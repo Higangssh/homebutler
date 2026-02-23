@@ -14,9 +14,7 @@ import (
 )
 
 const (
-	releaseURL  = "https://github.com/Higangssh/homebutler/releases/latest/download"
-	remoteBin   = "$HOME/bin/homebutler"
-	installDir  = "$HOME/bin"
+	releaseURL = "https://github.com/Higangssh/homebutler/releases/latest/download"
 )
 
 // DeployResult holds the result of a deploy operation.
@@ -48,9 +46,10 @@ func Deploy(server *config.ServerConfig, localBin string) (*DeployResult, error)
 	}
 	result.Arch = remoteOS + "/" + remoteArch
 
-	// Ensure ~/bin exists
-	if err := runSession(client, "mkdir -p $HOME/bin"); err != nil {
-		return nil, fmt.Errorf("mkdir on %s: %w", server.Name, err)
+	// Determine install path on remote: try /usr/local/bin, fallback to ~/.local/bin
+	installDir, err := detectInstallDir(client)
+	if err != nil {
+		return nil, fmt.Errorf("detect install dir on %s: %w", server.Name, err)
 	}
 
 	if localBin != "" {
@@ -60,7 +59,7 @@ func Deploy(server *config.ServerConfig, localBin string) (*DeployResult, error)
 		if err != nil {
 			return nil, fmt.Errorf("read local binary: %w", err)
 		}
-		if err := scpUpload(client, data, "bin/homebutler", 0755); err != nil {
+		if err := scpUpload(client, data, installDir+"/homebutler", 0755); err != nil {
 			return nil, fmt.Errorf("upload to %s: %w", server.Name, err)
 		}
 	} else {
@@ -68,24 +67,27 @@ func Deploy(server *config.ServerConfig, localBin string) (*DeployResult, error)
 		result.Source = "github"
 		data, err := downloadRelease(remoteOS, remoteArch)
 		if err != nil {
-			// Check if it's a network error and suggest --local
 			return nil, fmt.Errorf("download for %s/%s: %w\n\nFor air-gapped environments, use:\n  homebutler deploy --server %s --local ./homebutler-%s-%s",
 				remoteOS, remoteArch, err, server.Name, remoteOS, remoteArch)
 		}
-		if err := scpUpload(client, data, "bin/homebutler", 0755); err != nil {
+		if err := scpUpload(client, data, installDir+"/homebutler", 0755); err != nil {
 			return nil, fmt.Errorf("upload to %s: %w", server.Name, err)
 		}
 	}
 
-	// Verify installation
-	if err := runSession(client, "$HOME/bin/homebutler version"); err != nil {
+	// Ensure PATH includes install dir and verify
+	verifyCmd := fmt.Sprintf("export PATH=$PATH:%s; homebutler version", installDir)
+	if err := runSession(client, verifyCmd); err != nil {
 		result.Status = "error"
 		result.Message = "uploaded but verification failed: " + err.Error()
 		return result, nil
 	}
 
+	// Add to PATH permanently if needed
+	ensurePath(client, installDir)
+
 	result.Status = "ok"
-	result.Message = fmt.Sprintf("installed to ~/bin/homebutler (%s/%s)", remoteOS, remoteArch)
+	result.Message = fmt.Sprintf("installed to %s/homebutler (%s/%s)", installDir, remoteOS, remoteArch)
 	return result, nil
 }
 
@@ -103,6 +105,49 @@ func ValidateLocalArch(remoteOS, remoteArch string) error {
 			remoteOS, remoteArch)
 	}
 	return nil
+}
+
+// detectInstallDir finds the best install location on the remote server.
+// Priority: /usr/local/bin (writable or via sudo) > ~/.local/bin
+func detectInstallDir(client *ssh.Client) (string, error) {
+	// Try /usr/local/bin
+	if err := runSession(client, "test -w /usr/local/bin"); err == nil {
+		return "/usr/local/bin", nil
+	}
+	// Try with sudo
+	if err := runSession(client, "sudo -n test -w /usr/local/bin 2>/dev/null"); err == nil {
+		// Prep: sudo copy will be needed
+		runSession(client, "sudo mkdir -p /usr/local/bin")
+		return "/usr/local/bin", nil
+	}
+	// Fallback: ~/.local/bin
+	runSession(client, "mkdir -p $HOME/.local/bin")
+	return "$HOME/.local/bin", nil
+}
+
+// ensurePath adds installDir to PATH in shell rc files if not already present.
+// Covers .profile, .bashrc, and .zshrc for broad compatibility.
+func ensurePath(client *ssh.Client, installDir string) {
+	if installDir == "/usr/local/bin" {
+		return // already in PATH on most systems
+	}
+
+	exportLine := fmt.Sprintf(`export PATH="$PATH:%s"`, installDir)
+	rcFiles := []string{"$HOME/.profile", "$HOME/.bashrc", "$HOME/.zshrc"}
+
+	for _, rc := range rcFiles {
+		// Only patch files that exist
+		checkExist := fmt.Sprintf(`test -f %s`, rc)
+		if err := runSession(client, checkExist); err != nil {
+			continue
+		}
+		// Skip if already present
+		checkCmd := fmt.Sprintf(`grep -qF '%s' %s 2>/dev/null`, installDir, rc)
+		if err := runSession(client, checkCmd); err != nil {
+			addCmd := fmt.Sprintf(`echo '%s' >> %s`, exportLine, rc)
+			runSession(client, addCmd)
+		}
+	}
 }
 
 func detectRemoteArch(client *ssh.Client) (string, string, error) {

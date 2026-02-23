@@ -34,7 +34,7 @@ func Run(server *config.ServerConfig, args ...string) ([]byte, error) {
 
 	// Try configured bin path, then common locations
 	binPath := server.SSHBinPath()
-	cmd := fmt.Sprintf("export PATH=$PATH:$HOME/bin:/usr/local/bin; %s %s", binPath, strings.Join(args, " "))
+	cmd := fmt.Sprintf("export PATH=$HOME/.local/bin:$HOME/bin:/usr/local/bin:$PATH; %s %s", binPath, strings.Join(args, " "))
 	out, err := session.CombinedOutput(cmd)
 	if err != nil {
 		return nil, fmt.Errorf("remote command on %s: %w\noutput: %s", server.Name, err, string(out))
