@@ -6,6 +6,8 @@ import (
 	"os"
 	"time"
 
+	"github.com/Higangssh/homebutler/internal/alerts"
+	"github.com/Higangssh/homebutler/internal/config"
 	"github.com/Higangssh/homebutler/internal/docker"
 	"github.com/Higangssh/homebutler/internal/network"
 	"github.com/Higangssh/homebutler/internal/ports"
@@ -17,6 +19,13 @@ func Execute(version string) error {
 	if len(os.Args) < 2 {
 		printUsage()
 		return nil
+	}
+
+	// Load config
+	cfgPath := getFlag("--config", "homebutler.yaml")
+	cfg, err := config.Load(cfgPath)
+	if err != nil {
+		return fmt.Errorf("config error: %w", err)
 	}
 
 	jsonOutput := hasFlag("--json")
@@ -31,7 +40,9 @@ func Execute(version string) error {
 	case "network":
 		return runNetwork(jsonOutput)
 	case "wake":
-		return runWake()
+		return runWake(cfg)
+	case "alerts":
+		return runAlerts(cfg, jsonOutput)
 	case "version":
 		fmt.Printf("homebutler %s\n", version)
 		return nil
@@ -106,25 +117,39 @@ func runNetwork(jsonOut bool) error {
 	return output(devices, jsonOut)
 }
 
-func runWake() error {
+func runWake(cfg *config.Config) error {
 	if len(os.Args) < 3 {
 		return fmt.Errorf("usage: homebutler wake <mac-address|name>")
 	}
 	target := os.Args[2]
 	broadcast := "255.255.255.255"
-	if len(os.Args) >= 4 {
+
+	// Check if target is a name from config
+	if wt := cfg.FindWakeTarget(target); wt != nil {
+		target = wt.MAC
+		if wt.Broadcast != "" {
+			broadcast = wt.Broadcast
+		}
+	}
+
+	// Only use positional arg as broadcast if it's not a flag
+	if len(os.Args) >= 4 && !isFlag(os.Args[3]) {
 		broadcast = os.Args[3]
 	}
+
 	return wake.Send(target, broadcast)
 }
 
-func output(data any, jsonOut bool) error {
-	if jsonOut {
-		enc := json.NewEncoder(os.Stdout)
-		enc.SetIndent("", "  ")
-		return enc.Encode(data)
+func runAlerts(cfg *config.Config, jsonOut bool) error {
+	result, err := alerts.Check(&cfg.Alerts)
+	if err != nil {
+		return fmt.Errorf("failed to check alerts: %w", err)
 	}
-	// Default: also JSON for AI parsing
+	return output(result, jsonOut)
+}
+
+func output(data any, jsonOut bool) error {
+	_ = jsonOut // always JSON for now
 	enc := json.NewEncoder(os.Stdout)
 	enc.SetIndent("", "  ")
 	return enc.Encode(data)
@@ -137,6 +162,19 @@ func hasFlag(flag string) bool {
 		}
 	}
 	return false
+}
+
+func getFlag(flag, defaultVal string) string {
+	for i, arg := range os.Args {
+		if arg == flag && i+1 < len(os.Args) {
+			return os.Args[i+1]
+		}
+	}
+	return defaultVal
+}
+
+func isFlag(s string) bool {
+	return len(s) > 1 && s[0] == '-'
 }
 
 func printUsage() {
@@ -154,6 +192,7 @@ Commands:
   wake <mac|name>     Send Wake-on-LAN magic packet
   ports               List open ports with process info
   network scan        Discover devices on local network
+  alerts              Check resource thresholds (CPU, memory, disk)
   version             Print version
   help                Show this help
 
