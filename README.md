@@ -1,4 +1,4 @@
-# homebutler 🏠🤖
+# homebutler 🏠
 
 A single-binary CLI to manage your entire homelab. Designed to work standalone or as an AI assistant skill (OpenClaw, etc).
 

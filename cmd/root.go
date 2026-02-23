@@ -140,7 +140,7 @@ func hasFlag(flag string) bool {
 }
 
 func printUsage() {
-	fmt.Println(`homebutler — Homelab butler in a single binary 🏠🤖
+	fmt.Println(`homebutler — Homelab butler in a single binary 🏠
 
 Usage:
   homebutler <command> [flags]
