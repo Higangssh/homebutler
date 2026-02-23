@@ -1,0 +1,109 @@
+# homebutler 🏠🤖
+
+A single-binary CLI to manage your entire homelab. Designed to work standalone or as an AI assistant skill (OpenClaw, etc).
+
+> Manage your homelab from chat. One binary. No dependencies.
+
+## Features
+
+- **System Status** — CPU, memory, disk, uptime at a glance
+- **Docker Management** — List, restart, stop, logs for containers
+- **Wake-on-LAN** — Power on machines remotely
+- **Port Scanner** — See what's listening and which process owns it
+- **Network Scan** — Discover devices on your LAN
+- **Alerts** — Get notified when resources exceed thresholds
+- **Multi-server** — Manage remote servers over SSH
+- **JSON Output** — Pipe-friendly, perfect for AI assistants to parse
+
+## Quick Start
+
+```bash
+# Install
+go install github.com/Higangssh/homebutler@latest
+
+# Or download from releases
+curl -fsSL https://github.com/Higangssh/homebutler/releases/latest/download/homebutler-$(uname -s)-$(uname -m) -o homebutler
+chmod +x homebutler
+
+# Run
+homebutler status
+homebutler docker list
+homebutler wake desktop
+homebutler ports
+```
+
+## Usage
+
+```
+homebutler <command> [flags]
+
+Commands:
+  status              System status (CPU, memory, disk, uptime)
+  docker list         List running containers
+  docker restart <n>  Restart a container
+  docker stop <n>     Stop a container
+  docker logs <n>     Show container logs
+  wake <name>         Send Wake-on-LAN packet
+  ports               List open ports with process info
+  network scan        Discover devices on LAN
+  alerts              Show current alert status
+  version             Print version
+
+Flags:
+  --config <path>     Config file (default: homebutler.yaml)
+  --json              Force JSON output
+  --server <name>     Target server (default: local)
+```
+
+## Configuration
+
+Copy the example config and adjust:
+
+```bash
+cp homebutler.example.yaml homebutler.yaml
+```
+
+See [homebutler.example.yaml](homebutler.example.yaml) for all options.
+
+## Security
+
+- **No network listener** — homebutler never opens ports or accepts connections
+- **Read-only by default** — Status commands don't modify anything
+- **Explicit actions only** — Destructive commands require exact container/service names
+- **SSH for remote** — Multi-server uses standard SSH (key-based auth recommended)
+- **No telemetry** — Zero data collection, zero phone-home
+
+## Use with AI Assistants
+
+homebutler outputs JSON, making it perfect for AI assistants:
+
+```bash
+# AI assistant runs this, parses JSON, responds in user's language
+homebutler status --json
+```
+
+### OpenClaw Skill
+
+An official OpenClaw skill is available:
+
+```bash
+openclaw skill install homeserver
+```
+
+This lets you manage your homelab from Telegram, Discord, or any chat platform connected to OpenClaw — in any language.
+
+## Building
+
+```bash
+git clone https://github.com/Higangssh/homebutler.git
+cd homebutler
+go build -o homebutler .
+```
+
+## Contributing
+
+Contributions welcome! Please open an issue first to discuss what you'd like to change.
+
+## License
+
+[MIT](LICENSE)
