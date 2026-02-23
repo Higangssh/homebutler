@@ -21,7 +21,7 @@ A single-binary CLI to manage your entire homelab. Designed to work standalone o
 
 ## Demo
 
-<!-- Demo GIF coming soon -->
+![homebutler demo](demo.gif)
 
 ## Quick Start
 

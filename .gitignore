@@ -28,3 +28,6 @@ homebutler.yaml
 homebutler.yml
 !homebutler.example.yaml
 PROJECT.md
+demo.sh
+demo.cast
+demo.tape
