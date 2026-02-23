@@ -16,7 +16,7 @@ A single-binary CLI to manage your entire homelab. Designed to work standalone o
 - **Port Scanner** — See what's listening and which process owns it
 - **Network Scan** — Discover devices on your LAN
 - **Alerts** — Get notified when resources exceed thresholds
-- **Multi-server** — Manage remote servers over SSH
+- **Multi-server** *(planned)* — Manage remote servers over SSH
 - **JSON Output** — Pipe-friendly, perfect for AI assistants to parse
 
 ## Demo
@@ -60,7 +60,7 @@ Commands:
 Flags:
   --config <path>     Config file (default: homebutler.yaml)
   --json              Force JSON output
-  --server <name>     Target server (default: local)
+  --server <name>     Target server (planned, default: local)
 ```
 
 ## Configuration
@@ -78,7 +78,7 @@ See [homebutler.example.yaml](homebutler.example.yaml) for all options.
 - **No network listener** — homebutler never opens ports or accepts connections
 - **Read-only by default** — Status commands don't modify anything
 - **Explicit actions only** — Destructive commands require exact container/service names
-- **SSH for remote** — Multi-server uses standard SSH (key-based auth recommended)
+- **SSH for remote** *(planned)* — Multi-server will use standard SSH (key-based auth recommended)
 - **No telemetry** — Zero data collection, zero phone-home
 
 ## Use with AI Assistants
