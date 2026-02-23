@@ -1,3 +1,7 @@
+[![Go](https://img.shields.io/badge/Go-1.26+-00ADD8?logo=go&logoColor=white)](https://go.dev)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Release](https://img.shields.io/github/v/release/Higangssh/homebutler)](https://github.com/Higangssh/homebutler/releases)
+
 # homebutler 🏠
 
 A single-binary CLI to manage your entire homelab. Designed to work standalone or as an AI assistant skill (OpenClaw, etc).
@@ -14,6 +18,10 @@ A single-binary CLI to manage your entire homelab. Designed to work standalone o
 - **Alerts** — Get notified when resources exceed thresholds
 - **Multi-server** — Manage remote servers over SSH
 - **JSON Output** — Pipe-friendly, perfect for AI assistants to parse
+
+## Demo
+
+<!-- Demo GIF coming soon -->
 
 ## Quick Start
 
@@ -92,12 +100,40 @@ openclaw skill install homeserver
 
 This lets you manage your homelab from Telegram, Discord, or any chat platform connected to OpenClaw — in any language.
 
-## Building
+## Installation
+
+### Binary Download
+
+Download the latest binary for your platform from [Releases](https://github.com/Higangssh/homebutler/releases):
+
+```bash
+# Linux (amd64)
+curl -fsSL https://github.com/Higangssh/homebutler/releases/latest/download/homebutler_linux_amd64.tar.gz | tar xz
+
+# Linux (arm64 — Raspberry Pi, etc.)
+curl -fsSL https://github.com/Higangssh/homebutler/releases/latest/download/homebutler_linux_arm64.tar.gz | tar xz
+
+# macOS (Apple Silicon)
+curl -fsSL https://github.com/Higangssh/homebutler/releases/latest/download/homebutler_darwin_arm64.tar.gz | tar xz
+
+# macOS (Intel)
+curl -fsSL https://github.com/Higangssh/homebutler/releases/latest/download/homebutler_darwin_amd64.tar.gz | tar xz
+
+sudo mv homebutler /usr/local/bin/
+```
+
+### Go Install
+
+```bash
+go install github.com/Higangssh/homebutler@latest
+```
+
+### Build from Source
 
 ```bash
 git clone https://github.com/Higangssh/homebutler.git
 cd homebutler
-go build -o homebutler .
+make build
 ```
 
 ## Contributing

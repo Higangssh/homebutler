@@ -15,7 +15,7 @@ import (
 	"github.com/Higangssh/homebutler/internal/wake"
 )
 
-func Execute(version string) error {
+func Execute(version, buildDate string) error {
 	if len(os.Args) < 2 {
 		printUsage()
 		return nil
@@ -44,7 +44,7 @@ func Execute(version string) error {
 	case "alerts":
 		return runAlerts(cfg, jsonOutput)
 	case "version":
-		fmt.Printf("homebutler %s\n", version)
+		fmt.Printf("homebutler %s (built %s)\n", version, buildDate)
 		return nil
 	case "help", "--help", "-h":
 		printUsage()

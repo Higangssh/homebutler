@@ -7,10 +7,13 @@ import (
 	"github.com/Higangssh/homebutler/cmd"
 )
 
-var version = "dev"
+var (
+	version   = "dev"
+	buildDate = "unknown"
+)
 
 func main() {
-	if err := cmd.Execute(version); err != nil {
+	if err := cmd.Execute(version, buildDate); err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		os.Exit(1)
 	}

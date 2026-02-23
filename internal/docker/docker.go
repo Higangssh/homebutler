@@ -18,10 +18,15 @@ type Container struct {
 }
 
 func List() ([]Container, error) {
+	// Check if docker binary exists
+	if _, lookErr := util.RunCmd("which", "docker"); lookErr != nil {
+		return nil, fmt.Errorf("docker is not installed (binary not found in PATH)")
+	}
+
 	out, err := util.RunCmd("docker", "ps", "-a",
 		"--format", "{{.ID}}\t{{.Names}}\t{{.Image}}\t{{.Status}}\t{{.State}}\t{{.Ports}}")
 	if err != nil {
-		return nil, fmt.Errorf("docker not available or not running: %w", err)
+		return nil, fmt.Errorf("docker daemon is not running: %w", err)
 	}
 
 	var containers []Container

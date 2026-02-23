@@ -27,3 +27,4 @@ vendor/
 homebutler.yaml
 homebutler.yml
 !homebutler.example.yaml
+PROJECT.md
