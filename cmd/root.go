@@ -34,11 +34,12 @@ func Execute(version, buildDate string) error {
 	serverName := getFlag("--server", "")
 	allServers := hasFlag("--all")
 
-	// Multi-server: route to remote execution
-	if allServers {
+	// Multi-server: route to remote execution (skip for deploy — it handles remoting itself)
+	isDeployCmd := len(os.Args) >= 2 && os.Args[1] == "deploy"
+	if allServers && !isDeployCmd {
 		return runAllServers(cfg, os.Args[1:])
 	}
-	if serverName != "" {
+	if serverName != "" && !isDeployCmd {
 		server := cfg.FindServer(serverName)
 		if server == nil {
 			return fmt.Errorf("server %q not found in config. Available servers: %s", serverName, listServerNames(cfg))
@@ -68,6 +69,8 @@ func Execute(version, buildDate string) error {
 		return runWake(cfg)
 	case "alerts":
 		return runAlerts(cfg, jsonOutput)
+	case "deploy":
+		return runDeploy(cfg)
 	case "version":
 		fmt.Printf("homebutler %s (built %s)\n", version, buildDate)
 		return nil
@@ -294,6 +297,57 @@ func listServerNames(cfg *config.Config) string {
 	return fmt.Sprintf("%v", names)
 }
 
+func runDeploy(cfg *config.Config) error {
+	serverName := getFlag("--server", "")
+	localBin := getFlag("--local", "")
+	allServers := hasFlag("--all")
+
+	if serverName == "" && !allServers {
+		return fmt.Errorf("usage: homebutler deploy --server <name> [--local <binary>]\n       homebutler deploy --all [--local <binary>]")
+	}
+
+	var targets []config.ServerConfig
+	if allServers {
+		for _, s := range cfg.Servers {
+			if !s.Local {
+				targets = append(targets, s)
+			}
+		}
+	} else {
+		server := cfg.FindServer(serverName)
+		if server == nil {
+			return fmt.Errorf("server %q not found in config", serverName)
+		}
+		if server.Local {
+			return fmt.Errorf("server %q is local, no deploy needed", serverName)
+		}
+		targets = append(targets, *server)
+	}
+
+	if len(targets) == 0 {
+		return fmt.Errorf("no remote servers to deploy to")
+	}
+
+	var results []remote.DeployResult
+	for _, srv := range targets {
+		fmt.Fprintf(os.Stderr, "deploying to %s (%s)...\n", srv.Name, srv.Host)
+		result, err := remote.Deploy(&srv, localBin)
+		if err != nil {
+			results = append(results, remote.DeployResult{
+				Server:  srv.Name,
+				Status:  "error",
+				Message: err.Error(),
+			})
+			fmt.Fprintf(os.Stderr, "  ✗ %s: %v\n", srv.Name, err)
+			continue
+		}
+		results = append(results, *result)
+		fmt.Fprintf(os.Stderr, "  ✓ %s: %s\n", srv.Name, result.Message)
+	}
+
+	return output(results, true)
+}
+
 func output(data any, jsonOut bool) error {
 	_ = jsonOut // always JSON for now
 	enc := json.NewEncoder(os.Stdout)
@@ -339,6 +393,7 @@ Commands:
   ports               List open ports with process info
   network scan        Discover devices on local network
   alerts              Check resource thresholds (CPU, memory, disk)
+  deploy              Install homebutler on remote servers
   version             Print version
   help                Show this help
 
@@ -346,6 +401,7 @@ Flags:
   --json              Force JSON output
   --server <name>     Run on a specific remote server
   --all               Run on all configured servers in parallel
+  --local <path>      Use local binary for deploy (air-gapped)
   --config <path>     Config file path (see Configuration below)
 
 Configuration file is resolved in order:
