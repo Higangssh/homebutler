@@ -128,7 +128,7 @@ func readARP() ([]Device, error) {
 
 	for _, line := range strings.Split(out, "\n") {
 		ip, mac := parseARPLine(line)
-		if ip == "" || mac == "" || mac == "(incomplete)" || mac == "ff:ff:ff:ff:ff:ff" ||
+		if ip == "" || mac == "" || mac == "(incomplete)" || mac == "<incomplete>" || strings.Contains(mac, "incomplete") || mac == "ff:ff:ff:ff:ff:ff" ||
 			strings.HasPrefix(ip, "224.") || strings.HasPrefix(ip, "239.") || strings.HasPrefix(ip, "255.") {
 			// Filter out multicast (224.x, 239.x) and broadcast addresses
 			continue

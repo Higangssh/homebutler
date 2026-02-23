@@ -29,7 +29,7 @@ func List() ([]Container, error) {
 		return nil, fmt.Errorf("docker daemon is not running: %w", err)
 	}
 
-	var containers []Container
+	containers := make([]Container, 0)
 	for _, line := range splitLines(out) {
 		if line == "" {
 			continue
