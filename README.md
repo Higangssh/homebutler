@@ -116,10 +116,10 @@ homebutler status --json
 
 ### OpenClaw Skill
 
-An official OpenClaw skill is available:
+An official [OpenClaw](https://github.com/openclaw/openclaw) skill is available on [ClawHub](https://clawhub.ai/skills/homeserver):
 
 ```bash
-openclaw skill install homeserver
+clawhub install homeserver
 ```
 
 This lets you manage your homelab from Telegram, Discord, or any chat platform connected to OpenClaw — in any language.
