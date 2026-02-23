@@ -1,12 +1,12 @@
 ---
 name: homeserver
-description: Homelab server management via homebutler CLI. Check system status (CPU/RAM/disk), manage Docker containers, Wake-on-LAN, scan open ports, discover network devices, and monitor resource alerts. Use when asked about server status, docker containers, wake machines, open ports, network devices, or system alerts.
+description: Homelab server management via homebutler CLI. Check system status (CPU/RAM/disk), manage Docker containers, Wake-on-LAN, scan open ports, discover network devices, monitor resource alerts, and manage multiple servers over SSH. Use when asked about server status, docker containers, wake machines, open ports, network devices, system alerts, or multi-server management.
 metadata:
   {
     "openclaw": {
       "emoji": "🏠",
       "requires": { "anyBins": ["homebutler"] },
-      "configPaths": ["homebutler.yaml"]
+      "configPaths": ["homebutler.yaml", "~/.config/homebutler/config.yaml"]
     }
   }
 ---
@@ -40,17 +40,21 @@ cd homebutler && make build && sudo mv homebutler /usr/local/bin/
 
 ### System Status
 ```bash
-homebutler status
+homebutler status                    # Local server
+homebutler status --server rpi       # Specific remote server
+homebutler status --all              # All servers in parallel
 ```
 Returns: hostname, OS, arch, uptime, CPU (usage%, cores), memory (total/used/%), disks (mount/total/used/%)
 
 ### Docker Management
 ```bash
-homebutler docker list          # List all containers
-homebutler docker restart <name> # Restart a container
-homebutler docker stop <name>    # Stop a container
-homebutler docker logs <name>    # Last 50 lines of logs
-homebutler docker logs <name> 200 # Last 200 lines
+homebutler docker list               # List all containers
+homebutler docker list --server rpi  # List on remote server
+homebutler docker list --all         # List on all servers
+homebutler docker restart <name>     # Restart a container
+homebutler docker stop <name>        # Stop a container
+homebutler docker logs <name>        # Last 50 lines of logs
+homebutler docker logs <name> 200    # Last 200 lines
 ```
 
 ### Wake-on-LAN
@@ -59,11 +63,13 @@ homebutler wake <mac-address>           # Wake by MAC
 homebutler wake <name>                   # Wake by config name
 homebutler wake <mac> 192.168.1.255     # Custom broadcast
 ```
-Config names are defined in `homebutler.yaml` under `wake.targets`.
+Config names are defined in config under `wake` targets.
 
 ### Open Ports
 ```bash
-homebutler ports
+homebutler ports                     # Local
+homebutler ports --server rpi        # Remote
+homebutler ports --all               # All servers
 ```
 Returns: protocol, address, port, PID, process name
 
@@ -76,9 +82,19 @@ Note: May take up to 30 seconds. Some devices may not appear if they don't respo
 
 ### Resource Alerts
 ```bash
-homebutler alerts
+homebutler alerts                    # Local
+homebutler alerts --server rpi       # Remote
+homebutler alerts --all              # All servers
 ```
 Checks CPU/memory/disk against thresholds in config. Returns status (ok/warning/critical) per resource.
+
+### Deploy (Remote Installation)
+```bash
+homebutler deploy --server rpi                          # Download from GitHub Releases
+homebutler deploy --server rpi --local ./homebutler     # Air-gapped: copy local binary
+homebutler deploy --all                                 # Deploy to all remote servers
+```
+Installs homebutler on remote servers via SSH. Auto-detects remote OS/architecture.
 
 ### Version
 ```bash
@@ -91,28 +107,63 @@ All commands output JSON by default. Use `--json` flag to force JSON even if fut
 
 ## Config File
 
-`homebutler.yaml` (or specify with `--config <path>`):
-- `wake.targets` — named WOL targets with MAC + broadcast
-- `alerts.cpu/memory/disk` — threshold percentages
-- `output.format` — default output format
+Config file is auto-discovered in order:
+1. `--config <path>` — Explicit flag
+2. `$HOMEBUTLER_CONFIG` — Environment variable
+3. `~/.config/homebutler/config.yaml` — XDG standard (recommended)
+4. `./homebutler.yaml` — Current directory
 
-## Multi-Server (Future)
+If no config found, sensible defaults are used.
 
-When `--server <name>` is supported, homebutler will SSH to remote servers and run commands there. Server configs will be in `homebutler.yaml` under `servers`.
+### Config Options
+- `servers` — Server list with SSH connection details
+- `wake` — Named WOL targets with MAC + broadcast
+- `alerts.cpu/memory/disk` — Threshold percentages
+- `output` — Default output format
+
+### Multi-Server Config Example
+```yaml
+servers:
+  - name: main-server
+    host: 192.168.1.10
+    local: true
+
+  - name: rpi
+    host: 192.168.1.20
+    user: pi
+    auth: key                # "key" (default, recommended) or "password"
+    key: ~/.ssh/id_ed25519   # optional, auto-detects
+
+  - name: vps
+    host: example.com
+    user: deploy
+    port: 2222
+    auth: password
+    password: "secret"
+```
 
 ## Usage Guidelines
 
 1. **Always run commands, don't guess** — execute `homebutler status` to get real data
 2. **Interpret results for the user** — don't dump raw JSON, summarize in natural language
 3. **Warn on alerts** — if any resource shows "warning" or "critical", highlight it
-4. **Docker errors** — if docker is not installed or daemon not running, explain clearly
-5. **Network scan** — warn user it may take ~30 seconds
-6. **Security** — never expose raw JSON with hostnames/IPs in group chats, summarize instead
+4. **Use --all for overview** — when user asks about "all servers" or "everything", use `--all`
+5. **Use --server for specific** — when user mentions a server by name, use `--server <name>`
+6. **Docker errors** — if docker is not installed or daemon not running, explain clearly
+7. **Network scan** — warn user it may take ~30 seconds
+8. **Security** — never expose raw JSON with hostnames/IPs in group chats, summarize instead
+9. **Deploy** — suggest `--local` for air-gapped environments
 
 ## Example Interactions
 
 User: "How's the server doing?"
 → Run `homebutler status`, summarize: "CPU 23%, memory 40%, disk 37%. Uptime 42 days. All good 👍"
+
+User: "Check all servers"
+→ Run `homebutler status --all`, summarize each server's status
+
+User: "How's the Raspberry Pi?"
+→ Run `homebutler status --server rpi`, summarize
 
 User: "What docker containers are running?"
 → Run `homebutler docker list`, list container names and states
@@ -120,5 +171,8 @@ User: "What docker containers are running?"
 User: "Wake up the NAS"
 → Run `homebutler wake nas` (if configured) or ask for MAC address
 
-User: "What ports are open?"
-→ Run `homebutler ports`, summarize which services are listening
+User: "Any alerts across all servers?"
+→ Run `homebutler alerts --all`, report any warnings/critical
+
+User: "Deploy homebutler to the new server"
+→ Run `homebutler deploy --server <name>`, report result
