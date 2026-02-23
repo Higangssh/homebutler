@@ -4,8 +4,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"time"
 
 	"github.com/Higangssh/homebutler/internal/docker"
+	"github.com/Higangssh/homebutler/internal/network"
 	"github.com/Higangssh/homebutler/internal/ports"
 	"github.com/Higangssh/homebutler/internal/system"
 	"github.com/Higangssh/homebutler/internal/wake"
@@ -26,6 +28,8 @@ func Execute(version string) error {
 		return runDocker(jsonOutput)
 	case "ports":
 		return runPorts(jsonOutput)
+	case "network":
+		return runNetwork(jsonOutput)
 	case "wake":
 		return runWake()
 	case "version":
@@ -91,6 +95,17 @@ func runPorts(jsonOut bool) error {
 	return output(openPorts, jsonOut)
 }
 
+func runNetwork(jsonOut bool) error {
+	if len(os.Args) < 3 || os.Args[2] != "scan" {
+		return fmt.Errorf("usage: homebutler network scan")
+	}
+	devices, err := network.ScanWithTimeout(30 * time.Second)
+	if err != nil {
+		return err
+	}
+	return output(devices, jsonOut)
+}
+
 func runWake() error {
 	if len(os.Args) < 3 {
 		return fmt.Errorf("usage: homebutler wake <mac-address|name>")
@@ -138,6 +153,7 @@ Commands:
   docker logs <n>     Show container logs (default: 50 lines)
   wake <mac|name>     Send Wake-on-LAN magic packet
   ports               List open ports with process info
+  network scan        Discover devices on local network
   version             Print version
   help                Show this help
 
