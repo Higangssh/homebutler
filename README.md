@@ -33,12 +33,12 @@ A single-binary CLI that lets you monitor servers, control Docker, wake machines
 | Multi-server SSH | ✅ Parallel | ❌ | ❌ | ❌ |
 | Chat integration | ✅ Native | ❌ | ❌ | ❌ |
 | AI-friendly JSON | ✅ | ❌ | ⚠️ API | ⚠️ API |
-| Docker control | ✅ | ❌ | ❌ | ✅ |
+| Docker control | ✅ | ⚠️ Monitor | ❌ | ✅ |
 | Wake-on-LAN | ✅ | ❌ | ❌ | ❌ |
 | Network scan | ✅ | ❌ | ❌ | ❌ |
 | Remote deploy | ✅ One command | ❌ | ❌ | ❌ |
-| Air-gapped install | ✅ Copy binary | ❌ pip/npm | ❌ Docker | ❌ Docker |
-| Resource usage | ~7MB, 0% idle | Medium | High | High |
+| Air-gapped install | ✅ Copy binary | ⚠️ apt/brew | ❌ Docker | ❌ Docker |
+| Resource usage | ~10MB, 0% idle | Medium | High | High |
 
 </details>
 
