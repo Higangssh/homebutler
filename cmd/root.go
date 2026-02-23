@@ -22,7 +22,7 @@ func Execute(version, buildDate string) error {
 	}
 
 	// Load config
-	cfgPath := getFlag("--config", "homebutler.yaml")
+	cfgPath := config.Resolve(getFlag("--config", ""))
 	cfg, err := config.Load(cfgPath)
 	if err != nil {
 		return fmt.Errorf("config error: %w", err)
@@ -198,5 +198,12 @@ Commands:
 
 Flags:
   --json              Force JSON output
-  --config <path>     Config file (default: homebutler.yaml)`)
+  --config <path>     Config file path (see Configuration below)
+
+Configuration file is resolved in order:
+  1. --config <path>              Explicit flag
+  2. $HOMEBUTLER_CONFIG           Environment variable
+  3. ~/.config/homebutler/config.yaml   XDG standard
+  4. ./homebutler.yaml            Current directory
+  If none found, defaults are used.`)
 }

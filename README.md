@@ -82,16 +82,31 @@ Commands:
   version             Print version
 
 Flags:
-  --config <path>     Config file (default: homebutler.yaml)
+  --config <path>     Config file (auto-detected, see Configuration)
   --json              Force JSON output
   --server <name>     Target server (planned, default: local)
 ```
 
 ## Configuration
 
-Copy the example config and adjust:
+homebutler searches for a config file in the following order:
+
+1. `--config <path>` — Explicit flag (highest priority)
+2. `$HOMEBUTLER_CONFIG` — Environment variable
+3. `~/.config/homebutler/config.yaml` — XDG standard location
+4. `./homebutler.yaml` — Current directory
+
+If no config file is found, sensible defaults are used (CPU 90%, memory 85%, disk 90%).
 
 ```bash
+# Recommended: use XDG location
+mkdir -p ~/.config/homebutler
+cp homebutler.example.yaml ~/.config/homebutler/config.yaml
+
+# Or use environment variable
+export HOMEBUTLER_CONFIG=/path/to/config.yaml
+
+# Or just put it in the current directory
 cp homebutler.example.yaml homebutler.yaml
 ```
 

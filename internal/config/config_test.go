@@ -87,6 +87,53 @@ func TestFindWakeTarget(t *testing.T) {
 	}
 }
 
+func TestResolveExplicit(t *testing.T) {
+	result := Resolve("/some/explicit/path.yaml")
+	if result != "/some/explicit/path.yaml" {
+		t.Errorf("expected explicit path, got %q", result)
+	}
+}
+
+func TestResolveEnvVar(t *testing.T) {
+	t.Setenv("HOMEBUTLER_CONFIG", "/env/config.yaml")
+	result := Resolve("")
+	if result != "/env/config.yaml" {
+		t.Errorf("expected env path, got %q", result)
+	}
+}
+
+func TestResolveXDG(t *testing.T) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		t.Skip("no home dir")
+	}
+	dir := filepath.Join(home, ".config", "homebutler")
+	os.MkdirAll(dir, 0755)
+	xdg := filepath.Join(dir, "config.yaml")
+
+	// Only test if XDG config doesn't already exist (don't mess with real config)
+	if _, err := os.Stat(xdg); err == nil {
+		t.Setenv("HOMEBUTLER_CONFIG", "")
+		result := Resolve("")
+		if result != xdg {
+			t.Errorf("expected XDG path %s, got %q", xdg, result)
+		}
+	}
+}
+
+func TestResolveNone(t *testing.T) {
+	t.Setenv("HOMEBUTLER_CONFIG", "")
+	// Run from temp dir where no homebutler.yaml exists
+	orig, _ := os.Getwd()
+	defer os.Chdir(orig)
+	os.Chdir(t.TempDir())
+
+	result := Resolve("")
+	if result != "" {
+		t.Errorf("expected empty string, got %q", result)
+	}
+}
+
 func TestLoadInvalidYaml(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "bad.yaml")

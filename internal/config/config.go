@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 
 	"gopkg.in/yaml.v3"
 )
@@ -30,6 +31,32 @@ type AlertConfig struct {
 	CPU    float64 `yaml:"cpu"`
 	Memory float64 `yaml:"memory"`
 	Disk   float64 `yaml:"disk"`
+}
+
+// Resolve finds the config file path using the following priority:
+//  1. Explicit path (--config flag)
+//  2. $HOMEBUTLER_CONFIG environment variable
+//  3. ~/.config/homebutler/config.yaml (XDG standard)
+//  4. ./homebutler.yaml (current directory)
+//
+// Returns empty string if no config file is found (defaults will be used).
+func Resolve(explicit string) string {
+	if explicit != "" {
+		return explicit
+	}
+	if env := os.Getenv("HOMEBUTLER_CONFIG"); env != "" {
+		return env
+	}
+	if home, err := os.UserHomeDir(); err == nil {
+		xdg := filepath.Join(home, ".config", "homebutler", "config.yaml")
+		if _, err := os.Stat(xdg); err == nil {
+			return xdg
+		}
+	}
+	if _, err := os.Stat("homebutler.yaml"); err == nil {
+		return "homebutler.yaml"
+	}
+	return ""
 }
 
 func Load(path string) (*Config, error) {
