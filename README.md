@@ -52,11 +52,11 @@ A single-binary CLI that lets you monitor servers, control Docker, wake machines
 ## Quick Start
 
 ```bash
-# macOS / Linux (Homebrew)
-brew install Higangssh/homebutler/homebutler
-
-# Or one-line install (auto-detects OS/arch)
+# One-line install (recommended, auto-detects OS/arch)
 curl -fsSL https://raw.githubusercontent.com/Higangssh/homebutler/main/install.sh | sh
+
+# Or via Homebrew
+brew install Higangssh/homebutler/homebutler
 
 # Run
 homebutler status
