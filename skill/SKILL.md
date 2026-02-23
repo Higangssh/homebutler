@@ -94,14 +94,14 @@ When `--server <name>` is supported, homebutler will SSH to remote servers and r
 
 ## Example Interactions
 
-User: "서버 상태 어때?"
-→ Run `homebutler status`, summarize: "CPU 23%, 메모리 40%, 디스크 37% 사용 중. 업타임 42일. 전부 정상 👍"
+User: "How's the server doing?"
+→ Run `homebutler status`, summarize: "CPU 23%, memory 40%, disk 37%. Uptime 42 days. All good 👍"
 
-User: "도커 컨테이너 뭐 돌아가고 있어?"
+User: "What docker containers are running?"
 → Run `homebutler docker list`, list container names and states
 
-User: "NAS 깨워줘"
+User: "Wake up the NAS"
 → Run `homebutler wake nas` (if configured) or ask for MAC address
 
-User: "열린 포트 뭐 있어?"
+User: "What ports are open?"
 → Run `homebutler ports`, summarize which services are listening
