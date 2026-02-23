@@ -52,18 +52,18 @@ A single-binary CLI that lets you monitor servers, control Docker, wake machines
 ## Quick Start
 
 ```bash
-# Install
-go install github.com/Higangssh/homebutler@latest
+# macOS / Linux (Homebrew)
+brew install Higangssh/homebutler/homebutler
 
-# Or download from releases
-curl -fsSL https://github.com/Higangssh/homebutler/releases/latest/download/homebutler-$(uname -s)-$(uname -m) -o homebutler
-chmod +x homebutler
+# Or one-line install (auto-detects OS/arch)
+curl -fsSL https://raw.githubusercontent.com/Higangssh/homebutler/main/install.sh | sh
 
 # Run
 homebutler status
 homebutler docker list
 homebutler wake desktop
 homebutler ports
+homebutler status --all    # all servers at once
 ```
 
 ## Usage
@@ -216,25 +216,21 @@ This lets you manage your homelab from Telegram, Discord, or any chat platform c
 
 ## Installation
 
-### Binary Download
-
-Download the latest binary for your platform from [Releases](https://github.com/Higangssh/homebutler/releases):
+### Homebrew (Recommended)
 
 ```bash
-# Linux (amd64)
-curl -fsSL https://github.com/Higangssh/homebutler/releases/latest/download/homebutler_linux_amd64.tar.gz | tar xz
-
-# Linux (arm64 — Raspberry Pi, etc.)
-curl -fsSL https://github.com/Higangssh/homebutler/releases/latest/download/homebutler_linux_arm64.tar.gz | tar xz
-
-# macOS (Apple Silicon)
-curl -fsSL https://github.com/Higangssh/homebutler/releases/latest/download/homebutler_darwin_arm64.tar.gz | tar xz
-
-# macOS (Intel)
-curl -fsSL https://github.com/Higangssh/homebutler/releases/latest/download/homebutler_darwin_amd64.tar.gz | tar xz
-
-sudo mv homebutler /usr/local/bin/
+brew install Higangssh/homebutler/homebutler
 ```
+
+Automatically installs to PATH. Works on macOS and Linux.
+
+### One-line Install
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Higangssh/homebutler/main/install.sh | sh
+```
+
+Auto-detects OS/architecture, downloads the latest release, and installs to PATH.
 
 ### Go Install
 
@@ -248,6 +244,13 @@ go install github.com/Higangssh/homebutler@latest
 git clone https://github.com/Higangssh/homebutler.git
 cd homebutler
 make build
+```
+
+## Uninstall
+
+```bash
+rm $(which homebutler)           # Remove binary
+rm -rf ~/.config/homebutler      # Remove config (optional)
 ```
 
 ## Contributing
