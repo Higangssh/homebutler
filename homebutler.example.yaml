@@ -1,0 +1,24 @@
+# homebutler configuration
+# Copy this file to homebutler.yaml and adjust to your setup.
+
+# Servers to manage
+servers:
+  - name: local
+    host: localhost
+    # For remote servers, specify SSH connection:
+    # ssh: user@192.168.1.20
+
+# Wake-on-LAN targets
+wake:
+  # - name: desktop
+  #   mac: "AA:BB:CC:DD:EE:FF"
+  #   ip: "192.168.0.255"  # broadcast address (optional)
+
+# Alert thresholds
+alerts:
+  cpu: 90       # percent
+  memory: 85    # percent
+  disk: 90      # percent
+
+# Output format: text, json
+output: json

@@ -1,0 +1,29 @@
+# Binaries
+homebutler
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Build
+/dist/
+/bin/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Go
+vendor/
+
+# Config (may contain sensitive data)
+homebutler.yaml
+homebutler.yml
+!homebutler.example.yaml
