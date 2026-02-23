@@ -16,7 +16,7 @@ A single-binary CLI that lets you monitor servers, control Docker, wake machines
 - **Port Scanner** — See what's listening and which process owns it
 - **Network Scan** — Discover devices on your LAN
 - **Alerts** — Get notified when resources exceed thresholds
-- **Multi-server** *(planned)* — Manage remote servers over SSH
+- **Multi-server** — Manage remote servers over SSH (key & password auth)
 - **JSON Output** — Pipe-friendly, perfect for AI assistants to parse
 
 ## Why homebutler?
@@ -30,13 +30,15 @@ A single-binary CLI that lets you monitor servers, control Docker, wake machines
 |---|---|---|---|---|
 | Single binary | ✅ | ❌ | ❌ | ❌ |
 | No web server | ✅ | ❌ | ❌ | ❌ |
+| Multi-server SSH | ✅ Parallel | ❌ | ❌ | ❌ |
 | Chat integration | ✅ Native | ❌ | ❌ | ❌ |
 | AI-friendly JSON | ✅ | ❌ | ⚠️ API | ⚠️ API |
 | Docker control | ✅ | ❌ | ❌ | ✅ |
 | Wake-on-LAN | ✅ | ❌ | ❌ | ❌ |
 | Network scan | ✅ | ❌ | ❌ | ❌ |
+| Remote deploy | ✅ One command | ❌ | ❌ | ❌ |
 | Air-gapped install | ✅ Copy binary | ❌ pip/npm | ❌ Docker | ❌ Docker |
-| Resource usage | ~3MB, 0% idle | Medium | High | High |
+| Resource usage | ~7MB, 0% idle | Medium | High | High |
 
 </details>
 
@@ -79,12 +81,15 @@ Commands:
   ports               List open ports with process info
   network scan        Discover devices on LAN
   alerts              Show current alert status
+  deploy              Install homebutler on remote servers
   version             Print version
 
 Flags:
-  --config <path>     Config file (auto-detected, see Configuration)
   --json              Force JSON output
-  --server <name>     Target server (planned, default: local)
+  --server <name>     Run on a specific remote server
+  --all               Run on all configured servers in parallel
+  --local <path>      Use local binary for deploy (air-gapped)
+  --config <path>     Config file (auto-detected, see Configuration)
 ```
 
 ## Configuration
@@ -112,12 +117,82 @@ cp homebutler.example.yaml homebutler.yaml
 
 See [homebutler.example.yaml](homebutler.example.yaml) for all options.
 
+## Multi-server
+
+Manage multiple servers from a single machine. homebutler connects via SSH and runs the remote homebutler binary to collect data.
+
+### Setup
+
+1. Install homebutler on remote servers:
+
+```bash
+# From a machine with internet access:
+homebutler deploy --server rpi5
+
+# Air-gapped / offline environments:
+CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -o homebutler-linux-arm64
+homebutler deploy --server rpi5 --local ./homebutler-linux-arm64
+```
+
+2. Configure servers in your config file:
+
+```yaml
+servers:
+  - name: mac-mini
+    host: 192.168.1.10
+    local: true              # This machine
+
+  - name: rpi5
+    host: 192.168.1.20
+    user: pi
+    auth: key                # Recommended (default)
+    key: ~/.ssh/id_ed25519   # Optional, auto-detects id_ed25519 / id_rsa
+
+  - name: vps
+    host: my-vps.example.com
+    user: deploy
+    port: 2222
+    auth: password           # Also supported
+    password: "secret"
+```
+
+### SSH Authentication
+
+Both key-based and password-based authentication are supported:
+
+- **Key-based (recommended)** — Set `auth: key` (or omit, it's the default). If `key` is not specified, homebutler tries `~/.ssh/id_ed25519` then `~/.ssh/id_rsa` automatically.
+- **Password-based** — Set `auth: password` and provide `password`. Not recommended for production.
+
+To set up key-based auth:
+
+```bash
+ssh-keygen -t ed25519 -C "homebutler"
+ssh-copy-id user@remote-host
+```
+
+### Usage
+
+```bash
+# Query a specific server
+homebutler status --server rpi5
+homebutler alerts --server rpi5
+homebutler docker list --server rpi5
+
+# Query all servers in parallel
+homebutler status --all
+homebutler alerts --all
+
+# Deploy/update homebutler on remote servers
+homebutler deploy --server rpi5
+homebutler deploy --all
+```
+
 ## Security
 
 - **No network listener** — homebutler never opens ports or accepts connections
 - **Read-only by default** — Status commands don't modify anything
 - **Explicit actions only** — Destructive commands require exact container/service names
-- **SSH for remote** *(planned)* — Multi-server will use standard SSH (key-based auth recommended)
+- **SSH for remote** — Multi-server uses standard SSH (key-based auth recommended)
 - **No telemetry** — Zero data collection, zero phone-home
 
 ## Use with AI Assistants
