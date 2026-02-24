@@ -23,8 +23,8 @@ Manage homelab servers using the `homebutler` CLI. Single binary, JSON output, A
 # Check if installed
 which homebutler
 
-# Option 1: One-line install (recommended)
-curl -fsSL https://raw.githubusercontent.com/Higangssh/homebutler/main/install.sh | sh
+# Option 1: Install via Homebrew (macOS/Linux)
+brew install Higangssh/homebutler/homebutler
 
 # Option 2: Install via Go
 go install github.com/Higangssh/homebutler@latest
@@ -32,6 +32,11 @@ go install github.com/Higangssh/homebutler@latest
 # Option 3: Build from source
 git clone https://github.com/Higangssh/homebutler.git
 cd homebutler && make build && sudo mv homebutler /usr/local/bin/
+
+# Option 4: Shell installer (review script before running)
+curl -fsSL https://raw.githubusercontent.com/Higangssh/homebutler/main/install.sh -o install.sh
+less install.sh  # review first
+sh install.sh
 ```
 
 ## Commands
@@ -137,8 +142,8 @@ servers:
     host: example.com
     user: deploy
     port: 2222
-    auth: password
-    password: "secret"
+    auth: key
+    key: ~/.ssh/id_ed25519
 ```
 
 ## Usage Guidelines
@@ -152,6 +157,14 @@ servers:
 7. **Network scan** — warn user it may take ~30 seconds
 8. **Security** — never expose raw JSON with hostnames/IPs in group chats, summarize instead
 9. **Deploy** — suggest `--local` for air-gapped environments
+
+## Security Notes
+
+- **SSH authentication**: Always prefer key-based auth over passwords. Never store plaintext passwords in config.
+- **Network scans**: Only run on your own local network. Warn user before scanning.
+- **Deploy**: Only deploy to servers you own. Confirm with user before remote installations.
+- **Config file permissions**: Keep config files readable only by owner (`chmod 600`).
+- **No telemetry**: homebutler sends zero data externally. All operations are local or to user-configured hosts only.
 
 ## Error Handling
 
