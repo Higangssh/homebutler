@@ -85,7 +85,7 @@ Commands:
   version             Print version
 
 Flags:
-  --json              Force JSON output
+  --json              JSON output (default: human-readable)
   --server <name>     Run on a specific remote server
   --all               Run on all configured servers in parallel
   --local <path>      Use local binary for deploy (air-gapped)
@@ -185,6 +185,30 @@ homebutler alerts --all
 # Deploy/update homebutler on remote servers
 homebutler deploy --server rpi
 homebutler deploy --all
+```
+
+## Output Format
+
+Default output is human-readable:
+
+```
+$ homebutler status
+🖥  homelab-server (linux/arm64)
+   Uptime:  42d 7h
+   CPU:     23.5% (4 cores)
+   Memory:  3.2 / 8.0 GB (40.0%)
+   Disk /:  47 / 128 GB (37%)
+
+$ homebutler status --all
+📡 homelab      CPU   24% | Mem   40% | Disk   37% | Up 42d 7h
+📡 nas          CPU    8% | Mem   40% | Disk   62% | Up 128d 3h
+```
+
+Use `--json` for machine-readable output (ideal for AI agents and scripts):
+
+```bash
+homebutler status --json
+homebutler alerts --json
 ```
 
 ## Security

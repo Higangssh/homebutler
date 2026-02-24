@@ -1,0 +1,108 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.26"
+
+      - name: Run tests
+        run: go test ./...
+
+      - name: Run GoReleaser
+        uses: goreleaser/goreleaser-action@v6
+        with:
+          version: latest
+          args: release --clean
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Update Homebrew tap
+        env:
+          TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+        run: |
+          if [ -z "$TAP_TOKEN" ]; then
+            echo "HOMEBREW_TAP_TOKEN not set, skipping tap update"
+            exit 0
+          fi
+
+          TAG=${GITHUB_REF#refs/tags/v}
+          REPO="Higangssh/homebutler"
+          TAP_REPO="Higangssh/homebrew-homebutler"
+
+          # Download checksums
+          CHECKSUMS_URL="https://github.com/${REPO}/releases/download/v${TAG}/checksums.txt"
+          curl -sL "$CHECKSUMS_URL" -o checksums.txt
+
+          # Extract sha256 for each platform
+          SHA_DARWIN_ARM64=$(grep "darwin_arm64" checksums.txt | awk '{print $1}')
+          SHA_DARWIN_AMD64=$(grep "darwin_amd64" checksums.txt | awk '{print $1}')
+          SHA_LINUX_ARM64=$(grep "linux_arm64" checksums.txt | awk '{print $1}')
+          SHA_LINUX_AMD64=$(grep "linux_amd64" checksums.txt | awk '{print $1}')
+
+          # Generate formula
+          cat > homebutler.rb << EOF
+          class Homebutler < Formula
+            desc "Homelab butler in a single binary — manage servers from chat"
+            homepage "https://github.com/${REPO}"
+            version "${TAG}"
+            license "MIT"
+
+            on_macos do
+              on_arm do
+                url "https://github.com/${REPO}/releases/download/v${TAG}/homebutler_${TAG}_darwin_arm64.tar.gz"
+                sha256 "${SHA_DARWIN_ARM64}"
+              end
+              on_intel do
+                url "https://github.com/${REPO}/releases/download/v${TAG}/homebutler_${TAG}_darwin_amd64.tar.gz"
+                sha256 "${SHA_DARWIN_AMD64}"
+              end
+            end
+
+            on_linux do
+              on_arm do
+                url "https://github.com/${REPO}/releases/download/v${TAG}/homebutler_${TAG}_linux_arm64.tar.gz"
+                sha256 "${SHA_LINUX_ARM64}"
+              end
+              on_intel do
+                url "https://github.com/${REPO}/releases/download/v${TAG}/homebutler_${TAG}_linux_amd64.tar.gz"
+                sha256 "${SHA_LINUX_AMD64}"
+              end
+            end
+
+            def install
+              bin.install "homebutler"
+            end
+
+            test do
+              assert_match "homebutler", shell_output("#{bin}/homebutler version")
+            end
+          end
+          EOF
+
+          # Remove leading whitespace from heredoc
+          sed -i 's/^          //' homebutler.rb
+
+          # Push to tap repo
+          git clone "https://x-access-token:${TAP_TOKEN}@github.com/${TAP_REPO}.git" tap
+          cp homebutler.rb tap/homebutler.rb
+          cd tap
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add homebutler.rb
+          git commit -m "chore: update homebutler to ${TAG}" || exit 0
+          git push

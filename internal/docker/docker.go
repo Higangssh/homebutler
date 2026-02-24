@@ -1,9 +1,7 @@
 package docker
 
 import (
-	"encoding/json"
 	"fmt"
-	"os"
 
 	"github.com/Higangssh/homebutler/internal/util"
 )
@@ -53,52 +51,57 @@ func List() ([]Container, error) {
 	return containers, nil
 }
 
-func Restart(name string) error {
+// ActionResult holds the result of a docker action.
+type ActionResult struct {
+	Action    string `json:"action"`
+	Container string `json:"container"`
+	Status    string `json:"status"`
+}
+
+func Restart(name string) (*ActionResult, error) {
 	if !isValidName(name) {
-		return fmt.Errorf("invalid container name: %s", name)
+		return nil, fmt.Errorf("invalid container name: %s", name)
 	}
 	out, err := util.RunCmd("docker", "restart", name)
 	if err != nil {
-		return fmt.Errorf("failed to restart %s: %s", name, out)
+		return nil, fmt.Errorf("failed to restart %s: %s", name, out)
 	}
-	fmt.Fprintf(os.Stdout, `{"action":"restart","container":"%s","status":"ok"}`+"\n", name)
-	return nil
+	return &ActionResult{Action: "restart", Container: name, Status: "ok"}, nil
 }
 
-func Stop(name string) error {
+func Stop(name string) (*ActionResult, error) {
 	if !isValidName(name) {
-		return fmt.Errorf("invalid container name: %s", name)
+		return nil, fmt.Errorf("invalid container name: %s", name)
 	}
 	out, err := util.RunCmd("docker", "stop", name)
 	if err != nil {
-		return fmt.Errorf("failed to stop %s: %s", name, out)
+		return nil, fmt.Errorf("failed to stop %s: %s", name, out)
 	}
-	fmt.Fprintf(os.Stdout, `{"action":"stop","container":"%s","status":"ok"}`+"\n", name)
-	return nil
+	return &ActionResult{Action: "stop", Container: name, Status: "ok"}, nil
 }
 
-func Logs(name string, lines string) error {
+// LogsResult holds docker logs output.
+type LogsResult struct {
+	Container string `json:"container"`
+	Lines     string `json:"lines"`
+	Logs      string `json:"logs"`
+}
+
+func Logs(name string, lines string) (*LogsResult, error) {
 	if !isValidName(name) {
-		return fmt.Errorf("invalid container name: %s", name)
+		return nil, fmt.Errorf("invalid container name: %s", name)
 	}
 	// Validate lines is a positive integer
 	for _, c := range lines {
 		if c < '0' || c > '9' {
-			return fmt.Errorf("invalid line count: %s (must be a positive integer)", lines)
+			return nil, fmt.Errorf("invalid line count: %s (must be a positive integer)", lines)
 		}
 	}
 	out, err := util.RunCmd("docker", "logs", "--tail", lines, name)
 	if err != nil {
-		return fmt.Errorf("failed to get logs for %s: %w", name, err)
+		return nil, fmt.Errorf("failed to get logs for %s: %w", name, err)
 	}
-	result := map[string]string{
-		"container": name,
-		"lines":     lines,
-		"logs":      out,
-	}
-	enc := json.NewEncoder(os.Stdout)
-	enc.SetIndent("", "  ")
-	return enc.Encode(result)
+	return &LogsResult{Container: name, Lines: lines, Logs: out}, nil
 }
 
 // isValidName prevents command injection by allowing only safe characters.

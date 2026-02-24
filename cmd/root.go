@@ -10,6 +10,7 @@ import (
 	"github.com/Higangssh/homebutler/internal/alerts"
 	"github.com/Higangssh/homebutler/internal/config"
 	"github.com/Higangssh/homebutler/internal/docker"
+	"github.com/Higangssh/homebutler/internal/format"
 	"github.com/Higangssh/homebutler/internal/network"
 	"github.com/Higangssh/homebutler/internal/ports"
 	"github.com/Higangssh/homebutler/internal/remote"
@@ -37,7 +38,7 @@ func Execute(version, buildDate string) error {
 	// Multi-server: route to remote execution (skip for deploy — it handles remoting itself)
 	isDeployCmd := len(os.Args) >= 2 && os.Args[1] == "deploy"
 	if allServers && !isDeployCmd {
-		return runAllServers(cfg, os.Args[1:])
+		return runAllServers(cfg, os.Args[1:], jsonOutput)
 	}
 	if serverName != "" && !isDeployCmd {
 		server := cfg.FindServer(serverName)
@@ -66,7 +67,7 @@ func Execute(version, buildDate string) error {
 	case "network":
 		return runNetwork(jsonOutput)
 	case "wake":
-		return runWake(cfg)
+		return runWake(cfg, jsonOutput)
 	case "alerts":
 		return runAlerts(cfg, jsonOutput)
 	case "deploy":
@@ -90,7 +91,7 @@ func runStatus(jsonOut bool) error {
 	return output(info, jsonOut)
 }
 
-func runDocker(jsonOut bool) error {
+func runDocker(jsonOutput bool) error {
 	if len(os.Args) < 3 {
 		return fmt.Errorf("usage: homebutler docker <list|restart|stop|logs> [name]")
 	}
@@ -101,17 +102,25 @@ func runDocker(jsonOut bool) error {
 		if err != nil {
 			return err
 		}
-		return output(containers, jsonOut)
+		return output(containers, jsonOutput)
 	case "restart":
 		if len(os.Args) < 4 {
 			return fmt.Errorf("usage: homebutler docker restart <container>")
 		}
-		return docker.Restart(os.Args[3])
+		result, err := docker.Restart(os.Args[3])
+		if err != nil {
+			return err
+		}
+		return output(result, jsonOutput)
 	case "stop":
 		if len(os.Args) < 4 {
 			return fmt.Errorf("usage: homebutler docker stop <container>")
 		}
-		return docker.Stop(os.Args[3])
+		result, err := docker.Stop(os.Args[3])
+		if err != nil {
+			return err
+		}
+		return output(result, jsonOutput)
 	case "logs":
 		if len(os.Args) < 4 {
 			return fmt.Errorf("usage: homebutler docker logs <container> [lines]")
@@ -120,7 +129,11 @@ func runDocker(jsonOut bool) error {
 		if len(os.Args) >= 5 {
 			lines = os.Args[4]
 		}
-		return docker.Logs(os.Args[3], lines)
+		result, err := docker.Logs(os.Args[3], lines)
+		if err != nil {
+			return err
+		}
+		return output(result, jsonOutput)
 	default:
 		return fmt.Errorf("unknown docker command: %s", os.Args[2])
 	}
@@ -145,7 +158,7 @@ func runNetwork(jsonOut bool) error {
 	return output(devices, jsonOut)
 }
 
-func runWake(cfg *config.Config) error {
+func runWake(cfg *config.Config, jsonOut bool) error {
 	if len(os.Args) < 3 {
 		return fmt.Errorf("usage: homebutler wake <mac-address|name>")
 	}
@@ -165,7 +178,11 @@ func runWake(cfg *config.Config) error {
 		broadcast = os.Args[3]
 	}
 
-	return wake.Send(target, broadcast)
+	result, err := wake.Send(target, broadcast)
+	if err != nil {
+		return err
+	}
+	return output(result, jsonOut)
 }
 
 func runAlerts(cfg *config.Config, jsonOut bool) error {
@@ -184,7 +201,7 @@ type serverResult struct {
 }
 
 // runAllServers executes a command on all configured servers in parallel.
-func runAllServers(cfg *config.Config, args []string) error {
+func runAllServers(cfg *config.Config, args []string, jsonOut bool) error {
 	if len(cfg.Servers) == 0 {
 		return fmt.Errorf("no servers configured. Add servers to your config file")
 	}
@@ -221,7 +238,51 @@ func runAllServers(cfg *config.Config, args []string) error {
 	}
 
 	wg.Wait()
+
+	if !jsonOut {
+		for _, r := range results {
+			if r.Error != "" {
+				fmt.Fprintf(os.Stdout, "❌ %-12s %s\n", r.Server, r.Error)
+				continue
+			}
+			// Parse JSON data to extract status fields
+			var data map[string]interface{}
+			if err := json.Unmarshal(r.Data, &data); err != nil {
+				fmt.Fprintf(os.Stdout, "📡 %-12s (parse error)\n", r.Server)
+				continue
+			}
+			cpu := getNestedFloat(data, "cpu", "usage_percent")
+			mem := getNestedFloat(data, "memory", "usage_percent")
+			uptime, _ := data["uptime"].(string)
+			disk := 0.0
+			if disks, ok := data["disks"].([]interface{}); ok && len(disks) > 0 {
+				if d, ok := disks[0].(map[string]interface{}); ok {
+					disk, _ = d["usage_percent"].(float64)
+				}
+			}
+			fmt.Fprintf(os.Stdout, "📡 %-12s CPU %4.0f%% | Mem %4.0f%% | Disk %4.0f%% | Up %s\n", r.Server, cpu, mem, disk, uptime)
+		}
+		return nil
+	}
 	return output(results, true)
+}
+
+func getNestedFloat(data map[string]interface{}, keys ...string) float64 {
+	current := data
+	for i, key := range keys {
+		if i == len(keys)-1 {
+			if v, ok := current[key].(float64); ok {
+				return v
+			}
+			return 0
+		}
+		if next, ok := current[key].(map[string]interface{}); ok {
+			current = next
+		} else {
+			return 0
+		}
+	}
+	return 0
 }
 
 // runLocalCommand runs homebutler locally and captures JSON output.
@@ -358,10 +419,37 @@ func runDeploy(cfg *config.Config) error {
 }
 
 func output(data any, jsonOut bool) error {
-	_ = jsonOut // always JSON for now
-	enc := json.NewEncoder(os.Stdout)
-	enc.SetIndent("", "  ")
-	return enc.Encode(data)
+	if jsonOut {
+		enc := json.NewEncoder(os.Stdout)
+		enc.SetIndent("", "  ")
+		return enc.Encode(data)
+	}
+
+	// Human-readable output
+	switch v := data.(type) {
+	case *system.StatusInfo:
+		fmt.Print(format.Status(v))
+	case []docker.Container:
+		fmt.Print(format.DockerList(v))
+	case *docker.ActionResult:
+		fmt.Print(format.DockerAction(v.Action, v.Container))
+	case *docker.LogsResult:
+		fmt.Printf("=== %s (last %s lines) ===\n%s\n", v.Container, v.Lines, v.Logs)
+	case *alerts.AlertResult:
+		fmt.Print(format.Alerts(v))
+	case []ports.PortInfo:
+		fmt.Print(format.Ports(v))
+	case []network.Device:
+		fmt.Print(format.NetworkScan(v))
+	case *wake.WakeResult:
+		fmt.Print(format.WakeResult(v.MAC, v.Broadcast))
+	default:
+		// Fallback to JSON for unknown types (deploy results, multi-server, etc.)
+		enc := json.NewEncoder(os.Stdout)
+		enc.SetIndent("", "  ")
+		return enc.Encode(data)
+	}
+	return nil
 }
 
 func hasFlag(flag string) bool {

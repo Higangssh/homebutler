@@ -10,15 +10,23 @@ import (
 
 var macRegex = regexp.MustCompile(`^([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2})$`)
 
+// WakeResult holds the result of a WOL operation.
+type WakeResult struct {
+	Action    string `json:"action"`
+	MAC       string `json:"mac"`
+	Broadcast string `json:"broadcast"`
+	Status    string `json:"status"`
+}
+
 // Send transmits a Wake-on-LAN magic packet to the given MAC address.
-func Send(mac string, broadcast string) error {
+func Send(mac string, broadcast string) (*WakeResult, error) {
 	if !macRegex.MatchString(mac) {
-		return fmt.Errorf("invalid MAC address: %s (expected format: AA:BB:CC:DD:EE:FF)", mac)
+		return nil, fmt.Errorf("invalid MAC address: %s (expected format: AA:BB:CC:DD:EE:FF)", mac)
 	}
 
 	macBytes, err := parseMac(mac)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	// Build magic packet: 6x 0xFF + 16x MAC address
@@ -33,17 +41,16 @@ func Send(mac string, broadcast string) error {
 	addr := fmt.Sprintf("%s:9", broadcast)
 	conn, err := net.Dial("udp", addr)
 	if err != nil {
-		return fmt.Errorf("failed to connect to %s: %w", addr, err)
+		return nil, fmt.Errorf("failed to connect to %s: %w", addr, err)
 	}
 	defer conn.Close()
 
 	_, err = conn.Write(packet)
 	if err != nil {
-		return fmt.Errorf("failed to send magic packet: %w", err)
+		return nil, fmt.Errorf("failed to send magic packet: %w", err)
 	}
 
-	fmt.Printf(`{"action":"wake","mac":"%s","broadcast":"%s","status":"sent"}`+"\n", mac, broadcast)
-	return nil
+	return &WakeResult{Action: "wake", MAC: mac, Broadcast: broadcast, Status: "sent"}, nil
 }
 
 func parseMac(mac string) ([]byte, error) {
