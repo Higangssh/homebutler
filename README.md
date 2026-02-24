@@ -4,9 +4,9 @@
 
 # homebutler 🏠
 
-**Manage your homelab from Telegram. One binary. Zero dependencies.**
+**Manage your homelab from any AI — Claude, ChatGPT, Cursor, or terminal. One binary. Zero dependencies.**
 
-A single-binary CLI that lets you monitor servers, control Docker, wake machines, and scan your network — directly from chat. Built for AI assistants, works great standalone.
+A single-binary CLI + MCP server that lets you monitor servers, control Docker, wake machines, and scan your network — from chat, AI tools, or the command line.
 
 ## Features
 
@@ -17,6 +17,7 @@ A single-binary CLI that lets you monitor servers, control Docker, wake machines
 - **Network Scan** — Discover devices on your LAN
 - **Alerts** — Get notified when resources exceed thresholds
 - **Multi-server** — Manage remote servers over SSH (key & password auth)
+- **MCP Server** — Works with Claude Desktop, ChatGPT, Cursor, and any MCP client
 - **JSON Output** — Pipe-friendly, perfect for AI assistants to parse
 
 ## Why homebutler?
@@ -31,6 +32,7 @@ A single-binary CLI that lets you monitor servers, control Docker, wake machines
 | Single binary | ✅ | ❌ | ❌ | ❌ |
 | No web server | ✅ | ❌ | ❌ | ❌ |
 | Multi-server SSH | ✅ Parallel | ❌ | ❌ | ❌ |
+| MCP support | ✅ Built-in | ❌ | ❌ | ❌ |
 | Chat integration | ✅ Native | ❌ | ❌ | ❌ |
 | AI-friendly JSON | ✅ | ❌ | ⚠️ API | ⚠️ API |
 | Docker control | ✅ | ⚠️ Monitor | ❌ | ✅ |
@@ -82,6 +84,7 @@ Commands:
   network scan        Discover devices on LAN
   alerts              Show current alert status
   deploy              Install homebutler on remote servers
+  mcp                 Start MCP server (JSON-RPC over stdio)
   version             Print version
 
 Flags:
@@ -219,14 +222,70 @@ homebutler alerts --json
 - **SSH for remote** — Multi-server uses standard SSH (key-based auth recommended)
 - **No telemetry** — Zero data collection, zero phone-home
 
-## Use with AI Assistants
+## MCP Server
 
-homebutler outputs JSON, making it perfect for AI assistants:
+homebutler includes a built-in [MCP (Model Context Protocol)](https://modelcontextprotocol.io/) server, so any AI tool can manage your homelab.
 
-```bash
-# AI assistant runs this, parses JSON, responds in user's language
-homebutler status --json
+### Supported Clients
+
+- **Claude Desktop** — Anthropic's desktop app
+- **ChatGPT Desktop** — OpenAI's desktop app
+- **Cursor** — AI code editor
+- **Windsurf** — AI code editor
+- **Any MCP-compatible client**
+
+### Setup
+
+Add to your MCP client config:
+
+**Claude Desktop** (`~/Library/Application Support/Claude/claude_desktop_config.json`):
+```json
+{
+  "mcpServers": {
+    "homebutler": {
+      "command": "homebutler",
+      "args": ["mcp"]
+    }
+  }
+}
 ```
+
+**Cursor** (Settings → MCP → Add):
+```json
+{
+  "command": "homebutler",
+  "args": ["mcp"]
+}
+```
+
+Restart your AI client — homebutler tools will appear automatically.
+
+### Available MCP Tools
+
+| Tool | Description |
+|---|---|
+| `system_status` | CPU, memory, disk, uptime |
+| `docker_list` | List containers |
+| `docker_restart` | Restart a container |
+| `docker_stop` | Stop a container |
+| `docker_logs` | Container log output |
+| `wake` | Wake-on-LAN magic packet |
+| `open_ports` | Open ports with process info |
+| `network_scan` | Discover LAN devices |
+| `alerts` | Resource threshold alerts |
+
+All tools support an optional `server` parameter for multi-server management.
+
+### How It Works
+
+```
+You: "How's my server doing?"
+AI → calls system_status tool
+homebutler → reads CPU/RAM/disk
+AI: "CPU 12%, memory 48%, disk 3%. Everything looks healthy!"
+```
+
+No network ports opened. MCP uses stdio (stdin/stdout) — only the parent AI process can communicate with homebutler.
 
 ### OpenClaw Skill
 
