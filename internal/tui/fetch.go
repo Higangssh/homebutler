@@ -53,8 +53,8 @@ func fetchServer(srv *config.ServerConfig, alertCfg *config.AlertConfig) ServerD
 	}
 }
 
-// fetchLocal gathers system status, docker containers, and alerts locally.
-// Docker and alerts are fetched with timeouts to avoid blocking the TUI.
+// fetchLocal gathers system status and alerts locally.
+// Docker is skipped here and fetched separately to avoid blocking.
 func fetchLocal(alertCfg *config.AlertConfig) ServerData {
 	data := ServerData{LastUpdate: time.Now()}
 
@@ -66,37 +66,36 @@ func fetchLocal(alertCfg *config.AlertConfig) ServerData {
 	data.Status = status
 	data.Name = status.Hostname
 
-	// Docker list with timeout (Docker Desktop may hang if not running)
-	type dockerResult struct {
-		containers []docker.Container
-		err        error
-	}
-	dockerCh := make(chan dockerResult, 1)
-	go func() {
-		c, err := docker.List()
-		dockerCh <- dockerResult{c, err}
-	}()
-	select {
-	case res := <-dockerCh:
-		if res.err != nil {
-			errMsg := res.err.Error()
-			if strings.Contains(errMsg, "not installed") || strings.Contains(errMsg, "not found") {
-				data.DockerStatus = "not_installed"
-			} else {
-				data.DockerStatus = "unavailable"
-			}
-		} else {
-			data.DockerStatus = "ok"
-			data.Containers = res.containers
-		}
-	case <-time.After(2 * time.Second):
-		data.DockerStatus = "unavailable"
-	}
-
 	alertResult, _ := alerts.Check(alertCfg)
 	data.Alerts = alertResult
 
 	return data
+}
+
+// fetchDocker fetches docker containers with a timeout.
+func fetchDocker() ([]docker.Container, string) {
+	type dockerResult struct {
+		containers []docker.Container
+		err        error
+	}
+	ch := make(chan dockerResult, 1)
+	go func() {
+		c, err := docker.List()
+		ch <- dockerResult{c, err}
+	}()
+	select {
+	case res := <-ch:
+		if res.err != nil {
+			errMsg := res.err.Error()
+			if strings.Contains(errMsg, "not installed") || strings.Contains(errMsg, "not found") {
+				return nil, "not_installed"
+			}
+			return nil, "unavailable"
+		}
+		return res.containers, "ok"
+	case <-time.After(2 * time.Second):
+		return nil, "unavailable"
+	}
 }
 
 // fetchRemote collects data from a remote server via SSH.

@@ -9,6 +9,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 
 	"github.com/Higangssh/homebutler/internal/config"
+	"github.com/Higangssh/homebutler/internal/docker"
 )
 
 const refreshInterval = 2 * time.Second
@@ -20,6 +21,13 @@ type tickMsg time.Time
 type dataMsg struct {
 	index int
 	data  ServerData
+}
+
+// dockerMsg delivers docker data separately (non-blocking).
+type dockerMsg struct {
+	index      int
+	containers []docker.Container
+	status     string
 }
 
 // serverTab represents one monitored server in the dashboard.
@@ -77,16 +85,21 @@ func NewModel(cfg *config.Config, serverNames []string) Model {
 
 // Init starts the initial data fetch and tick timer.
 func (m Model) Init() tea.Cmd {
-	cmds := make([]tea.Cmd, len(m.servers))
+	cmds := make([]tea.Cmd, 0, len(m.servers)*2+1)
 	for i := range m.servers {
 		idx := i
 		srv := m.servers[i]
-		cmds[i] = func() tea.Msg {
+		// System data (fast)
+		cmds = append(cmds, func() tea.Msg {
 			data := fetchServer(srv.config, &m.cfg.Alerts)
-			return dataMsg{
-				index: idx,
-				data:  data,
-			}
+			return dataMsg{index: idx, data: data}
+		})
+		// Docker data separately (may be slow on local)
+		if srv.config.Local {
+			cmds = append(cmds, func() tea.Msg {
+				containers, status := fetchDocker()
+				return dockerMsg{index: idx, containers: containers, status: status}
+			})
 		}
 	}
 	cmds = append(cmds, tickCmd())
@@ -122,15 +135,18 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.height = msg.Height
 
 	case tickMsg:
-		cmds := make([]tea.Cmd, len(m.servers))
+		cmds := make([]tea.Cmd, 0, len(m.servers)*2+1)
 		for i := range m.servers {
 			idx := i
 			srv := m.servers[i]
-			cmds[i] = func() tea.Msg {
-				return dataMsg{
-					index: idx,
-					data:  fetchServer(srv.config, &m.cfg.Alerts),
-				}
+			cmds = append(cmds, func() tea.Msg {
+				return dataMsg{index: idx, data: fetchServer(srv.config, &m.cfg.Alerts)}
+			})
+			if srv.config.Local {
+				cmds = append(cmds, func() tea.Msg {
+					containers, status := fetchDocker()
+					return dockerMsg{index: idx, containers: containers, status: status}
+				})
 			}
 		}
 		cmds = append(cmds, tickCmd())
@@ -139,6 +155,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case dataMsg:
 		if msg.index >= 0 && msg.index < len(m.servers) {
 			m.servers[msg.index].data = msg.data
+		}
+
+	case dockerMsg:
+		if msg.index >= 0 && msg.index < len(m.servers) {
+			m.servers[msg.index].data.DockerStatus = msg.status
+			m.servers[msg.index].data.Containers = msg.containers
 		}
 	}
 
