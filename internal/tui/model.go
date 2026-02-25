@@ -187,13 +187,16 @@ func (m Model) renderTabs() string {
 		if name == "" {
 			name = srv.config.Name
 		}
+		label := fmt.Sprintf(" [%d] %s ", i+1, name)
 		if i == m.activeTab {
-			tabs = append(tabs, activeTabStyle.Render(" "+name+" "))
+			tabs = append(tabs, activeTabStyle.Render(label))
 		} else {
-			tabs = append(tabs, inactiveTabStyle.Render(" "+name+" "))
+			tabs = append(tabs, inactiveTabStyle.Render(label))
 		}
 	}
-	return lipgloss.JoinHorizontal(lipgloss.Top, tabs...)
+	tabBar := lipgloss.JoinHorizontal(lipgloss.Top, tabs...)
+	serverCount := dimStyle.Render(fmt.Sprintf("  %d servers", len(m.servers)))
+	return tabBar + serverCount
 }
 
 // renderContent draws left (system) and right (docker) panels side by side.
