@@ -32,8 +32,10 @@ type dockerMsg struct {
 
 // serverTab represents one monitored server in the dashboard.
 type serverTab struct {
-	config *config.ServerConfig
-	data   ServerData
+	config     *config.ServerConfig
+	data       ServerData
+	cpuHistory []float64
+	memHistory []float64
 }
 
 // Model is the Bubble Tea model for the watch dashboard.
@@ -162,6 +164,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.servers[msg.index].data.DockerStatus = prevDocker
 				m.servers[msg.index].data.Containers = prevContainers
 			}
+			// Track CPU/Memory history for sparklines
+			if msg.data.Status != nil {
+				m.servers[msg.index].cpuHistory = appendHistory(
+					m.servers[msg.index].cpuHistory, msg.data.Status.CPU.UsagePercent)
+				m.servers[msg.index].memHistory = appendHistory(
+					m.servers[msg.index].memHistory, msg.data.Status.Memory.Percent)
+			}
 		}
 
 	case dockerMsg:
@@ -199,6 +208,8 @@ func (m Model) View() string {
 			b.WriteString("\n")
 		} else {
 			b.WriteString(m.renderContent(tab.data))
+			b.WriteString(m.renderProcessPanel(tab.data, m.width-4))
+			b.WriteString("\n")
 		}
 	}
 
@@ -262,10 +273,23 @@ func (m Model) renderSystemPanel(data ServerData, width int) string {
 			barWidth = 8
 		}
 
+		// CPU bar + sparkline
 		lines = append(lines, fmt.Sprintf("  CPU  %s %5.1f%%",
 			progressBar(s.CPU.UsagePercent, barWidth), s.CPU.UsagePercent))
+		tab := m.servers[m.activeTab]
+		if len(tab.cpuHistory) > 0 {
+			spark := sparkline(tab.cpuHistory, barWidth)
+			lines = append(lines, "       "+sparklineColor(tab.cpuHistory).Render(spark))
+		}
+
+		// Memory bar + sparkline
 		lines = append(lines, fmt.Sprintf("  Mem  %s %5.1f%%",
 			progressBar(s.Memory.Percent, barWidth), s.Memory.Percent))
+		if len(tab.memHistory) > 0 {
+			spark := sparkline(tab.memHistory, barWidth)
+			lines = append(lines, "       "+sparklineColor(tab.memHistory).Render(spark))
+		}
+
 		for _, d := range s.Disks {
 			label := truncate(d.Mount, 4)
 			lines = append(lines, fmt.Sprintf("  %-4s %s %5.1f%%",
@@ -322,6 +346,27 @@ func (m Model) renderDockerPanel(data ServerData, width int) string {
 		}
 	default:
 		lines = append(lines, dimStyle.Render("  Waiting for data..."))
+	}
+
+	content := strings.Join(lines, "\n")
+	return panelStyle.Width(width).Render(content)
+}
+
+// renderProcessPanel draws the top processes table.
+func (m Model) renderProcessPanel(data ServerData, width int) string {
+	var lines []string
+	lines = append(lines, titleStyle.Render("Top Processes (CPU)"))
+	lines = append(lines, "")
+
+	if len(data.Processes) == 0 {
+		lines = append(lines, dimStyle.Render("  No process data"))
+	} else {
+		header := fmt.Sprintf("  %6s  %6s  %6s  %s", "PID", "CPU%", "MEM%", "NAME")
+		lines = append(lines, headerStyle.Render(header))
+		for _, p := range data.Processes {
+			lines = append(lines, fmt.Sprintf("  %6d  %5.1f%%  %5.1f%%  %s",
+				p.PID, p.CPU, p.Mem, truncate(p.Name, 30)))
+		}
 	}
 
 	content := strings.Join(lines, "\n")

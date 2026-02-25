@@ -25,6 +25,7 @@ type ServerData struct {
 	Containers   []docker.Container
 	DockerStatus string // "ok", "not_installed", "unavailable", ""
 	Alerts       *alerts.AlertResult
+	Processes    []system.ProcessInfo
 	Error        error
 	LastUpdate   time.Time
 }
@@ -70,6 +71,9 @@ func fetchLocal(alertCfg *config.AlertConfig) ServerData {
 
 	alertResult, _ := alerts.Check(alertCfg)
 	data.Alerts = alertResult
+
+	procs, _ := system.TopProcesses(5)
+	data.Processes = procs
 
 	return data
 }
