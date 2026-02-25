@@ -318,7 +318,14 @@ func (m Model) renderFooter() string {
 		}
 	}
 
-	parts = append(parts, dimStyle.Render("  Tab: switch server | q: quit | Auto-refresh: 2s"))
+	// Keybinding hints
+	var keys []string
+	if len(m.servers) > 1 {
+		keys = append(keys, headerStyle.Render("Tab/Shift+Tab")+" switch server")
+	}
+	keys = append(keys, headerStyle.Render("q")+" quit")
+	keys = append(keys, dimStyle.Render(fmt.Sprintf("⟳ %ds", int(refreshInterval.Seconds()))))
+	parts = append(parts, "  "+strings.Join(keys, "  │  "))
 
 	footer := strings.Join(parts, "\n")
 	return panelStyle.Width(m.width - 4).Render(footer)
