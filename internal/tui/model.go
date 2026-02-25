@@ -154,7 +154,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case dataMsg:
 		if msg.index >= 0 && msg.index < len(m.servers) {
+			// Preserve docker data (fetched separately)
+			prevDocker := m.servers[msg.index].data.DockerStatus
+			prevContainers := m.servers[msg.index].data.Containers
 			m.servers[msg.index].data = msg.data
+			if msg.data.DockerStatus == "" && prevDocker != "" {
+				m.servers[msg.index].data.DockerStatus = prevDocker
+				m.servers[msg.index].data.Containers = prevContainers
+			}
 		}
 
 	case dockerMsg:
