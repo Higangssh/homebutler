@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/Higangssh/homebutler/internal/alerts"
@@ -72,28 +74,64 @@ func fetchLocal(alertCfg *config.AlertConfig) ServerData {
 	return data
 }
 
+// dockerCache caches the last docker check result to avoid goroutine leaks.
+// If a previous fetch is still running, we return the cached result.
+var (
+	dockerRunning  atomic.Bool
+	dockerCacheMu  sync.Mutex
+	dockerCacheCtr []docker.Container
+	dockerCacheSt  string
+)
+
 // fetchDocker fetches docker containers with a timeout.
+// Uses a single-flight pattern to prevent goroutine accumulation.
 func fetchDocker() ([]docker.Container, string) {
+	// If a fetch is already running, return cached result
+	if !dockerRunning.CompareAndSwap(false, true) {
+		dockerCacheMu.Lock()
+		c, s := dockerCacheCtr, dockerCacheSt
+		dockerCacheMu.Unlock()
+		if s == "" {
+			return nil, "unavailable"
+		}
+		return c, s
+	}
+
 	type dockerResult struct {
 		containers []docker.Container
 		err        error
 	}
 	ch := make(chan dockerResult, 1)
 	go func() {
+		defer dockerRunning.Store(false)
 		c, err := docker.List()
 		ch <- dockerResult{c, err}
 	}()
+
 	select {
 	case res := <-ch:
+		var containers []docker.Container
+		var status string
 		if res.err != nil {
 			errMsg := res.err.Error()
 			if strings.Contains(errMsg, "not installed") || strings.Contains(errMsg, "not found") {
-				return nil, "not_installed"
+				status = "not_installed"
+			} else {
+				status = "unavailable"
 			}
-			return nil, "unavailable"
+		} else {
+			containers = res.containers
+			status = "ok"
 		}
-		return res.containers, "ok"
+		dockerCacheMu.Lock()
+		dockerCacheCtr, dockerCacheSt = containers, status
+		dockerCacheMu.Unlock()
+		return containers, status
 	case <-time.After(2 * time.Second):
+		// Goroutine will finish eventually and update cache + release flag
+		dockerCacheMu.Lock()
+		dockerCacheCtr, dockerCacheSt = nil, "unavailable"
+		dockerCacheMu.Unlock()
 		return nil, "unavailable"
 	}
 }
