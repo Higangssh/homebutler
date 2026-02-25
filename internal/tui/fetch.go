@@ -120,10 +120,20 @@ func fetchRemote(srv *config.ServerConfig, alertCfg *config.AlertConfig) ServerD
 
 	// Docker containers (non-fatal)
 	out, err = remote.Run(srv, "docker", "list", "--json")
-	if err == nil {
+	if err != nil {
+		errMsg := err.Error()
+		if strings.Contains(errMsg, "not installed") || strings.Contains(errMsg, "not found") {
+			data.DockerStatus = "not_installed"
+		} else {
+			data.DockerStatus = "unavailable"
+		}
+	} else {
 		var containers []docker.Container
 		if json.Unmarshal(out, &containers) == nil {
+			data.DockerStatus = "ok"
 			data.Containers = containers
+		} else {
+			data.DockerStatus = "unavailable"
 		}
 	}
 
