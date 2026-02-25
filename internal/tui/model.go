@@ -82,9 +82,10 @@ func (m Model) Init() tea.Cmd {
 		idx := i
 		srv := m.servers[i]
 		cmds[i] = func() tea.Msg {
+			data := fetchServer(srv.config, &m.cfg.Alerts)
 			return dataMsg{
 				index: idx,
-				data:  fetchServer(srv.config, &m.cfg.Alerts),
+				data:  data,
 			}
 		}
 	}

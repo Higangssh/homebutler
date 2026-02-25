@@ -104,19 +104,19 @@ func getCPU() CPUInfo {
 
 	switch runtime.GOOS {
 	case "darwin":
-		out, err := util.RunCmd("top", "-l", "1", "-n", "0", "-stats", "cpu")
+		// Use sysctl for fast CPU load (no sampling delay unlike top)
+		out, err := util.RunCmd("/usr/sbin/sysctl", "-n", "vm.loadavg")
 		if err == nil {
-			for _, line := range strings.Split(out, "\n") {
-				if strings.Contains(line, "CPU usage") {
-					// CPU usage: 5.26% user, 10.52% sys, 84.21% idle
-					parts := strings.Split(line, ",")
-					for _, p := range parts {
-						if strings.Contains(p, "idle") {
-							var idle float64
-							fmt.Sscanf(strings.TrimSpace(p), "%f%% idle", &idle)
-							usage = 100 - idle
-						}
-					}
+			// Output: "{ 2.45 2.12 1.89 }" — use 1-min load average
+			cleaned := strings.Trim(strings.TrimSpace(out), "{ }")
+			fields := strings.Fields(cleaned)
+			if len(fields) >= 1 {
+				var load1 float64
+				fmt.Sscanf(fields[0], "%f", &load1)
+				// Convert load average to percentage (load / cores * 100)
+				usage = (load1 / float64(cores)) * 100
+				if usage > 100 {
+					usage = 100
 				}
 			}
 		}

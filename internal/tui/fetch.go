@@ -1,7 +1,9 @@
 package tui
 
 import (
+	"context"
 	"encoding/json"
+	"fmt"
 	"time"
 
 	"github.com/Higangssh/homebutler/internal/alerts"
@@ -10,6 +12,8 @@ import (
 	"github.com/Higangssh/homebutler/internal/remote"
 	"github.com/Higangssh/homebutler/internal/system"
 )
+
+const fetchTimeout = 10 * time.Second
 
 // ServerData holds all collected data for a single server.
 type ServerData struct {
@@ -21,15 +25,34 @@ type ServerData struct {
 	LastUpdate time.Time
 }
 
-// fetchServer collects data from a server (local or remote).
+// fetchServer collects data from a server (local or remote) with a timeout.
 func fetchServer(srv *config.ServerConfig, alertCfg *config.AlertConfig) ServerData {
-	if srv.Local {
-		return fetchLocal(alertCfg)
+	ctx, cancel := context.WithTimeout(context.Background(), fetchTimeout)
+	defer cancel()
+
+	ch := make(chan ServerData, 1)
+	go func() {
+		if srv.Local {
+			ch <- fetchLocal(alertCfg)
+		} else {
+			ch <- fetchRemote(srv, alertCfg)
+		}
+	}()
+
+	select {
+	case data := <-ch:
+		return data
+	case <-ctx.Done():
+		return ServerData{
+			Name:       srv.Name,
+			Error:      fmt.Errorf("fetch timeout (%v)", fetchTimeout),
+			LastUpdate: time.Now(),
+		}
 	}
-	return fetchRemote(srv, alertCfg)
 }
 
 // fetchLocal gathers system status, docker containers, and alerts locally.
+// Docker and alerts are fetched with timeouts to avoid blocking the TUI.
 func fetchLocal(alertCfg *config.AlertConfig) ServerData {
 	data := ServerData{LastUpdate: time.Now()}
 
@@ -41,8 +64,18 @@ func fetchLocal(alertCfg *config.AlertConfig) ServerData {
 	data.Status = status
 	data.Name = status.Hostname
 
-	containers, _ := docker.List()
-	data.Containers = containers
+	// Docker list with timeout (Docker Desktop may hang if not running)
+	dockerCh := make(chan []docker.Container, 1)
+	go func() {
+		containers, _ := docker.List()
+		dockerCh <- containers
+	}()
+	select {
+	case containers := <-dockerCh:
+		data.Containers = containers
+	case <-time.After(3 * time.Second):
+		data.Containers = nil // skip if Docker is unresponsive
+	}
 
 	alertResult, _ := alerts.Check(alertCfg)
 	data.Alerts = alertResult
