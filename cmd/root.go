@@ -94,7 +94,7 @@ func Execute(version, buildDate string) error {
 		return runServe(cfg)
 	case "mcp":
 		return mcp.NewServer(cfg, version).Run()
-	case "version":
+	case "version", "-v", "--version":
 		fmt.Printf("homebutler %s (built %s)\n", version, buildDate)
 		return nil
 	case "help", "--help", "-h":
@@ -104,8 +104,6 @@ func Execute(version, buildDate string) error {
 		return fmt.Errorf("unknown command: %s (run 'homebutler help' for usage)", os.Args[1])
 	}
 }
-
-
 
 func runStatus(jsonOut bool) error {
 	info, err := system.Status()

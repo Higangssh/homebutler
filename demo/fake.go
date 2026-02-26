@@ -229,9 +229,9 @@ func printTUI() {
 	rightLines = append(rightLines, headerStyle.Render(pHdr))
 
 	type proc struct {
-		pid        int
-		cpu, mem   float64
-		name       string
+		pid      int
+		cpu, mem float64
+		name     string
 	}
 	procs := []proc{
 		{462, 8.3, 0.2, "WallpaperAerials~"},

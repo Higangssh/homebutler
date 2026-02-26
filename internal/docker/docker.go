@@ -9,12 +9,12 @@ import (
 )
 
 type Container struct {
-	ID      string `json:"id"`
-	Name    string `json:"name"`
-	Image   string `json:"image"`
-	Status  string `json:"status"`
-	State   string `json:"state"`
-	Ports   string `json:"ports"`
+	ID     string `json:"id"`
+	Name   string `json:"name"`
+	Image  string `json:"image"`
+	Status string `json:"status"`
+	State  string `json:"state"`
+	Ports  string `json:"ports"`
 }
 
 func List() ([]Container, error) {
@@ -39,11 +39,11 @@ func List() ([]Container, error) {
 			continue
 		}
 		c := Container{
-			ID:    fields[0][:12],
-			Name:  fields[1],
-			Image: fields[2],
+			ID:     fields[0][:12],
+			Name:   fields[1],
+			Image:  fields[2],
 			Status: friendlyStatus(fields[3], fields[4]),
-			State: fields[4],
+			State:  fields[4],
 		}
 		if len(fields) > 5 {
 			c.Ports = fields[5]

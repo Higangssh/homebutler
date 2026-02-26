@@ -11,14 +11,14 @@ import (
 )
 
 type StatusInfo struct {
-	Hostname string    `json:"hostname"`
-	OS       string    `json:"os"`
-	Arch     string    `json:"arch"`
-	Uptime   string    `json:"uptime"`
-	CPU      CPUInfo   `json:"cpu"`
-	Memory   MemInfo   `json:"memory"`
+	Hostname string     `json:"hostname"`
+	OS       string     `json:"os"`
+	Arch     string     `json:"arch"`
+	Uptime   string     `json:"uptime"`
+	CPU      CPUInfo    `json:"cpu"`
+	Memory   MemInfo    `json:"memory"`
 	Disks    []DiskInfo `json:"disks"`
-	Time     string    `json:"time"`
+	Time     string     `json:"time"`
 }
 
 type CPUInfo struct {
@@ -27,9 +27,9 @@ type CPUInfo struct {
 }
 
 type MemInfo struct {
-	TotalGB  float64 `json:"total_gb"`
-	UsedGB   float64 `json:"used_gb"`
-	Percent  float64 `json:"usage_percent"`
+	TotalGB float64 `json:"total_gb"`
+	UsedGB  float64 `json:"used_gb"`
+	Percent float64 `json:"usage_percent"`
 }
 
 type DiskInfo struct {
