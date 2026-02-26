@@ -9,24 +9,29 @@ async function fetchJSON(path, opts) {
   return res.json();
 }
 
-export function getStatus() {
-  return fetchJSON('/api/status');
+function withServer(path, server) {
+  if (server) return `${path}?server=${encodeURIComponent(server)}`;
+  return path;
 }
 
-export function getDocker() {
-  return fetchJSON('/api/docker');
+export function getStatus(server) {
+  return fetchJSON(withServer('/api/status', server));
 }
 
-export function getProcesses() {
-  return fetchJSON('/api/processes');
+export function getDocker(server) {
+  return fetchJSON(withServer('/api/docker', server));
 }
 
-export function getAlerts() {
-  return fetchJSON('/api/alerts');
+export function getProcesses(server) {
+  return fetchJSON(withServer('/api/processes', server));
 }
 
-export function getPorts() {
-  return fetchJSON('/api/ports');
+export function getAlerts(server) {
+  return fetchJSON(withServer('/api/alerts', server));
+}
+
+export function getPorts(server) {
+  return fetchJSON(withServer('/api/ports', server));
 }
 
 export function getWake() {

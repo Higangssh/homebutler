@@ -437,3 +437,234 @@ func TestDemoServerStatusNotFound(t *testing.T) {
 		t.Fatalf("expected 404, got %d", w.Code)
 	}
 }
+
+// --- Server switching tests (demo mode with ?server= param) ---
+
+func TestDemoStatusWithServerParam(t *testing.T) {
+	srv := testDemoServer()
+
+	// nas-box should return different hostname and CPU
+	req := httptest.NewRequest("GET", "/api/status?server=nas-box", nil)
+	w := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", w.Code)
+	}
+
+	var result map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &result); err != nil {
+		t.Fatalf("invalid JSON: %v", err)
+	}
+	if result["hostname"] != "nas-box" {
+		t.Fatalf("expected hostname 'nas-box', got %v", result["hostname"])
+	}
+	cpu := result["cpu"].(map[string]any)
+	if cpu["usage_percent"] != 5.2 {
+		t.Fatalf("expected nas-box CPU 5.2, got %v", cpu["usage_percent"])
+	}
+}
+
+func TestDemoStatusWithLocalServerParam(t *testing.T) {
+	srv := testDemoServer()
+
+	// homelab-server (local) should return normal demo data
+	req := httptest.NewRequest("GET", "/api/status?server=homelab-server", nil)
+	w := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", w.Code)
+	}
+
+	var result map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &result); err != nil {
+		t.Fatalf("invalid JSON: %v", err)
+	}
+	if result["hostname"] != "homelab-server" {
+		t.Fatalf("expected hostname 'homelab-server', got %v", result["hostname"])
+	}
+}
+
+func TestDemoStatusWithOfflineServer(t *testing.T) {
+	srv := testDemoServer()
+
+	// backup-nas is "error" status - should return offline error
+	req := httptest.NewRequest("GET", "/api/status?server=backup-nas", nil)
+	w := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadGateway {
+		t.Fatalf("expected 502, got %d", w.Code)
+	}
+}
+
+func TestDemoDockerWithServerParam(t *testing.T) {
+	srv := testDemoServer()
+
+	req := httptest.NewRequest("GET", "/api/docker?server=nas-box", nil)
+	w := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", w.Code)
+	}
+
+	var result map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &result); err != nil {
+		t.Fatalf("invalid JSON: %v", err)
+	}
+	containers := result["containers"].([]any)
+	if len(containers) != 2 {
+		t.Fatalf("expected 2 containers for nas-box, got %d", len(containers))
+	}
+}
+
+func TestDemoDockerRaspberryPi(t *testing.T) {
+	srv := testDemoServer()
+
+	req := httptest.NewRequest("GET", "/api/docker?server=raspberry-pi", nil)
+	w := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", w.Code)
+	}
+
+	var result map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &result); err != nil {
+		t.Fatalf("invalid JSON: %v", err)
+	}
+	containers := result["containers"].([]any)
+	if len(containers) != 1 {
+		t.Fatalf("expected 1 container for raspberry-pi, got %d", len(containers))
+	}
+	c0 := containers[0].(map[string]any)
+	if c0["name"] != "pihole" {
+		t.Fatalf("expected container 'pihole', got %v", c0["name"])
+	}
+}
+
+func TestDemoProcessesWithServerParam(t *testing.T) {
+	srv := testDemoServer()
+
+	req := httptest.NewRequest("GET", "/api/processes?server=nas-box", nil)
+	w := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", w.Code)
+	}
+
+	var result []map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &result); err != nil {
+		t.Fatalf("invalid JSON: %v", err)
+	}
+	if len(result) != 5 {
+		t.Fatalf("expected 5 processes for nas-box, got %d", len(result))
+	}
+}
+
+func TestDemoAlertsWithServerParam(t *testing.T) {
+	srv := testDemoServer()
+
+	req := httptest.NewRequest("GET", "/api/alerts?server=raspberry-pi", nil)
+	w := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", w.Code)
+	}
+
+	var result map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &result); err != nil {
+		t.Fatalf("invalid JSON: %v", err)
+	}
+	disks := result["disks"].([]any)
+	if len(disks) != 1 {
+		t.Fatalf("expected 1 disk alert for raspberry-pi, got %d", len(disks))
+	}
+}
+
+func TestDemoPortsWithServerParam(t *testing.T) {
+	srv := testDemoServer()
+
+	req := httptest.NewRequest("GET", "/api/ports?server=nas-box", nil)
+	w := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", w.Code)
+	}
+
+	var result []map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &result); err != nil {
+		t.Fatalf("invalid JSON: %v", err)
+	}
+	if len(result) != 3 {
+		t.Fatalf("expected 3 ports for nas-box, got %d", len(result))
+	}
+}
+
+func TestDemoNoServerParamUnchanged(t *testing.T) {
+	srv := testDemoServer()
+
+	// Without ?server param, should return default homelab-server data
+	req := httptest.NewRequest("GET", "/api/status", nil)
+	w := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", w.Code)
+	}
+
+	var result map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &result); err != nil {
+		t.Fatalf("invalid JSON: %v", err)
+	}
+	if result["hostname"] != "homelab-server" {
+		t.Fatalf("expected hostname 'homelab-server', got %v", result["hostname"])
+	}
+}
+
+func TestRealServerNoServerParamUnchanged(t *testing.T) {
+	srv := testServer()
+
+	// Real mode without ?server= should work as before (local)
+	req := httptest.NewRequest("GET", "/api/status", nil)
+	w := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", w.Code)
+	}
+
+	var result map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &result); err != nil {
+		t.Fatalf("invalid JSON: %v", err)
+	}
+	if _, ok := result["hostname"]; !ok {
+		t.Fatal("missing hostname field")
+	}
+}
+
+func TestRealServerLocalServerParam(t *testing.T) {
+	srv := testServer()
+
+	// ?server=myserver (local) should fall through to local handler
+	req := httptest.NewRequest("GET", "/api/status?server=myserver", nil)
+	w := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", w.Code)
+	}
+
+	var result map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &result); err != nil {
+		t.Fatalf("invalid JSON: %v", err)
+	}
+	if _, ok := result["hostname"]; !ok {
+		t.Fatal("missing hostname field")
+	}
+}

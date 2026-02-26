@@ -43,11 +43,11 @@
   </div>
 
   <div class="grid">
-    <StatusCard />
-    <DockerCard />
-    <ProcessCard />
-    <AlertCard />
-    <PortsCard />
+    <StatusCard server={selectedServer} />
+    <DockerCard server={selectedServer} />
+    <ProcessCard server={selectedServer} />
+    <AlertCard server={selectedServer} />
+    <PortsCard server={selectedServer} />
     <WakeCard />
   </div>
 </main>

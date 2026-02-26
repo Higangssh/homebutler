@@ -78,6 +78,8 @@ func Execute(version, buildDate string) error {
 		return runDocker(jsonOutput)
 	case "ports":
 		return runPorts(jsonOutput)
+	case "processes":
+		return runProcesses(jsonOutput)
 	case "network":
 		return runNetwork(jsonOutput)
 	case "wake":
@@ -167,6 +169,14 @@ func runPorts(jsonOut bool) error {
 		return err
 	}
 	return output(openPorts, jsonOut)
+}
+
+func runProcesses(jsonOut bool) error {
+	procs, err := system.TopProcesses(10)
+	if err != nil {
+		return err
+	}
+	return output(procs, jsonOut)
 }
 
 func runNetwork(jsonOut bool) error {

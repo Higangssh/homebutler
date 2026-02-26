@@ -94,6 +94,36 @@ func (s *Server) cors(next http.HandlerFunc) http.HandlerFunc {
 	}
 }
 
+// isRemoteRequest checks the ?server query param and returns the server config if it's a remote server.
+// Returns (nil, false) if no server param, server is local, or server not found.
+func (s *Server) isRemoteRequest(r *http.Request) (*config.ServerConfig, bool) {
+	name := r.URL.Query().Get("server")
+	if name == "" {
+		return nil, false
+	}
+	srv := s.cfg.FindServer(name)
+	if srv == nil || srv.Local {
+		return nil, false
+	}
+	return srv, true
+}
+
+// forwardRemote runs a homebutler subcommand on a remote server via SSH and writes the JSON response.
+func (s *Server) forwardRemote(w http.ResponseWriter, srv *config.ServerConfig, args ...string) {
+	out, err := remote.Run(srv, args...)
+	if err != nil {
+		writeError(w, http.StatusBadGateway, err.Error())
+		return
+	}
+	var raw json.RawMessage
+	if err := json.Unmarshal(out, &raw); err != nil {
+		writeError(w, http.StatusBadGateway, "invalid response from remote server")
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.Write(out)
+}
+
 func (s *Server) handleOptions(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 	w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
@@ -102,6 +132,10 @@ func (s *Server) handleOptions(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request) {
+	if srv, ok := s.isRemoteRequest(r); ok {
+		s.forwardRemote(w, srv, "status", "--json")
+		return
+	}
 	info, err := system.Status()
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
@@ -111,6 +145,10 @@ func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleDocker(w http.ResponseWriter, r *http.Request) {
+	if srv, ok := s.isRemoteRequest(r); ok {
+		s.forwardRemote(w, srv, "docker", "list", "--json")
+		return
+	}
 	containers, err := docker.List()
 	if err != nil {
 		// Return empty list with unavailable status instead of raw error
@@ -128,6 +166,10 @@ func (s *Server) handleDocker(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleProcesses(w http.ResponseWriter, r *http.Request) {
+	if srv, ok := s.isRemoteRequest(r); ok {
+		s.forwardRemote(w, srv, "processes", "--json")
+		return
+	}
 	procs, err := system.TopProcesses(10)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
@@ -137,6 +179,10 @@ func (s *Server) handleProcesses(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleAlerts(w http.ResponseWriter, r *http.Request) {
+	if srv, ok := s.isRemoteRequest(r); ok {
+		s.forwardRemote(w, srv, "alerts", "--json")
+		return
+	}
 	result, err := alerts.Check(&s.cfg.Alerts)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
@@ -146,6 +192,10 @@ func (s *Server) handleAlerts(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handlePorts(w http.ResponseWriter, r *http.Request) {
+	if srv, ok := s.isRemoteRequest(r); ok {
+		s.forwardRemote(w, srv, "ports", "--json")
+		return
+	}
 	openPorts, err := ports.List()
 	if err != nil {
 		writeJSON(w, []any{})

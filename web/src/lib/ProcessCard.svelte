@@ -2,21 +2,26 @@
   import { onMount, onDestroy } from 'svelte';
   import { getProcesses } from './api.js';
 
+  let { server = '' } = $props();
+
   let processes = $state([]);
   let error = $state('');
   let timer;
 
   async function refresh() {
     try {
-      processes = await getProcesses();
+      processes = await getProcesses(server);
       error = '';
     } catch (err) {
       error = err.message;
     }
   }
 
-  onMount(() => {
+  $effect(() => {
+    server;
+    processes = [];
     refresh();
+    clearInterval(timer);
     timer = setInterval(refresh, 5000);
   });
 

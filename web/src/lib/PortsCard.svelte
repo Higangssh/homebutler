@@ -2,21 +2,26 @@
   import { onMount, onDestroy } from 'svelte';
   import { getPorts } from './api.js';
 
+  let { server = '' } = $props();
+
   let ports = $state([]);
   let error = $state('');
   let timer;
 
   async function refresh() {
     try {
-      ports = await getPorts();
+      ports = await getPorts(server);
       error = '';
     } catch (err) {
       error = err.message;
     }
   }
 
-  onMount(() => {
+  $effect(() => {
+    server;
+    ports = [];
     refresh();
+    clearInterval(timer);
     timer = setInterval(refresh, 10000);
   });
 

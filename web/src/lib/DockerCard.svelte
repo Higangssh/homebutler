@@ -2,6 +2,8 @@
   import { onMount, onDestroy } from 'svelte';
   import { getDocker } from './api.js';
 
+  let { server = '' } = $props();
+
   let containers = $state([]);
   let available = $state(true);
   let message = $state('');
@@ -10,7 +12,7 @@
 
   async function refresh() {
     try {
-      const data = await getDocker();
+      const data = await getDocker(server);
       available = data.available ?? true;
       message = data.message ?? '';
       containers = data.containers ?? [];
@@ -20,8 +22,11 @@
     }
   }
 
-  onMount(() => {
+  $effect(() => {
+    server;
+    containers = [];
     refresh();
+    clearInterval(timer);
     timer = setInterval(refresh, 5000);
   });
 
