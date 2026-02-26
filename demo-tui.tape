@@ -1,9 +1,9 @@
 Output demo-tui.gif
 
 Set Shell "bash"
-Set FontSize 13
+Set FontSize 14
 Set Width 1200
-Set Height 750
+Set Height 580
 Set Theme "Catppuccin Mocha"
 Set Padding 20
 Set TypingSpeed 50ms
@@ -17,32 +17,29 @@ Enter
 Sleep 200ms
 Show
 
-# 1. TUI dashboard (hero)
-Type "homebutler watch"
-Sleep 200ms
-Enter
-Sleep 4s
-
-# 2. System status
+# 1. System status
 Type "homebutler status"
 Sleep 200ms
 Enter
-Sleep 2s
+Sleep 2500ms
 
-# 3. Docker list
+# 2. Docker list
 Type "homebutler docker list"
 Sleep 200ms
 Enter
-Sleep 2s
+Sleep 2500ms
 
-# 4. Open ports
-Type "homebutler ports"
-Sleep 200ms
-Enter
-Sleep 2s
-
-# 5. Alerts
+# 3. Alerts
 Type "homebutler alerts"
 Sleep 200ms
 Enter
-Sleep 3s
+Sleep 2500ms
+
+# 4. Clear and show TUI (hero, last)
+Type "clear"
+Enter
+Sleep 300ms
+Type "homebutler watch"
+Sleep 200ms
+Enter
+Sleep 5s
