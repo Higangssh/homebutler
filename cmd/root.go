@@ -23,6 +23,12 @@ import (
 )
 
 func Execute(version, buildDate string) error {
+	// Check for version flags first (before any command processing)
+	if hasFlag("--version") || hasFlag("-v") {
+		fmt.Printf("homebutler %s (built %s)\n", version, buildDate)
+		return nil
+	}
+
 	if len(os.Args) < 2 {
 		printUsage()
 		return nil
