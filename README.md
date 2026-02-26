@@ -54,7 +54,7 @@ A single-binary CLI + MCP server that lets you monitor servers, control Docker, 
 ## Demo
 
 <p align="center">
-  <img src="demo-tui.gif" alt="homebutler TUI dashboard" width="800">
+  <img src="demo/demo-tui.gif" alt="homebutler TUI dashboard" width="800">
 </p>
 
 ## Quick Start

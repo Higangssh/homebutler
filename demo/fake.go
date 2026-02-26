@@ -1,4 +1,4 @@
-// cmd/demo/main.go — Renders fake CLI/TUI output for GIF recording.
+// demo/fake.go — Renders fake CLI/TUI output for GIF recording.
 package main
 
 import (
