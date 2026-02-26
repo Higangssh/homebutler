@@ -32,7 +32,6 @@ func runInit() error {
 
 	cfg := &config.Config{
 		Alerts: config.AlertConfig{CPU: 90, Memory: 85, Disk: 90},
-
 	}
 
 	addMode := false // true = keep existing servers, just add new ones

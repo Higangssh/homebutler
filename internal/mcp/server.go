@@ -29,10 +29,10 @@ type jsonRPCRequest struct {
 }
 
 type jsonRPCResponse struct {
-	JSONRPC string      `json:"jsonrpc"`
+	JSONRPC string          `json:"jsonrpc"`
 	ID      json.RawMessage `json:"id"`
-	Result  any         `json:"result,omitempty"`
-	Error   *rpcError   `json:"error,omitempty"`
+	Result  any             `json:"result,omitempty"`
+	Error   *rpcError       `json:"error,omitempty"`
 }
 
 type rpcError struct {
@@ -48,9 +48,9 @@ type serverInfo struct {
 }
 
 type initializeResult struct {
-	ProtocolVersion string      `json:"protocolVersion"`
-	Capabilities    capInfo     `json:"capabilities"`
-	ServerInfo      serverInfo  `json:"serverInfo"`
+	ProtocolVersion string     `json:"protocolVersion"`
+	Capabilities    capInfo    `json:"capabilities"`
+	ServerInfo      serverInfo `json:"serverInfo"`
 }
 
 type capInfo struct {
@@ -60,15 +60,15 @@ type capInfo struct {
 type toolsCap struct{}
 
 type toolDef struct {
-	Name        string     `json:"name"`
-	Description string     `json:"description"`
+	Name        string      `json:"name"`
+	Description string      `json:"description"`
 	InputSchema inputSchema `json:"inputSchema"`
 }
 
 type inputSchema struct {
-	Type       string                `json:"type"`
-	Properties map[string]propDef    `json:"properties,omitempty"`
-	Required   []string              `json:"required,omitempty"`
+	Type       string             `json:"type"`
+	Properties map[string]propDef `json:"properties,omitempty"`
+	Required   []string           `json:"required,omitempty"`
 }
 
 type propDef struct {
