@@ -61,7 +61,7 @@ func connect(server *config.ServerConfig) (*ssh.Client, error) {
 		authMethods = append(authMethods, ssh.Password(server.Password))
 	}
 
-	hostKeyCallback, err := hostKeyCallback()
+	hostKeyCallback, err := newKnownHostsCallback()
 	if err != nil {
 		return nil, err
 	}
@@ -88,9 +88,22 @@ func connect(server *config.ServerConfig) (*ssh.Client, error) {
 					"This could indicate a man-in-the-middle attack.\n"+
 					"If you trust this change, run: homebutler trust %s --reset", server.Name, addr, server.Name)
 			}
-			// Unknown host — not in known_hosts
-			return nil, fmt.Errorf("unknown host key for %s (%s): server not found in known_hosts.\n"+
-				"Run: homebutler trust %s", server.Name, addr, server.Name)
+			// Unknown host — TOFU: auto-add to known_hosts and retry
+			if tofuErr := tofuConnect(addr, cfg); tofuErr == nil {
+				// Reload known_hosts and retry
+				newCb, cbErr := newKnownHostsCallback()
+				if cbErr == nil {
+					retryCfg := *cfg
+					retryCfg.HostKeyCallback = newCb
+					retryClient, retryErr := ssh.Dial("tcp", addr, &retryCfg)
+					if retryErr != nil {
+						return nil, fmt.Errorf("failed to connect to %s (%s) after TOFU: %w", server.Name, addr, retryErr)
+					}
+					return retryClient, nil
+				}
+			}
+			return nil, fmt.Errorf("unknown host key for %s (%s): failed to auto-register host key.\n"+
+				"Try manually: homebutler trust %s", server.Name, addr, server.Name)
 		}
 		return nil, fmt.Errorf("failed to connect to %s (%s): %w", server.Name, addr, err)
 	}
@@ -107,8 +120,8 @@ func knownHostsPath() (string, error) {
 	return filepath.Join(home, ".ssh", "known_hosts"), nil
 }
 
-// hostKeyCallback returns an ssh.HostKeyCallback that verifies against known_hosts.
-func hostKeyCallback() (ssh.HostKeyCallback, error) {
+// newKnownHostsCallback returns an ssh.HostKeyCallback that verifies against known_hosts.
+func newKnownHostsCallback() (ssh.HostKeyCallback, error) {
 	path, err := knownHostsPath()
 	if err != nil {
 		return nil, err
@@ -130,6 +143,46 @@ func hostKeyCallback() (ssh.HostKeyCallback, error) {
 		return nil, fmt.Errorf("failed to read known_hosts: %w", err)
 	}
 	return cb, nil
+}
+
+// tofuConnect performs Trust On First Use: connects to get the host key,
+// then adds it to known_hosts automatically.
+func tofuConnect(addr string, cfg *ssh.ClientConfig) error {
+	path, err := knownHostsPath()
+	if err != nil {
+		return err
+	}
+
+	// Connect with a callback that captures the host key
+	var hostKey ssh.PublicKey
+	captureCfg := *cfg
+	captureCfg.HostKeyCallback = func(hostname string, remote net.Addr, key ssh.PublicKey) error {
+		hostKey = key
+		return nil
+	}
+
+	client, err := ssh.Dial("tcp", addr, &captureCfg)
+	if err != nil {
+		return fmt.Errorf("TOFU dial failed: %w", err)
+	}
+	client.Close()
+
+	if hostKey == nil {
+		return fmt.Errorf("no host key captured")
+	}
+
+	// Write to known_hosts
+	line := knownhosts.Line([]string{addr}, hostKey)
+	f, err := os.OpenFile(path, os.O_APPEND|os.O_WRONLY, 0600)
+	if err != nil {
+		return fmt.Errorf("cannot write known_hosts: %w", err)
+	}
+	defer f.Close()
+	if _, err := fmt.Fprintln(f, line); err != nil {
+		return err
+	}
+
+	return nil
 }
 
 // TrustServer connects to a server, displays its host key fingerprint,
