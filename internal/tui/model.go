@@ -390,7 +390,7 @@ func (m Model) renderRightPanel(data ServerData, w panelWidths) string {
 				shown = shown[:maxContainers]
 			}
 			for _, c := range shown {
-				stateStr := c.State
+				var stateStr string
 				switch c.State {
 				case "running":
 					stateStr = okStyle.Render(fmt.Sprintf("%-10s", c.State))

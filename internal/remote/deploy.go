@@ -232,9 +232,5 @@ func scpUpload(client *ssh.Client, data []byte, remotePath string, mode os.FileM
 		fmt.Fprint(w, "\x00")
 	}()
 
-	dir := filepath.Dir(remotePath)
-	if dir == "." {
-		dir = ""
-	}
 	return session.Run(fmt.Sprintf("scp -t %s", remotePath))
 }

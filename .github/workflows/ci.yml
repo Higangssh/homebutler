@@ -6,8 +6,27 @@ on:
   pull_request:
     branches: [main]
 
+permissions:
+  contents: read
+
 jobs:
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.26"
+
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@v6
+        with:
+          version: v2.1
+
   test:
+    name: Test
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -26,8 +45,45 @@ jobs:
       - name: Build
         run: go build ./...
 
-      - name: Vet
-        run: go vet ./...
-
       - name: Test
-        run: go test ./... -v
+        run: go test ./... -v -race
+
+      - name: Test coverage
+        run: |
+          go test ./... -coverprofile=coverage.out
+          go tool cover -func=coverage.out | tail -1
+
+  build:
+    name: Build (${{ matrix.os }})
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - goos: linux
+            goarch: amd64
+          - goos: linux
+            goarch: arm64
+          - goos: darwin
+            goarch: amd64
+          - goos: darwin
+            goarch: arm64
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.26"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Build web frontend
+        run: make build-web
+
+      - name: Cross-compile
+        env:
+          CGO_ENABLED: "0"
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+        run: go build -ldflags "-s -w" -o homebutler-${{ matrix.goos }}-${{ matrix.goarch }} .

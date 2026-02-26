@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"net"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -149,10 +148,7 @@ func runInit() error {
 	}
 	fmt.Println()
 
-	for {
-		if !promptYN(scanner, "  Add a remote server?", true) {
-			break
-		}
+	for promptYN(scanner, "  Add a remote server?", true) {
 		fmt.Println()
 
 		server, err := promptRemoteServer(scanner, home)
@@ -367,34 +363,4 @@ func testSSH(server *config.ServerConfig) bool {
 	}
 	conn.Close()
 	return true
-}
-
-// detectSSHAgent checks if SSH agent is available.
-func detectSSHAgent() bool {
-	return os.Getenv("SSH_AUTH_SOCK") != ""
-}
-
-// sshConfigHosts reads ~/.ssh/config and returns host entries (for future use).
-func sshConfigHosts(home string) []string {
-	data, err := os.ReadFile(filepath.Join(home, ".ssh", "config"))
-	if err != nil {
-		return nil
-	}
-	var hosts []string
-	for _, line := range strings.Split(string(data), "\n") {
-		line = strings.TrimSpace(line)
-		if strings.HasPrefix(strings.ToLower(line), "host ") {
-			host := strings.TrimSpace(line[5:])
-			if host != "*" && !strings.Contains(host, "*") {
-				hosts = append(hosts, host)
-			}
-		}
-	}
-	return hosts
-}
-
-// isCommandAvailable checks if a command exists in PATH.
-func isCommandAvailable(name string) bool {
-	_, err := exec.LookPath(name)
-	return err == nil
 }

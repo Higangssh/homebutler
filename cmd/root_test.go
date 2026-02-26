@@ -91,8 +91,6 @@ func TestGetFlag(t *testing.T) {
 	}
 }
 
-var origArgs = []string{}
-
 func TestHasFlag(t *testing.T) {
 	// hasFlag reads os.Args, tested implicitly through integration
 	// Just verify it doesn't panic with current args

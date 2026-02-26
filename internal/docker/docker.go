@@ -137,14 +137,14 @@ func shortenDuration(s string) string {
 	s = strings.ReplaceAll(s, " week", "w")
 	s = strings.ReplaceAll(s, " months", "mo")
 	s = strings.ReplaceAll(s, " month", "mo")
-	s = strings.Replace(s, " ", "", -1)
+	s = strings.ReplaceAll(s, " ", "")
 	return s
 }
 
 // isValidName prevents command injection by allowing only safe characters.
 func isValidName(name string) bool {
 	for _, c := range name {
-		if !((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
+		if !((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || //nolint:staticcheck // readability
 			(c >= '0' && c <= '9') || c == '-' || c == '_' || c == '.') {
 			return false
 		}
@@ -153,11 +153,7 @@ func isValidName(name string) bool {
 }
 
 func splitLines(s string) []string {
-	var lines []string
-	for _, l := range split(s, '\n') {
-		lines = append(lines, l)
-	}
-	return lines
+	return split(s, '\n')
 }
 
 func splitTabs(s string) []string {
