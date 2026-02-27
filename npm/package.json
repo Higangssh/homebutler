@@ -1,0 +1,40 @@
+{
+  "name": "homebutler",
+  "version": "0.0.0",
+  "description": "Homelab management CLI + MCP server — manage servers, Docker, ports, alerts via AI",
+  "keywords": [
+    "mcp",
+    "homelab",
+    "server",
+    "docker",
+    "claude",
+    "ai",
+    "devops",
+    "monitoring"
+  ],
+  "license": "MIT",
+  "author": "Higangssh",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Higangssh/homebutler"
+  },
+  "homepage": "https://github.com/Higangssh/homebutler",
+  "bugs": {
+    "url": "https://github.com/Higangssh/homebutler/issues"
+  },
+  "bin": {
+    "homebutler-mcp": "run.js"
+  },
+  "scripts": {
+    "postinstall": "node install.js"
+  },
+  "files": [
+    "install.js",
+    "run.js",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=16"
+  }
+}

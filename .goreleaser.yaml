@@ -21,10 +21,55 @@ archives:
 checksum:
   name_template: checksums.txt
 
+release:
+  header: |
+    ## HomeButler {{ .Tag }}
+
+    **Manage your homelab from any AI — one binary, zero dependencies.**
+
+    ### Install / Upgrade
+
+    ```bash
+    # Already installed? Just run:
+    homebutler upgrade
+
+    # Fresh install
+    brew install Higangssh/homebutler/homebutler
+    # or
+    curl -fsSL https://raw.githubusercontent.com/Higangssh/homebutler/main/install.sh | sh
+    # or
+    npm install -g homebutler
+    ```
+
+    ### MCP (Claude Desktop / Cursor / Claude Code)
+    ```json
+    { "mcpServers": { "homebutler": { "command": "npx", "args": ["-y", "homebutler@latest"] } } }
+    ```
+  footer: |
+    ---
+    **Full Changelog**: https://github.com/Higangssh/homebutler/compare/{{ .PreviousTag }}...{{ .Tag }}
+
+    **All install methods**: See [README](https://github.com/Higangssh/homebutler#installation)
+
 changelog:
   sort: asc
+  use: github
+  groups:
+    - title: "🚀 Features"
+      regexp: '^.*?feat(\(.+\))??!?:.+$'
+      order: 0
+    - title: "🐛 Bug Fixes"
+      regexp: '^.*?fix(\(.+\))??!?:.+$'
+      order: 1
+    - title: "🔒 Security"
+      regexp: '^.*?security(\(.+\))??!?:.+$'
+      order: 2
+    - title: "📦 Others"
+      order: 999
   filters:
     exclude:
       - "^docs:"
       - "^chore:"
       - "^test:"
+      - "^style:"
+      - "^ci:"

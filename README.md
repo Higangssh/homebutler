@@ -31,6 +31,16 @@ A single-binary CLI + MCP server that lets you monitor servers, control Docker, 
 
 > Other tools give you dashboards. homebutler gives you a **conversation**.
 
+**3 AM. Your server disk is 91% full. Here's what happens next:**
+
+<p align="center">
+  <img src="assets/demo-chat.png" alt="HomeButler alert → diagnose → fix via Telegram" width="480" />
+</p>
+
+Alert fires → you check logs from bed → AI restarts the problem container → disk drops to 66%. All from your phone. No SSH, no laptop, no dashboard login.
+
+This is what homebutler + [OpenClaw](https://github.com/openclaw/openclaw) looks like in practice.
+
 <details>
 <summary>📊 Comparison with alternatives</summary>
 
@@ -54,6 +64,10 @@ A single-binary CLI + MCP server that lets you monitor servers, control Docker, 
 </details>
 
 ## Demo
+
+### 🧠 AI-Powered Management (MCP)
+
+> **One natural language prompt manages your entire homelab.** Claude Code calls homebutler MCP tools in parallel — checking server status, listing Docker containers, and alerting on disk usage across multiple servers. [See screenshots & setup →](#mcp-server)
 
 ### 🌐 Web Dashboard
 
@@ -101,6 +115,9 @@ curl -fsSL https://raw.githubusercontent.com/Higangssh/homebutler/main/install.s
 # Or via Homebrew
 brew install Higangssh/homebutler/homebutler
 
+# Or via npm (MCP server only)
+npm install -g homebutler
+
 # Interactive setup — adds your servers in seconds
 homebutler init
 
@@ -133,6 +150,7 @@ Commands:
   network scan        Discover devices on LAN
   alerts              Show current alert status
   trust <server>      Register SSH host key (TOFU)
+  upgrade             Upgrade local + all remote servers to latest
   deploy              Install homebutler on remote servers
   mcp                 Start MCP server (JSON-RPC over stdio)
   version             Print version
@@ -143,6 +161,7 @@ Flags:
   --all               Run on all configured servers in parallel
   --port <number>     Port for serve command (default: 8080)
   --demo              Run serve with realistic demo data
+  --local             Upgrade only the local binary (skip remote servers)
   --local <path>      Use local binary for deploy (air-gapped)
   --config <path>     Config file (auto-detected, see Configuration)
 ```
@@ -299,9 +318,28 @@ homebutler docker list --server rpi
 homebutler status --all
 homebutler alerts --all
 
-# Deploy/update homebutler on remote servers
+# Deploy homebutler to remote servers (first install)
 homebutler deploy --server rpi
 homebutler deploy --all
+
+# Upgrade local + all remote servers to latest
+homebutler upgrade
+
+# Upgrade only the local binary
+homebutler upgrade --local
+```
+
+Upgrade checks GitHub Releases for the latest version, compares with each target, and updates only what's outdated:
+
+```
+$ homebutler upgrade
+checking latest version... v0.8.0
+
+upgrading local... ✓ v0.7.1 → v0.8.0
+upgrading rpi5...  ✓ v0.7.1 → v0.8.0 (linux/arm64)
+upgrading nas...   ─ already v0.8.0
+
+2 upgraded, 1 already up-to-date
 ```
 
 ## Output Format
@@ -330,7 +368,7 @@ homebutler alerts --json
 
 ## Security
 
-- **No network listener** — homebutler never opens ports or accepts connections
+- **No network listener by default** — CLI and MCP modes never open ports. `homebutler serve` starts a local-only dashboard (127.0.0.1) on demand
 - **Read-only by default** — Status commands don't modify anything
 - **Explicit actions only** — Destructive commands require exact container/service names
 - **SSH for remote** — Multi-server uses standard SSH (key-based auth recommended)
@@ -338,10 +376,40 @@ homebutler alerts --json
 
 ## MCP Server
 
-homebutler includes a built-in [MCP (Model Context Protocol)](https://modelcontextprotocol.io/) server, so any AI tool can manage your homelab.
+homebutler includes a built-in [MCP (Model Context Protocol)](https://modelcontextprotocol.io/) server, so any AI tool can manage your homelab — with natural language.
+
+> *"Check all my servers and list docker containers"*
+>
+> One prompt. Multiple servers. Full visibility.
+
+<p align="center">
+  <img src="assets/mcp-tool-calls.jpg" alt="Claude Code calling homebutler MCP tools" width="800" />
+</p>
+
+<p align="center">
+  <em>Claude Code calls homebutler tools in parallel across servers</em>
+</p>
+
+<p align="center">
+  <img src="assets/mcp-results.jpg" alt="homebutler MCP formatted results" width="800" />
+</p>
+
+<p align="center">
+  <em>Formatted results: server status, Docker containers, and disk alerts — from one prompt</em>
+</p>
+
+### Try Without Real Servers
+
+```bash
+# Demo mode — realistic data, no real system calls
+homebutler mcp --demo
+```
+
+Add `"args": ["mcp", "--demo"]` to your MCP config to try it instantly.
 
 ### Supported Clients
 
+- **Claude Code** — Anthropic's CLI for Claude
 - **Claude Desktop** — Anthropic's desktop app
 - **ChatGPT Desktop** — OpenAI's desktop app
 - **Cursor** — AI code editor
@@ -352,7 +420,21 @@ homebutler includes a built-in [MCP (Model Context Protocol)](https://modelconte
 
 Add to your MCP client config:
 
-**Claude Desktop** (`~/Library/Application Support/Claude/claude_desktop_config.json`):
+**Quick setup (no install needed):**
+```json
+{
+  "mcpServers": {
+    "homebutler": {
+      "command": "npx",
+      "args": ["-y", "homebutler@latest"]
+    }
+  }
+}
+```
+
+Add this to `.mcp.json` (Claude Code / Cursor) or your MCP client config (Claude Desktop / ChatGPT Desktop).
+
+**If homebutler is already installed:**
 ```json
 {
   "mcpServers": {
@@ -361,14 +443,6 @@ Add to your MCP client config:
       "args": ["mcp"]
     }
   }
-}
-```
-
-**Cursor** (Settings → MCP → Add):
-```json
-{
-  "command": "homebutler",
-  "args": ["mcp"]
 }
 ```
 
@@ -388,28 +462,39 @@ Restart your AI client — homebutler tools will appear automatically.
 | `network_scan` | Discover LAN devices |
 | `alerts` | Resource threshold alerts |
 
-All tools support an optional `server` parameter for multi-server management.
+All tools support an optional `server` parameter — manage every server from a single prompt.
 
 ### How It Works
 
 ```
-You: "How's my server doing?"
-AI → calls system_status tool
-homebutler → reads CPU/RAM/disk
-AI: "CPU 12%, memory 48%, disk 3%. Everything looks healthy!"
+You: "Check my servers and find any disk warnings"
+AI → calls system_status + alerts on each server (in parallel)
+homebutler → reads CPU/RAM/disk on local + remote servers via SSH
+AI: "homelab-server /mnt/data is at 87% — consider cleaning up. Everything else healthy."
 ```
 
 No network ports opened. MCP uses stdio (stdin/stdout) — only the parent AI process can communicate with homebutler.
 
-### OpenClaw Skill
+### Agent Skill (Claude Code, Cursor, OpenClaw, and more)
 
-An official [OpenClaw](https://github.com/openclaw/openclaw) skill is available on [ClawHub](https://clawhub.ai/skills/homeserver):
+homebutler ships with an [Agent Skill](https://agentskills.io) that works across AI tools:
+
+**Claude Code / Cursor / Gemini CLI** — copy the skill to your personal skills directory:
+
+```bash
+mkdir -p ~/.claude/skills/homeserver
+cp skills/homeserver/SKILL.md ~/.claude/skills/homeserver/
+```
+
+Then ask Claude Code: *"Check my server status"* — or invoke directly with `/homeserver`.
+
+**OpenClaw** — install from [ClawHub](https://clawhub.ai/Higangssh/homeserver):
 
 ```bash
 clawhub install homeserver
 ```
 
-This lets you manage your homelab from Telegram, Discord, or any chat platform connected to OpenClaw — in any language.
+Manage your homelab from Telegram, Discord, or any chat platform — in any language.
 
 ## Installation
 
@@ -428,6 +513,14 @@ curl -fsSL https://raw.githubusercontent.com/Higangssh/homebutler/main/install.s
 ```
 
 Auto-detects OS/architecture, downloads the latest release, and installs to PATH.
+
+### npm (MCP server)
+
+```bash
+npm install -g homebutler
+```
+
+Downloads the Go binary automatically. Use `npx -y homebutler@latest` to run without installing globally.
 
 ### Go Install
 

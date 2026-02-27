@@ -45,12 +45,16 @@ Open an issue describing:
 
 ### Pull Requests
 
-1. Fork the repo
-2. Create a branch (`git checkout -b feat/my-feature`)
-3. Make your changes
-4. Run tests (`go test ./... && go vet ./...`)
-5. Commit with [Conventional Commits](https://www.conventionalcommits.org/) (`feat:`, `fix:`, `refactor:`, etc.)
-6. Push and open a PR
+1. **Comment on the issue first** — Let others know you're working on it to avoid duplicate PRs
+2. Fork the repo
+3. Create a branch (`git checkout -b feat/my-feature`)
+4. Make your changes
+5. Run `go fmt ./...` and `go vet ./...`
+6. Run tests (`go test ./...`)
+7. Commit with [Conventional Commits](https://www.conventionalcommits.org/) (`feat:`, `fix:`, `refactor:`, etc.)
+8. Push and open a PR — **1 PR per issue**
+
+> **Note:** All PRs are squash-merged into a single commit on main.
 
 ### Commit Messages
 

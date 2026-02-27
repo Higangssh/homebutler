@@ -12,7 +12,6 @@ type Config struct {
 	Servers []ServerConfig `yaml:"servers"`
 	Wake    []WakeTarget   `yaml:"wake,omitempty"`
 	Alerts  AlertConfig    `yaml:"alerts"`
-
 }
 
 type ServerConfig struct {
@@ -72,7 +71,6 @@ func Load(path string) (*Config, error) {
 			Memory: 85,
 			Disk:   90,
 		},
-
 	}
 
 	data, err := os.ReadFile(path)

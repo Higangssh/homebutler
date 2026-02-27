@@ -20,14 +20,14 @@ func testServer() *Server {
 		},
 		Alerts: config.AlertConfig{CPU: 90, Memory: 85, Disk: 90},
 	}
-	return New(cfg, 8080)
+	return New(cfg, "127.0.0.1", 8080)
 }
 
 func testDemoServer() *Server {
 	cfg := &config.Config{
 		Alerts: config.AlertConfig{CPU: 90, Memory: 85, Disk: 90},
 	}
-	return New(cfg, 8080, true)
+	return New(cfg, "127.0.0.1", 8080, true)
 }
 
 func TestStatusEndpoint(t *testing.T) {
@@ -161,12 +161,31 @@ func TestServerStatusNotFound(t *testing.T) {
 
 func TestCORSHeaders(t *testing.T) {
 	srv := testServer()
+
+	// No Origin header → no CORS response
 	req := httptest.NewRequest("GET", "/api/servers", nil)
 	w := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(w, req)
+	if v := w.Header().Get("Access-Control-Allow-Origin"); v != "" {
+		t.Fatalf("expected no CORS header without Origin, got %q", v)
+	}
 
-	if v := w.Header().Get("Access-Control-Allow-Origin"); v != "*" {
-		t.Fatalf("expected CORS header *, got %q", v)
+	// Allowed origin → CORS response
+	req = httptest.NewRequest("GET", "/api/servers", nil)
+	req.Header.Set("Origin", "http://127.0.0.1:8080")
+	w = httptest.NewRecorder()
+	srv.Handler().ServeHTTP(w, req)
+	if v := w.Header().Get("Access-Control-Allow-Origin"); v != "http://127.0.0.1:8080" {
+		t.Fatalf("expected CORS header http://127.0.0.1:8080, got %q", v)
+	}
+
+	// Unknown origin → no CORS response
+	req = httptest.NewRequest("GET", "/api/servers", nil)
+	req.Header.Set("Origin", "http://evil.com")
+	w = httptest.NewRecorder()
+	srv.Handler().ServeHTTP(w, req)
+	if v := w.Header().Get("Access-Control-Allow-Origin"); v != "" {
+		t.Fatalf("expected no CORS header for unknown origin, got %q", v)
 	}
 }
 

@@ -24,15 +24,19 @@ var webFS embed.FS
 // Server is the HTTP server for the homebutler web dashboard.
 type Server struct {
 	cfg  *config.Config
+	host string
 	port int
 	demo bool
 	mux  *http.ServeMux
 }
 
-// New creates a new Server with the given config and port.
-func New(cfg *config.Config, port int, demo ...bool) *Server {
+// New creates a new Server with the given config, host, and port.
+func New(cfg *config.Config, host string, port int, demo ...bool) *Server {
 	d := len(demo) > 0 && demo[0]
-	s := &Server{cfg: cfg, port: port, demo: d, mux: http.NewServeMux()}
+	if host == "" {
+		host = "127.0.0.1"
+	}
+	s := &Server{cfg: cfg, host: host, port: port, demo: d, mux: http.NewServeMux()}
 	s.routes()
 	return s
 }
@@ -44,11 +48,12 @@ func (s *Server) Handler() http.Handler {
 
 // Run starts the HTTP server.
 func (s *Server) Run() error {
-	addr := fmt.Sprintf(":%d", s.port)
+	addr := fmt.Sprintf("%s:%d", s.host, s.port)
+	displayAddr := fmt.Sprintf("http://%s:%d", s.host, s.port)
 	if s.demo {
-		fmt.Printf("homebutler dashboard (DEMO MODE): http://localhost%s\n", addr)
+		fmt.Printf("homebutler dashboard (DEMO MODE): %s\n", displayAddr)
 	} else {
-		fmt.Printf("homebutler dashboard: http://localhost%s\n", addr)
+		fmt.Printf("homebutler dashboard: %s\n", displayAddr)
 	}
 	err := http.ListenAndServe(addr, s.mux)
 	if err != nil && strings.Contains(err.Error(), "address already in use") {
@@ -87,9 +92,15 @@ func (s *Server) routes() {
 
 func (s *Server) cors(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Access-Control-Allow-Origin", "*")
-		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+		origin := r.Header.Get("Origin")
+		if origin != "" {
+			allowed := fmt.Sprintf("http://%s:%d", s.host, s.port)
+			if origin == allowed || origin == fmt.Sprintf("http://localhost:%d", s.port) || origin == fmt.Sprintf("http://127.0.0.1:%d", s.port) {
+				w.Header().Set("Access-Control-Allow-Origin", origin)
+				w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+				w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+			}
+		}
 		next(w, r)
 	}
 }
@@ -125,9 +136,15 @@ func (s *Server) forwardRemote(w http.ResponseWriter, srv *config.ServerConfig, 
 }
 
 func (s *Server) handleOptions(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Access-Control-Allow-Origin", "*")
-	w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-	w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+	origin := r.Header.Get("Origin")
+	if origin != "" {
+		allowed := fmt.Sprintf("http://%s:%d", s.host, s.port)
+		if origin == allowed || origin == fmt.Sprintf("http://localhost:%d", s.port) || origin == fmt.Sprintf("http://127.0.0.1:%d", s.port) {
+			w.Header().Set("Access-Control-Allow-Origin", origin)
+			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+			w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+		}
+	}
 	w.WriteHeader(http.StatusNoContent)
 }
 

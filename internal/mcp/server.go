@@ -29,10 +29,10 @@ type jsonRPCRequest struct {
 }
 
 type jsonRPCResponse struct {
-	JSONRPC string      `json:"jsonrpc"`
+	JSONRPC string          `json:"jsonrpc"`
 	ID      json.RawMessage `json:"id"`
-	Result  any         `json:"result,omitempty"`
-	Error   *rpcError   `json:"error,omitempty"`
+	Result  any             `json:"result,omitempty"`
+	Error   *rpcError       `json:"error,omitempty"`
 }
 
 type rpcError struct {
@@ -48,9 +48,9 @@ type serverInfo struct {
 }
 
 type initializeResult struct {
-	ProtocolVersion string      `json:"protocolVersion"`
-	Capabilities    capInfo     `json:"capabilities"`
-	ServerInfo      serverInfo  `json:"serverInfo"`
+	ProtocolVersion string     `json:"protocolVersion"`
+	Capabilities    capInfo    `json:"capabilities"`
+	ServerInfo      serverInfo `json:"serverInfo"`
 }
 
 type capInfo struct {
@@ -60,15 +60,15 @@ type capInfo struct {
 type toolsCap struct{}
 
 type toolDef struct {
-	Name        string     `json:"name"`
-	Description string     `json:"description"`
+	Name        string      `json:"name"`
+	Description string      `json:"description"`
 	InputSchema inputSchema `json:"inputSchema"`
 }
 
 type inputSchema struct {
-	Type       string                `json:"type"`
-	Properties map[string]propDef    `json:"properties,omitempty"`
-	Required   []string              `json:"required,omitempty"`
+	Type       string             `json:"type"`
+	Properties map[string]propDef `json:"properties,omitempty"`
+	Required   []string           `json:"required,omitempty"`
 }
 
 type propDef struct {
@@ -99,15 +99,18 @@ type toolsCallResult struct {
 type Server struct {
 	cfg     *config.Config
 	version string
+	demo    bool
 	in      io.Reader
 	out     io.Writer
 }
 
 // NewServer creates a new MCP server.
-func NewServer(cfg *config.Config, version string) *Server {
+func NewServer(cfg *config.Config, version string, demo ...bool) *Server {
+	d := len(demo) > 0 && demo[0]
 	return &Server{
 		cfg:     cfg,
 		version: version,
+		demo:    d,
 		in:      os.Stdin,
 		out:     os.Stdout,
 	}
@@ -189,6 +192,10 @@ func (s *Server) handleToolCall(req *jsonRPCRequest) {
 }
 
 func (s *Server) executeTool(name string, args map[string]any) (any, error) {
+	if s.demo {
+		return s.executeDemoTool(name, args)
+	}
+
 	server := stringArg(args, "server")
 
 	// Route to remote if server is specified and not local

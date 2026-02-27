@@ -8,6 +8,7 @@ import (
 )
 
 func runServe(cfg *config.Config) error {
+	host := getFlag("--host", "127.0.0.1")
 	port := 8080
 	if v := getFlag("--port", ""); v != "" {
 		p, err := strconv.Atoi(v)
@@ -19,6 +20,6 @@ func runServe(cfg *config.Config) error {
 
 	demo := hasFlag("--demo")
 
-	srv := server.New(cfg, port, demo)
+	srv := server.New(cfg, host, port, demo)
 	return srv.Run()
 }

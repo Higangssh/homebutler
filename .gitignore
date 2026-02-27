@@ -35,9 +35,18 @@ PROJECT.md
 demo.sh
 demo.cast
 demo.tape
+demo-mcp.tape
+*.tgz
+.mcp.json
+npm/bin/
 homebutler-linux-arm64
 homebutler
 demo-chat.sh
 demo-chat.cast
 # /demo
 docs/TUI_SPEC.md
+demo-mcp.gif
+*.bak
+*.tmp
+*.log
+skill

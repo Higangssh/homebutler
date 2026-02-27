@@ -184,9 +184,15 @@ func normalizeArch(arch string) string {
 	}
 }
 
-func downloadRelease(osName, arch string) ([]byte, error) {
-	filename := fmt.Sprintf("homebutler_%s_%s.tar.gz", osName, arch)
-	url := releaseURL + "/" + filename
+func downloadRelease(osName, arch string, version ...string) ([]byte, error) {
+	var filename, url string
+	if len(version) > 0 && version[0] != "" {
+		filename = fmt.Sprintf("homebutler_%s_%s_%s.tar.gz", version[0], osName, arch)
+		url = fmt.Sprintf("https://github.com/Higangssh/homebutler/releases/download/v%s/%s", version[0], filename)
+	} else {
+		filename = fmt.Sprintf("homebutler_%s_%s.tar.gz", osName, arch)
+		url = releaseURL + "/" + filename
+	}
 
 	resp, err := http.Get(url)
 	if err != nil {
@@ -232,9 +238,5 @@ func scpUpload(client *ssh.Client, data []byte, remotePath string, mode os.FileM
 		fmt.Fprint(w, "\x00")
 	}()
 
-	dir := filepath.Dir(remotePath)
-	if dir == "." {
-		dir = ""
-	}
 	return session.Run(fmt.Sprintf("scp -t %s", remotePath))
 }
