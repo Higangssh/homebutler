@@ -50,8 +50,8 @@ func demoStatus(server string) map[string]any {
 	case "nas-box":
 		return map[string]any{
 			"hostname": "nas-box", "os": "linux", "arch": "amd64", "uptime": "12d 3h",
-			"time": "2026-02-27T14:30:00Z",
-			"cpu":  map[string]any{"usage_percent": 5.2, "cores": 4},
+			"time":   "2026-02-27T14:30:00Z",
+			"cpu":    map[string]any{"usage_percent": 5.2, "cores": 4},
 			"memory": map[string]any{"total_gb": 16.0, "used_gb": 6.8, "usage_percent": 42.5},
 			"disks": []map[string]any{
 				{"mount": "/", "total_gb": 120.0, "used_gb": 32.0, "usage_percent": 26.7},
@@ -61,8 +61,8 @@ func demoStatus(server string) map[string]any {
 	case "raspberry-pi":
 		return map[string]any{
 			"hostname": "raspberry-pi", "os": "linux", "arch": "arm64", "uptime": "28d 7h",
-			"time": "2026-02-27T14:30:00Z",
-			"cpu":  map[string]any{"usage_percent": 12.1, "cores": 4},
+			"time":   "2026-02-27T14:30:00Z",
+			"cpu":    map[string]any{"usage_percent": 12.1, "cores": 4},
 			"memory": map[string]any{"total_gb": 4.0, "used_gb": 2.1, "usage_percent": 52.5},
 			"disks": []map[string]any{
 				{"mount": "/", "total_gb": 64.0, "used_gb": 18.0, "usage_percent": 28.1},
@@ -71,8 +71,8 @@ func demoStatus(server string) map[string]any {
 	default:
 		return map[string]any{
 			"hostname": "homelab-server", "os": "linux", "arch": "amd64", "uptime": "4d 12h",
-			"time": "2026-02-27T14:30:00Z",
-			"cpu":  map[string]any{"usage_percent": 23.4, "cores": 8},
+			"time":   "2026-02-27T14:30:00Z",
+			"cpu":    map[string]any{"usage_percent": 23.4, "cores": 8},
 			"memory": map[string]any{"total_gb": 32.0, "used_gb": 12.4, "usage_percent": 38.8},
 			"disks": []map[string]any{
 				{"mount": "/", "total_gb": 500.0, "used_gb": 187.5, "usage_percent": 37.5},
