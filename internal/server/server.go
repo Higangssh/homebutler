@@ -1,13 +1,18 @@
 package server
 
 import (
+	"context"
 	"embed"
 	"encoding/json"
 	"fmt"
 	"io/fs"
 	"log"
 	"net/http"
+	"os"
+	"os/signal"
 	"strings"
+	"syscall"
+	"time"
 
 	"github.com/Higangssh/homebutler/internal/alerts"
 	"github.com/Higangssh/homebutler/internal/config"
@@ -50,16 +55,48 @@ func (s *Server) Handler() http.Handler {
 func (s *Server) Run() error {
 	addr := fmt.Sprintf("%s:%d", s.host, s.port)
 	displayAddr := fmt.Sprintf("http://%s:%d", s.host, s.port)
-	if s.demo {
-		fmt.Printf("homebutler dashboard (DEMO MODE): %s\n", displayAddr)
-	} else {
-		fmt.Printf("homebutler dashboard: %s\n", displayAddr)
+
+	srv := &http.Server{
+		Addr:    addr,
+		Handler: s.mux,
 	}
-	err := http.ListenAndServe(addr, s.mux)
-	if err != nil && strings.Contains(err.Error(), "address already in use") {
-		return fmt.Errorf("port %d is already in use. Try a different port:\n  homebutler serve --port %d", s.port, s.port+1)
+
+	serverErrors := make(chan error, 1)
+
+	go func() {
+		if s.demo {
+			fmt.Printf("homebutler dashboard (DEMO MODE): %s\n", displayAddr)
+		} else {
+			fmt.Printf("homebutler dashboard: %s\n", displayAddr)
+		}
+		serverErrors <- srv.ListenAndServe()
+	}()
+
+	shutdown := make(chan os.Signal, 1)
+	signal.Notify(shutdown, syscall.SIGINT, syscall.SIGTERM)
+
+	select {
+	case err := <-serverErrors:
+		if err != nil && strings.Contains(err.Error(), "address already in use") {
+			return fmt.Errorf("port %d is already in use. Try a different port:\n  homebutler serve --port %d", s.port, s.port+1)
+		}
+		return err
+
+	case sig := <-shutdown:
+		log.Printf("\nReceived signal: %v. Starting graceful shutdown...\n", sig)
+
+		// 5 second timeout to allow active connections to drain
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+
+		if err := srv.Shutdown(ctx); err != nil {
+			srv.Close()
+			return fmt.Errorf("could not stop server gracefully: %w", err)
+		}
+		log.Println("Server stopped")
 	}
-	return err
+
+	return nil
 }
 
 func (s *Server) routes() {
