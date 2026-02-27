@@ -99,15 +99,18 @@ type toolsCallResult struct {
 type Server struct {
 	cfg     *config.Config
 	version string
+	demo    bool
 	in      io.Reader
 	out     io.Writer
 }
 
 // NewServer creates a new MCP server.
-func NewServer(cfg *config.Config, version string) *Server {
+func NewServer(cfg *config.Config, version string, demo ...bool) *Server {
+	d := len(demo) > 0 && demo[0]
 	return &Server{
 		cfg:     cfg,
 		version: version,
+		demo:    d,
 		in:      os.Stdin,
 		out:     os.Stdout,
 	}
@@ -189,6 +192,10 @@ func (s *Server) handleToolCall(req *jsonRPCRequest) {
 }
 
 func (s *Server) executeTool(name string, args map[string]any) (any, error) {
+	if s.demo {
+		return s.executeDemoTool(name, args)
+	}
+
 	server := stringArg(args, "server")
 
 	// Route to remote if server is specified and not local

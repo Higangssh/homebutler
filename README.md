@@ -65,6 +65,14 @@ This is what homebutler + [OpenClaw](https://github.com/openclaw/openclaw) looks
 
 ## Demo
 
+### 🤖 AI-Powered Management (MCP)
+
+<p align="center">
+  <img src="assets/mcp-tool-calls.jpg" alt="Claude Code + homebutler MCP" width="800" />
+</p>
+
+> **One natural language prompt manages your entire homelab.** Claude Code calls homebutler MCP tools in parallel — checking server status, listing Docker containers, and alerting on disk usage across multiple servers. [See MCP setup →](#mcp-server)
+
 ### 🌐 Web Dashboard
 
 <p align="center">
@@ -348,10 +356,40 @@ homebutler alerts --json
 
 ## MCP Server
 
-homebutler includes a built-in [MCP (Model Context Protocol)](https://modelcontextprotocol.io/) server, so any AI tool can manage your homelab.
+homebutler includes a built-in [MCP (Model Context Protocol)](https://modelcontextprotocol.io/) server, so any AI tool can manage your homelab — with natural language.
+
+> *"Check all my servers and list docker containers"*
+>
+> One prompt. Multiple servers. Full visibility.
+
+<p align="center">
+  <img src="assets/mcp-tool-calls.jpg" alt="Claude Code calling homebutler MCP tools" width="700" />
+</p>
+
+<p align="center">
+  <em>Claude Code automatically calls homebutler tools in parallel across servers</em>
+</p>
+
+<p align="center">
+  <img src="assets/mcp-results.jpg" alt="homebutler MCP results" width="700" />
+</p>
+
+<p align="center">
+  <em>Formatted results: server status, Docker containers, disk alerts — all from one prompt</em>
+</p>
+
+### Try Without Real Servers
+
+```bash
+# Demo mode — realistic data, no real system calls
+homebutler mcp --demo
+```
+
+Add `"args": ["mcp", "--demo"]` to your MCP config to try it instantly.
 
 ### Supported Clients
 
+- **Claude Code** — Anthropic's CLI for Claude
 - **Claude Desktop** — Anthropic's desktop app
 - **ChatGPT Desktop** — OpenAI's desktop app
 - **Cursor** — AI code editor
@@ -362,7 +400,7 @@ homebutler includes a built-in [MCP (Model Context Protocol)](https://modelconte
 
 Add to your MCP client config:
 
-**Claude Desktop** (`~/Library/Application Support/Claude/claude_desktop_config.json`):
+**Claude Code / Cursor** (`.mcp.json` in your project root):
 ```json
 {
   "mcpServers": {
@@ -374,11 +412,15 @@ Add to your MCP client config:
 }
 ```
 
-**Cursor** (Settings → MCP → Add):
+**Claude Desktop** (`~/Library/Application Support/Claude/claude_desktop_config.json`):
 ```json
 {
-  "command": "homebutler",
-  "args": ["mcp"]
+  "mcpServers": {
+    "homebutler": {
+      "command": "homebutler",
+      "args": ["mcp"]
+    }
+  }
 }
 ```
 
@@ -398,15 +440,15 @@ Restart your AI client — homebutler tools will appear automatically.
 | `network_scan` | Discover LAN devices |
 | `alerts` | Resource threshold alerts |
 
-All tools support an optional `server` parameter for multi-server management.
+All tools support an optional `server` parameter — manage every server from a single prompt.
 
 ### How It Works
 
 ```
-You: "How's my server doing?"
-AI → calls system_status tool
-homebutler → reads CPU/RAM/disk
-AI: "CPU 12%, memory 48%, disk 3%. Everything looks healthy!"
+You: "Check my servers and find any disk warnings"
+AI → calls system_status + alerts on each server (in parallel)
+homebutler → reads CPU/RAM/disk on local + remote servers via SSH
+AI: "homelab-server /mnt/data is at 87% — consider cleaning up. Everything else healthy."
 ```
 
 No network ports opened. MCP uses stdio (stdin/stdout) — only the parent AI process can communicate with homebutler.

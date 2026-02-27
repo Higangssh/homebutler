@@ -93,7 +93,8 @@ func Execute(version, buildDate string) error {
 	case "serve":
 		return runServe(cfg)
 	case "mcp":
-		return mcp.NewServer(cfg, version).Run()
+		demo := hasFlag("--demo")
+		return mcp.NewServer(cfg, version, demo).Run()
 	case "version", "-v", "--version":
 		fmt.Printf("homebutler %s (built %s)\n", version, buildDate)
 		return nil
