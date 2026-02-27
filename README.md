@@ -396,19 +396,21 @@ Add `"args": ["mcp", "--demo"]` to your MCP config to try it instantly.
 
 Add to your MCP client config:
 
-**Claude Code / Cursor** (`.mcp.json` in your project root):
+**Quick setup (no install needed):**
 ```json
 {
   "mcpServers": {
     "homebutler": {
-      "command": "homebutler",
-      "args": ["mcp"]
+      "command": "npx",
+      "args": ["-y", "homebutler-mcp"]
     }
   }
 }
 ```
 
-**Claude Desktop** (`~/Library/Application Support/Claude/claude_desktop_config.json`):
+Add this to `.mcp.json` (Claude Code / Cursor) or your MCP client config (Claude Desktop / ChatGPT Desktop).
+
+**If homebutler is already installed:**
 ```json
 {
   "mcpServers": {
