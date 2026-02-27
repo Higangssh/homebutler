@@ -31,6 +31,17 @@ function getPlatform() {
 }
 
 function getVersion() {
+  // Try to get latest release tag from GitHub API
+  try {
+    const { execSync } = require("child_process");
+    const out = execSync(
+      'curl -sL -H "Accept: application/vnd.github.v3+json" https://api.github.com/repos/Higangssh/homebutler/releases/latest',
+      { encoding: "utf8", timeout: 10000 }
+    );
+    const data = JSON.parse(out);
+    if (data.tag_name) return data.tag_name.replace(/^v/, "");
+  } catch {}
+  // Fallback to package.json version
   const pkg = require("./package.json");
   return pkg.version;
 }

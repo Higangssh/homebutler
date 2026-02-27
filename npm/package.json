@@ -1,8 +1,17 @@
 {
   "name": "homebutler-mcp",
-  "version": "0.7.1",
+  "version": "0.7.3",
   "description": "MCP server for homelab management — manage servers, Docker, ports, alerts via AI",
-  "keywords": ["mcp", "homelab", "server", "docker", "claude", "ai", "devops", "monitoring"],
+  "keywords": [
+    "mcp",
+    "homelab",
+    "server",
+    "docker",
+    "claude",
+    "ai",
+    "devops",
+    "monitoring"
+  ],
   "license": "MIT",
   "author": "Higangssh",
   "repository": {
