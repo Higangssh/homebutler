@@ -340,7 +340,7 @@ homebutler alerts --json
 
 ## Security
 
-- **No network listener** — homebutler never opens ports or accepts connections
+- **No network listener by default** — CLI and MCP modes never open ports. `homebutler serve` starts a local-only dashboard (127.0.0.1) on demand
 - **Read-only by default** — Status commands don't modify anything
 - **Explicit actions only** — Destructive commands require exact container/service names
 - **SSH for remote** — Multi-server uses standard SSH (key-based auth recommended)
