@@ -411,15 +411,26 @@ AI: "CPU 12%, memory 48%, disk 3%. Everything looks healthy!"
 
 No network ports opened. MCP uses stdio (stdin/stdout) — only the parent AI process can communicate with homebutler.
 
-### OpenClaw Skill
+### Agent Skill (Claude Code, Cursor, OpenClaw, and more)
 
-An official [OpenClaw](https://github.com/openclaw/openclaw) skill is available on [ClawHub](https://clawhub.ai/Higangssh/homeserver):
+homebutler ships with an [Agent Skill](https://agentskills.io) that works across AI tools:
+
+**Claude Code / Cursor / Gemini CLI** — copy the skill to your personal skills directory:
+
+```bash
+mkdir -p ~/.claude/skills/homeserver
+cp skills/homeserver/SKILL.md ~/.claude/skills/homeserver/
+```
+
+Then ask Claude Code: *"Check my server status"* — or invoke directly with `/homeserver`.
+
+**OpenClaw** — install from [ClawHub](https://clawhub.ai/Higangssh/homeserver):
 
 ```bash
 clawhub install homeserver
 ```
 
-This lets you manage your homelab from Telegram, Discord, or any chat platform connected to OpenClaw — in any language.
+Manage your homelab from Telegram, Discord, or any chat platform — in any language.
 
 ## Installation
 

@@ -1,14 +1,16 @@
 ---
 name: homeserver
 description: Homelab server management via homebutler CLI. Check system status (CPU/RAM/disk), manage Docker containers, Wake-on-LAN, scan open ports, discover network devices, monitor resource alerts, and manage multiple servers over SSH. Use when asked about server status, docker containers, wake machines, open ports, network devices, system alerts, or multi-server management.
+compatibility: Requires homebutler binary in PATH. Works with Claude Code, OpenClaw, Cursor, Gemini CLI, and any Agent Skills compatible tool.
+license: MIT
 metadata:
-  {
-    "openclaw": {
-      "emoji": "🏠",
-      "requires": { "anyBins": ["homebutler"] },
-      "configPaths": ["homebutler.yaml", "~/.config/homebutler/config.yaml"]
-    }
-  }
+  author: Higangssh
+  version: "2.0"
+  openclaw:
+    emoji: "🏠"
+    requires:
+      anyBins: ["homebutler"]
+    configPaths: ["homebutler.yaml", "~/.config/homebutler/config.yaml"]
 ---
 
 # Homeserver Management
