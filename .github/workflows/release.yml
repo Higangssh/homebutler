@@ -113,3 +113,19 @@ jobs:
           git add homebutler.rb
           git commit -m "chore: update homebutler to ${TAG}" || exit 0
           git push
+
+      - name: Publish npm wrapper
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          if [ -z "$NODE_AUTH_TOKEN" ]; then
+            echo "NPM_TOKEN not set, skipping npm publish"
+            exit 0
+          fi
+
+          TAG=${GITHUB_REF#refs/tags/v}
+          cd npm
+          npm version "$TAG" --no-git-tag-version --allow-same-version
+          echo "//registry.npmjs.org/:_authToken=${NODE_AUTH_TOKEN}" > .npmrc
+          npm publish --access public
+          rm .npmrc
