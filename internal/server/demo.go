@@ -257,6 +257,22 @@ func (s *Server) demoWakeSend(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// demoConfig returns realistic demo config data.
+func (s *Server) demoConfig(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, map[string]any{
+		"path": "~/.config/homebutler/config.yaml",
+		"servers": []map[string]any{
+			{"name": "mac-mini", "host": "192.168.1.10", "local": true, "user": "", "port": 0, "auth": "key", "key": "", "password": ""},
+			{"name": "nas-box", "host": "192.168.1.20", "local": false, "user": "admin", "port": 22, "auth": "key", "key": "id_rsa", "password": ""},
+			{"name": "raspberry-pi", "host": "192.168.1.30", "local": false, "user": "pi", "port": 22, "auth": "password", "key": "", "password": "••••••"},
+		},
+		"alerts": map[string]any{"cpu": 90, "memory": 85, "disk": 90},
+		"wake": []map[string]string{
+			{"name": "gaming-pc", "mac": "AA:BB:CC:DD:EE:FF", "broadcast": "192.168.1.255"},
+		},
+	})
+}
+
 // demoServers returns realistic demo server list.
 func (s *Server) demoServers(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, []map[string]any{

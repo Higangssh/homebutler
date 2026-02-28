@@ -53,3 +53,7 @@ export function getServerStatus(name) {
 export function getVersion() {
   return fetchJSON('/api/version');
 }
+
+export function getConfig() {
+  return fetchJSON('/api/config');
+}

@@ -8,10 +8,12 @@
   import AlertCard from './lib/AlertCard.svelte';
   import PortsCard from './lib/PortsCard.svelte';
   import WakeCard from './lib/WakeCard.svelte';
+  import ConfigCard from './lib/ConfigCard.svelte';
 
   let servers = $state([]);
   let selectedServer = $state('');
   let version = $state('dev');
+  let activeTab = $state('dashboard');
 
   onMount(async () => {
     try {
@@ -27,11 +29,23 @@
 </script>
 
 <header>
-  <div class="header-center">
+  <div class="header-left">
     <img src="/logo.png" alt="HomeButler" class="logo" />
     <h1>HomeButler</h1>
   </div>
-  {#if servers.length > 0}
+  <nav class="tabs">
+    <button
+      class="tab"
+      class:active={activeTab === 'dashboard'}
+      onclick={() => activeTab = 'dashboard'}
+    >Dashboard</button>
+    <button
+      class="tab"
+      class:active={activeTab === 'config'}
+      onclick={() => activeTab = 'config'}
+    >Config</button>
+  </nav>
+  {#if activeTab === 'dashboard' && servers.length > 0}
     <div class="header-right">
       <select bind:value={selectedServer}>
         {#each servers as srv}
@@ -43,18 +57,22 @@
 </header>
 
 <main>
-  <div class="overview-row">
-    <ServerOverviewCard />
-  </div>
+  {#if activeTab === 'dashboard'}
+    <div class="overview-row">
+      <ServerOverviewCard />
+    </div>
 
-  <div class="grid">
-    <StatusCard server={selectedServer} />
-    <DockerCard server={selectedServer} />
-    <ProcessCard server={selectedServer} />
-    <AlertCard server={selectedServer} />
-    <PortsCard server={selectedServer} />
-    <WakeCard />
-  </div>
+    <div class="grid">
+      <StatusCard server={selectedServer} />
+      <DockerCard server={selectedServer} />
+      <ProcessCard server={selectedServer} />
+      <AlertCard server={selectedServer} />
+      <PortsCard server={selectedServer} />
+      <WakeCard />
+    </div>
+  {:else}
+    <ConfigCard />
+  {/if}
 </main>
 
 <footer>
@@ -70,12 +88,39 @@
     border-bottom: 1px solid var(--border);
     background: var(--bg-card);
     position: relative;
+    gap: 1.5rem;
   }
 
-  .header-center {
+  .header-left {
     display: flex;
     align-items: center;
     gap: 0.5rem;
+  }
+
+  .tabs {
+    display: flex;
+    gap: 0;
+  }
+
+  .tab {
+    background: none;
+    border: none;
+    color: var(--text-secondary);
+    font-size: 0.85rem;
+    font-weight: 500;
+    padding: 0.4rem 0.75rem;
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    transition: color 0.15s ease, border-color 0.15s ease;
+  }
+
+  .tab:hover {
+    color: var(--text-primary);
+  }
+
+  .tab.active {
+    color: var(--accent);
+    border-bottom-color: var(--accent);
   }
 
   .header-right {
@@ -149,6 +194,7 @@
 
     header {
       padding: 0.75rem 1rem;
+      gap: 0.75rem;
     }
   }
 </style>

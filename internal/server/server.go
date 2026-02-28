@@ -14,6 +14,8 @@ import (
 	"syscall"
 	"time"
 
+	"path/filepath"
+
 	"github.com/Higangssh/homebutler/internal/alerts"
 	"github.com/Higangssh/homebutler/internal/config"
 	"github.com/Higangssh/homebutler/internal/docker"
@@ -116,6 +118,7 @@ func (s *Server) routes() {
 		s.mux.HandleFunc("POST /api/wake/{name}", s.cors(s.demoWakeSend))
 		s.mux.HandleFunc("GET /api/servers", s.cors(s.demoServers))
 		s.mux.HandleFunc("GET /api/servers/{name}/status", s.cors(s.demoServerStatus))
+		s.mux.HandleFunc("GET /api/config", s.cors(s.demoConfig))
 	} else {
 		s.mux.HandleFunc("GET /api/status", s.cors(s.handleStatus))
 		s.mux.HandleFunc("GET /api/docker", s.cors(s.handleDocker))
@@ -126,6 +129,7 @@ func (s *Server) routes() {
 		s.mux.HandleFunc("POST /api/wake/{name}", s.cors(s.handleWakeSend))
 		s.mux.HandleFunc("GET /api/servers", s.cors(s.handleServers))
 		s.mux.HandleFunc("GET /api/servers/{name}/status", s.cors(s.handleServerStatus))
+		s.mux.HandleFunc("GET /api/config", s.cors(s.handleConfig))
 	}
 	s.mux.HandleFunc("GET /api/version", s.cors(s.handleVersion))
 	s.mux.HandleFunc("OPTIONS /api/", s.handleOptions)
@@ -295,6 +299,59 @@ func (s *Server) handleWakeSend(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, result)
+}
+
+func (s *Server) handleConfig(w http.ResponseWriter, r *http.Request) {
+	servers := make([]map[string]any, len(s.cfg.Servers))
+	for i, srv := range s.cfg.Servers {
+		auth := srv.AuthMode
+		if auth == "" {
+			auth = "key"
+		}
+		key := ""
+		if srv.KeyFile != "" {
+			key = filepath.Base(srv.KeyFile)
+		}
+		pw := ""
+		if srv.Password != "" {
+			pw = "••••••"
+		}
+		servers[i] = map[string]any{
+			"name":     srv.Name,
+			"host":     srv.Host,
+			"local":    srv.Local,
+			"user":     srv.User,
+			"port":     srv.Port,
+			"auth":     auth,
+			"key":      key,
+			"password": pw,
+		}
+	}
+
+	wakeTargets := make([]map[string]string, len(s.cfg.Wake))
+	for i, t := range s.cfg.Wake {
+		wakeTargets[i] = map[string]string{
+			"name":      t.Name,
+			"mac":       t.MAC,
+			"broadcast": t.Broadcast,
+		}
+	}
+
+	cfgPath := s.cfg.Path
+	if cfgPath == "" {
+		cfgPath = "(defaults)"
+	}
+
+	writeJSON(w, map[string]any{
+		"path":    cfgPath,
+		"servers": servers,
+		"alerts": map[string]any{
+			"cpu":    s.cfg.Alerts.CPU,
+			"memory": s.cfg.Alerts.Memory,
+			"disk":   s.cfg.Alerts.Disk,
+		},
+		"wake": wakeTargets,
+	})
 }
 
 func (s *Server) handleVersion(w http.ResponseWriter, r *http.Request) {

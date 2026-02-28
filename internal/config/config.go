@@ -9,6 +9,7 @@ import (
 )
 
 type Config struct {
+	Path    string         `yaml:"-"` // resolved config file path (not serialized)
 	Servers []ServerConfig `yaml:"servers"`
 	Wake    []WakeTarget   `yaml:"wake,omitempty"`
 	Alerts  AlertConfig    `yaml:"alerts"`
@@ -85,6 +86,7 @@ func Load(path string) (*Config, error) {
 		return nil, fmt.Errorf("failed to parse config: %w", err)
 	}
 
+	cfg.Path = path
 	return cfg, nil
 }
 
