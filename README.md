@@ -14,10 +14,11 @@
 A single-binary CLI + MCP server that lets you monitor servers, control Docker, wake machines, and scan your network — from chat, AI tools, or the command line.
 
 <p align="center">
-  <video src="https://github.com/Higangssh/homebutler/raw/main/assets/demo.mp4" width="800" autoplay loop muted playsinline>
-    Your browser does not support the video tag.
-  </video>
+  <a href="https://github.com/Higangssh/homebutler/raw/main/assets/demo.mp4">
+    <img src="assets/demo-thumbnail.png" alt="homebutler demo" width="800" />
+  </a>
 </p>
+<p align="center"><em>▶️ Click to watch demo — Alert → Diagnose → Fix, all from chat (34s)</em></p>
 
 ## Features
 
