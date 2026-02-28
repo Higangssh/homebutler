@@ -128,6 +128,8 @@ All notable changes to this project will be documented in this file.
 - JSON output support (`--json`)
 - Interactive setup wizard (`homebutler init`)
 
+[v0.8.1]: https://github.com/Higangssh/homebutler/compare/v0.8.0...v0.8.1
+[v0.8.0]: https://github.com/Higangssh/homebutler/compare/v0.7.1...v0.8.0
 [v0.7.1]: https://github.com/Higangssh/homebutler/compare/v0.7.0...v0.7.1
 [v0.7.0]: https://github.com/Higangssh/homebutler/compare/v0.6.1...v0.7.0
 [v0.6.1]: https://github.com/Higangssh/homebutler/compare/v0.6.0...v0.6.1
