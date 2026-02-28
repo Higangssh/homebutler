@@ -58,15 +58,44 @@ Open an issue describing:
 
 ### Commit Messages
 
-We use Conventional Commits:
+We use [Conventional Commits](https://www.conventionalcommits.org/). Commits are automatically parsed to generate the [CHANGELOG](CHANGELOG.md) via `git-cliff`.
 
+**Format:** `<type>: <description>`
+
+| Type | Purpose | Appears in CHANGELOG |
+|------|---------|---------------------|
+| `feat` | New feature or capability | 🚀 Features |
+| `fix` | Bug fix | 🐛 Bug Fixes |
+| `security` | Security fix or hardening | 🔒 Security |
+| `refactor` | Code restructuring (no behavior change) | ♻️ Refactor |
+| `perf` | Performance improvement | ⚡ Performance |
+| `docs` | Documentation only | Hidden |
+| `test` | Adding or fixing tests | Hidden |
+| `chore` | Build, CI, dependencies, tooling | Hidden |
+| `style` | Formatting, whitespace (no logic change) | Hidden |
+| `ci` | CI/CD workflow changes | Hidden |
+
+**Rules:**
+- Lowercase type, no capitalized description: `feat: add config tab` not `Feat: Add Config Tab`
+- No period at the end
+- Keep the first line under 72 characters
+- Use imperative mood: "add" not "added", "fix" not "fixed"
+- Scope is optional: `feat(web): add config tab` is fine but not required
+- Breaking changes: add `!` after type: `feat!: change config format`
+
+**Examples:**
 ```
 feat: add network latency monitoring
 fix: correct CPU calculation on macOS
-refactor: simplify SSH connection logic
+security: bind web server to localhost by default
+refactor: split cmd/root.go into domain files
+perf: parallelize multi-server SSH connections
 docs: update MCP setup instructions
+test: add coverage for alert thresholds
 chore: update CI workflow
 ```
+
+> **Why it matters:** `feat` and `fix` commits become release notes. `docs`, `test`, `chore` are hidden from the CHANGELOG. Choose your type carefully — it determines what users see.
 
 ## Project Structure
 
