@@ -2,6 +2,24 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v0.8.1] - 2026-02-28
+
+### Added
+- Read-only Config tab in web dashboard (servers, alert thresholds, WoL devices)
+- `GET /api/config` endpoint with masked passwords and key paths
+- Tab navigation in dashboard header (Dashboard | Config)
+- Demo mode returns realistic sample config data
+- Dynamic version display in dashboard footer via `/api/version` endpoint
+- Demo video embedded in README (YouTube link with thumbnail)
+
+### Changed
+- Dashboard header layout updated to accommodate tab navigation
+- Config values displayed in monospace font for readability
+
+### Security
+- Passwords masked as `••••••` in config API response
+- SSH key paths reduced to basename only (no full path exposure)
+
 ## [v0.8.0] - 2026-02-28
 
 ### Added
