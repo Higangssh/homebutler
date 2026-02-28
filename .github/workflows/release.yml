@@ -30,6 +30,24 @@ jobs:
       - name: Run tests
         run: go test ./...
 
+      - name: Generate CHANGELOG
+        uses: orhun/git-cliff-action@v4
+        with:
+          config: cliff.toml
+          args: --output CHANGELOG.md
+
+      - name: Commit CHANGELOG
+        run: |
+          if git diff --quiet CHANGELOG.md 2>/dev/null; then
+            echo "No CHANGELOG changes"
+          else
+            git config user.name "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+            git add CHANGELOG.md
+            git commit -m "docs: update CHANGELOG for ${GITHUB_REF#refs/tags/}"
+            git push origin HEAD:main
+          fi
+
       - name: Run GoReleaser
         uses: goreleaser/goreleaser-action@v6
         with:
