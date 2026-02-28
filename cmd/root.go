@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"runtime"
 	"strings"
 	"time"
 
@@ -98,7 +99,7 @@ func Execute(version, buildDate string) error {
 		demo := hasFlag("--demo")
 		return mcp.NewServer(cfg, version, demo).Run()
 	case "version", "-v", "--version":
-		fmt.Printf("homebutler %s (built %s)\n", version, buildDate)
+		fmt.Printf("homebutler %s (built %s) go-version %s\n", version, buildDate, runtime.Version())
 		return nil
 	case "help", "--help", "-h":
 		printUsage()
