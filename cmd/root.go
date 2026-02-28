@@ -93,7 +93,7 @@ func Execute(version, buildDate string) error {
 	case "upgrade":
 		return runUpgrade(cfg, version)
 	case "serve":
-		return runServe(cfg)
+		return runServe(cfg, version)
 	case "mcp":
 		demo := hasFlag("--demo")
 		return mcp.NewServer(cfg, version, demo).Run()

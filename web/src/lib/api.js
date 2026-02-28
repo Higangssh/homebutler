@@ -49,3 +49,7 @@ export function getServers() {
 export function getServerStatus(name) {
   return fetchJSON(`/api/servers/${encodeURIComponent(name)}/status`);
 }
+
+export function getVersion() {
+  return fetchJSON('/api/version');
+}

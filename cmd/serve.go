@@ -7,7 +7,7 @@ import (
 	"github.com/Higangssh/homebutler/internal/server"
 )
 
-func runServe(cfg *config.Config) error {
+func runServe(cfg *config.Config, version string) error {
 	host := getFlag("--host", "127.0.0.1")
 	port := 8080
 	if v := getFlag("--port", ""); v != "" {
@@ -21,5 +21,6 @@ func runServe(cfg *config.Config) error {
 	demo := hasFlag("--demo")
 
 	srv := server.New(cfg, host, port, demo)
+	srv.SetVersion(version)
 	return srv.Run()
 }

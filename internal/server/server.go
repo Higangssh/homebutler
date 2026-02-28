@@ -28,22 +28,28 @@ var webFS embed.FS
 
 // Server is the HTTP server for the homebutler web dashboard.
 type Server struct {
-	cfg  *config.Config
-	host string
-	port int
-	demo bool
-	mux  *http.ServeMux
+	cfg     *config.Config
+	host    string
+	port    int
+	demo    bool
+	version string
+	mux     *http.ServeMux
 }
 
-// New creates a new Server with the given config, host, and port.
+// New creates a new Server with the given config, host, port, and version.
 func New(cfg *config.Config, host string, port int, demo ...bool) *Server {
 	d := len(demo) > 0 && demo[0]
 	if host == "" {
 		host = "127.0.0.1"
 	}
-	s := &Server{cfg: cfg, host: host, port: port, demo: d, mux: http.NewServeMux()}
+	s := &Server{cfg: cfg, host: host, port: port, demo: d, version: "dev", mux: http.NewServeMux()}
 	s.routes()
 	return s
+}
+
+// SetVersion sets the version string shown in the dashboard.
+func (s *Server) SetVersion(v string) {
+	s.version = v
 }
 
 // Handler returns the underlying http.Handler (for testing).
@@ -121,6 +127,7 @@ func (s *Server) routes() {
 		s.mux.HandleFunc("GET /api/servers", s.cors(s.handleServers))
 		s.mux.HandleFunc("GET /api/servers/{name}/status", s.cors(s.handleServerStatus))
 	}
+	s.mux.HandleFunc("GET /api/version", s.cors(s.handleVersion))
 	s.mux.HandleFunc("OPTIONS /api/", s.handleOptions)
 
 	// Serve frontend static files
@@ -288,6 +295,10 @@ func (s *Server) handleWakeSend(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, result)
+}
+
+func (s *Server) handleVersion(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, map[string]string{"version": s.version})
 }
 
 // serverInfo is a safe subset of config.ServerConfig for the API response.

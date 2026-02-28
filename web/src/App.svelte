@@ -1,6 +1,6 @@
 <script>
   import { onMount } from 'svelte';
-  import { getServers, getServerStatus } from './lib/api.js';
+  import { getServers, getServerStatus, getVersion } from './lib/api.js';
   import ServerOverviewCard from './lib/ServerOverviewCard.svelte';
   import StatusCard from './lib/StatusCard.svelte';
   import DockerCard from './lib/DockerCard.svelte';
@@ -11,12 +11,17 @@
 
   let servers = $state([]);
   let selectedServer = $state('');
+  let version = $state('dev');
 
   onMount(async () => {
     try {
       servers = await getServers();
       const local = servers.find(s => s.local);
       if (local) selectedServer = local.name;
+    } catch {}
+    try {
+      const v = await getVersion();
+      version = v.version || 'dev';
     } catch {}
   });
 </script>
@@ -53,7 +58,7 @@
 </main>
 
 <footer>
-  <span>homebutler v0.5.1 · powered by Go</span>
+  <span>homebutler {version} · powered by Go</span>
 </footer>
 
 <style>

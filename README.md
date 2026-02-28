@@ -13,6 +13,12 @@
 
 A single-binary CLI + MCP server that lets you monitor servers, control Docker, wake machines, and scan your network — from chat, AI tools, or the command line.
 
+<p align="center">
+  <video src="https://github.com/Higangssh/homebutler/raw/main/assets/demo.mp4" width="800" autoplay loop muted playsinline>
+    Your browser does not support the video tag.
+  </video>
+</p>
+
 ## Features
 
 - **Web Dashboard** — Beautiful dark-themed web UI with `homebutler serve`
