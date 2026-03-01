@@ -77,6 +77,7 @@ All three call the same `internal/` packages — no code duplication.
 **No ports opened by default.** CLI and MCP use stdin/stdout only. The web dashboard is opt-in (`homebutler serve`, binds `127.0.0.1`).
 
 **Now:** CLI + MCP + Web dashboard — you ask, it answers.
+
 **Goal:** Full AI ChatOps — infrastructure that manages itself.
 
 ## Features
