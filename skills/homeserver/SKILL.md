@@ -11,6 +11,17 @@ metadata:
     requires:
       anyBins: ["homebutler"]
     configPaths: ["homebutler.yaml", "~/.config/homebutler/config.yaml"]
+    permissions:
+      - "Read system metrics (CPU, memory, disk)"
+      - "List and manage Docker containers"
+      - "Send Wake-on-LAN packets on local network"
+      - "Scan open ports on local/remote servers"
+      - "ARP/ping scan on local LAN only"
+      - "SSH to configured remote servers (key-based auth)"
+      - "Deploy binaries to remote servers via SSH (requires user confirmation)"
+    credentials:
+      - "SSH keys (~/.ssh/id_ed25519 or ~/.ssh/id_rsa) for remote server access"
+      - "Server config (~/.config/homebutler/config.yaml) with host/user/auth details"
 ---
 
 # Homeserver Management
@@ -34,11 +45,6 @@ go install github.com/Higangssh/homebutler@latest
 # Option 3: Build from source
 git clone https://github.com/Higangssh/homebutler.git
 cd homebutler && make build && sudo mv homebutler /usr/local/bin/
-
-# Option 4: Shell installer (review script before running)
-curl -fsSL https://raw.githubusercontent.com/Higangssh/homebutler/main/install.sh -o install.sh
-less install.sh  # review first
-sh install.sh
 ```
 
 ## Commands
