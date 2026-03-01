@@ -20,6 +20,65 @@ A single-binary CLI + MCP server that lets you monitor servers, control Docker, 
 </p>
 <p align="center"><em>▶️ Click to watch demo — Alert → Diagnose → Fix, all from chat (34s)</em></p>
 
+## Architecture
+
+> **Goal: Engineers manage servers from chat — not SSH.**
+>
+> Alert fires → AI diagnoses → AI fixes → you get a summary on your phone.
+
+homebutler is the **tool layer** in an AI ChatOps stack. It doesn't care what's above it — use any chat platform, any AI agent, or just your terminal.
+
+```
+┌──────────────────────────────────────────────────┐
+│  Layer 3 — Chat Interface                        │
+│  Telegram · Slack · Discord · Terminal · Browser │
+│  (Your choice — homebutler doesn't touch this)   │
+└──────────────────────┬───────────────────────────┘
+                       │
+┌──────────────────────▼───────────────────────────┐
+│  Layer 2 — AI Agent                              │
+│  OpenClaw · LangChain · n8n · Claude Desktop     │
+│  (Understands intent → calls the right tool)     │
+└──────────────────────┬───────────────────────────┘
+                       │  CLI exec or MCP (stdio)
+┌──────────────────────▼───────────────────────────┐
+│  Layer 1 — Tool (homebutler)        ← YOU ARE HERE│
+│                                                  │
+│  ┌─────────┐  ┌─────────┐  ┌─────────┐          │
+│  │   CLI   │  │   MCP   │  │   Web   │          │
+│  │ stdout  │  │  stdio  │  │  :8080  │          │
+│  └────┬────┘  └────┬────┘  └────┬────┘          │
+│       └─────────┬──┴───────────┘                │
+│                 ▼                                 │
+│          internal/*                              │
+│   system · docker · ports · network              │
+│   wake · alerts · remote (SSH)                   │
+└──────────────────────────────────────────────────┘
+```
+
+**Three interfaces, one core:**
+
+| Interface | Transport | Use case |
+|-----------|-----------|----------|
+| **CLI** | Shell stdout/stderr | Terminal, scripts, AI agents via `exec` |
+| **MCP** | JSON-RPC over stdio | Claude Desktop, ChatGPT, Cursor, any MCP client |
+| **Web** | HTTP (`go:embed`) | Browser dashboard, on-demand with `homebutler serve` |
+
+All three call the same `internal/` packages — no code duplication.
+
+**homebutler is Layer 1.** Swap Layer 2 and 3 to fit your stack:
+
+- **Terminal only** → `homebutler status` (no agent needed)
+- **Claude Desktop** → MCP server, Claude calls tools directly
+- **OpenClaw + Telegram** → Agent runs CLI commands from chat
+- **Custom Python bot** → `subprocess.run(["homebutler", "status", "--json"])`
+- **n8n / Dify** → Execute node calling homebutler CLI
+
+**No ports opened by default.** CLI and MCP use stdin/stdout only. The web dashboard is opt-in (`homebutler serve`, binds `127.0.0.1`).
+
+**Now:** CLI + MCP + Web dashboard — you ask, it answers.
+**Goal:** Full AI ChatOps — infrastructure that manages itself.
+
 ## Features
 
 - **Web Dashboard** — Beautiful dark-themed web UI with `homebutler serve`
