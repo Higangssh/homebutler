@@ -15,7 +15,7 @@ metadata:
 
 # Homeserver Management
 
-Manage homelab servers using the `homebutler` CLI. Single binary, JSON output, AI-friendly.
+Manage homelab servers using the [`homebutler`](https://github.com/Higangssh/homebutler) CLI. Single binary, JSON output, AI-friendly.
 
 ## Prerequisites
 
