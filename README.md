@@ -216,6 +216,7 @@ Commands:
   ports               List open ports with process info
   network scan        Discover devices on LAN
   alerts              Show current alert status
+  alerts --watch      Continuous monitoring with real-time alerts
   trust <server>      Register SSH host key (TOFU)
   upgrade             Upgrade local + all remote servers to latest
   deploy              Install homebutler on remote servers
@@ -228,6 +229,9 @@ Flags:
   --all               Run on all configured servers in parallel
   --port <number>     Port for serve command (default: 8080)
   --demo              Run serve with realistic demo data
+  --watch             Continuous monitoring mode (alerts command)
+  --interval <dur>    Watch interval, e.g. 30s, 1m (default: 30s)
+  --config <path>     Custom alert thresholds config file
   --local             Upgrade only the local binary (skip remote servers)
   --local <path>      Use local binary for deploy (air-gapped)
   --config <path>     Config file (auto-detected, see Configuration)
@@ -276,6 +280,41 @@ homebutler watch               # monitors all configured servers
 - **Bottom** — Alert status + keybinding hints
 
 Auto-refreshes every 2 seconds. Press `q` to quit.
+
+## Alert Monitoring
+
+`homebutler alerts --watch` runs continuous monitoring and prints events as they happen:
+
+```bash
+homebutler alerts --watch                  # default: 30s interval, built-in thresholds
+homebutler alerts --watch --interval 10s   # check every 10 seconds
+homebutler alerts --watch --config alerts.yaml  # custom thresholds
+```
+
+**Default thresholds** (no config needed):
+- **CPU** — 90%
+- **Memory** — 85%
+- **Disk** — 90%
+
+**Custom thresholds** via YAML config:
+
+```yaml
+alerts:
+  cpu: 80
+  memory: 70
+  disk: 85
+```
+
+**Output:**
+```
+🔍 Watching local server (interval: 30s, Ctrl+C to stop)
+
+[14:23:01] 🔴 CPU          91.2% (threshold: 90%)
+[14:23:01] 🔴 Memory       87.5% (threshold: 85%)
+[14:23:31] ✅ CPU        recovered (45.3%)
+```
+
+Events are deduplicated — the same alert won't repeat until the resource recovers and exceeds the threshold again.
 
 ## Configuration
 
