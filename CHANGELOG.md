@@ -2,6 +2,41 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.9.0](https://github.com/Higangssh/homebutler/compare/v0.8.2...v0.9.0) - 2026-03-11
+
+### 🚀 Features
+
+- add `backup` command — one-command Docker volume backup with compose files and env
+- add `backup list` — list existing backups with size and timestamp
+- add `restore` command — restore volumes from backup archive
+- support `--service` flag for single-service backup/restore
+- support `--to` flag for custom backup destination
+- configurable `backup_dir` in homebutler.yml
+
+### 🔒 Security
+
+- warn when config file containing passwords has open permissions (recommend chmod 600)
+- fix goroutine leak in network scan — context cancellation now stops ping sweep
+- `ScanWithTimeout` properly cancels goroutines on timeout (no leak)
+
+### 📖 Documentation
+
+- split README into focused docs: `docs/backup.md`, `docs/configuration.md`, `docs/multi-server.md`, `docs/mcp-server.md`, `docs/web-dashboard.md`
+- README slimmed from 719 to 386 lines with links to detailed docs
+- add detailed backup documentation with how-it-works guide and security notes
+
+### 🐛 Bug Fixes
+
+- fix ineffective `break` in pingSweep `select` statement (staticcheck SA4011)
+- handle empty config path gracefully (no panic on `Load("")`)
+- log warning on backup temp directory cleanup failure
+
+### 🧹 Chores
+
+- rename `skill/` to `skills/` (convention)
+- remove stale media files from git, update .gitignore
+- add OpenClaw agent skill to repo
+
 ## [0.8.2](https://github.com/Higangssh/homebutler/compare/v0.8.1...v0.8.2) - 2026-03-02
 
 ### 🚀 Features
