@@ -245,82 +245,34 @@ Flags:
 
 ## Web Dashboard
 
-`homebutler serve` starts an embedded web dashboard — no Node.js, no Docker, no extra dependencies. The entire Svelte frontend is compiled into the Go binary at build time using `go:embed`.
+`homebutler serve` starts an embedded web dashboard — no Node.js, no Docker, no extra dependencies.
 
 ```bash
 homebutler serve                # http://localhost:8080
 homebutler serve --port 3000    # custom port
+homebutler serve --demo         # demo mode with sample data
 ```
 
-Access from another machine via SSH tunnel:
-
-```bash
-ssh -L 8080:localhost:8080 user@your-server
-# Then open http://localhost:8080 in your browser
-```
-
-**Dashboard cards:**
-
-| Card | Description |
-|---|---|
-| **Server Overview** | All servers with live status (green/red dots), CPU, memory, uptime |
-| **System Status** | CPU, memory, disk with color-coded progress bars |
-| **Docker Containers** | Running/stopped with friendly status ("Running · 4d") |
-| **Top Processes** | Top 10 by CPU usage with PID, CPU%, MEM% |
-| **Alerts** | Threshold monitoring with OK / WARNING / CRITICAL |
-| **Network Ports** | Open ports with process names |
-| **Wake-on-LAN** | One-click wake buttons |
+📖 **[Web dashboard details →](docs/web-dashboard.md)**
 
 ## TUI Dashboard
 
-`homebutler watch` launches an interactive terminal dashboard:
+`homebutler watch` launches an interactive terminal dashboard (btop-style):
 
 ```bash
 homebutler watch               # monitors all configured servers
 ```
 
-**Layout:**
-- **Top** — Server tabs (Tab / Shift+Tab to switch)
-- **Left panel** — CPU, memory, disk usage bars (color-coded: green → yellow → red)
-- **Right panel** — Docker containers with state and image info
-- **Bottom** — Alert status + keybinding hints
-
 Auto-refreshes every 2 seconds. Press `q` to quit.
 
 ## Alert Monitoring
 
-`homebutler alerts --watch` runs continuous monitoring and prints events as they happen:
-
 ```bash
-homebutler alerts --watch                  # default: 30s interval, built-in thresholds
+homebutler alerts --watch                  # default: 30s interval
 homebutler alerts --watch --interval 10s   # check every 10 seconds
-homebutler alerts --watch --config alerts.yaml  # custom thresholds
 ```
 
-**Default thresholds** (no config needed):
-- **CPU** — 90%
-- **Memory** — 85%
-- **Disk** — 90%
-
-**Custom thresholds** via YAML config:
-
-```yaml
-alerts:
-  cpu: 80
-  memory: 70
-  disk: 85
-```
-
-**Output:**
-```
-🔍 Watching local server (interval: 30s, Ctrl+C to stop)
-
-[14:23:01] 🔴 CPU          91.2% (threshold: 90%)
-[14:23:01] 🔴 Memory       87.5% (threshold: 85%)
-[14:23:31] ✅ CPU        recovered (45.3%)
-```
-
-Events are deduplicated — the same alert won't repeat until the resource recovers and exceeds the threshold again.
+Default thresholds: CPU 90%, Memory 85%, Disk 90%. Customizable via config.
 
 ## Backup & Restore
 
@@ -328,227 +280,41 @@ One-command Docker backup — volumes, compose files, and env variables.
 
 ```bash
 homebutler backup                          # backup everything
-homebutler backup --service jellyfin       # backup a specific service
+homebutler backup --service jellyfin       # specific service
 homebutler backup --to /mnt/nas/backups/   # custom destination
-homebutler backup list                     # list existing backups
-homebutler restore ./backup.tar.gz         # restore from archive
+homebutler backup list                     # list backups
+homebutler restore ./backup.tar.gz         # restore
 ```
 
-> ⚠️ Database services (PostgreSQL, MySQL, etc.) should be paused before backup for data consistency. See [full documentation](docs/backup.md) for details.
+> ⚠️ Database services should be paused before backup for data consistency.
 
-📖 **[Full backup documentation →](docs/backup.md)** — how it works, archive structure, scheduled backups, security notes.
+📖 **[Full backup documentation →](docs/backup.md)** — how it works, archive structure, security notes.
 
 ## Configuration
 
-### Interactive Setup
-
-The easiest way to get started:
-
 ```bash
-homebutler init
+homebutler init    # interactive setup wizard
 ```
 
-The setup wizard will:
-- Auto-detect your local machine (hostname, IP)
-- Walk you through adding remote servers (SSH user, port, auth)
-- Test SSH connectivity for each server
-- Show a summary before saving
-
-If you already have a config, `homebutler init` lets you **add servers** to your existing config or start fresh.
-
-### Config File
-
-homebutler searches for a config file in the following order:
-
-1. `--config <path>` — Explicit flag (highest priority)
-2. `$HOMEBUTLER_CONFIG` — Environment variable
-3. `~/.config/homebutler/config.yaml` — XDG standard location
-4. `./homebutler.yaml` — Current directory
-
-If no config file is found, sensible defaults are used (CPU 90%, memory 85%, disk 90%).
-
-```bash
-# Recommended: use XDG location
-mkdir -p ~/.config/homebutler
-cp homebutler.example.yaml ~/.config/homebutler/config.yaml
-
-# Or use environment variable
-export HOMEBUTLER_CONFIG=/path/to/config.yaml
-
-# Or just put it in the current directory
-cp homebutler.example.yaml homebutler.yaml
-```
-
-See [homebutler.example.yaml](homebutler.example.yaml) for all options.
+📖 **[Configuration details →](docs/configuration.md)** — config file locations, alert thresholds, all options.
 
 ## Multi-server
 
-Manage multiple servers from a single machine. homebutler connects via SSH and runs the remote homebutler binary to collect data.
-
-### Setup
-
-1. Install homebutler on remote servers:
+Manage multiple servers from a single machine over SSH.
 
 ```bash
-# From a machine with internet access:
-homebutler deploy --server rpi
-
-# Air-gapped / offline environments:
-CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -o homebutler-linux-arm64
-homebutler deploy --server rpi --local ./homebutler-linux-arm64
+homebutler status --server rpi     # query specific server
+homebutler status --all            # query all in parallel
+homebutler deploy --server rpi     # install on remote server
+homebutler upgrade                 # upgrade all servers
 ```
 
-2. Configure servers in your config file:
-
-```yaml
-servers:
-  - name: main-server
-    host: 192.168.1.10
-    local: true              # This machine
-
-  - name: rpi
-    host: 192.168.1.20
-    user: pi
-    auth: key                # Recommended (default)
-    key: ~/.ssh/id_ed25519   # Optional, auto-detects id_ed25519 / id_rsa
-
-  - name: vps
-    host: my-vps.example.com
-    user: deploy
-    port: 2222
-    auth: password           # Also supported
-    password: "your-password"
-```
-
-### SSH Authentication
-
-Both key-based and password-based authentication are supported:
-
-- **Key-based (recommended)** — Set `auth: key` (or omit, it's the default). If `key` is not specified, homebutler tries `~/.ssh/id_ed25519` then `~/.ssh/id_rsa` automatically.
-- **Password-based** — Set `auth: password` and provide `password`. Not recommended for production.
-
-To set up key-based auth:
-
-```bash
-ssh-keygen -t ed25519 -C "homebutler"
-ssh-copy-id user@remote-host
-```
-
-### Usage
-
-```bash
-# Query a specific server
-homebutler status --server rpi
-homebutler alerts --server rpi
-homebutler docker list --server rpi
-
-# Query all servers in parallel
-homebutler status --all
-homebutler alerts --all
-
-# Deploy homebutler to remote servers (first install)
-homebutler deploy --server rpi
-homebutler deploy --all
-
-# Upgrade local + all remote servers to latest
-homebutler upgrade
-
-# Upgrade only the local binary
-homebutler upgrade --local
-```
-
-Upgrade checks GitHub Releases for the latest version, compares with each target, and updates only what's outdated:
-
-```
-$ homebutler upgrade
-checking latest version... v0.8.0
-
-upgrading local... ✓ v0.7.1 → v0.8.0
-upgrading rpi5...  ✓ v0.7.1 → v0.8.0 (linux/arm64)
-upgrading nas...   ─ already v0.8.0
-
-2 upgraded, 1 already up-to-date
-```
-
-## Output Format
-
-Default output is human-readable:
-
-```
-$ homebutler status
-🖥  homelab-server (linux/arm64)
-   Uptime:  42d 7h
-   CPU:     23.5% (4 cores)
-   Memory:  3.2 / 8.0 GB (40.0%)
-   Disk /:  47 / 128 GB (37%)
-
-$ homebutler status --all
-📡 homelab      CPU   24% | Mem   40% | Disk   37% | Up 42d 7h
-📡 nas          CPU    8% | Mem   40% | Disk   62% | Up 128d 3h
-```
-
-Use `--json` for machine-readable output (ideal for AI agents and scripts):
-
-```bash
-homebutler status --json
-homebutler alerts --json
-```
-
-## Security
-
-- **No network listener by default** — CLI and MCP modes never open ports. `homebutler serve` starts a local-only dashboard (127.0.0.1) on demand
-- **Read-only by default** — Status commands don't modify anything
-- **Explicit actions only** — Destructive commands require exact container/service names
-- **SSH for remote** — Multi-server uses standard SSH (key-based auth recommended)
-- **No telemetry** — Zero data collection, zero phone-home
+📖 **[Multi-server setup →](docs/multi-server.md)** — SSH auth, config examples, deploy & upgrade.
 
 ## MCP Server
 
-homebutler includes a built-in [MCP (Model Context Protocol)](https://modelcontextprotocol.io/) server, so any AI tool can manage your homelab — with natural language.
+Built-in [MCP](https://modelcontextprotocol.io/) server — manage your homelab from any AI tool with natural language.
 
-> *"Check all my servers and list docker containers"*
->
-> One prompt. Multiple servers. Full visibility.
-
-<p align="center">
-  <img src="assets/mcp-tool-calls.jpg" alt="Claude Code calling homebutler MCP tools" width="800" />
-</p>
-
-<p align="center">
-  <em>Claude Code calls homebutler tools in parallel across servers</em>
-</p>
-
-<p align="center">
-  <img src="assets/mcp-results.jpg" alt="homebutler MCP formatted results" width="800" />
-</p>
-
-<p align="center">
-  <em>Formatted results: server status, Docker containers, and disk alerts — from one prompt</em>
-</p>
-
-### Try Without Real Servers
-
-```bash
-# Demo mode — realistic data, no real system calls
-homebutler mcp --demo
-```
-
-Add `"args": ["mcp", "--demo"]` to your MCP config to try it instantly.
-
-### Supported Clients
-
-- **Claude Code** — Anthropic's CLI for Claude
-- **Claude Desktop** — Anthropic's desktop app
-- **ChatGPT Desktop** — OpenAI's desktop app
-- **Cursor** — AI code editor
-- **Windsurf** — AI code editor
-- **Any MCP-compatible client**
-
-### Setup
-
-Add to your MCP client config:
-
-**Quick setup (no install needed):**
 ```json
 {
   "mcpServers": {
@@ -560,69 +326,9 @@ Add to your MCP client config:
 }
 ```
 
-Add this to `.mcp.json` (Claude Code / Cursor) or your MCP client config (Claude Desktop / ChatGPT Desktop).
+Works with Claude Desktop, ChatGPT, Cursor, Windsurf, and any MCP client.
 
-**If homebutler is already installed:**
-```json
-{
-  "mcpServers": {
-    "homebutler": {
-      "command": "homebutler",
-      "args": ["mcp"]
-    }
-  }
-}
-```
-
-Restart your AI client — homebutler tools will appear automatically.
-
-### Available MCP Tools
-
-| Tool | Description |
-|---|---|
-| `system_status` | CPU, memory, disk, uptime |
-| `docker_list` | List containers |
-| `docker_restart` | Restart a container |
-| `docker_stop` | Stop a container |
-| `docker_logs` | Container log output |
-| `wake` | Wake-on-LAN magic packet |
-| `open_ports` | Open ports with process info |
-| `network_scan` | Discover LAN devices |
-| `alerts` | Resource threshold alerts |
-
-All tools support an optional `server` parameter — manage every server from a single prompt.
-
-### How It Works
-
-```
-You: "Check my servers and find any disk warnings"
-AI → calls system_status + alerts on each server (in parallel)
-homebutler → reads CPU/RAM/disk on local + remote servers via SSH
-AI: "homelab-server /mnt/data is at 87% — consider cleaning up. Everything else healthy."
-```
-
-No network ports opened. MCP uses stdio (stdin/stdout) — only the parent AI process can communicate with homebutler.
-
-### Agent Skill (Claude Code, Cursor, OpenClaw, and more)
-
-homebutler ships with an [Agent Skill](https://agentskills.io) that works across AI tools:
-
-**Claude Code / Cursor / Gemini CLI** — copy the skill to your personal skills directory:
-
-```bash
-mkdir -p ~/.claude/skills/homeserver
-cp skills/homeserver/SKILL.md ~/.claude/skills/homeserver/
-```
-
-Then ask Claude Code: *"Check my server status"* — or invoke directly with `/homeserver`.
-
-**OpenClaw** — install from [ClawHub](https://clawhub.ai/Higangssh/homeserver):
-
-```bash
-clawhub install homeserver
-```
-
-Manage your homelab from Telegram, Discord, or any chat platform — in any language.
+📖 **[MCP server setup →](docs/mcp-server.md)** — supported clients, available tools, agent skills.
 
 ## Installation
 
