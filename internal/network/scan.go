@@ -1,6 +1,7 @@
 package network
 
 import (
+	"context"
 	"fmt"
 	"net"
 	"runtime"
@@ -21,13 +22,23 @@ type Device struct {
 // Scan discovers devices on the local network.
 // It determines the local subnet, pings all addresses, then reads the ARP table.
 func Scan() ([]Device, error) {
+	return ScanContext(context.Background())
+}
+
+// ScanContext discovers devices on the local network with cancellation support.
+func ScanContext(ctx context.Context) ([]Device, error) {
 	subnet, err := getLocalSubnet()
 	if err != nil {
 		return nil, fmt.Errorf("failed to determine local subnet: %w", err)
 	}
 
 	// Ping sweep to populate ARP table
-	pingSweep(subnet)
+	pingSweep(ctx, subnet)
+
+	// Check if cancelled during sweep
+	if ctx.Err() != nil {
+		return nil, ctx.Err()
+	}
 
 	// Read ARP table
 	devices, err := readARP()
@@ -37,6 +48,9 @@ func Scan() ([]Device, error) {
 
 	// Resolve hostnames
 	for i := range devices {
+		if ctx.Err() != nil {
+			break
+		}
 		names, err := net.LookupAddr(devices[i].IP)
 		if err == nil && len(names) > 0 {
 			devices[i].Hostname = strings.TrimSuffix(names[0], ".")
@@ -70,7 +84,7 @@ func getLocalSubnet() (string, error) {
 	return "", fmt.Errorf("no suitable network interface found")
 }
 
-func pingSweep(subnet string) {
+func pingSweep(ctx context.Context, subnet string) {
 	ip, ipnet, err := net.ParseCIDR(subnet)
 	if err != nil {
 		return
@@ -80,9 +94,17 @@ func pingSweep(subnet string) {
 	sem := make(chan struct{}, 50) // limit concurrency
 
 	for ip := ip.Mask(ipnet.Mask); ipnet.Contains(ip); incrementIP(ip) {
+		if ctx.Err() != nil {
+			break
+		}
 		target := ip.String()
 		wg.Add(1)
-		sem <- struct{}{}
+		select {
+		case sem <- struct{}{}:
+		case <-ctx.Done():
+			wg.Done()
+			break
+		}
 		go func(t string) {
 			defer wg.Done()
 			defer func() { <-sem }()
@@ -185,22 +207,14 @@ func incrementIP(ip net.IP) {
 }
 
 // ScanWithTimeout runs scan with a timeout.
+// Goroutines are cancelled when the timeout expires (no leak).
 func ScanWithTimeout(timeout time.Duration) ([]Device, error) {
-	type result struct {
-		devices []Device
-		err     error
-	}
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
 
-	ch := make(chan result, 1)
-	go func() {
-		devices, err := Scan()
-		ch <- result{devices, err}
-	}()
-
-	select {
-	case r := <-ch:
-		return r.devices, r.err
-	case <-time.After(timeout):
+	devices, err := ScanContext(ctx)
+	if err != nil && ctx.Err() != nil {
 		return nil, fmt.Errorf("network scan timed out after %s", timeout)
 	}
+	return devices, err
 }

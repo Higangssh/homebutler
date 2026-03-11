@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 
 	"gopkg.in/yaml.v3"
 )
@@ -87,6 +88,10 @@ func Load(path string) (*Config, error) {
 		},
 	}
 
+	if path == "" {
+		return cfg, nil // no config file, use defaults
+	}
+
 	data, err := os.ReadFile(path)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -100,7 +105,29 @@ func Load(path string) (*Config, error) {
 	}
 
 	cfg.Path = path
+
+	// Warn if config contains passwords and file permissions are too open (non-Windows).
+	if runtime.GOOS != "windows" && hasSecrets(cfg) {
+		if info, err := os.Stat(path); err == nil {
+			perm := info.Mode().Perm()
+			if perm&0o077 != 0 {
+				fmt.Fprintf(os.Stderr, "⚠️  Config file %s contains passwords but has open permissions (%04o).\n", path, perm)
+				fmt.Fprintf(os.Stderr, "   Run: chmod 600 %s\n\n", path)
+			}
+		}
+	}
+
 	return cfg, nil
+}
+
+// hasSecrets returns true if any server uses password auth.
+func hasSecrets(cfg *Config) bool {
+	for _, s := range cfg.Servers {
+		if s.Password != "" {
+			return true
+		}
+	}
+	return false
 }
 
 // FindServer returns the server config by name, or nil if not found.

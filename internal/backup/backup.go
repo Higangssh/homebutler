@@ -136,7 +136,9 @@ func Run(backupDir, service string) (*BackupResult, error) {
 	}
 
 	// Remove work directory, keep only the archive
-	os.RemoveAll(workDir)
+	if err := os.RemoveAll(workDir); err != nil {
+		fmt.Fprintf(os.Stderr, "warning: failed to clean up temp dir %s: %v\n", workDir, err)
+	}
 
 	// Get archive size
 	info, err := os.Stat(archivePath)
