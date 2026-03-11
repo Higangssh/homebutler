@@ -90,6 +90,7 @@ All three call the same `internal/` packages — no code duplication.
 - **Port Scanner** — See what's listening and which process owns it
 - **Network Scan** — Discover devices on your LAN
 - **Alerts** — Get notified when resources exceed thresholds
+- **Backup & Restore** — One-command Docker volume backup with compose + env files
 - **Multi-server** — Manage remote servers over SSH (key & password auth)
 - **MCP Server** — Works with Claude Desktop, ChatGPT, Cursor, and any MCP client
 - **JSON Output** — Pipe-friendly, perfect for AI assistants to parse
@@ -218,6 +219,9 @@ Commands:
   alerts              Show current alert status
   alerts --watch      Continuous monitoring with real-time alerts
   trust <server>      Register SSH host key (TOFU)
+  backup              Backup Docker volumes, compose files, and env
+  backup list         List existing backups
+  restore <archive>   Restore from a backup archive
   upgrade             Upgrade local + all remote servers to latest
   deploy              Install homebutler on remote servers
   mcp                 Start MCP server (JSON-RPC over stdio)
@@ -235,6 +239,8 @@ Flags:
   --local             Upgrade only the local binary (skip remote servers)
   --local <path>      Use local binary for deploy (air-gapped)
   --config <path>     Config file (auto-detected, see Configuration)
+  --service <name>    Target a specific Docker service (backup/restore)
+  --to <path>         Custom backup destination directory
 ```
 
 ## Web Dashboard
@@ -315,6 +321,61 @@ alerts:
 ```
 
 Events are deduplicated — the same alert won't repeat until the resource recovers and exceeds the threshold again.
+
+## Backup & Restore
+
+Back up all your Docker service volumes, compose files, and environment variables in one command.
+
+```bash
+homebutler backup                          # backup everything
+homebutler backup --service jellyfin       # backup a specific service
+homebutler backup --to /mnt/nas/backups/   # custom destination
+homebutler backup list                     # list existing backups
+```
+
+**Restore from a backup:**
+
+```bash
+homebutler restore ./backup_2026-03-11_1830.tar.gz                    # restore all
+homebutler restore ./backup_2026-03-11_1830.tar.gz --service postgres  # restore one service
+```
+
+**What gets backed up:**
+
+- Docker named volumes (using the official `docker run --rm alpine tar` pattern)
+- Bind-mounted directories
+- `docker-compose.yml` files
+- `.env` files
+- `manifest.json` with full metadata (services, volumes, timestamps)
+
+**Archive structure:**
+
+```
+backup_2026-03-11_1830.tar.gz
+├── manifest.json
+├── compose/
+│   ├── docker-compose.yml
+│   └── .env
+└── volumes/
+    ├── postgres_data.tar.gz
+    └── jellyfin_config.tar.gz
+```
+
+**Custom backup directory** in your config:
+
+```yaml
+backup:
+  dir: /mnt/nas/backups/homebutler
+```
+
+Default location: `~/.homebutler/backups/`
+
+> **⚠️ Important notes:**
+>
+> - **Database services** (PostgreSQL, MySQL, MongoDB, etc.): We recommend pausing the container (`docker pause <name>`) before backup and unpausing after (`docker unpause <name>`) to ensure data consistency. Alternatively, use `pg_dump` / `mysqldump` for a proper database export before running `homebutler backup`.
+> - homebutler does **not** automatically stop or pause containers during backup.
+> - Backup files are **not encrypted**. Store them in a secure location.
+> - For scheduled backups, combine with cron: `0 3 * * * homebutler backup --to /mnt/nas/backups/`
 
 ## Configuration
 

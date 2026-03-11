@@ -9,10 +9,23 @@ import (
 )
 
 type Config struct {
-	Path    string         `yaml:"-"` // resolved config file path (not serialized)
-	Servers []ServerConfig `yaml:"servers"`
-	Wake    []WakeTarget   `yaml:"wake,omitempty"`
-	Alerts  AlertConfig    `yaml:"alerts"`
+	Path      string         `yaml:"-"` // resolved config file path (not serialized)
+	Servers   []ServerConfig `yaml:"servers"`
+	Wake      []WakeTarget   `yaml:"wake,omitempty"`
+	Alerts    AlertConfig    `yaml:"alerts"`
+	BackupDir string         `yaml:"backup_dir,omitempty"`
+}
+
+// ResolveBackupDir returns the backup directory from config or the default ~/.homebutler/backups/.
+func (c *Config) ResolveBackupDir() string {
+	if c.BackupDir != "" {
+		return c.BackupDir
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return ".homebutler/backups"
+	}
+	return filepath.Join(home, ".homebutler", "backups")
 }
 
 type ServerConfig struct {

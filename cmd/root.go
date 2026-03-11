@@ -2,14 +2,18 @@ package cmd
 
 import (
 	"bufio"
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
+	"os/signal"
 	"runtime"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/Higangssh/homebutler/internal/alerts"
+	"github.com/Higangssh/homebutler/internal/backup"
 	"github.com/Higangssh/homebutler/internal/config"
 	"github.com/Higangssh/homebutler/internal/docker"
 	"github.com/Higangssh/homebutler/internal/format"
@@ -86,9 +90,16 @@ func Execute(version, buildDate string) error {
 	case "wake":
 		return runWake(cfg, jsonOutput)
 	case "alerts":
+		if hasFlag("--watch") {
+			return runAlertsWatch(cfg)
+		}
 		return runAlerts(cfg, jsonOutput)
 	case "trust":
 		return runTrust(cfg)
+	case "backup":
+		return runBackup(cfg, jsonOutput)
+	case "restore":
+		return runRestore(jsonOutput)
 	case "deploy":
 		return runDeploy(cfg)
 	case "upgrade":
@@ -229,6 +240,42 @@ func runAlerts(cfg *config.Config, jsonOut bool) error {
 	return output(result, jsonOut)
 }
 
+func runAlertsWatch(cfg *config.Config) error {
+	interval := 30 * time.Second
+	if v := getFlag("--interval", ""); v != "" {
+		d, err := time.ParseDuration(v)
+		if err != nil {
+			return fmt.Errorf("invalid interval %q: %w", v, err)
+		}
+		interval = d
+	}
+
+	watchCfg := alerts.WatchConfig{
+		Interval: interval,
+		Alert:    cfg.Alerts,
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	// Handle Ctrl+C
+	sigCh := make(chan os.Signal, 1)
+	signal.Notify(sigCh, os.Interrupt, syscall.SIGTERM)
+	go func() {
+		<-sigCh
+		cancel()
+	}()
+
+	fmt.Fprintf(os.Stderr, "🔍 Watching local server (interval: %s, Ctrl+C to stop)\n\n", interval)
+
+	events := alerts.Watch(ctx, watchCfg)
+	for e := range events {
+		fmt.Println(alerts.FormatEvent(e))
+	}
+	fmt.Fprintln(os.Stderr, "\n👋 Stopped watching.")
+	return nil
+}
+
 func runTrust(cfg *config.Config) error {
 	if len(os.Args) < 3 {
 		return fmt.Errorf("usage: homebutler trust <server> [--reset]")
@@ -264,6 +311,40 @@ func runTrust(cfg *config.Config) error {
 	return nil
 }
 
+func runBackup(cfg *config.Config, jsonOut bool) error {
+	service := getFlag("--service", "")
+	backupDir := getFlag("--to", cfg.ResolveBackupDir())
+
+	// Sub-command: backup list
+	if len(os.Args) >= 3 && os.Args[2] == "list" {
+		entries, err := backup.List(backupDir)
+		if err != nil {
+			return err
+		}
+		return output(entries, jsonOut)
+	}
+
+	result, err := backup.Run(backupDir, service)
+	if err != nil {
+		return err
+	}
+	return output(result, jsonOut)
+}
+
+func runRestore(jsonOut bool) error {
+	if len(os.Args) < 3 {
+		return fmt.Errorf("usage: homebutler restore <archive> [--service <name>]")
+	}
+	archivePath := os.Args[2]
+	service := getFlag("--service", "")
+
+	result, err := backup.Restore(archivePath, service)
+	if err != nil {
+		return err
+	}
+	return output(result, jsonOut)
+}
+
 // --- Output ---
 
 func output(data any, jsonOut bool) error {
@@ -290,6 +371,24 @@ func output(data any, jsonOut bool) error {
 		fmt.Print(format.NetworkScan(v))
 	case *wake.WakeResult:
 		fmt.Print(format.WakeResult(v.MAC, v.Broadcast))
+	case *backup.BackupResult:
+		fmt.Printf("Backup complete: %s\n", v.Archive)
+		fmt.Printf("  Services: %s\n", strings.Join(v.Services, ", "))
+		fmt.Printf("  Volumes:  %d\n", v.Volumes)
+		fmt.Printf("  Size:     %s\n", v.Size)
+	case *backup.RestoreResult:
+		fmt.Printf("Restore complete from: %s\n", v.Archive)
+		fmt.Printf("  Services: %s\n", strings.Join(v.Services, ", "))
+		fmt.Printf("  Volumes:  %d\n", v.Volumes)
+	case []backup.ListEntry:
+		if len(v) == 0 {
+			fmt.Println("No backups found.")
+		} else {
+			fmt.Printf("%-40s %-10s %s\n", "NAME", "SIZE", "CREATED")
+			for _, e := range v {
+				fmt.Printf("%-40s %-10s %s\n", e.Name, e.Size, e.CreatedAt)
+			}
+		}
 	default:
 		enc := json.NewEncoder(os.Stdout)
 		enc.SetIndent("", "  ")
@@ -324,10 +423,12 @@ func isFlag(s string) bool {
 
 // valueFlags are flags that take a value argument.
 var valueFlags = map[string]bool{
-	"--server": true,
-	"--config": true,
-	"--local":  true,
-	"--port":   true,
+	"--server":  true,
+	"--config":  true,
+	"--local":   true,
+	"--port":    true,
+	"--service": true,
+	"--to":      true,
 }
 
 func filterFlags(args []string, flags ...string) []string {
@@ -381,7 +482,14 @@ Commands:
   wake <mac|name>     Send Wake-on-LAN magic packet
   ports               List open ports with process info
   network scan        Discover devices on local network
+  backup              Backup all Docker service volumes
+  backup list         List existing backups
+  backup --service <n> Backup a specific service only
+  backup --to <path>  Custom backup destination
+  restore <archive>   Restore volumes from a backup archive
   alerts              Check resource thresholds (CPU, memory, disk)
+  alerts --watch      Continuously monitor resources (Ctrl+C to stop)
+                      Options: --interval <duration> (default: 30s)
   trust <server>      Trust a remote server's SSH host key
   upgrade             Upgrade local + all remote servers to latest
   deploy              Install homebutler on remote servers
