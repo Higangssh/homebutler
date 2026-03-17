@@ -169,6 +169,70 @@ func (s *ServerConfig) SSHBinPath() string {
 	return "homebutler"
 }
 
+// ValidationError describes a single configuration validation failure.
+type ValidationError struct {
+	Field   string
+	Message string
+}
+
+func (e ValidationError) Error() string {
+	return fmt.Sprintf("%s: %s", e.Field, e.Message)
+}
+
+// Validate checks the config for missing required fields and invalid values.
+// It returns all validation errors found (not just the first).
+func (c *Config) Validate() []ValidationError {
+	var errs []ValidationError
+
+	for i, s := range c.Servers {
+		prefix := fmt.Sprintf("servers[%d]", i)
+		if s.Name == "" {
+			errs = append(errs, ValidationError{
+				Field:   prefix + ".name",
+				Message: "required field is missing",
+			})
+		}
+		if !s.Local && s.Host == "" {
+			errs = append(errs, ValidationError{
+				Field:   prefix + ".host",
+				Message: "required for remote servers",
+			})
+		}
+		if s.Port != 0 && (s.Port < 1 || s.Port > 65535) {
+			errs = append(errs, ValidationError{
+				Field:   prefix + ".port",
+				Message: fmt.Sprintf("must be between 1 and 65535, got %d", s.Port),
+			})
+		}
+		if s.KeyFile != "" {
+			if _, err := os.Stat(s.KeyFile); os.IsNotExist(err) {
+				errs = append(errs, ValidationError{
+					Field:   prefix + ".key",
+					Message: fmt.Sprintf("file not found: %s", s.KeyFile),
+				})
+			}
+		}
+	}
+
+	for i, w := range c.Wake {
+		prefix := fmt.Sprintf("wake[%d]", i)
+		if w.Name == "" {
+			errs = append(errs, ValidationError{
+				Field:   prefix + ".name",
+				Message: "required field is missing",
+			})
+		}
+		if w.MAC == "" {
+			errs = append(errs, ValidationError{
+				Field:   prefix + ".mac",
+				Message: "required field is missing",
+			})
+		}
+	}
+
+	return errs
+}
+
 func (c *Config) FindWakeTarget(name string) *WakeTarget {
 	for _, t := range c.Wake {
 		if t.Name == name {

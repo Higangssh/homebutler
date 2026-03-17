@@ -109,6 +109,8 @@ func Execute(version, buildDate string) error {
 	case "mcp":
 		demo := hasFlag("--demo")
 		return mcp.NewServer(cfg, version, demo).Run()
+	case "config":
+		return runConfig(cfg)
 	case "version", "-v", "--version":
 		fmt.Printf("homebutler %s (built %s, %s)\n", version, buildDate, runtime.Version())
 		return nil
@@ -329,6 +331,27 @@ func runBackup(cfg *config.Config, jsonOut bool) error {
 		return err
 	}
 	return output(result, jsonOut)
+}
+
+func runConfig(cfg *config.Config) error {
+	if len(os.Args) < 3 {
+		return fmt.Errorf("usage: homebutler config <validate>")
+	}
+	switch os.Args[2] {
+	case "validate":
+		errs := cfg.Validate()
+		if len(errs) == 0 {
+			fmt.Println("✅ Config is valid")
+			return nil
+		}
+		fmt.Fprintf(os.Stderr, "❌ Config has %d error(s):\n", len(errs))
+		for _, e := range errs {
+			fmt.Fprintf(os.Stderr, "   • %s\n", e)
+		}
+		return fmt.Errorf("config validation failed")
+	default:
+		return fmt.Errorf("unknown config subcommand: %s (available: validate)", os.Args[2])
+	}
 }
 
 func runRestore(jsonOut bool) error {

@@ -150,3 +150,117 @@ func TestLoadInvalidYaml(t *testing.T) {
 		t.Error("expected error for invalid yaml")
 	}
 }
+
+func TestValidateValid(t *testing.T) {
+	cfg := &Config{
+		Servers: []ServerConfig{
+			{Name: "web", Host: "192.168.1.10", User: "admin"},
+		},
+		Wake: []WakeTarget{
+			{Name: "nas", MAC: "AA:BB:CC:DD:EE:FF"},
+		},
+	}
+	errs := cfg.Validate()
+	if len(errs) != 0 {
+		t.Errorf("expected no errors, got %d: %v", len(errs), errs)
+	}
+}
+
+func TestValidateLocalServerNoHost(t *testing.T) {
+	// Local servers don't need a host
+	cfg := &Config{
+		Servers: []ServerConfig{
+			{Name: "local", Local: true},
+		},
+	}
+	errs := cfg.Validate()
+	if len(errs) != 0 {
+		t.Errorf("expected no errors for local server without host, got %d: %v", len(errs), errs)
+	}
+}
+
+func TestValidateMissingServerName(t *testing.T) {
+	cfg := &Config{
+		Servers: []ServerConfig{
+			{Host: "192.168.1.10"},
+		},
+	}
+	errs := cfg.Validate()
+	if len(errs) != 1 {
+		t.Fatalf("expected 1 error, got %d: %v", len(errs), errs)
+	}
+	if errs[0].Field != "servers[0].name" {
+		t.Errorf("expected field servers[0].name, got %q", errs[0].Field)
+	}
+}
+
+func TestValidateMissingRemoteHost(t *testing.T) {
+	cfg := &Config{
+		Servers: []ServerConfig{
+			{Name: "web"},
+		},
+	}
+	errs := cfg.Validate()
+	if len(errs) != 1 {
+		t.Fatalf("expected 1 error, got %d: %v", len(errs), errs)
+	}
+	if errs[0].Field != "servers[0].host" {
+		t.Errorf("expected field servers[0].host, got %q", errs[0].Field)
+	}
+}
+
+func TestValidateInvalidPort(t *testing.T) {
+	cfg := &Config{
+		Servers: []ServerConfig{
+			{Name: "web", Host: "10.0.0.1", Port: 99999},
+		},
+	}
+	errs := cfg.Validate()
+	if len(errs) != 1 {
+		t.Fatalf("expected 1 error, got %d: %v", len(errs), errs)
+	}
+	if errs[0].Field != "servers[0].port" {
+		t.Errorf("expected field servers[0].port, got %q", errs[0].Field)
+	}
+}
+
+func TestValidateMissingKeyFile(t *testing.T) {
+	cfg := &Config{
+		Servers: []ServerConfig{
+			{Name: "web", Host: "10.0.0.1", KeyFile: "/nonexistent/key.pem"},
+		},
+	}
+	errs := cfg.Validate()
+	if len(errs) != 1 {
+		t.Fatalf("expected 1 error, got %d: %v", len(errs), errs)
+	}
+	if errs[0].Field != "servers[0].key" {
+		t.Errorf("expected field servers[0].key, got %q", errs[0].Field)
+	}
+}
+
+func TestValidateMissingWakeFields(t *testing.T) {
+	cfg := &Config{
+		Wake: []WakeTarget{
+			{Name: "nas"},    // missing MAC
+			{MAC: "AA:BB:CC:DD:EE:FF"}, // missing Name
+		},
+	}
+	errs := cfg.Validate()
+	if len(errs) != 2 {
+		t.Fatalf("expected 2 errors, got %d: %v", len(errs), errs)
+	}
+}
+
+func TestValidateMultipleErrors(t *testing.T) {
+	cfg := &Config{
+		Servers: []ServerConfig{
+			{},               // missing name and host
+			{Name: "valid", Host: "10.0.0.1"}, // fine
+		},
+	}
+	errs := cfg.Validate()
+	if len(errs) != 2 {
+		t.Fatalf("expected 2 errors (name+host missing), got %d: %v", len(errs), errs)
+	}
+}
