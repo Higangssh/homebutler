@@ -23,7 +23,7 @@ func List() ([]Container, error) {
 		return nil, fmt.Errorf("docker is not installed (binary not found in PATH)")
 	}
 
-	out, err := util.RunCmd("docker", "ps", "-a",
+	out, err := util.DockerCmd("ps", "-a",
 		"--format", "{{.ID}}\t{{.Names}}\t{{.Image}}\t{{.Status}}\t{{.State}}\t{{.Ports}}")
 	if err != nil {
 		return nil, fmt.Errorf("docker daemon is not running: %w", err)
@@ -64,7 +64,7 @@ func Restart(name string) (*ActionResult, error) {
 	if !isValidName(name) {
 		return nil, fmt.Errorf("invalid container name: %s", name)
 	}
-	out, err := util.RunCmd("docker", "restart", name)
+	out, err := util.DockerCmd("restart", name)
 	if err != nil {
 		return nil, fmt.Errorf("failed to restart %s: %s", name, out)
 	}
@@ -75,7 +75,7 @@ func Stop(name string) (*ActionResult, error) {
 	if !isValidName(name) {
 		return nil, fmt.Errorf("invalid container name: %s", name)
 	}
-	out, err := util.RunCmd("docker", "stop", name)
+	out, err := util.DockerCmd("stop", name)
 	if err != nil {
 		return nil, fmt.Errorf("failed to stop %s: %s", name, out)
 	}
@@ -99,7 +99,7 @@ func Logs(name string, lines string) (*LogsResult, error) {
 			return nil, fmt.Errorf("invalid line count: %s (must be a positive integer)", lines)
 		}
 	}
-	out, err := util.RunCmd("docker", "logs", "--tail", lines, name)
+	out, err := util.DockerCmd("logs", "--tail", lines, name)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get logs for %s: %w", name, err)
 	}

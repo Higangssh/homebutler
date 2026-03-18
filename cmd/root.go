@@ -100,6 +100,8 @@ func Execute(version, buildDate string) error {
 		return runBackup(cfg, jsonOutput)
 	case "restore":
 		return runRestore(jsonOutput)
+	case "install":
+		return runInstall()
 	case "deploy":
 		return runDeploy(cfg)
 	case "upgrade":
