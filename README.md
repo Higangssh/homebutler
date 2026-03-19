@@ -174,6 +174,14 @@ homebutler serve --demo       # Demo mode with realistic sample data
 
 > **`homebutler watch`** — A terminal-based dashboard powered by Bubble Tea. Monitors all configured servers with real-time updates, color-coded resource bars, and Docker container status. No browser needed.
 
+### 🕸️ Git Credits (Spider-Man Theme)
+
+<p align="center">
+  <img src="assets/spiderman-demo.gif" alt="homebutler git credits spider-man theme" width="800">
+</p>
+
+> Turn your Git history into movie-style rolling credits with glitch effects. Powered by [gitcredits](https://github.com/Higangssh/gitcredits).
+
 ## Quick Start
 
 ```bash
