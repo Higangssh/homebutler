@@ -118,6 +118,23 @@ var Registry = map[string]App{
       - PGID={{.GID}}
 `,
 	},
+	"vaultwarden": {
+		Name:          "vaultwarden",
+		Description:   "Lightweight Bitwarden-compatible password manager",
+		DefaultPort:   "8080",
+		ContainerPort: "80",
+		DataPath:      "/data",
+		ComposeFile: `services:
+  vaultwarden:
+    image: vaultwarden/server:latest
+    container_name: vaultwarden
+    restart: unless-stopped
+    ports:
+      - "{{.Port}}:80"
+    volumes:
+      - "{{.DataDir}}:/data"
+`,
+	},
 }
 
 // List returns all available apps.
