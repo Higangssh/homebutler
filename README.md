@@ -386,6 +386,7 @@ homebutler install purge uptime-kuma
 | App | Default Port | Description |
 |-----|-------------|-------------|
 | `uptime-kuma` | 3001 | Self-hosted monitoring tool |
+| `vaultwarden` | 8080 | Bitwarden-compatible password manager |
 
 > More apps coming soon. Want to add one? See [Contributing](CONTRIBUTING.md).
 

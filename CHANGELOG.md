@@ -2,6 +2,30 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.10.0](https://github.com/Higangssh/homebutler/compare/v0.9.0...v0.10.0) - 2026-03-20
+
+### 🚀 Features
+
+- add `install` command — deploy self-hosted apps with docker compose
+- add `install list` — list available apps
+- add `install status` — check installed app status
+- add `install uninstall` — stop app, keep data
+- add `install purge` — stop app, delete all data
+- support `--port` flag for custom host port
+- app registry: uptime-kuma, vaultwarden
+- cross-platform docker socket detection (default, colima, podman)
+- install registry (`installed.json`) to track app locations
+- PUID/PGID support for compatible apps
+
+### 🔒 Security
+
+- harden SSH remote execution against shell injection (ShellQuote)
+- add checksum verification for upgrade downloads
+
+### 🎨 Other
+
+- add spider-man theme git credits demo to README
+
 ## [0.9.0](https://github.com/Higangssh/homebutler/compare/v0.8.2...v0.9.0) - 2026-03-11
 
 ### 🚀 Features
