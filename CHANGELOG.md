@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.10.1](https://github.com/Higangssh/homebutler/compare/v0.10.0...v0.10.1) - 2026-03-20
+
+### 🧪 Tests
+
+- add comprehensive install tests (registry, CRUD, template rendering, port check)
+- add docker utility tests (socket detection, itoa)
+
 ## [0.10.0](https://github.com/Higangssh/homebutler/compare/v0.9.0...v0.10.0) - 2026-03-20
 
 **One-command app deployment for your homelab.** Install, manage, and remove self-hosted apps with docker compose — no manual setup needed.
