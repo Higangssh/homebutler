@@ -176,7 +176,7 @@ func TestComposeTemplateRendering(t *testing.T) {
 		if !strings.Contains(rendered, app.DefaultPort) {
 			t.Errorf("app %s: rendered compose missing port %s", name, app.DefaultPort)
 		}
-		if !strings.Contains(rendered, "/tmp/test-data") {
+		if strings.Contains(app.ComposeFile, "{{.DataDir}}") && !strings.Contains(rendered, "/tmp/test-data") {
 			t.Errorf("app %s: rendered compose missing data dir", name)
 		}
 	}

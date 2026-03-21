@@ -152,6 +152,42 @@ var Registry = map[string]App{
       - "{{.DataDir}}:/srv"
 `,
 	},
+	"it-tools": {
+		Name:          "it-tools",
+		Description:   "Collection of developer utilities (JSON, Base64, Hash, etc.)",
+		DefaultPort:   "8082",
+		ContainerPort: "80",
+		DataPath:      "/data",
+		ComposeFile: `services:
+  it-tools:
+    image: corentinth/it-tools:latest
+    container_name: it-tools
+    restart: unless-stopped
+    ports:
+      - "{{.Port}}:80"
+`,
+	},
+	"gitea": {
+		Name:          "gitea",
+		Description:   "Lightweight self-hosted Git service",
+		DefaultPort:   "3002",
+		ContainerPort: "3000",
+		DataPath:      "/data",
+		ComposeFile: `services:
+  gitea:
+    image: gitea/gitea:latest
+    container_name: gitea
+    restart: unless-stopped
+    ports:
+      - "{{.Port}}:3000"
+      - "2222:22"
+    volumes:
+      - "{{.DataDir}}:/data"
+    environment:
+      - USER_UID={{.UID}}
+      - USER_GID={{.GID}}
+`,
+	},
 }
 
 // List returns all available apps.
