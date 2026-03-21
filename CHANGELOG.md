@@ -2,6 +2,24 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.10.2](https://github.com/Higangssh/homebutler/compare/v0.10.1...v0.10.2) - 2026-03-21
+
+**5 apps now installable with one command.** filebrowser, it-tools, and gitea join the registry.
+
+```bash
+homebutler install list          # see all 5 apps
+homebutler install it-tools      # developer utilities in seconds
+homebutler install gitea         # your own Git server
+```
+
+### 🚀 Features
+
+- add filebrowser to install registry (web-based file manager)
+- add it-tools to install registry (developer utility collection)
+- add gitea to install registry (self-hosted Git service with SSH)
+- show process/container name in port conflict messages
+- check Docker container ports for colima/podman environments
+
 ## [0.10.1](https://github.com/Higangssh/homebutler/compare/v0.10.0...v0.10.1) - 2026-03-20
 
 ### 🧪 Tests

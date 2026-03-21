@@ -138,7 +138,7 @@ homebutler install status <app>      # Check app status
 homebutler install uninstall <app>   # Stop app, keep data
 homebutler install purge <app>       # Stop + delete all data
 ```
-Deploys self-hosted apps via docker compose. Each app gets its own directory at `~/.homebutler/apps/<app>/` with auto-generated `docker-compose.yml` and persistent data. Pre-checks docker availability, port conflicts, and duplicates. Currently available: uptime-kuma, vaultwarden.
+Deploys self-hosted apps via docker compose. Each app gets its own directory at `~/.homebutler/apps/<app>/` with auto-generated `docker-compose.yml` and persistent data. Pre-checks docker availability, port conflicts, and duplicates. Currently available: uptime-kuma, vaultwarden, filebrowser, it-tools, gitea.
 
 ### MCP Server
 ```bash

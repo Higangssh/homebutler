@@ -379,6 +379,9 @@ homebutler install purge uptime-kuma
 |-----|-------------|-------------|
 | `uptime-kuma` | 3001 | Self-hosted monitoring tool |
 | `vaultwarden` | 8080 | Bitwarden-compatible password manager |
+| `filebrowser` | 8081 | Web-based file manager |
+| `it-tools` | 8082 | Developer utilities (JSON, Base64, Hash, etc.) |
+| `gitea` | 3002 | Lightweight self-hosted Git service |
 
 > More apps coming soon. Want to add one? See [Contributing](CONTRIBUTING.md).
 
