@@ -135,6 +135,23 @@ var Registry = map[string]App{
       - "{{.DataDir}}:/data"
 `,
 	},
+	"filebrowser": {
+		Name:          "filebrowser",
+		Description:   "Web-based file manager",
+		DefaultPort:   "8081",
+		ContainerPort: "80",
+		DataPath:      "/srv",
+		ComposeFile: `services:
+  filebrowser:
+    image: filebrowser/filebrowser:latest
+    container_name: filebrowser
+    restart: unless-stopped
+    ports:
+      - "{{.Port}}:80"
+    volumes:
+      - "{{.DataDir}}:/srv"
+`,
+	},
 }
 
 // List returns all available apps.
@@ -185,9 +202,25 @@ func PreCheck(app App, port string) []string {
 	}
 
 	// Check port availability
-	if isPortInUse(port) {
-		issues = append(issues, fmt.Sprintf("port %s is already in use.\n"+
-			"    Use --port <number> to pick a different port", port))
+	if processInfo := portInUseBy(port); processInfo != "" {
+		issues = append(issues, fmt.Sprintf("port %s is already in use by %s.\n"+
+			"    Use --port <number> to pick a different port", port, processInfo))
+	} else {
+		// Also check Docker containers (colima/podman may not show in lsof)
+		dockerOut, _ := util.DockerCmd("ps", "--format", "{{.Names}} {{.Ports}}")
+		if strings.Contains(dockerOut, ":"+port+"->") {
+			// Extract container name
+			for _, line := range strings.Split(dockerOut, "\n") {
+				if strings.Contains(line, ":"+port+"->") {
+					parts := strings.Fields(line)
+					if len(parts) > 0 {
+						issues = append(issues, fmt.Sprintf("port %s is already in use by container %q.\n"+
+							"    Use --port <number> to pick a different port", port, parts[0]))
+					}
+					break
+				}
+			}
+		}
 	}
 
 	// Check if already running
@@ -205,22 +238,30 @@ func PreCheck(app App, port string) []string {
 }
 
 // isPortInUse checks if a port is in use (cross-platform).
-func isPortInUse(port string) bool {
-	// Try ss (Linux)
+func portInUseBy(port string) string {
+	// Try lsof (macOS/Linux) — gives process name
 	out, err := util.RunCmd("sh", "-c",
-		fmt.Sprintf("ss -tlnp 2>/dev/null | grep ':%s ' || true", port))
+		fmt.Sprintf("lsof -i :%s -sTCP:LISTEN 2>/dev/null | grep LISTEN | head -1 || true", port))
 	if err == nil && out != "" {
-		return true
+		fields := strings.Fields(out)
+		if len(fields) >= 2 {
+			return fmt.Sprintf("%s (PID %s)", fields[0], fields[1])
+		}
+		return "unknown process"
 	}
 
-	// Try lsof (macOS/Linux fallback)
+	// Try ss (Linux)
 	out, err = util.RunCmd("sh", "-c",
-		fmt.Sprintf("lsof -i :%s -sTCP:LISTEN 2>/dev/null | grep LISTEN || true", port))
+		fmt.Sprintf("ss -tlnp 2>/dev/null | grep ':%s ' | head -1 || true", port))
 	if err == nil && out != "" {
-		return true
+		return "in use"
 	}
 
-	return false
+	return ""
+}
+
+func isPortInUse(port string) bool {
+	return portInUseBy(port) != ""
 }
 
 // Install creates the app directory, renders docker-compose.yml, and runs it.
