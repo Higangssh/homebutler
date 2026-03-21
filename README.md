@@ -339,6 +339,10 @@ Works with Claude Desktop, ChatGPT, Cursor, Windsurf, and any MCP client.
 
 Deploy self-hosted apps with a single command. Each app runs via **docker compose** with automatic pre-checks, health verification, and clean lifecycle management.
 
+<p align="center">
+  <img src="assets/install-demo.gif" alt="homebutler install demo" width="900">
+</p>
+
 ```bash
 # List available apps
 homebutler install list
