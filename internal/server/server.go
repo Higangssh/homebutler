@@ -211,7 +211,28 @@ func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleDocker(w http.ResponseWriter, r *http.Request) {
 	if srv, ok := s.isRemoteRequest(r); ok {
-		s.forwardRemote(w, srv, "docker", "list", "--json")
+		out, err := remote.Run(srv, "docker", "list", "--json")
+		if err != nil {
+			writeJSON(w, map[string]any{
+				"available":  false,
+				"message":    err.Error(),
+				"containers": []any{},
+			})
+			return
+		}
+		var containers json.RawMessage
+		if err := json.Unmarshal(out, &containers); err != nil {
+			writeJSON(w, map[string]any{
+				"available":  false,
+				"message":    "invalid response from remote server",
+				"containers": []any{},
+			})
+			return
+		}
+		writeJSON(w, map[string]any{
+			"available":  true,
+			"containers": containers,
+		})
 		return
 	}
 	containers, err := docker.List()
