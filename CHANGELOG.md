@@ -2,6 +2,46 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.11.0](https://github.com/Higangssh/homebutler/compare/v0.10.2...v0.11.0) - 2026-03-28
+
+**Cobra CLI + docker stats.** The entire CLI is now powered by cobra — auto-generated help, shell completion, and cleaner flag handling. Plus a new `docker stats` command for real-time container resource monitoring.
+
+```bash
+homebutler docker stats          # per-container CPU, memory, network, I/O
+homebutler completion zsh        # shell auto-completion
+homebutler docker --help         # auto-generated sub-command help
+```
+
+### 🚀 Features
+
+- add `docker stats` command for per-container resource usage (CPU, memory, network I/O, block I/O, PIDs)
+- add `docker_stats` MCP tool (15th tool) with remote server support
+- add `/api/docker/stats` web dashboard API endpoint
+- add shell completion support for bash, zsh, and fish
+- auto-generated help for all commands and sub-commands
+
+### ♻️ Refactored
+
+- migrate entire CLI from manual switch/case to cobra framework
+- split monolithic root.go into per-command files (18 files)
+- extract shared CLI helpers to cmd/helpers.go
+
+### 🐛 Fixed
+
+- wrap remote docker response to match local format (#21)
+
+### 🧪 Tests
+
+- boost test coverage: server 49→81%, ports 8→75%, docker 47→64%, remote 7→22%
+- add docker stats parsing tests (7 cases)
+- add docker stats API tests (7 cases)
+
+### 📦 Other
+
+- add Dockerfile for Glama MCP server inspection
+- add glama.json for Glama author verification
+- add Glama score badge to README
+
 ## [0.10.2](https://github.com/Higangssh/homebutler/compare/v0.10.1...v0.10.2) - 2026-03-21
 
 **5 apps now installable with one command.** filebrowser, it-tools, and gitea join the registry.
