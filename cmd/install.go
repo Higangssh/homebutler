@@ -52,6 +52,10 @@ func newInstallListCmd() *cobra.Command {
 		Short:   "List available apps",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			apps := install.List()
+			jsonOut, _ := cmd.Root().PersistentFlags().GetBool("json")
+			if jsonOut {
+				return output(apps, true)
+			}
 			fmt.Fprintf(os.Stderr, "📦 Available apps (%d):\n\n", len(apps))
 			for _, app := range apps {
 				fmt.Fprintf(os.Stderr, "  %-20s %s\n", app.Name, app.Description)
