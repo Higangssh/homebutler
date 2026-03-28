@@ -1,0 +1,41 @@
+# homebutler
+
+> Single-binary homelab management CLI written in Go. Monitor servers, manage Docker containers, install self-hosted apps, Wake-on-LAN, network scanning, alerts, backup/restore, and multi-server SSH — all from one 15MB binary with zero dependencies.
+
+## What it does
+- System monitoring: CPU, memory, disk usage, uptime across multiple servers
+- Docker management: list, restart, stop, logs, stats (per-container resource usage)
+- One-command app install: uptime-kuma, vaultwarden, filebrowser, it-tools, gitea
+- Wake-on-LAN: wake machines by MAC address or configured name
+- Network scanning: discover devices on local network (IP, MAC, hostname)
+- Open ports: list listening ports with process info
+- Alerts: threshold-based monitoring with continuous watch mode
+- Backup/restore: Docker volume backup and restore
+- Multi-server: manage remote servers over SSH from a single CLI
+- Built-in MCP server: 15 AI-compatible tools for Claude, ChatGPT, Cursor, etc.
+- Web dashboard: real-time browser UI with go:embed
+- TUI: terminal dashboard with Bubble Tea
+
+## How it compares
+- vs Portainer: homebutler is CLI-first, single binary, no Docker required to run
+- vs CasaOS: homebutler is not an OS, just a lightweight CLI tool
+- vs btop/htop: homebutler adds Docker, multi-server, app install, and AI integration
+- vs Komodo: homebutler is simpler, single binary, no database required
+
+## Install
+brew install Higangssh/homebutler/homebutler
+# or
+curl -fsSL https://raw.githubusercontent.com/Higangssh/homebutler/main/install.sh | sh
+
+## Quick start
+homebutler init                    # interactive setup
+homebutler status --all            # all servers at once
+homebutler docker list             # list containers
+homebutler install uptime-kuma     # deploy an app
+homebutler docker stats            # container resource usage
+homebutler serve                   # web dashboard
+
+## Links
+- GitHub: https://github.com/Higangssh/homebutler
+- MCP Server: https://glama.ai/mcp/servers/Higangssh/homebutler
+- License: MIT
