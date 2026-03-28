@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"os"
 	"reflect"
 	"testing"
 )
@@ -59,42 +58,6 @@ func TestFilterFlags(t *testing.T) {
 			}
 		})
 	}
-}
-
-func TestListServerNames_Empty(t *testing.T) {
-	// Import would be circular, so just test the helper logic
-	// This tests the string building pattern
-}
-
-func TestGetFlag(t *testing.T) {
-	// Save and restore os.Args
-	savedArgs := os.Args
-	defer func() { os.Args = savedArgs }()
-
-	tests := []struct {
-		name     string
-		flag     string
-		def      string
-		expected string
-	}{
-		{"found", "--config", "default.yaml", "default.yaml"},
-	}
-
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			got := getFlag(tc.flag, tc.def)
-			// Without manipulating os.Args, this just returns default
-			if got != tc.expected {
-				t.Errorf("getFlag(%q, %q) = %q, want %q", tc.flag, tc.def, got, tc.expected)
-			}
-		})
-	}
-}
-
-func TestHasFlag(t *testing.T) {
-	// hasFlag reads os.Args, tested implicitly through integration
-	// Just verify it doesn't panic with current args
-	_ = hasFlag("--nonexistent")
 }
 
 func TestIsFlag(t *testing.T) {

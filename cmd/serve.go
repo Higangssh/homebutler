@@ -1,26 +1,33 @@
 package cmd
 
 import (
-	"strconv"
-
-	"github.com/Higangssh/homebutler/internal/config"
 	"github.com/Higangssh/homebutler/internal/server"
+	"github.com/spf13/cobra"
 )
 
-func runServe(cfg *config.Config, version string) error {
-	host := getFlag("--host", "127.0.0.1")
-	port := 8080
-	if v := getFlag("--port", ""); v != "" {
-		p, err := strconv.Atoi(v)
-		if err != nil || p < 1 || p > 65535 {
-			return err
-		}
-		port = p
+func newServeCmd() *cobra.Command {
+	var host string
+	var port int
+	var demo bool
+
+	cmd := &cobra.Command{
+		Use:   "serve",
+		Short: "Web dashboard (default port 8080)",
+		Long:  "Start the homebutler web dashboard. Use --demo for realistic demo data without real system calls.",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := loadConfig(); err != nil {
+				return err
+			}
+
+			srv := server.New(cfg, host, port, demo)
+			srv.SetVersion(Version)
+			return srv.Run()
+		},
 	}
 
-	demo := hasFlag("--demo")
+	cmd.Flags().StringVar(&host, "host", "127.0.0.1", "Host to bind to")
+	cmd.Flags().IntVar(&port, "port", 8080, "Port for the web dashboard")
+	cmd.Flags().BoolVar(&demo, "demo", false, "Run with realistic demo data (no real system calls)")
 
-	srv := server.New(cfg, host, port, demo)
-	srv.SetVersion(version)
-	return srv.Run()
+	return cmd
 }

@@ -6,50 +6,121 @@ import (
 	"strings"
 
 	"github.com/Higangssh/homebutler/internal/install"
+	"github.com/spf13/cobra"
 )
 
-func runInstall() error {
-	if len(os.Args) < 3 {
-		return printInstallUsage()
+func newInstallCmd() *cobra.Command {
+	installCmd := &cobra.Command{
+		Use:   "install <app> [options]",
+		Short: "Install and manage homelab apps",
+		Long: `Install and manage homelab apps via Docker Compose.
+
+Usage:
+  homebutler install <app>                Install an app
+  homebutler install <app> --port 8080    Custom port
+  homebutler install list                 List available apps
+  homebutler install status <app>         Check app status
+  homebutler install uninstall <app>      Stop (keep data)
+  homebutler install purge <app>          Stop + delete data`,
+		Args:                  cobra.ArbitraryArgs,
+		DisableFlagParsing:    false,
+		DisableFlagsInUseLine: true,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if len(args) == 0 {
+				return cmd.Help()
+			}
+			// This handles the case where someone types "homebutler install <appname>"
+			// directly (not via a subcommand).
+			return runInstallApp(args[0], cmd)
+		},
 	}
 
-	subCmd := os.Args[2]
+	installCmd.AddCommand(
+		newInstallListCmd(),
+		newInstallStatusCmd(),
+		newInstallUninstallCmd(),
+		newInstallPurgeCmd(),
+	)
 
-	switch subCmd {
-	case "list", "ls":
-		return runInstallList()
-	case "status":
-		if len(os.Args) < 4 {
-			return fmt.Errorf("usage: homebutler install status <app>")
-		}
-		return runInstallStatus(os.Args[3])
-	case "uninstall", "rm":
-		if len(os.Args) < 4 {
-			return fmt.Errorf("usage: homebutler install uninstall <app>")
-		}
-		return runInstallUninstall(os.Args[3])
-	case "purge":
-		if len(os.Args) < 4 {
-			return fmt.Errorf("usage: homebutler install purge <app>")
-		}
-		return runInstallPurge(os.Args[3])
-	default:
-		return runInstallApp(subCmd)
+	return installCmd
+}
+
+func newInstallListCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:     "list",
+		Aliases: []string{"ls"},
+		Short:   "List available apps",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			apps := install.List()
+			fmt.Fprintf(os.Stderr, "📦 Available apps (%d):\n\n", len(apps))
+			for _, app := range apps {
+				fmt.Fprintf(os.Stderr, "  %-20s %s\n", app.Name, app.Description)
+			}
+			fmt.Fprintln(os.Stderr)
+			fmt.Fprintln(os.Stderr, "Usage: homebutler install <app>")
+			return nil
+		},
 	}
 }
 
-func runInstallList() error {
-	apps := install.List()
-	fmt.Fprintf(os.Stderr, "📦 Available apps (%d):\n\n", len(apps))
-	for _, app := range apps {
-		fmt.Fprintf(os.Stderr, "  %-20s %s\n", app.Name, app.Description)
+func newInstallStatusCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "status <app>",
+		Short: "Check app status",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			status, err := install.Status(args[0])
+			if err != nil {
+				return err
+			}
+			icon := "🔴"
+			if status == "running" {
+				icon = "🟢"
+			}
+			fmt.Fprintf(os.Stderr, "%s %s: %s\n", icon, args[0], status)
+			return nil
+		},
 	}
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "Usage: homebutler install <app>")
-	return nil
 }
 
-func runInstallApp(appName string) error {
+func newInstallUninstallCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:     "uninstall <app>",
+		Aliases: []string{"rm"},
+		Short:   "Stop an app (keep data)",
+		Args:    cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			appName := args[0]
+			fmt.Fprintf(os.Stderr, "🛑 Stopping %s...\n", appName)
+			if err := install.Uninstall(appName); err != nil {
+				return err
+			}
+			fmt.Fprintln(os.Stderr, "✅ Stopped and removed containers")
+			fmt.Fprintf(os.Stderr, "💡 Data preserved at: %s\n", install.GetInstalledPath(appName))
+			fmt.Fprintf(os.Stderr, "   To delete everything: homebutler install purge %s\n", appName)
+			return nil
+		},
+	}
+}
+
+func newInstallPurgeCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "purge <app>",
+		Short: "Stop an app and delete all data",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			appName := args[0]
+			fmt.Fprintf(os.Stderr, "⚠️  Purging %s (containers + data)...\n", appName)
+			if err := install.Purge(appName); err != nil {
+				return err
+			}
+			fmt.Fprintln(os.Stderr, "✅ Completely removed")
+			return nil
+		},
+	}
+}
+
+func runInstallApp(appName string, cmd *cobra.Command) error {
 	app, ok := install.Registry[appName]
 	if !ok {
 		available := make([]string, 0)
@@ -59,9 +130,10 @@ func runInstallApp(appName string) error {
 		return fmt.Errorf("unknown app %q. Available: %s", appName, strings.Join(available, ", "))
 	}
 
-	// Parse options
+	// Parse --port from the parent command's flags
+	portFlag, _ := cmd.Flags().GetString("port")
 	opts := install.InstallOptions{
-		Port: getFlag("--port", ""),
+		Port: portFlag,
 	}
 
 	port := app.DefaultPort
@@ -112,51 +184,5 @@ func runInstallApp(appName string) error {
 		fmt.Fprintf(os.Stderr, "⚠️  Status: %s (check logs with: homebutler logs %s)\n", status, app.Name)
 	}
 
-	return nil
-}
-
-func runInstallStatus(appName string) error {
-	status, err := install.Status(appName)
-	if err != nil {
-		return err
-	}
-	icon := "🔴"
-	if status == "running" {
-		icon = "🟢"
-	}
-	fmt.Fprintf(os.Stderr, "%s %s: %s\n", icon, appName, status)
-	return nil
-}
-
-func runInstallUninstall(appName string) error {
-	fmt.Fprintf(os.Stderr, "🛑 Stopping %s...\n", appName)
-	if err := install.Uninstall(appName); err != nil {
-		return err
-	}
-	fmt.Fprintln(os.Stderr, "✅ Stopped and removed containers")
-	fmt.Fprintf(os.Stderr, "💡 Data preserved at: %s\n", install.GetInstalledPath(appName))
-	fmt.Fprintf(os.Stderr, "   To delete everything: homebutler install purge %s\n", appName)
-	return nil
-}
-
-func runInstallPurge(appName string) error {
-	fmt.Fprintf(os.Stderr, "⚠️  Purging %s (containers + data)...\n", appName)
-	if err := install.Purge(appName); err != nil {
-		return err
-	}
-	fmt.Fprintln(os.Stderr, "✅ Completely removed")
-	return nil
-}
-
-func printInstallUsage() error {
-	fmt.Fprintln(os.Stderr, "Usage: homebutler install <app> [options]")
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "Commands:")
-	fmt.Fprintln(os.Stderr, "  homebutler install <app>                Install an app")
-	fmt.Fprintln(os.Stderr, "  homebutler install <app> --port 8080    Custom port")
-	fmt.Fprintln(os.Stderr, "  homebutler install list                 List available apps")
-	fmt.Fprintln(os.Stderr, "  homebutler install status <app>         Check app status")
-	fmt.Fprintln(os.Stderr, "  homebutler install uninstall <app>      Stop (keep data)")
-	fmt.Fprintln(os.Stderr, "  homebutler install purge <app>          Stop + delete data")
 	return nil
 }
