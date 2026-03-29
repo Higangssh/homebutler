@@ -167,6 +167,27 @@ var Registry = map[string]App{
       - "{{.Port}}:80"
 `,
 	},
+	"jellyfin": {
+		Name:          "jellyfin",
+		Description:   "Free software media system for streaming movies, TV, and music",
+		DefaultPort:   "8096",
+		ContainerPort: "8096",
+		DataPath:      "/config",
+		ComposeFile: `services:
+  jellyfin:
+    image: jellyfin/jellyfin:latest
+    container_name: jellyfin
+    restart: unless-stopped
+    ports:
+      - "{{.Port}}:8096"
+    volumes:
+      - "{{.DataDir}}/config:/config"
+      - "{{.DataDir}}/cache:/cache"
+    environment:
+      - PUID={{.UID}}
+      - PGID={{.GID}}
+`,
+	},
 	"gitea": {
 		Name:          "gitea",
 		Description:   "Lightweight self-hosted Git service",

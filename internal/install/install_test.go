@@ -42,6 +42,42 @@ func TestRegistryUptimeKuma(t *testing.T) {
 	}
 }
 
+func TestRegistryJellyfin(t *testing.T) {
+	app, ok := Registry["jellyfin"]
+	if !ok {
+		t.Fatal("jellyfin should be in registry")
+	}
+	if app.DefaultPort != "8096" {
+		t.Errorf("expected port 8096, got %s", app.DefaultPort)
+	}
+	if app.ContainerPort != "8096" {
+		t.Errorf("expected container port 8096, got %s", app.ContainerPort)
+	}
+	if app.DataPath != "/config" {
+		t.Errorf("expected data path /config, got %s", app.DataPath)
+	}
+	if app.Description == "" {
+		t.Error("jellyfin should have a description")
+	}
+
+	// Verify compose template contains key elements
+	if !strings.Contains(app.ComposeFile, "jellyfin/jellyfin:latest") {
+		t.Error("compose should use jellyfin/jellyfin:latest image")
+	}
+	if !strings.Contains(app.ComposeFile, "/config") {
+		t.Error("compose should mount /config volume")
+	}
+	if !strings.Contains(app.ComposeFile, "/cache") {
+		t.Error("compose should mount /cache volume")
+	}
+	if !strings.Contains(app.ComposeFile, "PUID") {
+		t.Error("compose should support PUID")
+	}
+	if !strings.Contains(app.ComposeFile, "PGID") {
+		t.Error("compose should support PGID")
+	}
+}
+
 func TestRegistryVaultwarden(t *testing.T) {
 	app, ok := Registry["vaultwarden"]
 	if !ok {
