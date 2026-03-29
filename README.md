@@ -167,6 +167,9 @@ homebutler install uptime-kuma
 # Install with custom port
 homebutler install uptime-kuma --port 8080
 
+# Install jellyfin with media directory
+homebutler install jellyfin --media /mnt/movies
+
 # Check status
 homebutler install status uptime-kuma
 
@@ -200,6 +203,7 @@ homebutler install purge uptime-kuma
 | `filebrowser` | 8081 | Web-based file manager |
 | `it-tools` | 8082 | Developer utilities (JSON, Base64, Hash, etc.) |
 | `gitea` | 3002 | Lightweight self-hosted Git service |
+| `jellyfin` | 8096 | Free software media system (movies, TV, music) |
 
 > More apps coming soon. Want to add one? See [Contributing](CONTRIBUTING.md).
 

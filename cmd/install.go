@@ -35,6 +35,9 @@ Usage:
 		},
 	}
 
+	installCmd.Flags().String("port", "", "Custom host port")
+	installCmd.Flags().String("media", "", "Media directory to mount (jellyfin)")
+
 	installCmd.AddCommand(
 		newInstallListCmd(),
 		newInstallStatusCmd(),
@@ -134,10 +137,12 @@ func runInstallApp(appName string, cmd *cobra.Command) error {
 		return fmt.Errorf("unknown app %q. Available: %s", appName, strings.Join(available, ", "))
 	}
 
-	// Parse --port from the parent command's flags
+	// Parse flags from the parent command
 	portFlag, _ := cmd.Flags().GetString("port")
+	mediaFlag, _ := cmd.Flags().GetString("media")
 	opts := install.InstallOptions{
-		Port: portFlag,
+		Port:     portFlag,
+		MediaDir: mediaFlag,
 	}
 
 	port := app.DefaultPort
@@ -180,6 +185,11 @@ func runInstallApp(appName string, cmd *cobra.Command) error {
 		fmt.Fprintln(os.Stderr, "✅ Installation complete!")
 		fmt.Fprintf(os.Stderr, "🌐 Access: http://localhost:%s\n", port)
 		fmt.Fprintf(os.Stderr, "📁 Config: %s/docker-compose.yml\n", appDir)
+		if app.Name == "jellyfin" && mediaFlag == "" {
+			fmt.Fprintln(os.Stderr, "\n📂 Media: No media directory mounted.")
+			fmt.Fprintln(os.Stderr, "   To add media, reinstall with --media flag:")
+			fmt.Fprintf(os.Stderr, "   homebutler install jellyfin --media /path/to/movies\n")
+		}
 		fmt.Fprintf(os.Stderr, "\n💡 Useful commands:\n")
 		fmt.Fprintf(os.Stderr, "  homebutler install status %s\n", app.Name)
 		fmt.Fprintf(os.Stderr, "  homebutler logs %s\n", app.Name)

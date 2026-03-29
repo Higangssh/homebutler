@@ -85,15 +85,17 @@ type App struct {
 
 // InstallOptions allows user customization of defaults.
 type InstallOptions struct {
-	Port string // custom host port
+	Port     string // custom host port
+	MediaDir string // media directory (jellyfin)
 }
 
 // composeContext is passed to the compose template.
 type composeContext struct {
-	Port    string
-	DataDir string
-	UID     int
-	GID     int
+	Port     string
+	DataDir  string
+	UID      int
+	GID      int
+	MediaDir string
 }
 
 // Registry holds all installable apps.
@@ -182,7 +184,8 @@ var Registry = map[string]App{
       - "{{.Port}}:8096"
     volumes:
       - "{{.DataDir}}/config:/config"
-      - "{{.DataDir}}/cache:/cache"
+      - "{{.DataDir}}/cache:/cache"{{if .MediaDir}}
+      - "{{.MediaDir}}:/media:ro"{{end}}
     environment:
       - PUID={{.UID}}
       - PGID={{.GID}}
@@ -338,10 +341,11 @@ func Install(app App, opts InstallOptions) error {
 
 	// Render docker-compose.yml
 	ctx := composeContext{
-		Port:    port,
-		DataDir: dataDir,
-		UID:     os.Getuid(),
-		GID:     os.Getgid(),
+		Port:     port,
+		DataDir:  dataDir,
+		UID:      os.Getuid(),
+		GID:      os.Getgid(),
+		MediaDir: opts.MediaDir,
 	}
 
 	tmpl, err := template.New("compose").Parse(app.ComposeFile)
