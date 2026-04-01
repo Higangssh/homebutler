@@ -3,6 +3,7 @@ package install
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"text/template"
@@ -423,10 +424,11 @@ func TestComposeTemplateRendering(t *testing.T) {
 		}
 
 		ctx := composeContext{
-			Port:    app.DefaultPort,
-			DataDir: "/tmp/test-data",
-			UID:     1000,
-			GID:     1000,
+			Port:         app.DefaultPort,
+			DataDir:      "/tmp/test-data",
+			UID:          1000,
+			GID:          1000,
+			DockerSocket: "/var/run/docker.sock",
 		}
 
 		var buf strings.Builder
@@ -500,8 +502,7 @@ func TestPreCheckDNSPort53InUse(t *testing.T) {
 		issues := PreCheck(app, app.DefaultPort)
 		found := false
 		for _, issue := range issues {
-			if strings.Contains(issue, "Port 53 is in use") &&
-				strings.Contains(issue, "systemd-resolved") {
+			if strings.Contains(issue, "Port 53 is in use") {
 				found = true
 				break
 			}
@@ -632,6 +633,83 @@ func TestIsSpecialWarningOtherApps(t *testing.T) {
 		if w := IsSpecialWarning(name); w != "" {
 			t.Errorf("expected no warning for %s, got: %s", name, w)
 		}
+	}
+}
+
+func TestPreCheckDNSPort53WarningOSSpecific(t *testing.T) {
+	// Verify the DNS port 53 warning message is OS-appropriate
+	withMockPortCheck(t, func(port string) string {
+		if port == "53" {
+			return "some-process (PID 999)"
+		}
+		return ""
+	})
+	withMockInstalled(t, map[string]installedApp{})
+
+	app := Registry["pi-hole"]
+	issues := PreCheck(app, app.DefaultPort)
+
+	var port53Issue string
+	for _, issue := range issues {
+		if strings.Contains(issue, "Port 53 is in use") {
+			port53Issue = issue
+			break
+		}
+	}
+	if port53Issue == "" {
+		t.Fatal("expected port 53 warning")
+	}
+
+	switch goos := runtime.GOOS; goos {
+	case "darwin":
+		if !strings.Contains(port53Issue, "sudo lsof -i :53") {
+			t.Errorf("on macOS expected lsof hint, got: %s", port53Issue)
+		}
+		if strings.Contains(port53Issue, "systemd-resolved") {
+			t.Errorf("on macOS should not mention systemd-resolved, got: %s", port53Issue)
+		}
+	case "linux":
+		if !strings.Contains(port53Issue, "systemd-resolved") {
+			t.Errorf("on Linux expected systemd-resolved hint, got: %s", port53Issue)
+		}
+	}
+}
+
+func TestPortainerComposeUsesDynamicSocket(t *testing.T) {
+	app := Registry["portainer"]
+
+	// Template should contain the DockerSocket placeholder
+	if !strings.Contains(app.ComposeFile, "{{.DockerSocket}}") {
+		t.Fatal("portainer compose should use {{.DockerSocket}} template variable")
+	}
+
+	// Render with a custom socket path
+	tmpl, err := template.New("portainer").Parse(app.ComposeFile)
+	if err != nil {
+		t.Fatalf("invalid compose template: %v", err)
+	}
+
+	customSocket := "/home/user/.colima/default/docker.sock"
+	ctx := composeContext{
+		Port:         "9443",
+		DataDir:      "/tmp/test-data",
+		UID:          1000,
+		GID:          1000,
+		DockerSocket: customSocket,
+	}
+
+	var buf strings.Builder
+	if err := tmpl.Execute(&buf, ctx); err != nil {
+		t.Fatalf("template execute failed: %v", err)
+	}
+
+	rendered := buf.String()
+	if !strings.Contains(rendered, customSocket+":/var/run/docker.sock") {
+		t.Errorf("rendered compose should map custom socket to /var/run/docker.sock, got:\n%s", rendered)
+	}
+	// Should NOT contain hardcoded /var/run/docker.sock on the host side
+	if strings.Contains(rendered, "\"/var/run/docker.sock:/var/run/docker.sock\"") {
+		t.Error("rendered compose should not hardcode /var/run/docker.sock as host path when custom socket is used")
 	}
 }
 

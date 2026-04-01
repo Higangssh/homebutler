@@ -41,6 +41,33 @@ func EnsureDockerHost() {
 	})
 }
 
+// DockerSocket returns the path to the docker socket.
+// Priority: /var/run/docker.sock → ~/.colima/default/docker.sock →
+// ~/Library/Containers/com.docker.docker/Data/docker.sock
+func DockerSocket() string {
+	// Default Linux socket
+	if _, err := os.Stat("/var/run/docker.sock"); err == nil {
+		return "/var/run/docker.sock"
+	}
+
+	home, _ := os.UserHomeDir()
+
+	// macOS colima
+	colimaSock := home + "/.colima/default/docker.sock"
+	if _, err := os.Stat(colimaSock); err == nil {
+		return colimaSock
+	}
+
+	// macOS Docker Desktop
+	desktopSock := home + "/Library/Containers/com.docker.docker/Data/docker.sock"
+	if _, err := os.Stat(desktopSock); err == nil {
+		return desktopSock
+	}
+
+	// Fallback to default
+	return "/var/run/docker.sock"
+}
+
 // DockerCmd runs a docker command with proper socket detection.
 func DockerCmd(args ...string) (string, error) {
 	EnsureDockerHost()

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"text/template"
 
@@ -91,11 +92,12 @@ type InstallOptions struct {
 
 // composeContext is passed to the compose template.
 type composeContext struct {
-	Port     string
-	DataDir  string
-	UID      int
-	GID      int
-	MediaDir string
+	Port         string
+	DataDir      string
+	UID          int
+	GID          int
+	MediaDir     string
+	DockerSocket string
 }
 
 // Registry holds all installable apps.
@@ -348,7 +350,7 @@ var Registry = map[string]App{
     ports:
       - "{{.Port}}:9443"
     volumes:
-      - "/var/run/docker.sock:/var/run/docker.sock"
+      - "{{.DockerSocket}}:/var/run/docker.sock"
       - "{{.DataDir}}/data:/data"
 `,
 	},
@@ -459,8 +461,14 @@ func PreCheck(app App, port string) []string {
 	if conflict, ok := dnsApps[app.Name]; ok {
 		// Check port 53
 		if processInfo := checkPortInUse("53"); processInfo != "" {
-			issues = append(issues, "Port 53 is in use (possibly systemd-resolved). "+
-				"Disable it first: sudo systemctl disable --now systemd-resolved")
+			var msg string
+			if runtime.GOOS == "darwin" {
+				msg = "Port 53 is in use. Check what's using it: sudo lsof -i :53"
+			} else {
+				msg = "Port 53 is in use (possibly systemd-resolved). " +
+					"Disable it: sudo systemctl disable --now systemd-resolved"
+			}
+			issues = append(issues, msg)
 		}
 		// Check if the other DNS app is already installed
 		installed := getInstalled()
@@ -568,11 +576,12 @@ func Install(app App, opts InstallOptions) error {
 
 	// Render docker-compose.yml
 	ctx := composeContext{
-		Port:     port,
-		DataDir:  dataDir,
-		UID:      os.Getuid(),
-		GID:      os.Getgid(),
-		MediaDir: opts.MediaDir,
+		Port:         port,
+		DataDir:      dataDir,
+		UID:          os.Getuid(),
+		GID:          os.Getgid(),
+		MediaDir:     opts.MediaDir,
+		DockerSocket: util.DockerSocket(),
 	}
 
 	tmpl, err := template.New("compose").Parse(app.ComposeFile)

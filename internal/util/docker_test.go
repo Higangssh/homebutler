@@ -2,6 +2,7 @@ package util
 
 import (
 	"os"
+	"strings"
 	"testing"
 )
 
@@ -27,6 +28,26 @@ func TestEnsureDockerHost_RespectsEnv(t *testing.T) {
 func TestDockerCmd_DoesNotPanic(t *testing.T) {
 	// Should not panic even with invalid command
 	_, _ = DockerCmd("--version")
+}
+
+func TestDockerSocket_ReturnsPath(t *testing.T) {
+	sock := DockerSocket()
+	if sock == "" {
+		t.Fatal("DockerSocket should never return empty string")
+	}
+	// Should contain docker.sock in the path
+	if !strings.Contains(sock, "docker.sock") {
+		t.Errorf("DockerSocket should return a path containing docker.sock, got %s", sock)
+	}
+}
+
+func TestDockerSocket_FallbackToDefault(t *testing.T) {
+	// Even on systems where no socket exists, should fallback to /var/run/docker.sock
+	sock := DockerSocket()
+	// On macOS CI it may find a real socket; on Linux default. Just verify non-empty.
+	if sock == "" {
+		t.Fatal("DockerSocket should return a fallback path")
+	}
 }
 
 func TestItoa(t *testing.T) {
