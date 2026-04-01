@@ -91,7 +91,9 @@ func Run(backupDir, service string) (*BackupResult, error) {
 		allServices = append(allServices, services...)
 
 		// Copy compose files
-		copyComposeFiles(proj.ConfigFile, composeDir)
+		if err := copyComposeFiles(proj.ConfigFile, composeDir); err != nil {
+			return nil, fmt.Errorf("backup compose files: %w", err)
+		}
 	}
 
 	if len(allServices) == 0 {
@@ -335,7 +337,8 @@ func backupMount(m Mount, destDir string) error {
 }
 
 // copyComposeFiles copies compose config files to the backup.
-func copyComposeFiles(configFiles, destDir string) {
+// Returns an error if any file that was successfully read cannot be written.
+func copyComposeFiles(configFiles, destDir string) error {
 	for _, f := range strings.Split(configFiles, ",") {
 		f = strings.TrimSpace(f)
 		if f == "" {
@@ -345,14 +348,19 @@ func copyComposeFiles(configFiles, destDir string) {
 		if err != nil {
 			continue
 		}
-		os.WriteFile(filepath.Join(destDir, filepath.Base(f)), data, 0o644)
+		if err := os.WriteFile(filepath.Join(destDir, filepath.Base(f)), data, 0o644); err != nil {
+			return fmt.Errorf("failed to write compose file %s: %w", filepath.Base(f), err)
+		}
 
 		// Also try to copy .env from same directory
 		envFile := filepath.Join(filepath.Dir(f), ".env")
 		if envData, err := os.ReadFile(envFile); err == nil {
-			os.WriteFile(filepath.Join(destDir, ".env"), envData, 0o644)
+			if err := os.WriteFile(filepath.Join(destDir, ".env"), envData, 0o644); err != nil {
+				return fmt.Errorf("failed to write .env file: %w", err)
+			}
 		}
 	}
+	return nil
 }
 
 // sanitizeName replaces path separators and special chars with underscores.

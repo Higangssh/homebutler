@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"text/template"
 
@@ -386,8 +387,13 @@ func List() []App {
 }
 
 // BaseDir returns the base directory for homebutler apps.
+// Falls back to /tmp/.homebutler/apps if home directory cannot be determined.
 func BaseDir() string {
-	home, _ := os.UserHomeDir()
+	home, err := os.UserHomeDir()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "warning: cannot determine home directory: %v, using /tmp fallback\n", err)
+		home = "/tmp"
+	}
 	return filepath.Join(home, ".homebutler", "apps")
 }
 
@@ -559,11 +565,27 @@ func isPortInUse(port string) bool {
 	return portInUseBy(port) != ""
 }
 
+// ValidatePort checks that a port string is a valid port number (1-65535).
+func ValidatePort(port string) error {
+	n, err := strconv.Atoi(port)
+	if err != nil {
+		return fmt.Errorf("invalid port %q: must be a number", port)
+	}
+	if n < 1 || n > 65535 {
+		return fmt.Errorf("invalid port %d: must be between 1 and 65535", n)
+	}
+	return nil
+}
+
 // Install creates the app directory, renders docker-compose.yml, and runs it.
 func Install(app App, opts InstallOptions) error {
 	port := app.DefaultPort
 	if opts.Port != "" {
 		port = opts.Port
+	}
+
+	if err := ValidatePort(port); err != nil {
+		return err
 	}
 
 	appDir := AppDir(app.Name)

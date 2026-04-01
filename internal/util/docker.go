@@ -24,7 +24,10 @@ func EnsureDockerHost() {
 		}
 
 		// Try colima (macOS)
-		home, _ := os.UserHomeDir()
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return
+		}
 		colimaSock := home + "/.colima/default/docker.sock"
 		if _, err := os.Stat(colimaSock); err == nil {
 			os.Setenv("DOCKER_HOST", "unix://"+colimaSock)

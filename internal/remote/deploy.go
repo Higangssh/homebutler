@@ -145,9 +145,9 @@ func ensurePath(client *ssh.Client, installDir string) {
 			continue
 		}
 		// Skip if already present
-		checkCmd := fmt.Sprintf(`grep -qF '%s' %s 2>/dev/null`, installDir, rc)
+		checkCmd := fmt.Sprintf(`grep -qF %s %s 2>/dev/null`, util.ShellQuote(installDir), rc)
 		if err := runSession(client, checkCmd); err != nil {
-			addCmd := fmt.Sprintf(`echo '%s' >> %s`, exportLine, rc)
+			addCmd := fmt.Sprintf(`echo %s >> %s`, util.ShellQuote(exportLine), rc)
 			runSession(client, addCmd)
 		}
 	}

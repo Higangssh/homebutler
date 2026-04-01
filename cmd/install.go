@@ -140,6 +140,14 @@ func runInstallApp(appName string, cmd *cobra.Command) error {
 	// Parse flags from the parent command
 	portFlag, _ := cmd.Flags().GetString("port")
 	mediaFlag, _ := cmd.Flags().GetString("media")
+
+	// Validate custom port early
+	if portFlag != "" {
+		if err := install.ValidatePort(portFlag); err != nil {
+			return err
+		}
+	}
+
 	opts := install.InstallOptions{
 		Port:     portFlag,
 		MediaDir: mediaFlag,

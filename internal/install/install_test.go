@@ -739,3 +739,32 @@ func TestPostInstallMessage(t *testing.T) {
 		}
 	}
 }
+
+func TestValidatePort(t *testing.T) {
+	tests := []struct {
+		port    string
+		wantErr bool
+	}{
+		{"8080", false},
+		{"1", false},
+		{"65535", false},
+		{"0", true},
+		{"65536", true},
+		{"99999", true},
+		{"-1", true},
+		{"abc", true},
+		{";rm -rf /", true},
+		{"8080; cat /etc/passwd", true},
+		{"$(whoami)", true},
+		{"'; drop table; --", true},
+		{"", true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.port, func(t *testing.T) {
+			err := ValidatePort(tt.port)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("ValidatePort(%q) error=%v, wantErr=%v", tt.port, err, tt.wantErr)
+			}
+		})
+	}
+}
