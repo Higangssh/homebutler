@@ -59,7 +59,7 @@ This is what homebutler + [OpenClaw](https://github.com/openclaw/openclaw) looks
 
 ## Features
 
-- **App Install** — Deploy self-hosted apps with one command (`uptime-kuma`, `vaultwarden`, `gitea`, and more)
+- **App Install** — Deploy 14 self-hosted apps with one command (`uptime-kuma`, `jellyfin`, `pi-hole`, and more)
 - **System Status** — CPU, memory, disk, uptime at a glance
 - **Docker Management** — List, restart, stop, logs for containers
 - **Multi-server** — Manage remote servers over SSH (key & password auth)
@@ -196,16 +196,54 @@ homebutler install purge uptime-kuma
 
 ### Available apps
 
-| App | Default Port | Description |
-|-----|-------------|-------------|
-| `uptime-kuma` | 3001 | Self-hosted monitoring tool |
-| `vaultwarden` | 8080 | Bitwarden-compatible password manager |
-| `filebrowser` | 8081 | Web-based file manager |
-| `it-tools` | 8082 | Developer utilities (JSON, Base64, Hash, etc.) |
-| `gitea` | 3002 | Lightweight self-hosted Git service |
-| `jellyfin` | 8096 | Free software media system (movies, TV, music) |
+| App | Default Port | Description | Notes |
+|-----|-------------|-------------|-------|
+| `uptime-kuma` | 3001 | Self-hosted monitoring tool | |
+| `vaultwarden` | 8080 | Bitwarden-compatible password manager | |
+| `filebrowser` | 8081 | Web-based file manager | |
+| `it-tools` | 8082 | Developer utilities (JSON, Base64, Hash, etc.) | |
+| `gitea` | 3002 | Lightweight self-hosted Git service | |
+| `jellyfin` | 8096 | Media system (movies, TV, music) | `--media /path` to mount media dir |
+| `homepage` | 3010 | Modern homelab dashboard | |
+| `stirling-pdf` | 8083 | All-in-one PDF tool (merge, split, convert, OCR) | |
+| `speedtest-tracker` | 8084 | Internet speed test with historical graphs | |
+| `mealie` | 9925 | Recipe manager and meal planner | |
+| `pi-hole` | 8088 | DNS ad blocking | ⚠️ Uses port 53 (DNS), NET_ADMIN capability |
+| `adguard-home` | 3000 | DNS ad blocker and privacy | ⚠️ Uses port 53 (DNS) |
+| `portainer` | 9443 | Docker management GUI | ⚠️ Mounts Docker socket (HTTPS) |
+| `nginx-proxy-manager` | 81 | Reverse proxy with SSL and web UI | ⚠️ Uses ports 80/443 |
 
-> More apps coming soon. Want to add one? See [Contributing](CONTRIBUTING.md).
+### App-specific options
+
+```bash
+# Jellyfin: mount your media library
+homebutler install jellyfin --media /mnt/movies
+
+# Pi-hole / AdGuard: DNS ad blocking (port 53 required)
+homebutler install pi-hole
+# ⚠️ If port 53 is in use (Linux): sudo systemctl disable --now systemd-resolved
+
+# Portainer: Docker GUI (mounts docker socket)
+homebutler install portainer
+# Access via HTTPS: https://localhost:9443
+
+# Nginx Proxy Manager: reverse proxy
+homebutler install nginx-proxy-manager
+# Default login: admin@example.com / changeme (change immediately!)
+
+# Any app: custom port
+homebutler install <app> --port 9999
+```
+
+### Safety checks
+
+- **Port conflict detection** — Checks if the port is already in use before install
+- **DNS mutual exclusion** — Warns if pi-hole and adguard-home are both installed
+- **Docker socket warning** — Alerts when an app requires Docker socket access (portainer)
+- **OS-specific guidance** — Linux gets systemd-resolved fix, macOS gets lsof command
+- **Post-install tips** — DNS setup, HTTPS access, default credential warnings
+
+> Want more apps? [Open an issue](https://github.com/Higangssh/homebutler/issues) or see [Contributing](CONTRIBUTING.md).
 
 ## Usage
 
