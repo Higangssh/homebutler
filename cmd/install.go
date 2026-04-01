@@ -162,6 +162,11 @@ func runInstallApp(appName string, cmd *cobra.Command) error {
 	}
 	fmt.Fprintln(os.Stderr, "✅ All checks passed")
 
+	// Special app warnings (non-blocking)
+	if warning := install.IsSpecialWarning(app.Name); warning != "" {
+		fmt.Fprintln(os.Stderr, warning)
+	}
+
 	// Show what will be installed
 	appDir := install.AppDir(app.Name)
 
@@ -185,6 +190,9 @@ func runInstallApp(appName string, cmd *cobra.Command) error {
 		fmt.Fprintln(os.Stderr, "✅ Installation complete!")
 		fmt.Fprintf(os.Stderr, "🌐 Access: http://localhost:%s\n", port)
 		fmt.Fprintf(os.Stderr, "📁 Config: %s/docker-compose.yml\n", appDir)
+		if msg := install.PostInstallMessage(app.Name, port); msg != "" {
+			fmt.Fprintf(os.Stderr, "📋 %s\n", msg)
+		}
 		if app.Name == "jellyfin" && mediaFlag == "" {
 			fmt.Fprintln(os.Stderr, "\n📂 Media: No media directory mounted.")
 			fmt.Fprintln(os.Stderr, "   To add media, reinstall with --media flag:")

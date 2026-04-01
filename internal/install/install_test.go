@@ -466,3 +466,198 @@ func TestIsPortInUseHighPort(t *testing.T) {
 		t.Error("port 59999 should not be in use")
 	}
 }
+
+// --- Special app pre-check tests (with mocks) ---
+
+// withMockPortCheck temporarily overrides checkPortInUse for testing.
+func withMockPortCheck(t *testing.T, mock func(string) string) {
+	t.Helper()
+	orig := checkPortInUse
+	checkPortInUse = mock
+	t.Cleanup(func() { checkPortInUse = orig })
+}
+
+// withMockInstalled temporarily overrides getInstalled for testing.
+func withMockInstalled(t *testing.T, apps map[string]installedApp) {
+	t.Helper()
+	orig := getInstalled
+	getInstalled = func() map[string]installedApp { return apps }
+	t.Cleanup(func() { getInstalled = orig })
+}
+
+func TestPreCheckDNSPort53InUse(t *testing.T) {
+	// Port 53 is busy → should warn for both pi-hole and adguard-home
+	withMockPortCheck(t, func(port string) string {
+		if port == "53" {
+			return "systemd-resolved (PID 123)"
+		}
+		return ""
+	})
+	withMockInstalled(t, map[string]installedApp{})
+
+	for _, appName := range []string{"pi-hole", "adguard-home"} {
+		app := Registry[appName]
+		issues := PreCheck(app, app.DefaultPort)
+		found := false
+		for _, issue := range issues {
+			if strings.Contains(issue, "Port 53 is in use") &&
+				strings.Contains(issue, "systemd-resolved") {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Errorf("%s: expected port 53 warning, got %v", appName, issues)
+		}
+	}
+
+	// Non-DNS app should NOT get port 53 warning
+	app := Registry["uptime-kuma"]
+	issues := PreCheck(app, app.DefaultPort)
+	for _, issue := range issues {
+		if strings.Contains(issue, "Port 53") {
+			t.Errorf("uptime-kuma should not get port 53 warning, got: %s", issue)
+		}
+	}
+}
+
+func TestPreCheckDNSMutualConflict(t *testing.T) {
+	withMockPortCheck(t, func(port string) string { return "" })
+
+	// pi-hole installed → installing adguard-home should warn
+	withMockInstalled(t, map[string]installedApp{
+		"pi-hole": {Name: "pi-hole", Path: "/tmp/pi-hole", Port: "8088"},
+	})
+	app := Registry["adguard-home"]
+	issues := PreCheck(app, app.DefaultPort)
+	found := false
+	for _, issue := range issues {
+		if strings.Contains(issue, "pi-hole is already installed") &&
+			strings.Contains(issue, "two DNS servers") {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("expected pi-hole conflict warning when installing adguard-home, got %v", issues)
+	}
+
+	// adguard-home installed → installing pi-hole should warn
+	withMockInstalled(t, map[string]installedApp{
+		"adguard-home": {Name: "adguard-home", Path: "/tmp/adguard", Port: "3000"},
+	})
+	app = Registry["pi-hole"]
+	issues = PreCheck(app, app.DefaultPort)
+	found = false
+	for _, issue := range issues {
+		if strings.Contains(issue, "adguard-home is already installed") &&
+			strings.Contains(issue, "two DNS servers") {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("expected adguard-home conflict warning when installing pi-hole, got %v", issues)
+	}
+}
+
+func TestPreCheckNginxProxyManager80443(t *testing.T) {
+	withMockInstalled(t, map[string]installedApp{})
+
+	// Both 80 and 443 busy
+	withMockPortCheck(t, func(port string) string {
+		if port == "80" || port == "443" {
+			return "nginx (PID 456)"
+		}
+		return ""
+	})
+	app := Registry["nginx-proxy-manager"]
+	issues := PreCheck(app, app.DefaultPort)
+	found := false
+	for _, issue := range issues {
+		if strings.Contains(issue, "80/443") &&
+			strings.Contains(issue, "nginx-proxy-manager needs these ports") {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("expected 80/443 warning for nginx-proxy-manager, got %v", issues)
+	}
+
+	// Only 80 busy
+	withMockPortCheck(t, func(port string) string {
+		if port == "80" {
+			return "apache (PID 789)"
+		}
+		return ""
+	})
+	issues = PreCheck(app, app.DefaultPort)
+	found = false
+	for _, issue := range issues {
+		if strings.Contains(issue, "Port 80 is in use") {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("expected port 80 warning, got %v", issues)
+	}
+
+	// Neither busy → no port warning
+	withMockPortCheck(t, func(port string) string { return "" })
+	issues = PreCheck(app, app.DefaultPort)
+	for _, issue := range issues {
+		if strings.Contains(issue, "nginx-proxy-manager needs these ports") {
+			t.Errorf("should not warn when ports are free, got: %s", issue)
+		}
+	}
+}
+
+func TestIsSpecialWarningPortainer(t *testing.T) {
+	warning := IsSpecialWarning("portainer")
+	if warning == "" {
+		t.Fatal("expected warning for portainer")
+	}
+	if !strings.Contains(warning, "Docker socket access") {
+		t.Errorf("expected Docker socket warning, got: %s", warning)
+	}
+	if !strings.Contains(warning, "full control") {
+		t.Errorf("expected 'full control' in warning, got: %s", warning)
+	}
+}
+
+func TestIsSpecialWarningOtherApps(t *testing.T) {
+	for _, name := range []string{"uptime-kuma", "pi-hole", "nginx-proxy-manager", "jellyfin"} {
+		if w := IsSpecialWarning(name); w != "" {
+			t.Errorf("expected no warning for %s, got: %s", name, w)
+		}
+	}
+}
+
+func TestPostInstallMessage(t *testing.T) {
+	tests := []struct {
+		app      string
+		port     string
+		contains string
+	}{
+		{"pi-hole", "8088", "DNS to this server"},
+		{"adguard-home", "3000", "http://localhost:3000"},
+		{"portainer", "9443", "https://localhost:9443"},
+		{"nginx-proxy-manager", "81", "admin@example.com"},
+		{"uptime-kuma", "3001", ""},
+	}
+
+	for _, tt := range tests {
+		msg := PostInstallMessage(tt.app, tt.port)
+		if tt.contains == "" {
+			if msg != "" {
+				t.Errorf("%s: expected empty message, got %q", tt.app, msg)
+			}
+			continue
+		}
+		if !strings.Contains(msg, tt.contains) {
+			t.Errorf("%s: expected message containing %q, got %q", tt.app, tt.contains, msg)
+		}
+	}
+}

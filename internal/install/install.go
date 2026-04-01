@@ -394,6 +394,18 @@ func AppDir(appName string) string {
 	return filepath.Join(BaseDir(), appName)
 }
 
+// dnsApps are apps that use port 53 for DNS.
+var dnsApps = map[string]string{
+	"pi-hole":      "adguard-home",
+	"adguard-home": "pi-hole",
+}
+
+// Testable hooks (overridden in tests).
+var (
+	checkPortInUse = portInUseBy
+	getInstalled   = loadInstalled
+)
+
 // PreCheck verifies the system is ready for installation.
 func PreCheck(app App, port string) []string {
 	var issues []string
@@ -422,7 +434,7 @@ func PreCheck(app App, port string) []string {
 	}
 
 	// Check port availability
-	if processInfo := portInUseBy(port); processInfo != "" {
+	if processInfo := checkPortInUse(port); processInfo != "" {
 		issues = append(issues, fmt.Sprintf("port %s is already in use by %s.\n"+
 			"    Use --port <number> to pick a different port", port, processInfo))
 	} else {
@@ -443,6 +455,37 @@ func PreCheck(app App, port string) []string {
 		}
 	}
 
+	// DNS apps: check port 53 and mutual conflict
+	if conflict, ok := dnsApps[app.Name]; ok {
+		// Check port 53
+		if processInfo := checkPortInUse("53"); processInfo != "" {
+			issues = append(issues, "Port 53 is in use (possibly systemd-resolved). "+
+				"Disable it first: sudo systemctl disable --now systemd-resolved")
+		}
+		// Check if the other DNS app is already installed
+		installed := getInstalled()
+		if _, exists := installed[conflict]; exists {
+			issues = append(issues, fmt.Sprintf("%s is already installed. "+
+				"Running two DNS servers is not recommended.", conflict))
+		}
+	}
+
+	// nginx-proxy-manager: check port 80/443
+	if app.Name == "nginx-proxy-manager" {
+		var blocked []string
+		if processInfo := checkPortInUse("80"); processInfo != "" {
+			blocked = append(blocked, "80")
+		}
+		if processInfo := checkPortInUse("443"); processInfo != "" {
+			blocked = append(blocked, "443")
+		}
+		if len(blocked) > 0 {
+			issues = append(issues, fmt.Sprintf("Port %s is in use. "+
+				"nginx-proxy-manager needs these ports for reverse proxy.",
+				strings.Join(blocked, "/")))
+		}
+	}
+
 	// Check if already running
 	composeFile := filepath.Join(GetInstalledPath(app.Name), "docker-compose.yml")
 	if _, err := os.Stat(composeFile); err == nil {
@@ -455,6 +498,30 @@ func PreCheck(app App, port string) []string {
 	}
 
 	return issues
+}
+
+// PostInstallMessage returns app-specific guidance shown after successful install.
+func PostInstallMessage(appName, port string) string {
+	switch appName {
+	case "pi-hole":
+		return "Set your device/router DNS to this server's IP to enable ad blocking."
+	case "adguard-home":
+		return fmt.Sprintf("Complete initial setup at http://localhost:%s, then set your DNS.", port)
+	case "portainer":
+		return "Access via HTTPS at https://localhost:9443 (self-signed cert)."
+	case "nginx-proxy-manager":
+		return "Default login: admin@example.com / changeme. Change immediately!"
+	default:
+		return ""
+	}
+}
+
+// IsSpecialWarning returns a pre-install warning for special apps (shown but doesn't block install).
+func IsSpecialWarning(appName string) string {
+	if appName == "portainer" {
+		return "⚠️  Portainer requires Docker socket access. It will have full control over all containers."
+	}
+	return ""
 }
 
 // isPortInUse checks if a port is in use (cross-platform).
