@@ -123,6 +123,29 @@ var Registry = map[string]App{
       - PGID={{.GID}}
 `,
 	},
+	"plex": {
+		Name:          "plex",
+		Description:   "Plex Media Server - organize and stream your media",
+		DefaultPort:   "32400",
+		ContainerPort: "32400",
+		DataPath:      "/config",
+		ComposeFile: `services:
+  plex:
+    image: plexinc/pms-docker:latest
+    container_name: plex
+    restart: unless-stopped
+    ports:
+      - "{{.Port}}:32400"
+    volumes:
+      - "{{.DataDir}}/config:/config"
+      - "{{.DataDir}}/transcode:/transcode"{{if .MediaDir}}
+      - "{{.MediaDir}}:/data"{{end}}
+    environment:
+      - PUID={{.UID}}
+      - PGID={{.GID}}
+      - VERSION=docker
+`,
+	},
 	"vaultwarden": {
 		Name:          "vaultwarden",
 		Description:   "Lightweight Bitwarden-compatible password manager",
@@ -519,6 +542,8 @@ func PostInstallMessage(appName, port string) string {
 	switch appName {
 	case "pi-hole":
 		return "Set your device/router DNS to this server's IP to enable ad blocking."
+	case "plex":
+		return "Plex is starting. Initial setup is required via the web interface."
 	case "adguard-home":
 		return fmt.Sprintf("Complete initial setup at http://localhost:%s, then set your DNS.", port)
 	case "portainer":
