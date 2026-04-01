@@ -212,6 +212,166 @@ var Registry = map[string]App{
       - USER_GID={{.GID}}
 `,
 	},
+	"homepage": {
+		Name:          "homepage",
+		Description:   "Modern dashboard for your homelab with service integration",
+		DefaultPort:   "3010",
+		ContainerPort: "3000",
+		DataPath:      "/app/config",
+		ComposeFile: `services:
+  homepage:
+    image: ghcr.io/gethomepage/homepage:latest
+    container_name: homepage
+    restart: unless-stopped
+    ports:
+      - "{{.Port}}:3000"
+    volumes:
+      - "{{.DataDir}}/config:/app/config"
+    environment:
+      - PUID={{.UID}}
+      - PGID={{.GID}}
+`,
+	},
+	"stirling-pdf": {
+		Name:          "stirling-pdf",
+		Description:   "All-in-one PDF manipulation tool (merge, split, convert, OCR)",
+		DefaultPort:   "8083",
+		ContainerPort: "8080",
+		DataPath:      "/configs",
+		ComposeFile: `services:
+  stirling-pdf:
+    image: frooodle/s-pdf:latest
+    container_name: stirling-pdf
+    restart: unless-stopped
+    ports:
+      - "{{.Port}}:8080"
+    volumes:
+      - "{{.DataDir}}/configs:/configs"
+    environment:
+      - PUID={{.UID}}
+      - PGID={{.GID}}
+`,
+	},
+	"speedtest-tracker": {
+		Name:          "speedtest-tracker",
+		Description:   "Internet speed test tracker with historical data and graphs",
+		DefaultPort:   "8084",
+		ContainerPort: "80",
+		DataPath:      "/config",
+		ComposeFile: `services:
+  speedtest-tracker:
+    image: lscr.io/linuxserver/speedtest-tracker:latest
+    container_name: speedtest-tracker
+    restart: unless-stopped
+    ports:
+      - "{{.Port}}:80"
+    volumes:
+      - "{{.DataDir}}/config:/config"
+    environment:
+      - PUID={{.UID}}
+      - PGID={{.GID}}
+`,
+	},
+	"mealie": {
+		Name:          "mealie",
+		Description:   "Self-hosted recipe manager and meal planner",
+		DefaultPort:   "9925",
+		ContainerPort: "9000",
+		DataPath:      "/app/data",
+		ComposeFile: `services:
+  mealie:
+    image: ghcr.io/mealie-recipes/mealie:latest
+    container_name: mealie
+    restart: unless-stopped
+    ports:
+      - "{{.Port}}:9000"
+    volumes:
+      - "{{.DataDir}}/data:/app/data"
+    environment:
+      - PUID={{.UID}}
+      - PGID={{.GID}}
+`,
+	},
+	"pi-hole": {
+		Name:          "pi-hole",
+		Description:   "Network-wide ad blocking via DNS filtering",
+		DefaultPort:   "8088",
+		ContainerPort: "80",
+		DataPath:      "/etc/pihole",
+		ComposeFile: `services:
+  pihole:
+    image: pihole/pihole:latest
+    container_name: pihole
+    restart: unless-stopped
+    ports:
+      - "{{.Port}}:80"
+      - "53:53/tcp"
+      - "53:53/udp"
+    volumes:
+      - "{{.DataDir}}/pihole:/etc/pihole"
+      - "{{.DataDir}}/dnsmasq:/etc/dnsmasq.d"
+    cap_add:
+      - NET_ADMIN
+`,
+	},
+	"adguard-home": {
+		Name:          "adguard-home",
+		Description:   "DNS-based ad blocker and privacy protection",
+		DefaultPort:   "3000",
+		ContainerPort: "3000",
+		DataPath:      "/opt/adguardhome/work",
+		ComposeFile: `services:
+  adguard-home:
+    image: adguard/adguardhome:latest
+    container_name: adguard-home
+    restart: unless-stopped
+    ports:
+      - "{{.Port}}:3000"
+      - "53:53/tcp"
+      - "53:53/udp"
+    volumes:
+      - "{{.DataDir}}/work:/opt/adguardhome/work"
+      - "{{.DataDir}}/conf:/opt/adguardhome/conf"
+`,
+	},
+	"portainer": {
+		Name:          "portainer",
+		Description:   "Docker management GUI with container, image, and volume control",
+		DefaultPort:   "9443",
+		ContainerPort: "9443",
+		DataPath:      "/data",
+		ComposeFile: `services:
+  portainer:
+    image: portainer/portainer-ce:latest
+    container_name: portainer
+    restart: unless-stopped
+    ports:
+      - "{{.Port}}:9443"
+    volumes:
+      - "/var/run/docker.sock:/var/run/docker.sock"
+      - "{{.DataDir}}/data:/data"
+`,
+	},
+	"nginx-proxy-manager": {
+		Name:          "nginx-proxy-manager",
+		Description:   "Reverse proxy with SSL termination and web UI for managing hosts",
+		DefaultPort:   "81",
+		ContainerPort: "81",
+		DataPath:      "/data",
+		ComposeFile: `services:
+  nginx-proxy-manager:
+    image: jc21/nginx-proxy-manager:latest
+    container_name: nginx-proxy-manager
+    restart: unless-stopped
+    ports:
+      - "{{.Port}}:81"
+      - "80:80"
+      - "443:443"
+    volumes:
+      - "{{.DataDir}}/data:/data"
+      - "{{.DataDir}}/letsencrypt:/etc/letsencrypt"
+`,
+	},
 }
 
 // List returns all available apps.

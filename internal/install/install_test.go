@@ -91,6 +91,237 @@ func TestRegistryVaultwarden(t *testing.T) {
 	}
 }
 
+func TestRegistryHomepage(t *testing.T) {
+	app, ok := Registry["homepage"]
+	if !ok {
+		t.Fatal("homepage should be in registry")
+	}
+	if app.DefaultPort != "3010" {
+		t.Errorf("expected port 3010, got %s", app.DefaultPort)
+	}
+	if app.ContainerPort != "3000" {
+		t.Errorf("expected container port 3000, got %s", app.ContainerPort)
+	}
+	if app.Description == "" {
+		t.Error("homepage should have a description")
+	}
+	if !strings.Contains(app.ComposeFile, "ghcr.io/gethomepage/homepage:latest") {
+		t.Error("compose should use ghcr.io/gethomepage/homepage:latest image")
+	}
+	if !strings.Contains(app.ComposeFile, "/app/config") {
+		t.Error("compose should mount /app/config volume")
+	}
+	if !strings.Contains(app.ComposeFile, "PUID") || !strings.Contains(app.ComposeFile, "PGID") {
+		t.Error("compose should support PUID/PGID")
+	}
+}
+
+func TestRegistryStirlingPdf(t *testing.T) {
+	app, ok := Registry["stirling-pdf"]
+	if !ok {
+		t.Fatal("stirling-pdf should be in registry")
+	}
+	if app.DefaultPort != "8083" {
+		t.Errorf("expected port 8083, got %s", app.DefaultPort)
+	}
+	if app.ContainerPort != "8080" {
+		t.Errorf("expected container port 8080, got %s", app.ContainerPort)
+	}
+	if app.Description == "" {
+		t.Error("stirling-pdf should have a description")
+	}
+	if !strings.Contains(app.ComposeFile, "frooodle/s-pdf:latest") {
+		t.Error("compose should use frooodle/s-pdf:latest image")
+	}
+	if !strings.Contains(app.ComposeFile, "/configs") {
+		t.Error("compose should mount /configs volume")
+	}
+	if !strings.Contains(app.ComposeFile, "PUID") || !strings.Contains(app.ComposeFile, "PGID") {
+		t.Error("compose should support PUID/PGID")
+	}
+}
+
+func TestRegistrySpeedtestTracker(t *testing.T) {
+	app, ok := Registry["speedtest-tracker"]
+	if !ok {
+		t.Fatal("speedtest-tracker should be in registry")
+	}
+	if app.DefaultPort != "8084" {
+		t.Errorf("expected port 8084, got %s", app.DefaultPort)
+	}
+	if app.ContainerPort != "80" {
+		t.Errorf("expected container port 80, got %s", app.ContainerPort)
+	}
+	if app.Description == "" {
+		t.Error("speedtest-tracker should have a description")
+	}
+	if !strings.Contains(app.ComposeFile, "lscr.io/linuxserver/speedtest-tracker:latest") {
+		t.Error("compose should use lscr.io/linuxserver/speedtest-tracker:latest image")
+	}
+	if !strings.Contains(app.ComposeFile, "/config") {
+		t.Error("compose should mount /config volume")
+	}
+	if !strings.Contains(app.ComposeFile, "PUID") || !strings.Contains(app.ComposeFile, "PGID") {
+		t.Error("compose should support PUID/PGID")
+	}
+}
+
+func TestRegistryMealie(t *testing.T) {
+	app, ok := Registry["mealie"]
+	if !ok {
+		t.Fatal("mealie should be in registry")
+	}
+	if app.DefaultPort != "9925" {
+		t.Errorf("expected port 9925, got %s", app.DefaultPort)
+	}
+	if app.ContainerPort != "9000" {
+		t.Errorf("expected container port 9000, got %s", app.ContainerPort)
+	}
+	if app.Description == "" {
+		t.Error("mealie should have a description")
+	}
+	if !strings.Contains(app.ComposeFile, "ghcr.io/mealie-recipes/mealie:latest") {
+		t.Error("compose should use ghcr.io/mealie-recipes/mealie:latest image")
+	}
+	if !strings.Contains(app.ComposeFile, "/app/data") {
+		t.Error("compose should mount /app/data volume")
+	}
+	if !strings.Contains(app.ComposeFile, "PUID") || !strings.Contains(app.ComposeFile, "PGID") {
+		t.Error("compose should support PUID/PGID")
+	}
+}
+
+func TestRegistryPiHole(t *testing.T) {
+	app, ok := Registry["pi-hole"]
+	if !ok {
+		t.Fatal("pi-hole should be in registry")
+	}
+	if app.DefaultPort != "8088" {
+		t.Errorf("expected port 8088, got %s", app.DefaultPort)
+	}
+	if app.ContainerPort != "80" {
+		t.Errorf("expected container port 80, got %s", app.ContainerPort)
+	}
+	if app.Description == "" {
+		t.Error("pi-hole should have a description")
+	}
+	if !strings.Contains(app.ComposeFile, "pihole/pihole:latest") {
+		t.Error("compose should use pihole/pihole:latest image")
+	}
+	if !strings.Contains(app.ComposeFile, "53:53/tcp") {
+		t.Error("compose should expose DNS port 53/tcp")
+	}
+	if !strings.Contains(app.ComposeFile, "53:53/udp") {
+		t.Error("compose should expose DNS port 53/udp")
+	}
+	if !strings.Contains(app.ComposeFile, "cap_add") {
+		t.Error("compose should include cap_add")
+	}
+	if !strings.Contains(app.ComposeFile, "NET_ADMIN") {
+		t.Error("compose should include NET_ADMIN capability")
+	}
+	// pi-hole does NOT use PUID/PGID
+	if strings.Contains(app.ComposeFile, "PUID") || strings.Contains(app.ComposeFile, "PGID") {
+		t.Error("pi-hole compose should NOT use PUID/PGID")
+	}
+}
+
+func TestRegistryAdguardHome(t *testing.T) {
+	app, ok := Registry["adguard-home"]
+	if !ok {
+		t.Fatal("adguard-home should be in registry")
+	}
+	if app.DefaultPort != "3000" {
+		t.Errorf("expected port 3000, got %s", app.DefaultPort)
+	}
+	if app.ContainerPort != "3000" {
+		t.Errorf("expected container port 3000, got %s", app.ContainerPort)
+	}
+	if app.Description == "" {
+		t.Error("adguard-home should have a description")
+	}
+	if !strings.Contains(app.ComposeFile, "adguard/adguardhome:latest") {
+		t.Error("compose should use adguard/adguardhome:latest image")
+	}
+	if !strings.Contains(app.ComposeFile, "53:53/tcp") {
+		t.Error("compose should expose DNS port 53/tcp")
+	}
+	if !strings.Contains(app.ComposeFile, "53:53/udp") {
+		t.Error("compose should expose DNS port 53/udp")
+	}
+	if !strings.Contains(app.ComposeFile, "/opt/adguardhome/work") {
+		t.Error("compose should mount /opt/adguardhome/work")
+	}
+	if !strings.Contains(app.ComposeFile, "/opt/adguardhome/conf") {
+		t.Error("compose should mount /opt/adguardhome/conf")
+	}
+	// adguard-home does NOT use PUID/PGID
+	if strings.Contains(app.ComposeFile, "PUID") || strings.Contains(app.ComposeFile, "PGID") {
+		t.Error("adguard-home compose should NOT use PUID/PGID")
+	}
+}
+
+func TestRegistryPortainer(t *testing.T) {
+	app, ok := Registry["portainer"]
+	if !ok {
+		t.Fatal("portainer should be in registry")
+	}
+	if app.DefaultPort != "9443" {
+		t.Errorf("expected port 9443, got %s", app.DefaultPort)
+	}
+	if app.ContainerPort != "9443" {
+		t.Errorf("expected container port 9443, got %s", app.ContainerPort)
+	}
+	if app.Description == "" {
+		t.Error("portainer should have a description")
+	}
+	if !strings.Contains(app.ComposeFile, "portainer/portainer-ce:latest") {
+		t.Error("compose should use portainer/portainer-ce:latest image")
+	}
+	if !strings.Contains(app.ComposeFile, "docker.sock") {
+		t.Error("compose should mount docker.sock")
+	}
+	if !strings.Contains(app.ComposeFile, "/data") {
+		t.Error("compose should mount /data volume")
+	}
+	// portainer does NOT use PUID/PGID
+	if strings.Contains(app.ComposeFile, "PUID") || strings.Contains(app.ComposeFile, "PGID") {
+		t.Error("portainer compose should NOT use PUID/PGID")
+	}
+}
+
+func TestRegistryNginxProxyManager(t *testing.T) {
+	app, ok := Registry["nginx-proxy-manager"]
+	if !ok {
+		t.Fatal("nginx-proxy-manager should be in registry")
+	}
+	if app.DefaultPort != "81" {
+		t.Errorf("expected port 81, got %s", app.DefaultPort)
+	}
+	if app.ContainerPort != "81" {
+		t.Errorf("expected container port 81, got %s", app.ContainerPort)
+	}
+	if app.Description == "" {
+		t.Error("nginx-proxy-manager should have a description")
+	}
+	if !strings.Contains(app.ComposeFile, "jc21/nginx-proxy-manager:latest") {
+		t.Error("compose should use jc21/nginx-proxy-manager:latest image")
+	}
+	if !strings.Contains(app.ComposeFile, "80:80") {
+		t.Error("compose should expose HTTP port 80")
+	}
+	if !strings.Contains(app.ComposeFile, "443:443") {
+		t.Error("compose should expose HTTPS port 443")
+	}
+	if !strings.Contains(app.ComposeFile, "/etc/letsencrypt") {
+		t.Error("compose should mount /etc/letsencrypt")
+	}
+	// nginx-proxy-manager does NOT use PUID/PGID
+	if strings.Contains(app.ComposeFile, "PUID") || strings.Contains(app.ComposeFile, "PGID") {
+		t.Error("nginx-proxy-manager compose should NOT use PUID/PGID")
+	}
+}
+
 func TestListReturnsAllApps(t *testing.T) {
 	apps := List()
 	if len(apps) != len(Registry) {
