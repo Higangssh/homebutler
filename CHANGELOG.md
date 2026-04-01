@@ -2,6 +2,36 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.11.1](https://github.com/Higangssh/homebutler/compare/v0.11.0...v0.11.1) - 2026-04-01
+
+**14 installable apps.** From monitoring to media streaming, DNS ad blocking to reverse proxies — all one command away.
+
+```bash
+homebutler install list              # see all 14 apps
+homebutler install pi-hole           # DNS ad blocking
+homebutler install jellyfin --media /movies  # media server
+homebutler install portainer         # Docker GUI
+```
+
+### 🚀 Features
+
+- add 8 new installable apps: homepage, stirling-pdf, speedtest-tracker, mealie, pi-hole, adguard-home, portainer, nginx-proxy-manager (total 14)
+- add `--media` flag for jellyfin media directory mounting
+- add safety checks: DNS port 53 conflict detection, mutual DNS app exclusion, port 80/443 check
+- add Docker socket warning for portainer
+- add post-install guidance: DNS setup, HTTPS access, default credential warnings
+- auto-detect Docker socket path (Linux, colima, Docker Desktop) for portainer
+- OS-specific DNS warnings (Linux: systemd-resolved, macOS: lsof)
+
+### 🐛 Fixed
+
+- install list `--json` now outputs proper JSON
+
+### 📦 Other
+
+- add `llms.txt` for AI search optimization
+- update README with 14 apps table, options, and safety checks
+
 ## [0.11.0](https://github.com/Higangssh/homebutler/compare/v0.10.2...v0.11.0) - 2026-03-28
 
 **Cobra CLI + docker stats.** The entire CLI is now powered by cobra — auto-generated help, shell completion, and cleaner flag handling. Plus a new `docker stats` command for real-time container resource monitoring.
