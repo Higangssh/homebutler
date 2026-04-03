@@ -53,9 +53,9 @@ func newProcessesCmd() *cobra.Command {
 				}
 			}
 			fmt.Fprintln(os.Stdout)
-			fmt.Fprintf(os.Stdout, "  %6s  %5s  %5s  %s\n", "PID", "CPU%", "MEM%", "PROCESS")
+			fmt.Fprintf(os.Stdout, "  %8s  %5s  %5s  %s\n", "PID", "CPU%", "MEM%", "PROCESS")
 			for _, p := range result.Processes {
-				fmt.Fprintf(os.Stdout, "  %6d  %5.1f  %5.1f  %s\n", p.PID, p.CPU, p.Mem, p.Name)
+				fmt.Fprintf(os.Stdout, "  %8d  %5.1f  %5.1f  %s\n", p.PID, p.CPU, p.Mem, p.Name)
 			}
 
 			// Summary line
