@@ -3,10 +3,10 @@ package system
 import "testing"
 
 func TestParseProcesses(t *testing.T) {
-	output := `  PID  %CPU %MEM COMMAND
- 1234  25.0  3.2 /usr/bin/node
-  567  12.5  1.8 /usr/sbin/httpd
-  890   5.0  0.5 vim`
+	output := `  PID  %CPU %MEM STAT COMMAND
+ 1234  25.0  3.2 S    /usr/bin/node
+  567  12.5  1.8 S    /usr/sbin/httpd
+  890   5.0  0.5 S    vim`
 
 	procs := parseProcesses(output, 5)
 	if len(procs) != 3 {
@@ -30,8 +30,8 @@ func TestParseProcesses(t *testing.T) {
 }
 
 func TestParseProcesses_PathWithSpaces(t *testing.T) {
-	output := `  PID  %CPU %MEM COMMAND
-  100  10.0  2.0 /Applications/Google Chrome.app/Contents/MacOS/Google Chrome`
+	output := `  PID  %CPU %MEM STAT COMMAND
+  100  10.0  2.0 S    /Applications/Google Chrome.app/Contents/MacOS/Google Chrome`
 
 	procs := parseProcesses(output, 5)
 	if len(procs) != 1 {
@@ -50,19 +50,19 @@ func TestParseProcesses_Empty(t *testing.T) {
 }
 
 func TestParseProcesses_HeaderOnly(t *testing.T) {
-	procs := parseProcesses("  PID  %CPU %MEM COMMAND", 5)
+	procs := parseProcesses("  PID  %CPU %MEM STAT COMMAND", 5)
 	if len(procs) != 0 {
 		t.Errorf("expected 0 processes for header-only input, got %d", len(procs))
 	}
 }
 
 func TestParseProcesses_Limit(t *testing.T) {
-	output := `  PID  %CPU %MEM COMMAND
-    1  10.0  1.0 a
-    2   9.0  1.0 b
-    3   8.0  1.0 c
-    4   7.0  1.0 d
-    5   6.0  1.0 e`
+	output := `  PID  %CPU %MEM STAT COMMAND
+    1  10.0  1.0 S    a
+    2   9.0  1.0 S    b
+    3   8.0  1.0 S    c
+    4   7.0  1.0 S    d
+    5   6.0  1.0 S    e`
 
 	procs := parseProcesses(output, 3)
 	if len(procs) != 3 {
@@ -70,6 +70,92 @@ func TestParseProcesses_Limit(t *testing.T) {
 	}
 	if procs[2].PID != 3 {
 		t.Errorf("expected last PID 3, got %d", procs[2].PID)
+	}
+}
+
+func TestParseProcesses_Zombie(t *testing.T) {
+	output := `  PID  %CPU %MEM STAT COMMAND
+ 1234   0.0  0.0 Z    defunct-proc
+  567  12.5  1.8 S    httpd
+  890   0.0  0.0 Z+   another-zombie`
+
+	procs := parseProcesses(output, 0)
+	if len(procs) != 3 {
+		t.Fatalf("expected 3 processes, got %d", len(procs))
+	}
+	if !procs[0].Zombie {
+		t.Error("expected first process to be zombie")
+	}
+	if procs[0].Name != "defunct-proc" {
+		t.Errorf("expected name 'defunct-proc', got %q", procs[0].Name)
+	}
+	if procs[1].Zombie {
+		t.Error("expected second process to NOT be zombie")
+	}
+	if !procs[2].Zombie {
+		t.Error("expected third process to be zombie")
+	}
+}
+
+func TestParseProcesses_NoLimit(t *testing.T) {
+	output := `  PID  %CPU %MEM STAT COMMAND
+    1  10.0  1.0 S    a
+    2   9.0  1.0 S    b
+    3   8.0  1.0 S    c`
+
+	procs := parseProcesses(output, 0)
+	if len(procs) != 3 {
+		t.Fatalf("expected all 3 processes with limit=0, got %d", len(procs))
+	}
+}
+
+func TestParseProcesses_FallbackOldFormat(t *testing.T) {
+	// Old 4-field format without state column
+	output := `  PID  %CPU %MEM COMMAND
+ 1234  25.0  3.2 /usr/bin/node
+  567  12.5  1.8 httpd`
+
+	procs := parseProcesses(output, 5)
+	if len(procs) != 2 {
+		t.Fatalf("expected 2 processes from old format, got %d", len(procs))
+	}
+	if procs[0].Name != "node" {
+		t.Errorf("expected name 'node', got %q", procs[0].Name)
+	}
+}
+
+func TestListProcesses(t *testing.T) {
+	result, err := ListProcesses(5, "cpu")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.Total == 0 {
+		t.Error("expected at least one process")
+	}
+	if len(result.Processes) > 5 {
+		t.Errorf("expected at most 5 processes, got %d", len(result.Processes))
+	}
+	for _, p := range result.Processes {
+		if p.PID <= 0 {
+			t.Errorf("expected positive PID, got %d", p.PID)
+		}
+		if p.Name == "" {
+			t.Error("expected non-empty process name")
+		}
+	}
+}
+
+func TestListProcesses_SortByMem(t *testing.T) {
+	result, err := ListProcesses(5, "mem")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	// Verify sorted by memory descending
+	for i := 1; i < len(result.Processes); i++ {
+		if result.Processes[i].Mem > result.Processes[i-1].Mem {
+			t.Errorf("processes not sorted by memory: %.1f > %.1f at index %d",
+				result.Processes[i].Mem, result.Processes[i-1].Mem, i)
+		}
 	}
 }
 
