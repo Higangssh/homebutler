@@ -2,6 +2,35 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.12.0](https://github.com/Higangssh/homebutler/compare/v0.11.2...v0.12.0) - 2026-04-03
+
+**Process monitoring + better error messages.** New `ps` command shows top processes with zombie detection. Permission errors now tell you exactly what to do.
+
+```bash
+homebutler ps                # top 10 by CPU
+homebutler ps --sort mem     # top 10 by memory
+homebutler ps --limit 20     # top 20
+homebutler ps --all           # show everything
+```
+
+### 🚀 Features
+
+- add `processes` command with `ps` alias for quick process monitoring
+- `--sort cpu|mem` flag to sort by CPU or memory usage
+- `--limit N` flag to control number of displayed processes (0 = all)
+- zombie process detection with ⚠️ warning and PID listing
+- process count summary (total + zombie count)
+
+### 🐛 Fixed
+
+- add sudo hints for permission errors across all commands:
+  - `upgrade`: permission denied when replacing binary
+  - `install`: directory creation and registry write failures
+  - `uninstall`: registry update failures
+  - `backup`: backup directory creation failures
+  - `restore`: bind mount directory creation failures
+- add `internal/util/permissions.go` helper for consistent permission error detection
+
 ## [0.11.2](https://github.com/Higangssh/homebutler/compare/v0.11.1...v0.11.2) - 2026-04-03
 
 **Better UX for non-root users.** `homebutler ports` now tells you when process names are missing instead of showing blank columns.
