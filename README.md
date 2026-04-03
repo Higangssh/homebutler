@@ -98,7 +98,7 @@ This is what homebutler + [OpenClaw](https://github.com/openclaw/openclaw) looks
 - **Server Overview** — See all servers at a glance with color-coded status (green = online, red = offline)
 - **System Metrics** — CPU, memory, disk usage with progress bars and color thresholds
 - **Docker Containers** — Running/stopped status with friendly labels ("Running · 4d", "Stopped · 6h ago")
-- **Top Processes** — Top 10 processes sorted by CPU usage
+- **Top Processes** — Top processes sorted by CPU/memory with zombie detection
 - **Resource Alerts** — Threshold-based warnings with visual progress bars (OK / WARNING / CRITICAL)
 - **Network Ports** — Open ports with process names and bind addresses
 - **Wake-on-LAN** — One-click wake buttons for configured devices
@@ -283,6 +283,9 @@ Commands:
   docker logs <n>     Show container logs
   wake <name>         Send Wake-on-LAN packet
   ports               List open ports with process info
+  ps                  Show top processes (alias: processes)
+  ps --sort mem       Sort by memory instead of CPU
+  ps --limit 20       Show top 20 (default: 10, 0 = all)
   network scan        Discover devices on LAN
   alerts              Show current alert status
   alerts --watch      Continuous monitoring with real-time alerts
