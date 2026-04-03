@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/Higangssh/homebutler/internal/config"
+	"github.com/Higangssh/homebutler/internal/util"
 	"golang.org/x/crypto/ssh"
 )
 
@@ -102,7 +103,11 @@ func SelfUpgrade(currentVersion, latestVersion string) *UpgradeResult {
 	backupPath := execPath + ".bak"
 	if err := os.Rename(execPath, backupPath); err != nil {
 		result.Status = "error"
-		result.Message = fmt.Sprintf("cannot backup current binary: %v", err)
+		if util.IsPermissionError(err) {
+			result.Message = fmt.Sprintf("cannot backup current binary: %v\n\n  ⚠️  Try: sudo homebutler upgrade", err)
+		} else {
+			result.Message = fmt.Sprintf("cannot backup current binary: %v", err)
+		}
 		return result
 	}
 
@@ -110,7 +115,11 @@ func SelfUpgrade(currentVersion, latestVersion string) *UpgradeResult {
 		// Restore backup on failure
 		os.Rename(backupPath, execPath)
 		result.Status = "error"
-		result.Message = fmt.Sprintf("cannot write new binary: %v", err)
+		if util.IsPermissionError(err) {
+			result.Message = fmt.Sprintf("cannot write new binary: %v\n\n  ⚠️  Try: sudo homebutler upgrade", err)
+		} else {
+			result.Message = fmt.Sprintf("cannot write new binary: %v", err)
+		}
 		return result
 	}
 

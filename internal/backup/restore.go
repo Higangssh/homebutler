@@ -123,6 +123,9 @@ func restoreMount(m Mount, volDir string) error {
 	case "bind":
 		// Restore bind mount to host path
 		if err := os.MkdirAll(m.Source, 0o755); err != nil {
+			if util.IsPermissionError(err) {
+				return fmt.Errorf("failed to create bind mount dir %s: %w\n\n  ⚠️  Try: sudo homebutler restore %s", m.Source, err, archivePath)
+			}
 			return fmt.Errorf("failed to create bind mount dir %s: %w", m.Source, err)
 		}
 		_, err := util.RunCmd("tar", "xzf", archivePath, "-C", m.Source)

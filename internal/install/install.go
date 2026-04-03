@@ -35,9 +35,18 @@ func saveInstalled(app installedApp) error {
 		return err
 	}
 	if err := os.MkdirAll(BaseDir(), 0755); err != nil {
+		if util.IsPermissionError(err) {
+			return fmt.Errorf("failed to create registry dir: %w\n\n  ⚠️  Try: sudo homebutler install %s", err, app.Name)
+		}
 		return err
 	}
-	return os.WriteFile(registryFile(), data, 0644)
+	if err := os.WriteFile(registryFile(), data, 0644); err != nil {
+		if util.IsPermissionError(err) {
+			return fmt.Errorf("failed to write install registry: %w\n\n  ⚠️  Try: sudo homebutler install %s", err, app.Name)
+		}
+		return err
+	}
+	return nil
 }
 
 // removeInstalled removes an app from the registry.
@@ -49,7 +58,13 @@ func removeInstalled(appName string) error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(registryFile(), data, 0644)
+	if err := os.WriteFile(registryFile(), data, 0644); err != nil {
+		if util.IsPermissionError(err) {
+			return fmt.Errorf("failed to update install registry: %w\n\n  ⚠️  Try: sudo homebutler uninstall %s", err, appName)
+		}
+		return err
+	}
+	return nil
 }
 
 // loadInstalled reads the installed apps registry.
@@ -593,6 +608,9 @@ func Install(app App, opts InstallOptions) error {
 
 	// Create directories
 	if err := os.MkdirAll(dataDir, 0755); err != nil {
+		if util.IsPermissionError(err) {
+			return fmt.Errorf("failed to create directory %s: %w\n\n  ⚠️  Try: sudo homebutler install %s", dataDir, err, app.Name)
+		}
 		return fmt.Errorf("failed to create directory %s: %w", dataDir, err)
 	}
 
@@ -614,6 +632,9 @@ func Install(app App, opts InstallOptions) error {
 	composeFile := filepath.Join(appDir, "docker-compose.yml")
 	f, err := os.Create(composeFile)
 	if err != nil {
+		if util.IsPermissionError(err) {
+			return fmt.Errorf("failed to create %s: %w\n\n  ⚠️  Try: sudo homebutler install %s", composeFile, err, app.Name)
+		}
 		return fmt.Errorf("failed to create %s: %w", composeFile, err)
 	}
 	defer f.Close()
