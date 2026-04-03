@@ -2,6 +2,20 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.11.2](https://github.com/Higangssh/homebutler/compare/v0.11.1...v0.11.2) - 2026-04-03
+
+**Better UX for non-root users.** `homebutler ports` now tells you when process names are missing instead of showing blank columns.
+
+```bash
+homebutler ports    # shows ⚠️ hint if process info is missing
+sudo homebutler ports   # full process info
+```
+
+### 🐛 Fixed
+
+- show sudo hint when process names are missing in `ports` command
+- address critical security and error handling issues
+
 ## [0.11.1](https://github.com/Higangssh/homebutler/compare/v0.11.0...v0.11.1) - 2026-04-01
 
 **14 installable apps.** From monitoring to media streaming, DNS ad blocking to reverse proxies — all one command away.
