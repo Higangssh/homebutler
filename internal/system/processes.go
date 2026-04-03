@@ -40,12 +40,7 @@ func TopProcessesSorted(n int, sortBy string) ([]ProcessInfo, error) {
 		return nil, err
 	}
 
-	switch sortBy {
-	case "mem":
-		sort.Slice(all, func(i, j int) bool { return all[i].Mem > all[j].Mem })
-	default: // cpu
-		sort.Slice(all, func(i, j int) bool { return all[i].CPU > all[j].CPU })
-	}
+	sortProcesses(all, sortBy)
 
 	if n > 0 && len(all) > n {
 		all = all[:n]
@@ -69,12 +64,7 @@ func ListProcesses(n int, sortBy string) (*ProcessResult, error) {
 	}
 
 	// Sort
-	switch sortBy {
-	case "mem":
-		sort.Slice(all, func(i, j int) bool { return all[i].Mem > all[j].Mem })
-	default:
-		sort.Slice(all, func(i, j int) bool { return all[i].CPU > all[j].CPU })
-	}
+	sortProcesses(all, sortBy)
 
 	total := len(all)
 	if n > 0 && len(all) > n {
@@ -88,7 +78,27 @@ func ListProcesses(n int, sortBy string) (*ProcessResult, error) {
 	}, nil
 }
 
-// allProcesses returns all running processes.
+// sortProcesses sorts by primary field with secondary sort for tie-breaking.
+func sortProcesses(procs []ProcessInfo, sortBy string) {
+	switch sortBy {
+	case "mem":
+		sort.Slice(procs, func(i, j int) bool {
+			if procs[i].Mem != procs[j].Mem {
+				return procs[i].Mem > procs[j].Mem
+			}
+			return procs[i].CPU > procs[j].CPU
+		})
+	default: // cpu
+		sort.Slice(procs, func(i, j int) bool {
+			if procs[i].CPU != procs[j].CPU {
+				return procs[i].CPU > procs[j].CPU
+			}
+			return procs[i].Mem > procs[j].Mem
+		})
+	}
+}
+
+// allProcesses returns all running processes, filtering out kernel threads.
 func allProcesses() ([]ProcessInfo, error) {
 	var out string
 	var err error
@@ -105,7 +115,43 @@ func allProcesses() ([]ProcessInfo, error) {
 		return nil, err
 	}
 
-	return parseProcesses(out, 0), nil
+	all := parseProcesses(out, 0)
+
+	// Filter out kernel threads (PID <= 2 or bracketed names like [kthreadd])
+	var filtered []ProcessInfo
+	for _, p := range all {
+		if p.PID <= 2 {
+			continue
+		}
+		if strings.HasPrefix(p.Name, "[") || isKernelThread(p.Name) {
+			continue
+		}
+		filtered = append(filtered, p)
+	}
+
+	return filtered, nil
+}
+
+// isKernelThread detects common Linux kernel thread names.
+func isKernelThread(name string) bool {
+	kernelPrefixes := []string{
+		"kthreadd", "kworker/", "ksoftirqd/", "migration/",
+		"rcu_", "watchdog/", "cpuhp/", "netns", "kdevtmpfs",
+		"inet_frag_wq", "kauditd", "khungtaskd", "oom_reaper",
+		"writeback", "kcompactd", "ksmd", "khugepaged",
+		"kintegrityd", "kblockd", "blkcg_punt", "edac-poller",
+		"devfreq_wq", "kswapd", "ecryptfs", "kthrotld",
+		"irq/", "scsi_", "md_", "raid", "jbd2",
+		"ext4-", "xfs-", "btrfs-",
+		"slub_flushwq", "mm_percpu_wq", "rcu_tasks",
+		"0:0H",
+	}
+	for _, prefix := range kernelPrefixes {
+		if strings.HasPrefix(name, prefix) {
+			return true
+		}
+	}
+	return false
 }
 
 // parseProcesses extracts process info from ps output, skipping the header.
