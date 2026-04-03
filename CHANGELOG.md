@@ -2,6 +2,17 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.12.1](https://github.com/Higangssh/homebutler/compare/v0.12.0...v0.12.1) - 2026-04-03
+
+### 🐛 Fixed
+
+- filter kernel threads from `ps` output (kthreadd, kworker, rcu_*, etc.)
+- add secondary sort: CPU tie → sort by memory, memory tie → sort by CPU
+
+### 📦 Other
+
+- add `ps` command to README CLI reference
+
 ## [0.12.0](https://github.com/Higangssh/homebutler/compare/v0.11.2...v0.12.0) - 2026-04-03
 
 **Process monitoring + better error messages.** New `ps` command shows top processes with zombie detection. Permission errors now tell you exactly what to do.
