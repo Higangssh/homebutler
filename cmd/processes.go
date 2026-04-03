@@ -37,7 +37,22 @@ func newProcessesCmd() *cobra.Command {
 			if sortBy == "mem" {
 				sortLabel = "Memory"
 			}
-			fmt.Fprintf(os.Stdout, "\n📊 Top processes (by %s)\n\n", sortLabel)
+			fmt.Fprintf(os.Stdout, "\n📊 Top processes (by %s)\n", sortLabel)
+
+			// Check if all CPU is 0.0 and we're sorting by CPU
+			if sortBy != "mem" {
+				allZeroCPU := true
+				for _, p := range result.Processes {
+					if p.CPU > 0.0 {
+						allZeroCPU = false
+						break
+					}
+				}
+				if allZeroCPU && len(result.Processes) > 0 {
+					fmt.Fprintf(os.Stdout, "  💤 All processes at 0%% CPU — sorted by memory instead\n")
+				}
+			}
+			fmt.Fprintln(os.Stdout)
 			fmt.Fprintf(os.Stdout, "  %6s  %5s  %5s  %s\n", "PID", "CPU%", "MEM%", "PROCESS")
 			for _, p := range result.Processes {
 				fmt.Fprintf(os.Stdout, "  %6d  %5.1f  %5.1f  %s\n", p.PID, p.CPU, p.Mem, p.Name)
