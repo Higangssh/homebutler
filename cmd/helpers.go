@@ -170,11 +170,11 @@ func runLocalCommand(args []string) ([]byte, error) {
 		}
 		return json.Marshal(containers)
 	case "ports":
-		openPorts, err := ports.List()
+		result, err := ports.List()
 		if err != nil {
 			return nil, err
 		}
-		return json.Marshal(openPorts)
+		return json.Marshal(result.Ports)
 	default:
 		return nil, fmt.Errorf("command %q not supported with --all", args[0])
 	}

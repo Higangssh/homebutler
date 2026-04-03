@@ -16,15 +16,37 @@ type PortInfo struct {
 	Process  string `json:"process,omitempty"`
 }
 
-func List() ([]PortInfo, error) {
+// Result holds the port list and metadata about the scan.
+type Result struct {
+	Ports          []PortInfo `json:"ports"`
+	MissingProcess bool       `json:"missing_process,omitempty"`
+}
+
+func List() (*Result, error) {
+	var ports []PortInfo
+	var err error
+
 	switch runtime.GOOS {
 	case "darwin":
-		return listDarwin()
+		ports, err = listDarwin()
 	case "linux":
-		return listLinux()
+		ports, err = listLinux()
 	default:
 		return nil, fmt.Errorf("unsupported OS: %s", runtime.GOOS)
 	}
+	if err != nil {
+		return nil, err
+	}
+
+	missing := false
+	for _, p := range ports {
+		if p.Process == "" {
+			missing = true
+			break
+		}
+	}
+
+	return &Result{Ports: ports, MissingProcess: missing}, nil
 }
 
 func listDarwin() ([]PortInfo, error) {

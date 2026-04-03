@@ -1,6 +1,10 @@
 package cmd
 
 import (
+	"fmt"
+	"os"
+	"runtime"
+
 	"github.com/Higangssh/homebutler/internal/ports"
 	"github.com/spf13/cobra"
 )
@@ -17,11 +21,21 @@ func newPortsCmd() *cobra.Command {
 			if handled, err := maybeRouteRemote(); handled {
 				return err
 			}
-			openPorts, err := ports.List()
+			result, err := ports.List()
 			if err != nil {
 				return err
 			}
-			return output(openPorts, jsonOutput)
+			if err := output(result.Ports, jsonOutput); err != nil {
+				return err
+			}
+			if result.MissingProcess && !jsonOutput {
+				hint := "sudo homebutler ports"
+				if runtime.GOOS == "darwin" {
+					hint = "sudo homebutler ports"
+				}
+				fmt.Fprintf(os.Stderr, "\n⚠️  Some process names are missing. Try: %s\n", hint)
+			}
+			return nil
 		},
 	}
 }
