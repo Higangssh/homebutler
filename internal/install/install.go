@@ -139,7 +139,7 @@ var Registry = map[string]App{
     volumes:
       - "{{.DataDir}}/config:/config"
       - "{{.DataDir}}/transcode:/transcode"{{if .MediaDir}}
-      - "{{.MediaDir}}:/data"{{end}}
+      - "{{.MediaDir}}:/data:ro"{{end}}
     environment:
       - PUID={{.UID}}
       - PGID={{.GID}}
