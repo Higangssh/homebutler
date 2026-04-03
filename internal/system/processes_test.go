@@ -3,10 +3,10 @@ package system
 import "testing"
 
 func TestParseProcesses(t *testing.T) {
-	output := `  PID  %CPU %MEM STAT COMMAND
- 1234  25.0  3.2 S    /usr/bin/node
-  567  12.5  1.8 S    /usr/sbin/httpd
-  890   5.0  0.5 S    vim`
+	output := `  PID  %CPU %MEM   RSS STAT COMMAND
+ 1234  25.0  3.2 51200 S    /usr/bin/node
+  567  12.5  1.8 28800 S    /usr/sbin/httpd
+  890   5.0  0.5  8000 S    vim`
 
 	procs := parseProcesses(output, 5)
 	if len(procs) != 3 {
@@ -21,6 +21,9 @@ func TestParseProcesses(t *testing.T) {
 	if procs[0].Mem != 3.2 {
 		t.Errorf("expected Mem 3.2, got %f", procs[0].Mem)
 	}
+	if procs[0].RSS != 51200 {
+		t.Errorf("expected RSS 51200, got %d", procs[0].RSS)
+	}
 	if procs[0].Name != "node" {
 		t.Errorf("expected name 'node', got %q", procs[0].Name)
 	}
@@ -30,8 +33,8 @@ func TestParseProcesses(t *testing.T) {
 }
 
 func TestParseProcesses_PathWithSpaces(t *testing.T) {
-	output := `  PID  %CPU %MEM STAT COMMAND
-  100  10.0  2.0 S    /Applications/Google Chrome.app/Contents/MacOS/Google Chrome`
+	output := `  PID  %CPU %MEM   RSS STAT COMMAND
+  100  10.0  2.0 32000 S    /Applications/Google Chrome.app/Contents/MacOS/Google Chrome`
 
 	procs := parseProcesses(output, 5)
 	if len(procs) != 1 {
@@ -50,19 +53,19 @@ func TestParseProcesses_Empty(t *testing.T) {
 }
 
 func TestParseProcesses_HeaderOnly(t *testing.T) {
-	procs := parseProcesses("  PID  %CPU %MEM STAT COMMAND", 5)
+	procs := parseProcesses("  PID  %CPU %MEM   RSS STAT COMMAND", 5)
 	if len(procs) != 0 {
 		t.Errorf("expected 0 processes for header-only input, got %d", len(procs))
 	}
 }
 
 func TestParseProcesses_Limit(t *testing.T) {
-	output := `  PID  %CPU %MEM STAT COMMAND
-    1  10.0  1.0 S    a
-    2   9.0  1.0 S    b
-    3   8.0  1.0 S    c
-    4   7.0  1.0 S    d
-    5   6.0  1.0 S    e`
+	output := `  PID  %CPU %MEM   RSS STAT COMMAND
+    1  10.0  1.0 16000 S    a
+    2   9.0  1.0 14000 S    b
+    3   8.0  1.0 12000 S    c
+    4   7.0  1.0 10000 S    d
+    5   6.0  1.0  8000 S    e`
 
 	procs := parseProcesses(output, 3)
 	if len(procs) != 3 {
@@ -74,10 +77,10 @@ func TestParseProcesses_Limit(t *testing.T) {
 }
 
 func TestParseProcesses_Zombie(t *testing.T) {
-	output := `  PID  %CPU %MEM STAT COMMAND
- 1234   0.0  0.0 Z    defunct-proc
-  567  12.5  1.8 S    httpd
-  890   0.0  0.0 Z+   another-zombie`
+	output := `  PID  %CPU %MEM   RSS STAT COMMAND
+ 1234   0.0  0.0     0 Z    defunct-proc
+  567  12.5  1.8 28800 S    httpd
+  890   0.0  0.0     0 Z+   another-zombie`
 
 	procs := parseProcesses(output, 0)
 	if len(procs) != 3 {
@@ -98,10 +101,10 @@ func TestParseProcesses_Zombie(t *testing.T) {
 }
 
 func TestParseProcesses_NoLimit(t *testing.T) {
-	output := `  PID  %CPU %MEM STAT COMMAND
-    1  10.0  1.0 S    a
-    2   9.0  1.0 S    b
-    3   8.0  1.0 S    c`
+	output := `  PID  %CPU %MEM   RSS STAT COMMAND
+    1  10.0  1.0 16000 S    a
+    2   9.0  1.0 14000 S    b
+    3   8.0  1.0 12000 S    c`
 
 	procs := parseProcesses(output, 0)
 	if len(procs) != 3 {
@@ -110,7 +113,7 @@ func TestParseProcesses_NoLimit(t *testing.T) {
 }
 
 func TestParseProcesses_FallbackOldFormat(t *testing.T) {
-	// Old 4-field format without state column
+	// Old 4-field format without rss/state column
 	output := `  PID  %CPU %MEM COMMAND
  1234  25.0  3.2 /usr/bin/node
   567  12.5  1.8 httpd`
@@ -150,12 +153,22 @@ func TestListProcesses_SortByMem(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	// Verify sorted by memory descending
 	for i := 1; i < len(result.Processes); i++ {
 		if result.Processes[i].Mem > result.Processes[i-1].Mem {
 			t.Errorf("processes not sorted by memory: %.1f > %.1f at index %d",
 				result.Processes[i].Mem, result.Processes[i-1].Mem, i)
 		}
+	}
+}
+
+func TestListProcesses_RSS(t *testing.T) {
+	result, err := ListProcesses(3, "mem")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	// Top processes by memory should have non-zero RSS
+	if len(result.Processes) > 0 && result.Processes[0].RSS == 0 {
+		t.Error("expected top memory process to have non-zero RSS")
 	}
 }
 

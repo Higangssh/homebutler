@@ -8,6 +8,17 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// formatRSS converts KB to human-readable format.
+func formatRSS(kb int64) string {
+	if kb >= 1024*1024 {
+		return fmt.Sprintf("%.1fG", float64(kb)/1024/1024)
+	}
+	if kb >= 1024 {
+		return fmt.Sprintf("%.1fM", float64(kb)/1024)
+	}
+	return fmt.Sprintf("%dK", kb)
+}
+
 func newProcessesCmd() *cobra.Command {
 	var sortBy string
 	var limit int
@@ -53,9 +64,9 @@ func newProcessesCmd() *cobra.Command {
 				}
 			}
 			fmt.Fprintln(os.Stdout)
-			fmt.Fprintf(os.Stdout, "  %8s  %5s  %5s  %s\n", "PID", "CPU%", "MEM%", "PROCESS")
+			fmt.Fprintf(os.Stdout, "  %8s  %5s  %5s  %8s  %s\n", "PID", "CPU%", "MEM%", "RSS", "PROCESS")
 			for _, p := range result.Processes {
-				fmt.Fprintf(os.Stdout, "  %8d  %5.1f  %5.1f  %s\n", p.PID, p.CPU, p.Mem, p.Name)
+				fmt.Fprintf(os.Stdout, "  %8d  %5.1f  %5.1f  %8s  %s\n", p.PID, p.CPU, p.Mem, formatRSS(p.RSS), p.Name)
 			}
 
 			// Summary line

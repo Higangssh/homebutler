@@ -16,6 +16,7 @@ type ProcessInfo struct {
 	Name   string  `json:"name"`
 	CPU    float64 `json:"cpu"`
 	Mem    float64 `json:"mem"`
+	RSS    int64   `json:"rss"`
 	State  string  `json:"state,omitempty"`
 	Zombie bool    `json:"zombie,omitempty"`
 }
@@ -105,9 +106,9 @@ func allProcesses() ([]ProcessInfo, error) {
 
 	switch runtime.GOOS {
 	case "darwin":
-		out, err = util.RunCmd("ps", "-eo", "pid,pcpu,pmem,state,comm")
+		out, err = util.RunCmd("ps", "-eo", "pid,pcpu,pmem,rss,state,comm")
 	case "linux":
-		out, err = util.RunCmd("ps", "-eo", "pid,pcpu,pmem,state,comm")
+		out, err = util.RunCmd("ps", "-eo", "pid,pcpu,pmem,rss,state,comm")
 	default:
 		return nil, fmt.Errorf("unsupported platform: %s", runtime.GOOS)
 	}
@@ -171,8 +172,8 @@ func parseProcesses(output string, n int) []ProcessInfo {
 		}
 
 		fields := strings.Fields(line)
-		if len(fields) < 5 {
-			// Fallback for old 4-field format (without state)
+		if len(fields) < 6 {
+			// Fallback for old format (without rss/state)
 			if len(fields) >= 4 {
 				var pid int
 				var cpu, mem float64
@@ -193,13 +194,15 @@ func parseProcesses(output string, n int) []ProcessInfo {
 
 		var pid int
 		var cpu, mem float64
+		var rss int64
 		fmt.Sscanf(fields[0], "%d", &pid)
 		fmt.Sscanf(fields[1], "%f", &cpu)
 		fmt.Sscanf(fields[2], "%f", &mem)
-		state := fields[3]
+		fmt.Sscanf(fields[3], "%d", &rss)
+		state := fields[4]
 
 		// comm is the last column and may contain path with spaces
-		name := strings.Join(fields[4:], " ")
+		name := strings.Join(fields[5:], " ")
 		if strings.Contains(name, "/") {
 			name = filepath.Base(name)
 		}
@@ -211,6 +214,7 @@ func parseProcesses(output string, n int) []ProcessInfo {
 			Name:   name,
 			CPU:    cpu,
 			Mem:    mem,
+			RSS:    rss,
 			State:  state,
 			Zombie: isZombie,
 		})
