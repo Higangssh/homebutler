@@ -196,3 +196,172 @@ func FormatEvent(e Event) string {
 	}
 	return fmt.Sprintf("[%s] %s %s", e.Time.Format("15:04:05"), icon, e.Message)
 }
+
+// WatchRules runs the self-healing watch loop using YAML-defined rules.
+// Returns a channel of formatted log lines. Cancel the context to stop.
+func WatchRules(ctx context.Context, interval time.Duration, rulesCfg *AlertsConfig) <-chan string {
+	ch := make(chan string, 32)
+
+	go func() {
+		defer close(ch)
+		cooldowns := newCooldownTracker()
+
+		// Check immediately
+		evaluateRules(rulesCfg, cooldowns, ch)
+
+		ticker := time.NewTicker(interval)
+		defer ticker.Stop()
+
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				evaluateRules(rulesCfg, cooldowns, ch)
+			}
+		}
+	}()
+
+	return ch
+}
+
+func evaluateRules(rulesCfg *AlertsConfig, cooldowns *cooldownTracker, ch chan<- string) {
+	now := time.Now()
+	ts := now.Format("15:04:05")
+
+	// Gather system metrics once
+	info, sysErr := system.Status()
+	var cpuPct, memPct, diskPct float64
+	if sysErr == nil {
+		cpuPct = info.CPU.UsagePercent
+		memPct = info.Memory.Percent
+		if len(info.Disks) > 0 {
+			for _, d := range info.Disks {
+				if d.Percent > diskPct {
+					diskPct = d.Percent
+				}
+			}
+		}
+	}
+
+	triggered := false
+	for _, rule := range rulesCfg.Rules {
+		if cooldowns.InCooldown(rule.Name, rule.CooldownDuration()) {
+			continue
+		}
+
+		var ruleTriggered bool
+		var details string
+
+		switch rule.Metric {
+		case "cpu":
+			if sysErr != nil {
+				continue
+			}
+			if cpuPct >= rule.Threshold {
+				ruleTriggered = true
+				details = fmt.Sprintf("cpu %.1f%% >= %.0f%%", cpuPct, rule.Threshold)
+			}
+		case "memory":
+			if sysErr != nil {
+				continue
+			}
+			if memPct >= rule.Threshold {
+				ruleTriggered = true
+				details = fmt.Sprintf("memory %.1f%% >= %.0f%%", memPct, rule.Threshold)
+			}
+		case "disk":
+			if sysErr != nil {
+				continue
+			}
+			if diskPct >= rule.Threshold {
+				ruleTriggered = true
+				details = fmt.Sprintf("disk %.1f%% >= %.0f%%", diskPct, rule.Threshold)
+			}
+		case "container":
+			statuses, err := CheckContainers(rule.Watch)
+			if err != nil {
+				continue
+			}
+			for _, s := range statuses {
+				if !s.Running {
+					ruleTriggered = true
+					details = fmt.Sprintf("%s is %s", s.Name, s.State)
+					break
+				}
+			}
+		}
+
+		if !ruleTriggered {
+			continue
+		}
+
+		triggered = true
+		cooldowns.MarkFired(rule.Name)
+
+		// Log the trigger
+		icon := "⚠️"
+		if rule.Metric == "container" {
+			icon = "🔴"
+		}
+		ch <- fmt.Sprintf("  ⏱️  %s  %s  %s triggered (%s)", ts, icon, rule.Name, details)
+
+		// Execute action
+		result := ExecuteAction(rule)
+		resultStatus := "success"
+		if !result.Success {
+			resultStatus = "failed"
+		}
+
+		if rule.Action != "notify" {
+			ch <- fmt.Sprintf("                 → Executing: %s", actionDescription(rule))
+			if result.Success {
+				ch <- fmt.Sprintf("                 → ✅ %s", result.Output)
+			} else {
+				ch <- fmt.Sprintf("                 → ❌ %s", result.Output)
+			}
+		}
+
+		// Send webhook
+		if rule.Notify == "webhook" && rulesCfg.Webhook.URL != "" {
+			payload := WebhookPayload{
+				Rule:         rule.Name,
+				Status:       "triggered",
+				Details:      details,
+				ActionTaken:  rule.Action,
+				ActionResult: resultStatus,
+				Timestamp:    now.Format(time.RFC3339),
+			}
+			if err := SendWebhook(rulesCfg.Webhook.URL, payload); err != nil {
+				ch <- fmt.Sprintf("                 → webhook error: %s", err)
+			}
+		}
+
+		// Record history
+		entry := HistoryEntry{
+			Timestamp:    now,
+			Rule:         rule.Name,
+			Metric:       rule.Metric,
+			Details:      details,
+			ActionTaken:  rule.Action,
+			ActionResult: resultStatus,
+		}
+		_ = RecordHistory(entry)
+	}
+
+	if !triggered {
+		ch <- fmt.Sprintf("  ⏱️  %s  ✅ All clear (cpu %.0f%%, mem %.0f%%, disk %.0f%%)",
+			ts, cpuPct, memPct, diskPct)
+	}
+}
+
+func actionDescription(rule Rule) string {
+	switch rule.Action {
+	case "restart":
+		return "docker restart " + strings.Join(rule.Watch, ", ")
+	case "exec":
+		return rule.Exec
+	default:
+		return rule.Action
+	}
+}
