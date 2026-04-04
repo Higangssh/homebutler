@@ -2,6 +2,34 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.14.0](https://github.com/Higangssh/homebutler/compare/v0.13.0...v0.14.0) - 2026-04-05
+
+**Self-Healing — your homelab fixes itself while you sleep.** Define rules in YAML, and homebutler watches your servers and takes action automatically. Plus multi-channel notifications and an interactive setup wizard.
+
+### 🚀 Features
+
+- add self-healing engine with YAML-defined rules and playbook execution
+- support 4 metrics: `cpu`, `memory`, `disk`, `container`
+- support 3 actions: `notify`, `restart` (docker restart), `exec` (run any command)
+- cooldown support to prevent alert storms
+- `alerts init` is now interactive — walks you through threshold, container, and webhook setup
+- confirmation step after container selection ("Correct? [Y/n]")
+- input hints for container selection format
+- add multi-provider notification system: Telegram, Slack, Discord, generic webhook
+- `alerts test-notify` command to verify notification channels
+- `alerts history` to view past events and remediation results
+- `alerts --watch` for continuous self-healing daemon mode
+
+### 📝 Documentation
+
+- add self-healing section to README with YAML examples
+- add multi-channel notification docs to README
+- add homebutler.dev website link to README
+
+### 🐛 Fixes
+
+- fix gofmt formatting in alerts rules
+
 ## [0.13.0](https://github.com/Higangssh/homebutler/compare/v0.12.2...v0.13.0) - 2026-04-04
 
 **Backup Drill — prove your backups actually work.** Run a restore rehearsal in an isolated Docker environment. No risk to your running services.
