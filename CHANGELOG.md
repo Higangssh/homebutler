@@ -2,6 +2,28 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.12.2](https://github.com/Higangssh/homebutler/compare/v0.12.1...v0.12.2) - 2026-04-04
+
+**Better `ps`, plus Plex.** Process output is clearer when CPU is idle, memory now shows real RSS sizes, and Plex joins the installable app list.
+
+```bash
+homebutler ps                 # CPU + MEM% + RSS
+homebutler ps --sort mem      # top processes by memory
+homebutler install plex       # install Plex Media Server
+homebutler install plex --media /path/to/media
+```
+
+### 🚀 Features
+
+- add RSS column to `ps` output with human-readable memory sizes (`K`, `M`, `G`)
+- add Plex Media Server to installable apps with `--media` mount support
+- add Plex post-install guidance for initial web setup
+
+### 🐛 Fixed
+
+- show `sorted by memory instead` notice when all processes are at `0.0%` CPU
+- widen PID column in `ps` output to handle 7+ digit PIDs cleanly
+
 ## [0.12.1](https://github.com/Higangssh/homebutler/compare/v0.12.0...v0.12.1) - 2026-04-03
 
 ### 🐛 Fixed
