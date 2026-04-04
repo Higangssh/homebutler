@@ -23,8 +23,8 @@ func noContainers() ([]docker.Container, error) {
 }
 
 func TestRunInitPrompt_Defaults(t *testing.T) {
-	// All defaults: Enter x3, then "all", then "1" (restart), then empty webhook
-	input := "\n\n\nall\n1\n\n"
+	// All defaults: Enter x3, then "all", confirm "y", then "1" (restart), then empty webhook
+	input := "\n\n\nall\n\n1\n\n"
 	r := strings.NewReader(input)
 	var w bytes.Buffer
 
@@ -54,7 +54,7 @@ func TestRunInitPrompt_Defaults(t *testing.T) {
 }
 
 func TestRunInitPrompt_CustomValues(t *testing.T) {
-	input := "80\n70\n60\n1,3\n2\nhttps://example.com/hook\n"
+	input := "80\n70\n60\n1,3\ny\n2\nhttps://example.com/hook\n"
 	r := strings.NewReader(input)
 	var w bytes.Buffer
 

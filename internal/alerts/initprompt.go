@@ -77,11 +77,21 @@ func RunInitPrompt(r io.Reader, w io.Writer, listContainers ContainerLister) (*I
 			fmt.Fprintf(w, "  [%d] %s (%s)\n", i+1, promptAccent.Render(c.Name), state)
 		}
 
-		fmt.Fprintf(w, "\n%s ", promptDim.Render("? Select containers to watch (comma-separated, or 'all'):"))
+		fmt.Fprintf(w, "\n%s\n", promptDim.Render("? Select containers to watch:"))
+		fmt.Fprintln(w, promptDim.Render("  Enter numbers separated by commas (e.g. 1,2), 'all', or press Enter to skip"))
+		fmt.Fprintf(w, "%s ", promptDim.Render("  >"))
 		selection := readLine(scanner)
 		result.Containers = parseContainerSelection(selection, containers)
 
 		if len(result.Containers) > 0 {
+			// Confirm selection
+			fmt.Fprintf(w, "\n  → Watching: %s\n", promptAccent.Render(strings.Join(result.Containers, ", ")))
+			fmt.Fprintf(w, "%s ", promptDim.Render("  Correct? [Y/n]:"))
+			confirm := strings.TrimSpace(strings.ToLower(readLine(scanner)))
+			if confirm == "n" || confirm == "no" {
+				result.Containers = nil
+				fmt.Fprintln(w, promptDim.Render("  Skipped container monitoring."))
+			}
 			fmt.Fprintln(w)
 			fmt.Fprintln(w, promptDim.Render("? When a container goes down:"))
 			fmt.Fprintln(w, "  [1] Restart automatically")
