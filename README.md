@@ -59,12 +59,13 @@ This is what homebutler + [OpenClaw](https://github.com/openclaw/openclaw) looks
 
 ## Features
 
-- **App Install** — Deploy 14 self-hosted apps with one command (`uptime-kuma`, `jellyfin`, `pi-hole`, and more)
+- **App Install** — Deploy 15 self-hosted apps with one command (`uptime-kuma`, `jellyfin`, `pi-hole`, and more)
 - **System Status** — CPU, memory, disk, uptime at a glance
 - **Docker Management** — List, restart, stop, logs for containers
 - **Multi-server** — Manage remote servers over SSH (key & password auth)
 - **Alerts** — Get notified when resources exceed thresholds
 - **Backup & Restore** — One-command Docker volume backup with compose + env files
+- **Backup Drill** — Verify backups actually work by booting them in isolated containers
 - **MCP Server** — Works with Claude Desktop, ChatGPT, Cursor, and any MCP client
 - **Web Dashboard** — Beautiful dark-themed web UI with `homebutler serve`
 - **TUI Dashboard** — Real-time terminal monitoring with `homebutler watch` (btop-style)
@@ -292,6 +293,8 @@ Commands:
   trust <server>      Register SSH host key (TOFU)
   backup              Backup Docker volumes, compose files, and env
   backup list         List existing backups
+  backup drill <app>  Verify backup restores correctly (isolated)
+  backup drill --all  Verify all apps in backup
   restore <archive>   Restore from a backup archive
   upgrade             Upgrade local + all remote servers to latest
   deploy              Install homebutler on remote servers
@@ -316,6 +319,8 @@ Flags:
   --local <path>      Use local binary for deploy (air-gapped)
   --service <name>    Target a specific Docker service (backup/restore)
   --to <path>         Custom backup destination directory
+  --archive <path>    Specific backup archive for drill
+  --all               Verify all supported apps (backup drill)
 ```
 
 </details>
@@ -372,6 +377,45 @@ homebutler restore ./backup.tar.gz         # restore
 > ⚠️ Database services should be paused before backup for data consistency.
 
 📖 **[Full backup documentation →](docs/backup.md)** — how it works, archive structure, security notes.
+
+### 🔍 Backup Drill
+
+**"Having a backup" and "being able to restore" are different things.**
+
+Backup Drill boots your backup in an isolated Docker environment and verifies the app actually responds — like a fire drill for your data.
+
+```bash
+homebutler backup drill uptime-kuma        # verify one app
+homebutler backup drill --all              # verify all apps
+homebutler backup drill --json             # machine-readable output
+homebutler backup drill --archive ./file   # use a specific backup
+```
+
+**What happens:**
+1. Finds the latest backup archive
+2. Verifies archive integrity (`tar` validation)
+3. Creates an isolated Docker network + random port
+4. Boots the app from backup data
+5. Runs an HTTP health check
+6. Reports pass/fail and cleans up everything
+
+```
+🔍 Backup Drill — uptime-kuma
+
+  📦 Backup: ~/.homebutler/backups/backup_2026-04-04_1711.tar.gz
+  📏 Size: 18.6 MB
+  🔐 Integrity: ✅ tar valid (8 files)
+
+  🚀 Boot: ✅ container started in 0s
+  🌐 Health: ✅ HTTP 200 on port 58574
+  ⏱️  Total: 2s
+
+  ✅ DRILL PASSED
+```
+
+**Zero risk** — runs in a completely isolated environment. Your running services are never touched.
+
+Supports health checks for: `nginx-proxy-manager`, `vaultwarden`, `uptime-kuma`, `pi-hole`, `gitea`, `jellyfin`, `plex`, `portainer`, `homepage`, `adguard-home`.
 
 ## Configuration
 
