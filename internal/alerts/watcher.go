@@ -322,18 +322,19 @@ func evaluateRules(rulesCfg *AlertsConfig, cooldowns *cooldownTracker, ch chan<-
 			}
 		}
 
-		// Send webhook
-		if rule.Notify == "webhook" && rulesCfg.Webhook.URL != "" {
-			payload := WebhookPayload{
-				Rule:         rule.Name,
-				Status:       "triggered",
-				Details:      details,
-				ActionTaken:  rule.Action,
-				ActionResult: resultStatus,
-				Timestamp:    now.Format(time.RFC3339),
+		// Send notifications to all configured providers
+		notifyCfg := ResolveNotifyConfig(rulesCfg)
+		if notifyCfg != nil {
+			event := NotifyEvent{
+				RuleName: rule.Name,
+				Status:   "triggered",
+				Details:  details,
+				Action:   rule.Action,
+				Result:   resultStatus,
+				Time:     now.Format("2006-01-02 15:04:05"),
 			}
-			if err := SendWebhook(rulesCfg.Webhook.URL, payload); err != nil {
-				ch <- fmt.Sprintf("                 → webhook error: %s", err)
+			for _, err := range NotifyAll(notifyCfg, event) {
+				ch <- fmt.Sprintf("                 → notify error: %s", err)
 			}
 		}
 
@@ -353,6 +354,22 @@ func evaluateRules(rulesCfg *AlertsConfig, cooldowns *cooldownTracker, ch chan<-
 		ch <- fmt.Sprintf("  ⏱️  %s  ✅ All clear (cpu %.0f%%, mem %.0f%%, disk %.0f%%)",
 			ts, cpuPct, memPct, diskPct)
 	}
+}
+
+// ResolveNotifyConfig merges legacy Webhook config into NotifyConfig.
+func ResolveNotifyConfig(cfg *AlertsConfig) *NotifyConfig {
+	nc := cfg.Notify
+
+	// Map legacy webhook into NotifyConfig if not already set
+	if cfg.Webhook.URL != "" && (nc.Webhook == nil || nc.Webhook.URL == "") {
+		nc.Webhook = &WebhookConfig{URL: cfg.Webhook.URL}
+	}
+
+	// Return nil if nothing is configured
+	if nc.Telegram == nil && nc.Slack == nil && nc.Discord == nil && nc.Webhook == nil {
+		return nil
+	}
+	return &nc
 }
 
 func actionDescription(rule Rule) string {

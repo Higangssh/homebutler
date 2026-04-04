@@ -30,7 +30,8 @@ type WebhookConfig struct {
 // AlertsConfig is the top-level YAML structure for self-healing rules.
 type AlertsConfig struct {
 	Rules   []Rule        `yaml:"rules" json:"rules"`
-	Webhook WebhookConfig `yaml:"webhook" json:"webhook"`
+	Webhook WebhookConfig `yaml:"webhook" json:"webhook"` // legacy, kept for backward compat
+	Notify  NotifyConfig  `yaml:"notify" json:"notify"`
 }
 
 // CooldownDuration parses the cooldown string into a time.Duration.

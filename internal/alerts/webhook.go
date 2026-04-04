@@ -18,6 +18,8 @@ type WebhookPayload struct {
 	Timestamp    string `json:"timestamp"`
 }
 
+// Deprecated: SendWebhook is kept for backward compatibility.
+// Use NotifyAll with NotifyConfig instead.
 // SendWebhook posts a JSON payload to the configured webhook URL.
 // If the URL is empty, it silently returns nil (not an error).
 func SendWebhook(url string, payload WebhookPayload) error {

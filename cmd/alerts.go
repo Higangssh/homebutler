@@ -54,6 +54,7 @@ Use --config to load YAML rules for self-healing mode.`,
 
 	cmd.AddCommand(newAlertsInitCmd())
 	cmd.AddCommand(newAlertsHistoryCmd())
+	cmd.AddCommand(newAlertsTestNotifyCmd())
 
 	return cmd
 }
@@ -124,6 +125,96 @@ func newAlertsHistoryCmd() *cobra.Command {
 			return nil
 		},
 	}
+}
+
+func newAlertsTestNotifyCmd() *cobra.Command {
+	var alertsConfig string
+
+	cmd := &cobra.Command{
+		Use:   "test-notify",
+		Short: "Send a test notification to all configured providers",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			rulesCfg, err := loadAlertsConfig(alertsConfig)
+			if err != nil {
+				return err
+			}
+			if rulesCfg == nil {
+				return fmt.Errorf("no alerts config found; use --alerts-config or run 'alerts init' first")
+			}
+
+			notifyCfg := alerts.ResolveNotifyConfig(rulesCfg)
+			if notifyCfg == nil {
+				return fmt.Errorf("no notification providers configured in alerts.yaml")
+			}
+
+			event := alerts.NotifyEvent{
+				RuleName: "test-notification",
+				Status:   "triggered",
+				Details:  "This is a test notification from homebutler",
+				Action:   "notify",
+				Result:   "success",
+				Time:     time.Now().Format("2006-01-02 15:04:05"),
+			}
+
+			fmt.Println("Sending test notification...")
+			errs := alerts.NotifyAll(notifyCfg, event)
+
+			// Report results per provider
+			providers := []string{}
+			if notifyCfg.Telegram != nil {
+				providers = append(providers, "telegram")
+			}
+			if notifyCfg.Slack != nil {
+				providers = append(providers, "slack")
+			}
+			if notifyCfg.Discord != nil {
+				providers = append(providers, "discord")
+			}
+			if notifyCfg.Webhook != nil {
+				providers = append(providers, "webhook")
+			}
+
+			errMap := make(map[string]bool)
+			for _, e := range errs {
+				for _, p := range providers {
+					if strings.Contains(e.Error(), p) {
+						errMap[p] = true
+					}
+				}
+			}
+
+			for _, p := range providers {
+				if errMap[p] {
+					fmt.Printf("  ❌ %s: failed\n", p)
+				} else {
+					fmt.Printf("  ✅ %s: sent\n", p)
+				}
+			}
+
+			if len(errs) > 0 {
+				return fmt.Errorf("%d provider(s) failed", len(errs))
+			}
+			return nil
+		},
+	}
+
+	cmd.Flags().StringVar(&alertsConfig, "alerts-config", "", "Path to alerts YAML config")
+	return cmd
+}
+
+func loadAlertsConfig(alertsConfigPath string) (*alerts.AlertsConfig, error) {
+	if alertsConfigPath != "" {
+		return alerts.LoadRules(alertsConfigPath)
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return nil, nil
+	}
+	defaultPath := filepath.Join(home, ".homebutler", "alerts.yaml")
+	if _, statErr := os.Stat(defaultPath); statErr != nil {
+		return nil, nil
+	}
+	return alerts.LoadRules(defaultPath)
 }
 
 func runAlertsWatch(intervalStr, alertsConfigPath string) error {
