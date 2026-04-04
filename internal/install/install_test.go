@@ -79,6 +79,36 @@ func TestRegistryJellyfin(t *testing.T) {
 	}
 }
 
+func TestRegistryPlex(t *testing.T) {
+	app, ok := Registry["plex"]
+	if !ok {
+		t.Fatal("plex should be in registry")
+	}
+	if app.DefaultPort != "32400" {
+		t.Errorf("expected port 32400, got %s", app.DefaultPort)
+	}
+	if app.ContainerPort != "32400" {
+		t.Errorf("expected container port 32400, got %s", app.ContainerPort)
+	}
+
+	// Verify compose template contains key elements
+	if !strings.Contains(app.ComposeFile, "plexinc/pms-docker:latest") {
+		t.Error("compose should use plexinc/pms-docker:latest image")
+	}
+	if !strings.Contains(app.ComposeFile, "/config") {
+		t.Error("compose should mount /config volume")
+	}
+	if !strings.Contains(app.ComposeFile, "/transcode") {
+		t.Error("compose should mount /transcode volume")
+	}
+	if !strings.Contains(app.ComposeFile, ":/data:ro") {
+		t.Error("compose should mount media volume as read-only (:ro)")
+	}
+	if !strings.Contains(app.ComposeFile, "PUID") || !strings.Contains(app.ComposeFile, "PGID") {
+		t.Error("compose should support PUID/PGID")
+	}
+}
+
 func TestRegistryVaultwarden(t *testing.T) {
 	app, ok := Registry["vaultwarden"]
 	if !ok {

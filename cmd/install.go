@@ -201,10 +201,10 @@ func runInstallApp(appName string, cmd *cobra.Command) error {
 		if msg := install.PostInstallMessage(app.Name, port); msg != "" {
 			fmt.Fprintf(os.Stderr, "📋 %s\n", msg)
 		}
-		if app.Name == "jellyfin" && mediaFlag == "" {
+		if (app.Name == "jellyfin" || app.Name == "plex") && mediaFlag == "" {
 			fmt.Fprintln(os.Stderr, "\n📂 Media: No media directory mounted.")
 			fmt.Fprintln(os.Stderr, "   To add media, reinstall with --media flag:")
-			fmt.Fprintf(os.Stderr, "   homebutler install jellyfin --media /path/to/movies\n")
+			fmt.Fprintf(os.Stderr, "   homebutler install %s --media /path/to/movies\n", app.Name)
 		}
 		fmt.Fprintf(os.Stderr, "\n💡 Useful commands:\n")
 		fmt.Fprintf(os.Stderr, "  homebutler install status %s\n", app.Name)
