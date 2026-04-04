@@ -11,11 +11,11 @@ import (
 // Rule defines a single alert rule from the YAML configuration.
 type Rule struct {
 	Name       string   `yaml:"name" json:"name"`
-	Metric     string   `yaml:"metric" json:"metric"`         // "cpu", "memory", "disk", "container"
-	Threshold  float64  `yaml:"threshold" json:"threshold"`    // percentage for cpu/memory/disk
+	Metric     string   `yaml:"metric" json:"metric"`       // "cpu", "memory", "disk", "container"
+	Threshold  float64  `yaml:"threshold" json:"threshold"` // percentage for cpu/memory/disk
 	Duration   string   `yaml:"duration,omitempty" json:"duration,omitempty"`
 	Watch      []string `yaml:"watch,omitempty" json:"watch,omitempty"` // container names
-	Action     string   `yaml:"action" json:"action"`          // "notify", "restart", "exec"
+	Action     string   `yaml:"action" json:"action"`                   // "notify", "restart", "exec"
 	Exec       string   `yaml:"exec,omitempty" json:"exec,omitempty"`
 	Notify     string   `yaml:"notify,omitempty" json:"notify,omitempty"` // "webhook"
 	Cooldown   string   `yaml:"cooldown,omitempty" json:"cooldown,omitempty"`
