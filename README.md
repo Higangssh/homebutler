@@ -67,7 +67,8 @@ This is what homebutler + [OpenClaw](https://github.com/openclaw/openclaw) looks
 - **System Status** — CPU, memory, disk, uptime at a glance
 - **Docker Management** — List, restart, stop, logs for containers
 - **Multi-server** — Manage remote servers over SSH (key & password auth)
-- **Alerts** — Get notified when resources exceed thresholds
+- **Self-Healing** — YAML-defined rules that auto-detect and auto-fix issues (restart containers, prune disk, run scripts)
+- **Alerts & Notifications** — Multi-channel alerts via Telegram, Slack, Discord, or generic webhook
 - **Backup & Restore** — One-command Docker volume backup with compose + env files
 - **Backup Drill** — Verify backups actually work by booting them in isolated containers
 - **MCP Server** — Works with Claude Desktop, ChatGPT, Cursor, and any MCP client
@@ -381,6 +382,58 @@ homebutler restore ./backup.tar.gz         # restore
 > ⚠️ Database services should be paused before backup for data consistency.
 
 📖 **[Full backup documentation →](docs/backup.md)** — how it works, archive structure, security notes.
+
+### 🛡️ Self-Healing
+
+**Your homelab fixes itself while you sleep.**
+
+Define rules in YAML. homebutler watches your servers and takes action automatically — restart crashed containers, prune disk, or run custom scripts.
+
+```bash
+homebutler alerts init          # interactive setup wizard
+homebutler alerts --watch       # start self-healing daemon
+homebutler alerts history       # view past events
+homebutler alerts test-notify   # test your notification channels
+```
+
+**Example `~/.homebutler/alerts.yaml`:**
+
+```yaml
+rules:
+  - name: container-down
+    metric: container
+    watch: [uptime-kuma, vaultwarden]
+    action: restart
+    cooldown: 5m
+
+  - name: disk-full
+    metric: disk
+    threshold: 85
+    action: exec
+    exec: "docker system prune -f"
+
+notify:
+  telegram:
+    bot_token: "your-bot-token"
+    chat_id: "your-chat-id"
+  slack:
+    webhook_url: "https://hooks.slack.com/..."
+  discord:
+    webhook_url: "https://discord.com/api/webhooks/..."
+```
+
+**What it does:**
+
+```
+⏱️ 03:14:22  🔴 disk-full triggered (disk 91%)
+             → Executing: docker system prune -f
+             → Reclaimed 4.2 GB
+✓  03:14:29  ✅ Resolved (disk 66%)
+```
+
+**Supported metrics:** `cpu`, `memory`, `disk`, `container`
+**Supported actions:** `notify` (alert only), `restart` (docker restart), `exec` (run any command)
+**Supported channels:** Telegram, Slack, Discord, generic webhook
 
 ### 🔍 Backup Drill
 
