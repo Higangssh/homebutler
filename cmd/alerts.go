@@ -1,15 +1,19 @@
 package cmd
 
 import (
+	"bufio"
 	"context"
 	"fmt"
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strings"
 	"syscall"
 	"time"
 
 	"github.com/Higangssh/homebutler/internal/alerts"
+	"github.com/Higangssh/homebutler/internal/docker"
+	"github.com/charmbracelet/lipgloss"
 	"github.com/spf13/cobra"
 )
 
@@ -57,7 +61,7 @@ Use --config to load YAML rules for self-healing mode.`,
 func newAlertsInitCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "init",
-		Short: "Generate a default alerts.yaml template",
+		Short: "Interactively generate an alerts.yaml config",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			home, err := os.UserHomeDir()
 			if err != nil {
@@ -68,14 +72,37 @@ func newAlertsInitCmd() *cobra.Command {
 				return fmt.Errorf("failed to create directory: %w", err)
 			}
 			path := filepath.Join(dir, "alerts.yaml")
+
+			// If file exists, ask whether to overwrite
 			if _, err := os.Stat(path); err == nil {
-				return fmt.Errorf("alerts config already exists: %s\nUse a text editor to modify it", path)
+				fmt.Printf("%s already exists. Overwrite? [y/N]: ", path)
+				scanner := bufio.NewScanner(os.Stdin)
+				scanner.Scan()
+				ans := strings.TrimSpace(strings.ToLower(scanner.Text()))
+				if ans != "y" && ans != "yes" {
+					fmt.Println("Aborted.")
+					return nil
+				}
 			}
-			if err := os.WriteFile(path, []byte(alerts.DefaultTemplate), 0o644); err != nil {
-				return fmt.Errorf("failed to write template: %w", err)
+
+			result, err := alerts.RunInitPrompt(os.Stdin, os.Stdout, docker.List)
+			if err != nil {
+				return err
 			}
-			fmt.Printf("Created alerts config: %s\n", path)
-			fmt.Println("Edit the file to configure rules and webhook URL.")
+
+			yamlStr, err := alerts.BuildYAML(result)
+			if err != nil {
+				return err
+			}
+
+			if err := os.WriteFile(path, []byte(yamlStr), 0o644); err != nil {
+				return fmt.Errorf("failed to write config: %w", err)
+			}
+
+			okStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("82"))
+			fmt.Println()
+			fmt.Println(okStyle.Render(fmt.Sprintf("✅ Created %s", path)))
+			fmt.Println(okStyle.Render("🛡️  Run: homebutler alerts --watch"))
 			return nil
 		},
 	}
