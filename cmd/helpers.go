@@ -72,6 +72,10 @@ func output(data any, jsonOut bool) error {
 		fmt.Printf("Restore complete from: %s\n", v.Archive)
 		fmt.Printf("  Services: %s\n", strings.Join(v.Services, ", "))
 		fmt.Printf("  Volumes:  %d\n", v.Volumes)
+	case *backup.DrillResult:
+		fmt.Print(v.String())
+	case *backup.DrillReport:
+		fmt.Print(v.String())
 	case []backup.ListEntry:
 		if len(v) == 0 {
 			fmt.Println("No backups found.")
