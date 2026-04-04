@@ -1,6 +1,7 @@
 package install
 
 import (
+	"io"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -766,5 +767,48 @@ func TestValidatePort(t *testing.T) {
 				t.Errorf("ValidatePort(%q) error=%v, wantErr=%v", tt.port, err, tt.wantErr)
 			}
 		})
+	}
+}
+
+func TestInstallDryRun(t *testing.T) {
+	tmpDir, _ := os.MkdirTemp("", "homebutler-dryrun-*")
+	defer os.RemoveAll(tmpDir)
+
+	origHome := os.Getenv("HOME")
+	os.Setenv("HOME", tmpDir)
+	defer os.Setenv("HOME", origHome)
+
+	app := Registry["uptime-kuma"]
+	opts := InstallOptions{DryRun: true}
+
+	// Capture stdout
+	oldStdout := os.Stdout
+	r, w, _ := os.Pipe()
+	os.Stdout = w
+
+	err := Install(app, opts)
+	
+	w.Close()
+	os.Stdout = oldStdout
+
+	if err != nil {
+		t.Fatalf("Install dry-run failed: %v", err)
+	}
+
+	var buf strings.Builder
+	_, _ = io.Copy(&buf, r)
+	output := buf.String()
+
+	if !strings.Contains(output, "[Dry Run]") {
+		t.Error("Dry run output should contain '[Dry Run]'")
+	}
+	if !strings.Contains(output, "image: louislam/uptime-kuma:1") {
+		t.Error("Dry run output should contain rendered compose content")
+	}
+
+	// Verify no files/directories created
+	appDir := AppDir(app.Name)
+	if _, err := os.Stat(appDir); !os.IsNotExist(err) {
+		t.Errorf("App directory %s should not exist after dry-run", appDir)
 	}
 }

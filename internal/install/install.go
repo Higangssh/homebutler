@@ -612,6 +612,20 @@ func Install(app App, opts InstallOptions) error {
 		return fmt.Errorf("invalid compose template: %w", err)
 	}
 
+	if opts.DryRun {
+		fmt.Printf("✨ [Dry Run] Rendered docker-compose.yml for %s:\n\n", app.Name)
+		if err := tmpl.Execute(os.Stdout, ctx); err != nil {
+			return fmt.Errorf("failed to render compose file to stdout: %w", err)
+		}
+		fmt.Printf("\n✨ [Dry Run] Would run: docker compose -f %s up -d\n", filepath.Join(appDir, "docker-compose.yml"))
+		return nil
+	}
+
+	// Create directories
+	if err := os.MkdirAll(dataDir, 0755); err != nil {
+		return fmt.Errorf("failed to create directory %s: %w", dataDir, err)
+	}
+
 	composeFile := filepath.Join(appDir, "docker-compose.yml")
 	f, err := os.Create(composeFile)
 	if err != nil {
@@ -621,12 +635,6 @@ func Install(app App, opts InstallOptions) error {
 
 	if err := tmpl.Execute(f, ctx); err != nil {
 		return fmt.Errorf("failed to render compose file: %w", err)
-	}
-
-	// Dry run: stop after rendering compose file
-	if opts.DryRun {
-		fmt.Fprintf(os.Stderr, "✨ [Dry Run] Would run: docker compose -f %s up -d\n", composeFile)
-		return nil
 	}
 
 	// Run docker compose up
