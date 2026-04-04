@@ -2,6 +2,29 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.13.0](https://github.com/Higangssh/homebutler/compare/v0.12.2...v0.13.0) - 2026-04-04
+
+**Backup Drill — prove your backups actually work.** Run a restore rehearsal in an isolated Docker environment. No risk to your running services.
+
+```bash
+homebutler backup drill uptime-kuma        # verify a single app
+homebutler backup drill --all               # verify all apps in the backup
+homebutler backup drill --json              # machine-readable output
+homebutler backup drill --archive ./file    # use a specific backup
+```
+
+### 🚀 Features
+
+- add `backup drill` command — automated restore verification in isolated containers
+- 5-stage pipeline: locate → verify → isolate → boot → prove
+- health checks for 10 apps (nginx-proxy-manager, vaultwarden, uptime-kuma, pi-hole, gitea, jellyfin, plex, portainer, homepage, adguard-home)
+- `--all` flag to drill every supported app in one run
+- `--archive` flag to target a specific backup file
+- `--json` output for automation and MCP integration
+- isolated Docker network + random port per drill (zero impact on running services)
+- automatic cleanup of temporary containers, networks, and volumes
+- friendly error messages with recovery hints
+
 ## [0.12.2](https://github.com/Higangssh/homebutler/compare/v0.12.1...v0.12.2) - 2026-04-04
 
 **Better `ps`, plus Plex.** Process output is clearer when CPU is idle, memory now shows real RSS sizes, and Plex joins the installable app list.
