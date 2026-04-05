@@ -817,7 +817,7 @@ func TestInstallDryRun(t *testing.T) {
 	os.Stdout = w
 
 	err := Install(app, opts)
-	
+
 	w.Close()
 	os.Stdout = oldStdout
 
