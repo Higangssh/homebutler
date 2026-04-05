@@ -632,14 +632,6 @@ func Install(app App, opts InstallOptions) error {
 	appDir := AppDir(app.Name)
 	dataDir := filepath.Join(appDir, "data")
 
-	// Create directories
-	if err := os.MkdirAll(dataDir, 0755); err != nil {
-		if util.IsPermissionError(err) {
-			return fmt.Errorf("failed to create directory %s: %w\n\n  ⚠️  Try: sudo homebutler install %s", dataDir, err, app.Name)
-		}
-		return fmt.Errorf("failed to create directory %s: %w", dataDir, err)
-	}
-
 	// Render docker-compose.yml
 	ctx := composeContext{
 		Port:         port,
@@ -664,8 +656,11 @@ func Install(app App, opts InstallOptions) error {
 		return nil
 	}
 
-	// Create directories
+	// Create directories (only for real installs)
 	if err := os.MkdirAll(dataDir, 0755); err != nil {
+		if util.IsPermissionError(err) {
+			return fmt.Errorf("failed to create directory %s: %w\n\n  ⚠️  Try: sudo homebutler install %s", dataDir, err, app.Name)
+		}
 		return fmt.Errorf("failed to create directory %s: %w", dataDir, err)
 	}
 
