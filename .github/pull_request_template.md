@@ -1,14 +1,11 @@
-## Summary
+## What does this PR do?
 
-<!-- What does this PR do? -->
-
-## Related Issue
-
-<!-- Link the issue: Closes #123 -->
+<!-- Brief description -->
 
 ## Checklist
 
-- [ ] `go fmt ./...` — no formatting issues
-- [ ] `go vet ./...` — no warnings
+- [ ] `gofmt -w .` — code is formatted
+- [ ] `go build ./...` — builds without errors
 - [ ] `go test ./...` — all tests pass
-- [ ] Commit message follows [Conventional Commits](https://www.conventionalcommits.org/)
+- [ ] Tests added for new functionality
+- [ ] README updated (if user-facing change)
