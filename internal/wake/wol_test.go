@@ -1,6 +1,9 @@
 package wake
 
-import "testing"
+import (
+	"encoding/json"
+	"testing"
+)
 
 func TestMacRegex(t *testing.T) {
 	tests := []struct {
@@ -150,5 +153,62 @@ func TestMagicPacketStructure(t *testing.T) {
 					offset+j, rep, j, packet[offset+j], macBytes[j])
 			}
 		}
+	}
+}
+
+func TestSendValidMAC(t *testing.T) {
+	tests := []struct {
+		name      string
+		mac       string
+		broadcast string
+	}{
+		{"colon-separated", "AA:BB:CC:DD:EE:FF", "127.0.0.1"},
+		{"hyphen-separated", "11-22-33-44-55-66", "127.0.0.1"},
+		{"lowercase", "aa:bb:cc:dd:ee:ff", "127.0.0.1"},
+		{"mixed-case", "aA:bB:cC:dD:eE:fF", "127.0.0.1"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := Send(tt.mac, tt.broadcast)
+			if err != nil {
+				t.Fatalf("Send(%q, %q) unexpected error: %v", tt.mac, tt.broadcast, err)
+			}
+			if result == nil {
+				t.Fatal("expected non-nil result")
+			}
+			if result.Action != "wake" {
+				t.Errorf("Action = %q, want %q", result.Action, "wake")
+			}
+			if result.MAC != tt.mac {
+				t.Errorf("MAC = %q, want %q", result.MAC, tt.mac)
+			}
+			if result.Broadcast != tt.broadcast {
+				t.Errorf("Broadcast = %q, want %q", result.Broadcast, tt.broadcast)
+			}
+			if result.Status != "sent" {
+				t.Errorf("Status = %q, want %q", result.Status, "sent")
+			}
+		})
+	}
+}
+
+func TestWakeResultJSON(t *testing.T) {
+	r := WakeResult{
+		Action:    "wake",
+		MAC:       "AA:BB:CC:DD:EE:FF",
+		Broadcast: "255.255.255.255",
+		Status:    "sent",
+	}
+	data, err := json.Marshal(r)
+	if err != nil {
+		t.Fatalf("Marshal error: %v", err)
+	}
+
+	var parsed WakeResult
+	if err := json.Unmarshal(data, &parsed); err != nil {
+		t.Fatalf("Unmarshal error: %v", err)
+	}
+	if parsed != r {
+		t.Errorf("JSON roundtrip mismatch: got %+v, want %+v", parsed, r)
 	}
 }

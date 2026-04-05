@@ -207,6 +207,42 @@ func TestDeployResult_Fields(t *testing.T) {
 	}
 }
 
+func TestDeploy_ConnectFailure(t *testing.T) {
+	server := &config.ServerConfig{
+		Name:     "bad",
+		Host:     "127.0.0.1",
+		Port:     6553,
+		AuthMode: "password",
+		Password: "secret",
+	}
+
+	_, err := Deploy(server, "")
+	if err == nil {
+		t.Fatal("expected deploy connect failure")
+	}
+	if !contains(err.Error(), "ssh connect") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestRemoteUpgrade_ConnectFailure(t *testing.T) {
+	server := &config.ServerConfig{
+		Name:     "bad",
+		Host:     "127.0.0.1",
+		Port:     6553,
+		AuthMode: "password",
+		Password: "secret",
+	}
+
+	result := RemoteUpgrade(server, "9.9.9")
+	if result.Status != "error" {
+		t.Fatalf("expected error status, got %s", result.Status)
+	}
+	if !contains(result.Message, "ssh connect") {
+		t.Fatalf("unexpected message: %s", result.Message)
+	}
+}
+
 // --- filterFlags (tested via export) ---
 // filterFlags is in cmd package, so we test the logic indirectly
 

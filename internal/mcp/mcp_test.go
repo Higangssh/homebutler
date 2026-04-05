@@ -334,6 +334,7 @@ func TestStringArg(t *testing.T) {
 		"str":   "hello",
 		"num":   float64(42),
 		"float": float64(3.14),
+		"bool":  true,
 	}
 
 	if v := stringArg(args, "str"); v != "hello" {
@@ -347,5 +348,124 @@ func TestStringArg(t *testing.T) {
 	}
 	if v := stringArg(nil, "key"); v != "" {
 		t.Errorf("stringArg(nil, key) = %q, want empty", v)
+	}
+	if v := stringArg(args, "bool"); v != "true" {
+		t.Errorf("stringArg(bool) = %q, want %q", v, "true")
+	}
+}
+
+func TestRequireString(t *testing.T) {
+	tests := []struct {
+		name   string
+		args   map[string]any
+		key    string
+		wantV  string
+		wantOK bool
+	}{
+		{"present", map[string]any{"name": "foo"}, "name", "foo", true},
+		{"missing", map[string]any{}, "name", "", false},
+		{"empty-value", map[string]any{"name": ""}, "name", "", false},
+		{"nil-args", nil, "name", "", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			v, ok := requireString(tt.args, tt.key)
+			if v != tt.wantV {
+				t.Errorf("requireString() v = %q, want %q", v, tt.wantV)
+			}
+			if ok != tt.wantOK {
+				t.Errorf("requireString() ok = %v, want %v", ok, tt.wantOK)
+			}
+		})
+	}
+}
+
+func TestHandleToolCallInvalidParams(t *testing.T) {
+	s, out := newTestServer()
+	req := `{"jsonrpc":"2.0","id":10,"method":"tools/call","params":"not-an-object"}`
+	resp := sendAndReceive(t, s, out, req)
+
+	if resp.Error == nil {
+		t.Fatal("expected error for invalid params")
+	}
+	if resp.Error.Code != -32602 {
+		t.Errorf("error code = %d, want %d", resp.Error.Code, -32602)
+	}
+}
+
+func TestDemoToolsWithServerVariants(t *testing.T) {
+	s := NewServer(&config.Config{}, "dev", true)
+
+	servers := []string{"", "nas-box", "raspberry-pi", "homelab-server"}
+	tools := []string{"system_status", "docker_list", "open_ports", "alerts"}
+
+	for _, srv := range servers {
+		for _, tool := range tools {
+			t.Run(tool+"/"+srv, func(t *testing.T) {
+				args := map[string]any{}
+				if srv != "" {
+					args["server"] = srv
+				}
+				res, err := s.executeDemoTool(tool, args)
+				if err != nil {
+					t.Fatalf("executeDemoTool(%q) error: %v", tool, err)
+				}
+				if res == nil {
+					t.Fatalf("executeDemoTool(%q) returned nil", tool)
+				}
+			})
+		}
+	}
+}
+
+func TestDemoToolsWithArgs(t *testing.T) {
+	s := NewServer(&config.Config{}, "dev", true)
+
+	tests := []struct {
+		name string
+		tool string
+		args map[string]any
+	}{
+		{"docker-restart", "docker_restart", map[string]any{"name": "nginx"}},
+		{"docker-stop", "docker_stop", map[string]any{"name": "nginx"}},
+		{"docker-logs-known", "docker_logs", map[string]any{"name": "postgres"}},
+		{"docker-logs-backup", "docker_logs", map[string]any{"name": "backup"}},
+		{"docker-logs-unknown", "docker_logs", map[string]any{"name": "unknown-container"}},
+		{"wake", "wake", map[string]any{"target": "AA:BB:CC:DD:EE:FF"}},
+		{"network-scan", "network_scan", map[string]any{}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			res, err := s.executeDemoTool(tt.tool, tt.args)
+			if err != nil {
+				t.Fatalf("executeDemoTool(%q) error: %v", tt.tool, err)
+			}
+			if res == nil {
+				t.Fatalf("executeDemoTool(%q) returned nil", tt.tool)
+			}
+		})
+	}
+}
+
+func TestInitializeVersion(t *testing.T) {
+	cfg := &config.Config{}
+	out := &bytes.Buffer{}
+	s := NewServer(cfg, "1.2.3")
+	s.out = out
+
+	req := `{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}`
+	s.in = strings.NewReader(req + "\n")
+	if err := s.Run(); err != nil {
+		t.Fatalf("Run() error: %v", err)
+	}
+
+	var resp jsonRPCResponse
+	json.Unmarshal(out.Bytes(), &resp)
+	result, _ := json.Marshal(resp.Result)
+	var init initializeResult
+	json.Unmarshal(result, &init)
+
+	if init.ServerInfo.Version != "1.2.3" {
+		t.Errorf("version = %q, want %q", init.ServerInfo.Version, "1.2.3")
 	}
 }
