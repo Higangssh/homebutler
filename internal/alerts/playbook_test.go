@@ -183,11 +183,11 @@ func TestIsDangerousCommandComment(t *testing.T) {
 	if !IsDangerousCommand("rm -rf /") {
 		t.Error("rm -rf / should still be blocked")
 	}
-	// Bypass example: encoded/obfuscated commands pass through
-	// This is expected — the blocklist is documented as supplementary
-	if IsDangerousCommand("perl -e 'system(\"rm -rf /\")'") {
-		// This should actually NOT be caught by simple string matching
-		// but the nested rm -rf / IS caught since it's in the string
+	// Bypass example: encoded/obfuscated commands may pass through.
+	// The nested "rm -rf /" IS caught since it's in the string.
+	// This is expected — the blocklist is documented as supplementary.
+	if !IsDangerousCommand("perl -e 'system(\"rm -rf /\")'") {
+		t.Error("expected perl wrapping rm -rf / to be caught")
 	}
 }
 
