@@ -2,6 +2,39 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.14.1](https://github.com/Higangssh/homebutler/compare/v0.14.0...v0.14.1) - 2026-04-06
+
+**Harder to misuse, easier to contribute.** This release tightens security around install and alerts, adds local contribution guardrails, and improves test coverage across the core runtime.
+
+### 🐛 Fixes
+
+- prevent `install --dry-run` from creating files or triggering post-install verification
+- fix staticcheck warning in `playbook_test.go`
+- format `install_test.go` to keep CI green
+
+### 🔐 Security
+
+- block path traversal in install, uninstall, purge, and related app path handling
+- add timeout support for `exec` alert actions to avoid stuck watcher runs
+- bind web server to `127.0.0.1` by default and add optional token auth for API access
+- validate ports before shell-based checks and drain HTTP response bodies properly
+- clean up partial compose output on render failure
+
+### 🧪 Testing
+
+- raise coverage for core internal packages:
+  - `internal/mcp` → 54.2%
+  - `internal/config` → 87.7%
+  - `internal/network` → 85.9%
+  - `internal/backup` → 50.5%
+  - `internal/remote` → 51.0%
+  - `internal/wake` → 86.4%
+
+### 📝 Documentation
+
+- add `CONTRIBUTING.md` with required local checks before PR submission
+- add PR template with `gofmt`, build, and test checklist
+
 ## [0.14.0](https://github.com/Higangssh/homebutler/compare/v0.13.0...v0.14.0) - 2026-04-05
 
 **Self-Healing — your homelab fixes itself while you sleep.** Define rules in YAML, and homebutler watches your servers and takes action automatically. Plus multi-channel notifications and an interactive setup wizard.
