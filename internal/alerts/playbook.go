@@ -1,7 +1,9 @@
 package alerts
 
 import (
+	"context"
 	"fmt"
+	"log"
 	"os/exec"
 	"strings"
 	"sync"
@@ -67,6 +69,8 @@ var dangerousPatterns = []string{
 }
 
 // IsDangerousCommand checks if a command matches known dangerous patterns.
+// NOTE: This is a best-effort blocklist and is NOT a complete security boundary.
+// It serves as a supplementary safety net; do not rely on it as the sole defense.
 func IsDangerousCommand(cmd string) bool {
 	lower := strings.ToLower(strings.TrimSpace(cmd))
 	for _, pattern := range dangerousPatterns {
@@ -135,11 +139,27 @@ func executeExec(rule Rule) PlaybookResult {
 		}
 	}
 
-	cmd := exec.Command("sh", "-c", rule.Exec)
+	log.Printf("[exec] rule=%q running: %s (timeout=%s)", rule.Name, rule.Exec, rule.ExecTimeout())
+
+	timeout := rule.ExecTimeout()
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	cmd := exec.CommandContext(ctx, "sh", "-c", rule.Exec)
 	out, err := cmd.CombinedOutput()
 	output := strings.TrimSpace(string(out))
 
+	if ctx.Err() == context.DeadlineExceeded {
+		log.Printf("[exec] rule=%q timed out after %s", rule.Name, timeout)
+		return PlaybookResult{
+			Action:  "exec",
+			Success: false,
+			Output:  fmt.Sprintf("command timed out after %s", timeout),
+		}
+	}
+
 	if err != nil {
+		log.Printf("[exec] rule=%q failed: %v", rule.Name, err)
 		return PlaybookResult{
 			Action:  "exec",
 			Success: false,
@@ -147,6 +167,7 @@ func executeExec(rule Rule) PlaybookResult {
 		}
 	}
 
+	log.Printf("[exec] rule=%q succeeded", rule.Name)
 	return PlaybookResult{
 		Action:  "exec",
 		Success: true,

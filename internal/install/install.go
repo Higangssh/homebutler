@@ -436,6 +436,24 @@ func BaseDir() string {
 	return filepath.Join(home, ".homebutler", "apps")
 }
 
+// ValidateAppName checks that an app name is safe for use in file paths.
+// It rejects names containing path separators or traversal sequences.
+func ValidateAppName(name string) error {
+	if name == "" {
+		return fmt.Errorf("app name must not be empty")
+	}
+	if strings.Contains(name, "/") || strings.Contains(name, "\\") || strings.Contains(name, "..") {
+		return fmt.Errorf("invalid app name %q: must not contain '/', '\\', or '..'", name)
+	}
+	// After joining, the result must still be under BaseDir.
+	joined := filepath.Join(BaseDir(), name)
+	rel, err := filepath.Rel(BaseDir(), joined)
+	if err != nil || strings.HasPrefix(rel, "..") {
+		return fmt.Errorf("invalid app name %q: path escapes base directory", name)
+	}
+	return nil
+}
+
 // AppDir returns the directory for a specific app.
 func AppDir(appName string) string {
 	return filepath.Join(BaseDir(), appName)
@@ -579,8 +597,15 @@ func IsSpecialWarning(appName string) string {
 	return ""
 }
 
-// isPortInUse checks if a port is in use (cross-platform).
+// portInUseBy checks if a port is in use (cross-platform).
 func portInUseBy(port string) string {
+	// Validate port is purely numeric to prevent shell injection.
+	for _, c := range port {
+		if c < '0' || c > '9' {
+			return ""
+		}
+	}
+
 	// Try lsof (macOS/Linux) — gives process name
 	out, err := util.RunCmd("sh", "-c",
 		fmt.Sprintf("lsof -i :%s -sTCP:LISTEN 2>/dev/null | grep LISTEN | head -1 || true", port))
@@ -675,6 +700,8 @@ func Install(app App, opts InstallOptions) error {
 	defer f.Close()
 
 	if err := tmpl.Execute(f, ctx); err != nil {
+		f.Close()
+		os.Remove(composeFile)
 		return fmt.Errorf("failed to render compose file: %w", err)
 	}
 
@@ -694,6 +721,9 @@ func Install(app App, opts InstallOptions) error {
 
 // Uninstall stops the app and removes its containers.
 func Uninstall(appName string) error {
+	if err := ValidateAppName(appName); err != nil {
+		return err
+	}
 	appDir := GetInstalledPath(appName)
 	composeFile := filepath.Join(appDir, "docker-compose.yml")
 
@@ -711,6 +741,9 @@ func Uninstall(appName string) error {
 
 // Purge removes the app directory including data.
 func Purge(appName string) error {
+	if err := ValidateAppName(appName); err != nil {
+		return err
+	}
 	appDir := GetInstalledPath(appName)
 	if err := Uninstall(appName); err != nil {
 		return err
@@ -733,6 +766,9 @@ func Purge(appName string) error {
 
 // Status checks if the installed app is running.
 func Status(appName string) (string, error) {
+	if err := ValidateAppName(appName); err != nil {
+		return "", err
+	}
 	appDir := GetInstalledPath(appName)
 	composeFile := filepath.Join(appDir, "docker-compose.yml")
 

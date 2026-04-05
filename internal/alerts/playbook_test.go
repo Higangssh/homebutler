@@ -1,6 +1,7 @@
 package alerts
 
 import (
+	"strings"
 	"testing"
 	"time"
 )
@@ -129,5 +130,72 @@ func TestExecuteRestartNoContainers(t *testing.T) {
 	result := ExecuteAction(rule)
 	if result.Success {
 		t.Error("restart with no containers should fail")
+	}
+}
+
+func TestExecTimeout(t *testing.T) {
+	rule := Rule{Action: "exec", Exec: "sleep 10", Timeout: "1s"}
+	result := ExecuteAction(rule)
+	if result.Success {
+		t.Error("long-running command should fail with timeout")
+	}
+	if !strings.Contains(result.Output, "timed out") {
+		t.Errorf("expected timeout message, got %q", result.Output)
+	}
+}
+
+func TestExecDefaultTimeout(t *testing.T) {
+	rule := Rule{Action: "exec", Exec: "echo fast"}
+	result := ExecuteAction(rule)
+	if !result.Success {
+		t.Errorf("fast command should succeed: %s", result.Output)
+	}
+}
+
+func TestExecCustomTimeout(t *testing.T) {
+	rule := Rule{Action: "exec", Exec: "echo ok", Timeout: "5s"}
+	result := ExecuteAction(rule)
+	if !result.Success {
+		t.Errorf("command should succeed within timeout: %s", result.Output)
+	}
+}
+
+func TestExecTimeoutParsing(t *testing.T) {
+	// Default
+	r := Rule{}
+	if r.ExecTimeout() != 30*time.Second {
+		t.Errorf("default timeout should be 30s, got %s", r.ExecTimeout())
+	}
+	// Custom
+	r.Timeout = "10s"
+	if r.ExecTimeout() != 10*time.Second {
+		t.Errorf("custom timeout should be 10s, got %s", r.ExecTimeout())
+	}
+	// Invalid falls back to 30s
+	r.Timeout = "invalid"
+	if r.ExecTimeout() != 30*time.Second {
+		t.Errorf("invalid timeout should fallback to 30s, got %s", r.ExecTimeout())
+	}
+}
+
+func TestIsDangerousCommandComment(t *testing.T) {
+	// Verify the function still works (blocklist is supplementary)
+	if !IsDangerousCommand("rm -rf /") {
+		t.Error("rm -rf / should still be blocked")
+	}
+	// Bypass example: encoded/obfuscated commands pass through
+	// This is expected — the blocklist is documented as supplementary
+	if IsDangerousCommand("perl -e 'system(\"rm -rf /\")'") {
+		// This should actually NOT be caught by simple string matching
+		// but the nested rm -rf / IS caught since it's in the string
+	}
+}
+
+func TestExecWithStrings(t *testing.T) {
+	// Verify the strings import is used
+	rule := Rule{Action: "exec", Exec: "echo hello"}
+	result := ExecuteAction(rule)
+	if result.Output != "hello" {
+		t.Errorf("expected 'hello', got %q", result.Output)
 	}
 }

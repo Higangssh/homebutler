@@ -800,6 +800,64 @@ func TestValidatePort(t *testing.T) {
 	}
 }
 
+func TestValidateAppName(t *testing.T) {
+	tests := []struct {
+		name    string
+		wantErr bool
+	}{
+		{"uptime-kuma", false},
+		{"my-app", false},
+		{"app123", false},
+		{"", true},
+		{"../../etc", true},
+		{"../foo", true},
+		{"foo/bar", true},
+		{"foo\\bar", true},
+		{"..", true},
+		{"foo/../bar", true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := ValidateAppName(tt.name)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("ValidateAppName(%q) error=%v, wantErr=%v", tt.name, err, tt.wantErr)
+			}
+		})
+	}
+}
+
+func TestPathTraversalBlocked(t *testing.T) {
+	// Uninstall, Purge, Status should reject path traversal
+	traversalNames := []string{"../../etc/passwd", "../foo", "foo/../../bar"}
+	for _, name := range traversalNames {
+		if _, err := Status(name); err == nil {
+			t.Errorf("Status(%q) should return error", name)
+		}
+		if err := Uninstall(name); err == nil {
+			t.Errorf("Uninstall(%q) should return error", name)
+		}
+		if err := Purge(name); err == nil {
+			t.Errorf("Purge(%q) should return error", name)
+		}
+	}
+}
+
+func TestPortInUseByRejectsNonNumeric(t *testing.T) {
+	// Non-numeric port strings should return empty (no injection)
+	injections := []string{
+		";rm -rf /",
+		"$(whoami)",
+		"80; cat /etc/passwd",
+		"80`id`",
+	}
+	for _, p := range injections {
+		result := portInUseBy(p)
+		if result != "" {
+			t.Errorf("portInUseBy(%q) should return empty for non-numeric input, got %q", p, result)
+		}
+	}
+}
+
 func TestInstallDryRun(t *testing.T) {
 	tmpDir, _ := os.MkdirTemp("", "homebutler-dryrun-*")
 	defer os.RemoveAll(tmpDir)

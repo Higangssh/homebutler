@@ -839,7 +839,7 @@ func TestCORS_LocalhostOriginAllowed(t *testing.T) {
 	if v := w.Header().Get("Access-Control-Allow-Methods"); v != "GET, POST, OPTIONS" {
 		t.Fatalf("expected methods header, got %q", v)
 	}
-	if v := w.Header().Get("Access-Control-Allow-Headers"); v != "Content-Type" {
+	if v := w.Header().Get("Access-Control-Allow-Headers"); v != "Content-Type, Authorization" {
 		t.Fatalf("expected headers header, got %q", v)
 	}
 }
@@ -1582,5 +1582,87 @@ func TestSPAFallback_UnknownPath(t *testing.T) {
 	// Should serve index.html (or fallback HTML) with 200
 	if w.Code != http.StatusOK {
 		t.Fatalf("expected 200 for SPA fallback, got %d", w.Code)
+	}
+}
+
+func testServerWithToken(token string) *Server {
+	cfg := &config.Config{
+		Servers: []config.ServerConfig{
+			{Name: "myserver", Host: "192.168.1.10", Local: true},
+		},
+		Alerts: config.AlertConfig{CPU: 90, Memory: 85, Disk: 90},
+	}
+	s := New(cfg, "127.0.0.1", 8080)
+	s.SetToken(token)
+	return s
+}
+
+func TestTokenAuth_NoTokenConfigured(t *testing.T) {
+	srv := testServer() // no token set
+	req := httptest.NewRequest("GET", "/api/version", nil)
+	w := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200 without token config, got %d", w.Code)
+	}
+}
+
+func TestTokenAuth_ValidToken(t *testing.T) {
+	srv := testServerWithToken("secret123")
+	req := httptest.NewRequest("GET", "/api/version", nil)
+	req.Header.Set("Authorization", "Bearer secret123")
+	w := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200 with valid token, got %d", w.Code)
+	}
+}
+
+func TestTokenAuth_MissingToken(t *testing.T) {
+	srv := testServerWithToken("secret123")
+	req := httptest.NewRequest("GET", "/api/version", nil)
+	w := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(w, req)
+
+	if w.Code != http.StatusUnauthorized {
+		t.Fatalf("expected 401 without token, got %d", w.Code)
+	}
+}
+
+func TestTokenAuth_WrongToken(t *testing.T) {
+	srv := testServerWithToken("secret123")
+	req := httptest.NewRequest("GET", "/api/version", nil)
+	req.Header.Set("Authorization", "Bearer wrong")
+	w := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(w, req)
+
+	if w.Code != http.StatusUnauthorized {
+		t.Fatalf("expected 401 with wrong token, got %d", w.Code)
+	}
+}
+
+func TestTokenAuth_NonAPIPath(t *testing.T) {
+	srv := testServerWithToken("secret123")
+	req := httptest.NewRequest("GET", "/", nil)
+	w := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(w, req)
+
+	// Non-API paths should not require auth
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200 for non-API path, got %d", w.Code)
+	}
+}
+
+func TestTokenAuth_StatusEndpoint(t *testing.T) {
+	srv := testServerWithToken("mytoken")
+	req := httptest.NewRequest("GET", "/api/status", nil)
+	req.Header.Set("Authorization", "Bearer mytoken")
+	w := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200 with valid token on /api/status, got %d", w.Code)
 	}
 }

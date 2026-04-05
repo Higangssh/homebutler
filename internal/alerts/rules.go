@@ -17,7 +17,8 @@ type Rule struct {
 	Watch      []string `yaml:"watch,omitempty" json:"watch,omitempty"` // container names
 	Action     string   `yaml:"action" json:"action"`                   // "notify", "restart", "exec"
 	Exec       string   `yaml:"exec,omitempty" json:"exec,omitempty"`
-	Notify     string   `yaml:"notify,omitempty" json:"notify,omitempty"` // "webhook"
+	Timeout    string   `yaml:"timeout,omitempty" json:"timeout,omitempty"` // exec timeout (default 30s)
+	Notify     string   `yaml:"notify,omitempty" json:"notify,omitempty"`   // "webhook"
 	Cooldown   string   `yaml:"cooldown,omitempty" json:"cooldown,omitempty"`
 	MaxRetries int      `yaml:"max_retries,omitempty" json:"max_retries,omitempty"`
 }
@@ -47,8 +48,29 @@ func (r *Rule) CooldownDuration() time.Duration {
 	return d
 }
 
+// ExecTimeout parses the timeout string into a time.Duration.
+// Returns 30s if not set.
+func (r *Rule) ExecTimeout() time.Duration {
+	if r.Timeout == "" {
+		return 30 * time.Second
+	}
+	d, err := time.ParseDuration(r.Timeout)
+	if err != nil || d <= 0 {
+		return 30 * time.Second
+	}
+	return d
+}
+
 // LoadRules reads and parses an alerts YAML config file.
 func LoadRules(path string) (*AlertsConfig, error) {
+	// Warn if the file has overly permissive permissions (anything beyond 0600).
+	if info, err := os.Stat(path); err == nil {
+		mode := info.Mode().Perm()
+		if mode&0077 != 0 {
+			fmt.Fprintf(os.Stderr, "⚠️  alerts config %s has permissions %04o; consider chmod 0600 for security\n", path, mode)
+		}
+	}
+
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read alerts config: %w", err)

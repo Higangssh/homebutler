@@ -38,6 +38,7 @@ type Server struct {
 	host         string
 	port         int
 	demo         bool
+	token        string
 	version      string
 	mux          *http.ServeMux
 	remoteRunner RemoteRunner
@@ -54,6 +55,11 @@ func New(cfg *config.Config, host string, port int, demo ...bool) *Server {
 	return s
 }
 
+// SetToken configures bearer token authentication for /api/* endpoints.
+func (s *Server) SetToken(t string) {
+	s.token = t
+}
+
 // SetVersion sets the version string shown in the dashboard.
 func (s *Server) SetVersion(v string) {
 	s.version = v
@@ -66,6 +72,13 @@ func (s *Server) Handler() http.Handler {
 
 // Run starts the HTTP server.
 func (s *Server) Run() error {
+	if s.host == "0.0.0.0" {
+		fmt.Fprintln(os.Stderr, "⚠️  WARNING: binding to 0.0.0.0 exposes the dashboard to all network interfaces.")
+		if s.token == "" {
+			fmt.Fprintln(os.Stderr, "   Consider using --token to require authentication.")
+		}
+	}
+
 	addr := fmt.Sprintf("%s:%d", s.host, s.port)
 	displayAddr := fmt.Sprintf("http://%s:%d", s.host, s.port)
 
@@ -113,32 +126,37 @@ func (s *Server) Run() error {
 }
 
 func (s *Server) routes() {
-	if s.demo {
-		s.mux.HandleFunc("GET /api/status", s.cors(s.demoStatus))
-		s.mux.HandleFunc("GET /api/docker", s.cors(s.demoDocker))
-		s.mux.HandleFunc("GET /api/docker/stats", s.cors(s.demoDockerStats))
-		s.mux.HandleFunc("GET /api/processes", s.cors(s.demoProcesses))
-		s.mux.HandleFunc("GET /api/alerts", s.cors(s.demoAlerts))
-		s.mux.HandleFunc("GET /api/ports", s.cors(s.demoPorts))
-		s.mux.HandleFunc("GET /api/wake", s.cors(s.demoWake))
-		s.mux.HandleFunc("POST /api/wake/{name}", s.cors(s.demoWakeSend))
-		s.mux.HandleFunc("GET /api/servers", s.cors(s.demoServers))
-		s.mux.HandleFunc("GET /api/servers/{name}/status", s.cors(s.demoServerStatus))
-		s.mux.HandleFunc("GET /api/config", s.cors(s.demoConfig))
-	} else {
-		s.mux.HandleFunc("GET /api/status", s.cors(s.handleStatus))
-		s.mux.HandleFunc("GET /api/docker", s.cors(s.handleDocker))
-		s.mux.HandleFunc("GET /api/docker/stats", s.cors(s.handleDockerStats))
-		s.mux.HandleFunc("GET /api/processes", s.cors(s.handleProcesses))
-		s.mux.HandleFunc("GET /api/alerts", s.cors(s.handleAlerts))
-		s.mux.HandleFunc("GET /api/ports", s.cors(s.handlePorts))
-		s.mux.HandleFunc("GET /api/wake", s.cors(s.handleWakeList))
-		s.mux.HandleFunc("POST /api/wake/{name}", s.cors(s.handleWakeSend))
-		s.mux.HandleFunc("GET /api/servers", s.cors(s.handleServers))
-		s.mux.HandleFunc("GET /api/servers/{name}/status", s.cors(s.handleServerStatus))
-		s.mux.HandleFunc("GET /api/config", s.cors(s.handleConfig))
+	// api wraps handlers with CORS and optional bearer token auth.
+	api := func(h http.HandlerFunc) http.HandlerFunc {
+		return s.requireAuth(s.cors(h))
 	}
-	s.mux.HandleFunc("GET /api/version", s.cors(s.handleVersion))
+
+	if s.demo {
+		s.mux.HandleFunc("GET /api/status", api(s.demoStatus))
+		s.mux.HandleFunc("GET /api/docker", api(s.demoDocker))
+		s.mux.HandleFunc("GET /api/docker/stats", api(s.demoDockerStats))
+		s.mux.HandleFunc("GET /api/processes", api(s.demoProcesses))
+		s.mux.HandleFunc("GET /api/alerts", api(s.demoAlerts))
+		s.mux.HandleFunc("GET /api/ports", api(s.demoPorts))
+		s.mux.HandleFunc("GET /api/wake", api(s.demoWake))
+		s.mux.HandleFunc("POST /api/wake/{name}", api(s.demoWakeSend))
+		s.mux.HandleFunc("GET /api/servers", api(s.demoServers))
+		s.mux.HandleFunc("GET /api/servers/{name}/status", api(s.demoServerStatus))
+		s.mux.HandleFunc("GET /api/config", api(s.demoConfig))
+	} else {
+		s.mux.HandleFunc("GET /api/status", api(s.handleStatus))
+		s.mux.HandleFunc("GET /api/docker", api(s.handleDocker))
+		s.mux.HandleFunc("GET /api/docker/stats", api(s.handleDockerStats))
+		s.mux.HandleFunc("GET /api/processes", api(s.handleProcesses))
+		s.mux.HandleFunc("GET /api/alerts", api(s.handleAlerts))
+		s.mux.HandleFunc("GET /api/ports", api(s.handlePorts))
+		s.mux.HandleFunc("GET /api/wake", api(s.handleWakeList))
+		s.mux.HandleFunc("POST /api/wake/{name}", api(s.handleWakeSend))
+		s.mux.HandleFunc("GET /api/servers", api(s.handleServers))
+		s.mux.HandleFunc("GET /api/servers/{name}/status", api(s.handleServerStatus))
+		s.mux.HandleFunc("GET /api/config", api(s.handleConfig))
+	}
+	s.mux.HandleFunc("GET /api/version", api(s.handleVersion))
 	s.mux.HandleFunc("OPTIONS /api/", s.handleOptions)
 
 	// Serve frontend static files
@@ -153,7 +171,22 @@ func (s *Server) cors(next http.HandlerFunc) http.HandlerFunc {
 			if origin == allowed || origin == fmt.Sprintf("http://localhost:%d", s.port) || origin == fmt.Sprintf("http://127.0.0.1:%d", s.port) {
 				w.Header().Set("Access-Control-Allow-Origin", origin)
 				w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-				w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+				w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+			}
+		}
+		next(w, r)
+	}
+}
+
+// requireAuth wraps a handler and enforces bearer token authentication
+// on /api/* paths when a token is configured.
+func (s *Server) requireAuth(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if s.token != "" && strings.HasPrefix(r.URL.Path, "/api/") {
+			auth := r.Header.Get("Authorization")
+			if auth != "Bearer "+s.token {
+				writeError(w, http.StatusUnauthorized, "unauthorized")
+				return
 			}
 		}
 		next(w, r)
@@ -197,7 +230,7 @@ func (s *Server) handleOptions(w http.ResponseWriter, r *http.Request) {
 		if origin == allowed || origin == fmt.Sprintf("http://localhost:%d", s.port) || origin == fmt.Sprintf("http://127.0.0.1:%d", s.port) {
 			w.Header().Set("Access-Control-Allow-Origin", origin)
 			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-			w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+			w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
 		}
 	}
 	w.WriteHeader(http.StatusNoContent)
