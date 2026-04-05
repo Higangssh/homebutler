@@ -37,6 +37,7 @@ Usage:
 
 	installCmd.Flags().String("port", "", "Custom host port")
 	installCmd.Flags().String("media", "", "Media directory to mount (jellyfin)")
+	installCmd.Flags().Bool("dry-run", false, "Do not actually install, just show what would happen")
 
 	installCmd.AddCommand(
 		newInstallListCmd(),
@@ -140,6 +141,7 @@ func runInstallApp(appName string, cmd *cobra.Command) error {
 	// Parse flags from the parent command
 	portFlag, _ := cmd.Flags().GetString("port")
 	mediaFlag, _ := cmd.Flags().GetString("media")
+	dryRunFlag, _ := cmd.Flags().GetBool("dry-run")
 
 	// Validate custom port early
 	if portFlag != "" {
@@ -151,6 +153,7 @@ func runInstallApp(appName string, cmd *cobra.Command) error {
 	opts := install.InstallOptions{
 		Port:     portFlag,
 		MediaDir: mediaFlag,
+		DryRun:   dryRunFlag,
 	}
 
 	port := app.DefaultPort
@@ -186,6 +189,10 @@ func runInstallApp(appName string, cmd *cobra.Command) error {
 	// Install
 	if err := install.Install(app, opts); err != nil {
 		return err
+	}
+
+	if opts.DryRun {
+		return nil
 	}
 
 	// Verify

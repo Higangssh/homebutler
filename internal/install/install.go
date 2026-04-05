@@ -104,6 +104,7 @@ type App struct {
 type InstallOptions struct {
 	Port     string // custom host port
 	MediaDir string // media directory (jellyfin)
+	DryRun   bool   // do not actually install, just show what would happen
 }
 
 // composeContext is passed to the compose template.
@@ -652,6 +653,20 @@ func Install(app App, opts InstallOptions) error {
 	tmpl, err := template.New("compose").Parse(app.ComposeFile)
 	if err != nil {
 		return fmt.Errorf("invalid compose template: %w", err)
+	}
+
+	if opts.DryRun {
+		fmt.Printf("✨ [Dry Run] Rendered docker-compose.yml for %s:\n\n", app.Name)
+		if err := tmpl.Execute(os.Stdout, ctx); err != nil {
+			return fmt.Errorf("failed to render compose file to stdout: %w", err)
+		}
+		fmt.Printf("\n✨ [Dry Run] Would run: docker compose -f %s up -d\n", filepath.Join(appDir, "docker-compose.yml"))
+		return nil
+	}
+
+	// Create directories
+	if err := os.MkdirAll(dataDir, 0755); err != nil {
+		return fmt.Errorf("failed to create directory %s: %w", dataDir, err)
 	}
 
 	composeFile := filepath.Join(appDir, "docker-compose.yml")
