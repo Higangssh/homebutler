@@ -1,10 +1,13 @@
 package cmd
 
 import (
+	"bufio"
 	"context"
 	"fmt"
 	"os"
 	"os/signal"
+	"strconv"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -13,6 +16,7 @@ import (
 	"github.com/Higangssh/homebutler/internal/tui"
 	"github.com/Higangssh/homebutler/internal/util"
 	"github.com/Higangssh/homebutler/internal/watch"
+	isatty "github.com/mattn/go-isatty"
 	"github.com/spf13/cobra"
 )
 
@@ -70,21 +74,30 @@ func newWatchAddCmd() *cobra.Command {
 		Short: "Add a container/service to the watch list",
 		Long: `Add a Docker container, systemd unit, or PM2 app to the watch list.
 If no name is given and kind is docker, lists running containers for reference.
+When a name is given without --kind, an interactive prompt lets you choose the type.
 
 Examples:
-  homebutler watch add nginx                      # docker (default)
+  homebutler watch add nginx                      # interactive type selection
+  homebutler watch add --kind docker nginx        # non-interactive
   homebutler watch add --kind systemd nginx.service
   homebutler watch add --kind pm2 my-api`,
 		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			// Validate kind
-			switch kind {
-			case "docker", "systemd", "pm2":
-			default:
-				return fmt.Errorf("invalid kind %q: must be docker, systemd, or pm2", kind)
+			kindChanged := cmd.Flags().Changed("kind")
+
+			// If --kind was explicitly provided, validate it
+			if kindChanged {
+				switch kind {
+				case "docker", "systemd", "pm2":
+				default:
+					return fmt.Errorf("invalid kind %q: must be docker, systemd, or pm2", kind)
+				}
 			}
 
 			if len(args) == 0 {
+				if !kindChanged {
+					kind = "docker"
+				}
 				if kind == "docker" {
 					containers, err := docker.List()
 					if err != nil {
@@ -108,6 +121,20 @@ Examples:
 			}
 
 			name := args[0]
+
+			// If --kind was not explicitly given, prompt interactively
+			if !kindChanged {
+				if !isatty.IsTerminal(os.Stdin.Fd()) && !isatty.IsCygwinTerminal(os.Stdin.Fd()) {
+					return fmt.Errorf("--kind flag is required when stdin is not a terminal")
+				}
+				options := []string{"docker", "systemd", "pm2"}
+				labels := []string{"Docker container", "systemd service", "PM2 application"}
+				idx, err := promptSelect(bufio.NewScanner(os.Stdin), "Select process type", options, labels)
+				if err != nil {
+					return err
+				}
+				kind = options[idx]
+			}
 			if !isValidTargetName(name) {
 				return fmt.Errorf("invalid name: %s", name)
 			}
@@ -513,6 +540,31 @@ func restartLabel(count int) string {
 		return fmt.Sprintf("restart #%d", count)
 	}
 	return "restart detected"
+}
+
+// promptSelect displays a numbered list of options and returns the chosen index.
+// labels are the display strings; options are the underlying values (used only for caller).
+func promptSelect(scanner *bufio.Scanner, prompt string, options, labels []string) (int, error) {
+	fmt.Printf("? %s:\n", prompt)
+	for i, label := range labels {
+		fmt.Printf("  %d) %s\n", i+1, label)
+	}
+	for {
+		fmt.Print("Enter number [1]: ")
+		if !scanner.Scan() {
+			return 0, fmt.Errorf("interrupted")
+		}
+		input := strings.TrimSpace(scanner.Text())
+		if input == "" {
+			return 0, nil
+		}
+		n, err := strconv.Atoi(input)
+		if err != nil || n < 1 || n > len(options) {
+			fmt.Printf("Please enter a number between 1 and %d.\n", len(options))
+			continue
+		}
+		return n - 1, nil
+	}
 }
 
 func isValidTargetName(name string) bool {
