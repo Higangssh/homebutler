@@ -136,7 +136,7 @@ func TestFlapping(t *testing.T) {
 		incidents := []Incident{
 			incident("web", now.Add(-1*time.Minute)),
 			incident("web", now.Add(-5*time.Minute)),
-			incident("web", now.Add(-10*time.Minute - 1*time.Nanosecond)),
+			incident("web", now.Add(-10*time.Minute-1*time.Nanosecond)),
 		}
 		r := cfg.Check("web", incidents, now)
 		if r.IsFlapping {

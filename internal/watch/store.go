@@ -43,12 +43,12 @@ type ContainerState struct {
 }
 
 type Incident struct {
-	ID           string    `json:"id"`
-	Container    string    `json:"container"`
-	DetectedAt   time.Time `json:"detected_at"`
-	RestartCount int       `json:"restart_count"`
-	PrevStarted  string    `json:"prev_started_at"`
-	CurrStarted  string    `json:"curr_started_at"`
+	ID            string          `json:"id"`
+	Container     string          `json:"container"`
+	DetectedAt    time.Time       `json:"detected_at"`
+	RestartCount  int             `json:"restart_count"`
+	PrevStarted   string          `json:"prev_started_at"`
+	CurrStarted   string          `json:"curr_started_at"`
 	PreLogs       string          `json:"pre_logs"`
 	PostLogs      string          `json:"post_logs"`
 	Flapping      *FlappingResult `json:"flapping,omitempty"`
