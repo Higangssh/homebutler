@@ -540,11 +540,19 @@ homebutler restore ./backup.tar.gz         # restore
 Define rules in YAML. homebutler watches your servers and takes action automatically — restart crashed containers, prune disk, or run custom scripts.
 
 ```bash
-homebutler alerts init          # interactive setup wizard
+homebutler alerts init          # interactively generate ~/.config/homebutler/config.yaml
 homebutler alerts --watch       # start self-healing daemon
 homebutler alerts history       # view past events
 homebutler alerts test-notify   # test your notification channels
 ```
+
+**Recommended setup flow:**
+
+1. Run `homebutler alerts init` once to generate a user-friendly `config.yaml` template.
+2. Fill in `notify` with at least one provider (Telegram, Slack, Discord, or webhook).
+3. Set `watch.notify_on` to match how noisy you want alerts to be.
+4. Add `alerts.rules` for actions like restart, notify, or exec.
+5. Start monitoring with `homebutler alerts --watch`.
 
 **Example `~/.config/homebutler/config.yaml`:**
 
@@ -593,6 +601,14 @@ alerts:
 **Supported metrics:** `cpu`, `memory`, `disk`, `container`
 **Supported actions:** `notify` (alert only), `restart` (docker restart), `exec` (run any command)
 **Supported channels:** Telegram, Slack, Discord, generic webhook
+
+**Config loading order:**
+
+1. `~/.config/homebutler/config.yaml` (preferred)
+2. `~/.homebutler/alerts.yaml` (legacy fallback, deprecated)
+3. `~/.homebutler/watch/config.json` (legacy watch fallback)
+
+If you are starting fresh, use only `config.yaml`. Legacy files are still read for backward compatibility, but they are no longer the recommended setup path.
 
 ### 🔍 Backup Drill
 
