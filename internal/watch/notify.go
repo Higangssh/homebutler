@@ -31,13 +31,8 @@ func (wn *WatchNotifier) NotifyIncident(inc Incident, flap FlappingResult, crash
 		return nil
 	}
 
-	shouldNotify := false
-	if flap.IsFlapping && wn.Settings.OnFlapping {
-		shouldNotify = true
-	}
-	if !flap.IsFlapping && wn.Settings.OnIncident {
-		shouldNotify = true
-	}
+	shouldNotify := (flap.IsFlapping && wn.Settings.OnFlapping) ||
+		(!flap.IsFlapping && wn.Settings.OnIncident)
 	if !shouldNotify {
 		return nil
 	}
