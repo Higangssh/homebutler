@@ -73,7 +73,7 @@ This is what homebutler + [OpenClaw](https://github.com/openclaw/openclaw) looks
 - **Backup Drill** — Verify backups actually work by booting them in isolated containers
 - **MCP Server** — Works with Claude Desktop, ChatGPT, Cursor, and any MCP client
 - **Web Dashboard** — Beautiful dark-themed web UI with `homebutler serve`
-- **Watch & History** — Track Docker container restarts, capture post-restart logs, browse restart history (`homebutler watch`)
+- **Watch & History** — Track restarts for Docker containers, systemd services, and PM2 apps; capture pre-death and post-restart logs; browse restart history (`homebutler watch`)
 - **TUI Dashboard** — Real-time terminal monitoring with `homebutler watch tui` (btop-style)
 - **Wake-on-LAN** — Power on machines remotely
 - **Port Scanner** — See what's listening and which process owns it
@@ -120,18 +120,23 @@ homebutler serve --demo       # Demo mode with realistic sample data
 
 </details>
 
-### 🔄 Docker Restart Watch
+### 🔄 Process Restart Watch
 
-`homebutler watch` tracks whether Docker containers have restarted. When a restart is detected, it captures logs and saves the record under `~/.homebutler/watch/`.
+`homebutler watch` tracks whether Docker containers, systemd services, or PM2 apps have restarted. When a restart is detected, it captures **pre-death logs** (the last output before the crash) and post-restart logs, then saves the record under `~/.homebutler/watch/`.
+
+Docker targets are monitored via **real-time `docker events`** stream for instant detection. Systemd and PM2 targets use polling.
 
 ```bash
-homebutler watch add nginx        # Add container to watch list
-homebutler watch list             # Show watched containers
-homebutler watch check            # One-shot restart check
-homebutler watch start            # Continuous monitoring loop (default 30s)
-homebutler watch history          # List restart history
-homebutler watch show <id>        # Show restart details with logs
-homebutler watch remove nginx     # Stop watching a container
+homebutler watch add nginx                    # Interactive: choose docker/systemd/pm2
+homebutler watch add --kind docker nginx      # Docker container
+homebutler watch add --kind systemd nginx.service  # systemd unit
+homebutler watch add --kind pm2 my-api        # PM2 application
+homebutler watch list                         # Show watched targets
+homebutler watch check                        # One-shot restart check
+homebutler watch start                        # Continuous monitoring loop (default 30s)
+homebutler watch history                      # List restart history
+homebutler watch show <id>                    # Show restart details with pre-death & post-restart logs
+homebutler watch remove nginx                 # Stop watching a target
 ```
 
 ### 🖥️ TUI Dashboard
@@ -164,7 +169,7 @@ homebutler init
 # Run
 homebutler status
 homebutler watch tui         # TUI dashboard (all servers)
-homebutler watch start       # Docker restart monitor (foreground)
+homebutler watch start       # Process restart monitor (Docker/systemd/PM2)
 homebutler serve             # Web dashboard at http://localhost:8080
 homebutler docker list
 homebutler wake desktop
@@ -372,20 +377,23 @@ homebutler serve --demo         # demo mode with sample data
 </details>
 
 <details>
-<summary>🔄 Docker Restart Watch</summary>
+<summary>🔄 Process Restart Watch</summary>
 
-`homebutler watch` tracks whether Docker containers have restarted and stores the history with captured logs under `~/.homebutler/watch/`.
+`homebutler watch` tracks whether Docker containers, systemd services, or PM2 apps have restarted and stores the history with captured logs under `~/.homebutler/watch/`.
 
 ```bash
-homebutler watch add myapp          # register container
-homebutler watch start              # continuous monitoring (default 30s)
-homebutler watch start --interval 1m  # custom interval
-homebutler watch check              # one-shot check
-homebutler watch history            # list restart incidents
-homebutler watch show <id>          # show incident details + post-restart logs
+homebutler watch add myapp                     # interactive kind selection
+homebutler watch add --kind docker myapp       # Docker container
+homebutler watch add --kind systemd myapp.service  # systemd unit
+homebutler watch add --kind pm2 my-api         # PM2 application
+homebutler watch start                         # continuous monitoring (default 30s)
+homebutler watch start --interval 1m           # custom interval
+homebutler watch check                         # one-shot check
+homebutler watch history                       # list restart incidents
+homebutler watch show <id>                     # show incident details + logs
 ```
 
-Each incident captures the last 100 lines of container logs at the time of detection.
+Each incident captures **pre-death logs** (the last output before the crash) and post-restart logs. Docker targets use real-time `docker events` for instant detection; systemd and PM2 targets use polling.
 
 </details>
 
