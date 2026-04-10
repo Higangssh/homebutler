@@ -12,6 +12,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/Higangssh/homebutler/internal/alerts"
 	"github.com/Higangssh/homebutler/internal/docker"
 	"github.com/Higangssh/homebutler/internal/tui"
 	"github.com/Higangssh/homebutler/internal/util"
@@ -344,17 +345,27 @@ Docker targets use docker events (real-time). Systemd and PM2 targets use pollin
 				return nil
 			}
 
-			// Load watch config (flapping, notification settings)
+			// Load watch config (config.yaml preferred, watch/config.json fallback)
 			watchCfg, cfgErr := watch.LoadWatchConfig(dir)
 			if cfgErr != nil {
 				fmt.Fprintf(os.Stderr, "warning: cannot load watch config: %v, using defaults\n", cfgErr)
 				defaultCfg := watch.DefaultWatchConfig()
 				watchCfg = &defaultCfg
 			}
+			if cfg != nil {
+				watchCfg.Notify = cfg.Watch.Notify
+				watchCfg.Flapping = cfg.Watch.Flapping
+			}
 
 			var notifier *watch.WatchNotifier
 			if watchCfg.Notify.Enabled {
-				notifier = watch.NewWatchNotifier(watchCfg.Notify, nil)
+				providers := &cfg.Notify
+				if providers.IsEmpty() {
+					if alertsCfg, err := loadAlertsConfig(""); err == nil && alertsCfg != nil {
+						providers = alerts.ResolveNotifyConfig(alertsCfg)
+					}
+				}
+				notifier = watch.NewWatchNotifier(watchCfg.Notify, providers)
 			}
 
 			// Group targets by kind

@@ -3,31 +3,30 @@ package watch
 import (
 	"fmt"
 	"strings"
-	"sync"
 	"time"
 
-	"github.com/Higangssh/homebutler/internal/alerts"
+	"github.com/Higangssh/homebutler/internal/notify"
 )
 
 type WatchNotifier struct {
 	Settings   NotifySettings
-	AlertsCfg  *alerts.NotifyConfig
-	cooldowns  map[string]time.Time
-	mu         sync.Mutex
-	notifyFunc func(*alerts.NotifyConfig, alerts.NotifyEvent) []error
+	Dispatcher *notify.Dispatcher
 }
 
-func NewWatchNotifier(settings NotifySettings, alertsCfg *alerts.NotifyConfig) *WatchNotifier {
+func NewWatchNotifier(settings NotifySettings, providers *notify.ProviderConfig) *WatchNotifier {
+	cooldown, err := time.ParseDuration(settings.Cooldown)
+	if err != nil {
+		cooldown = 5 * time.Minute
+	}
+
 	return &WatchNotifier{
 		Settings:   settings,
-		AlertsCfg:  alertsCfg,
-		cooldowns:  make(map[string]time.Time),
-		notifyFunc: alerts.NotifyAll,
+		Dispatcher: notify.NewDispatcher(providers, cooldown),
 	}
 }
 
 func (wn *WatchNotifier) NotifyIncident(inc Incident, flap FlappingResult, crash *CrashSummary, now time.Time) error {
-	if !wn.Settings.Enabled {
+	if wn == nil || !wn.Settings.Enabled || wn.Dispatcher == nil {
 		return nil
 	}
 
@@ -37,26 +36,11 @@ func (wn *WatchNotifier) NotifyIncident(inc Incident, flap FlappingResult, crash
 		return nil
 	}
 
-	cooldown, err := time.ParseDuration(wn.Settings.Cooldown)
-	if err != nil {
-		cooldown = 5 * time.Minute
-	}
-
-	wn.mu.Lock()
-	if last, ok := wn.cooldowns[inc.Container]; ok && now.Before(last.Add(cooldown)) {
-		wn.mu.Unlock()
-		return nil
-	}
-	wn.cooldowns[inc.Container] = now
-	wn.mu.Unlock()
-
-	if wn.AlertsCfg == nil {
-		return nil
-	}
-
 	status := "restart"
+	kind := "watch.incident"
 	if flap.IsFlapping {
 		status = "flapping"
+		kind = "watch.flapping"
 	}
 
 	var details []string
@@ -64,18 +48,17 @@ func (wn *WatchNotifier) NotifyIncident(inc Incident, flap FlappingResult, crash
 		details = append(details, fmt.Sprintf("category=%s reason=%s", crash.Category, crash.Reason))
 	}
 
-	event := alerts.NotifyEvent{
-		RuleName: "watch:" + inc.Container,
-		Status:   status,
-		Details:  strings.Join(details, "; "),
-		Time:     inc.DetectedAt.Format(time.RFC3339),
+	event := notify.Event{
+		Kind:        kind,
+		Source:      "watch",
+		Name:        inc.Container,
+		Status:      status,
+		Details:     strings.Join(details, "; "),
+		Time:        inc.DetectedAt,
+		Fingerprint: kind + ":" + inc.Container,
 	}
 
-	fn := wn.notifyFunc
-	if fn == nil {
-		fn = alerts.NotifyAll
-	}
-	errs := fn(wn.AlertsCfg, event)
+	errs := wn.Dispatcher.Send(event.Fingerprint, event, now)
 	if len(errs) > 0 {
 		return errs[0]
 	}

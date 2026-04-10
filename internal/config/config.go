@@ -6,15 +6,24 @@ import (
 	"path/filepath"
 	"runtime"
 
+	"github.com/Higangssh/homebutler/internal/notify"
+	"github.com/Higangssh/homebutler/internal/watch"
 	"gopkg.in/yaml.v3"
 )
 
 type Config struct {
-	Path      string         `yaml:"-"` // resolved config file path (not serialized)
-	Servers   []ServerConfig `yaml:"servers"`
-	Wake      []WakeTarget   `yaml:"wake,omitempty"`
-	Alerts    AlertConfig    `yaml:"alerts"`
-	BackupDir string         `yaml:"backup_dir,omitempty"`
+	Path      string                `yaml:"-"` // resolved config file path (not serialized)
+	Servers   []ServerConfig        `yaml:"servers"`
+	Wake      []WakeTarget          `yaml:"wake,omitempty"`
+	Alerts    AlertConfig           `yaml:"alerts"`
+	Notify    notify.ProviderConfig `yaml:"notify,omitempty"`
+	Watch     WatchRuntimeConfig    `yaml:"watch,omitempty"`
+	BackupDir string                `yaml:"backup_dir,omitempty"`
+}
+
+type WatchRuntimeConfig struct {
+	Notify   watch.NotifySettings `yaml:"notify,omitempty"`
+	Flapping watch.FlappingConfig `yaml:"flapping,omitempty"`
 }
 
 // ResolveBackupDir returns the backup directory from config or the default ~/.homebutler/backups/.
@@ -80,11 +89,16 @@ func Resolve(explicit string) string {
 }
 
 func Load(path string) (*Config, error) {
+	defaultWatch := watch.DefaultWatchConfig()
 	cfg := &Config{
 		Alerts: AlertConfig{
 			CPU:    90,
 			Memory: 85,
 			Disk:   90,
+		},
+		Watch: WatchRuntimeConfig{
+			Notify:   defaultWatch.Notify,
+			Flapping: defaultWatch.Flapping,
 		},
 	}
 

@@ -189,32 +189,36 @@ Flapping incidents are tagged `[FLAPPING]` in history and highlighted in `watch 
 
 #### Notifications (optional, off by default)
 
-Notifications are disabled by default — useful for air-gapped or closed networks where everything runs locally.
+Notifications are disabled by default, which is useful for air-gapped or closed networks where everything runs locally.
 
-To enable, create `~/.homebutler/watch/config.json`:
+Preferred config is now `~/.config/homebutler/config.yaml`:
 
-```json
-{
-  "notify": {
-    "enabled": true,
-    "on_incident": false,
-    "on_flapping": true,
-    "cooldown": "5m"
-  },
-  "flapping": {
-    "short_window": "10m",
-    "short_threshold": 3,
-    "long_window": "24h",
-    "long_threshold": 5
-  }
-}
+```yaml
+notify:
+  telegram:
+    bot_token: "123456:ABC..."
+    chat_id: "8577492680"
+
+watch:
+  notify:
+    enabled: true
+    on_incident: false
+    on_flapping: true
+    cooldown: 5m
+  flapping:
+    short_window: 10m
+    short_threshold: 3
+    long_window: 24h
+    long_threshold: 5
 ```
 
-- `on_incident: false` — don't alert on every single restart
-- `on_flapping: true` — only alert when it's a repeating crash loop
-- `cooldown: "5m"` — no duplicate alerts within 5 minutes per container
+Legacy `~/.homebutler/watch/config.json` is still read as a fallback for watch-specific settings, and legacy `alerts.yaml` notify/webhook provider settings are still accepted for provider compatibility.
 
-Notification providers (Telegram, Slack, Discord, Webhook) are configured through the main homebutler alert config.
+- `enabled: true` — allow watch to send notifications at all
+- `on_incident: false` — don't alert on every single restart
+- `on_flapping: true` — only alert when it becomes a repeating crash loop
+- `cooldown: 5m` — suppress duplicate notifications for the same event fingerprint during the cooldown window
+- `flapping` — detects repeated restarts in a short window (acute) or long window (chronic)
 
 #### Manage targets
 

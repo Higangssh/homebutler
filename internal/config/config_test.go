@@ -20,6 +20,12 @@ func TestLoadDefaults(t *testing.T) {
 	if cfg.Alerts.Disk != 90 {
 		t.Errorf("expected Disk threshold 90, got %f", cfg.Alerts.Disk)
 	}
+	if !cfg.Watch.Notify.OnFlapping {
+		t.Error("expected default watch notify on_flapping=true")
+	}
+	if cfg.Watch.Flapping.ShortThreshold != 3 {
+		t.Errorf("expected default short flapping threshold 3, got %d", cfg.Watch.Flapping.ShortThreshold)
+	}
 
 }
 
@@ -32,6 +38,21 @@ alerts:
   cpu: 80
   memory: 70
   disk: 95
+notify:
+  telegram:
+    bot_token: "123:abc"
+    chat_id: "999"
+watch:
+  notify:
+    enabled: true
+    on_incident: true
+    on_flapping: false
+    cooldown: 10m
+  flapping:
+    short_window: 5m
+    short_threshold: 4
+    long_window: 12h
+    long_threshold: 6
 wake:
   - name: nas
     mac: "AA:BB:CC:DD:EE:FF"
@@ -59,6 +80,15 @@ wake:
 	}
 	if cfg.Wake[0].Name != "nas" {
 		t.Errorf("expected wake target 'nas', got %q", cfg.Wake[0].Name)
+	}
+	if cfg.Notify.Telegram == nil || cfg.Notify.Telegram.ChatID != "999" {
+		t.Fatalf("expected telegram notify config to load, got %+v", cfg.Notify.Telegram)
+	}
+	if !cfg.Watch.Notify.Enabled || cfg.Watch.Notify.OnIncident || !cfg.Watch.Notify.OnFlapping {
+		t.Fatalf("unexpected watch notify config: %+v", cfg.Watch.Notify)
+	}
+	if cfg.Watch.Flapping.ShortThreshold != 4 || cfg.Watch.Flapping.LongThreshold != 6 {
+		t.Fatalf("unexpected watch flapping config: %+v", cfg.Watch.Flapping)
 	}
 }
 

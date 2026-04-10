@@ -3,10 +3,10 @@ package watch
 import "time"
 
 type FlappingConfig struct {
-	ShortWindow    time.Duration
-	ShortThreshold int
-	LongWindow     time.Duration
-	LongThreshold  int
+	ShortWindow    time.Duration `yaml:"short_window" json:"short_window"`
+	ShortThreshold int           `yaml:"short_threshold" json:"short_threshold"`
+	LongWindow     time.Duration `yaml:"long_window" json:"long_window"`
+	LongThreshold  int           `yaml:"long_threshold" json:"long_threshold"`
 }
 
 type FlappingResult struct {

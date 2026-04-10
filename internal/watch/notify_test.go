@@ -1,25 +1,23 @@
 package watch
 
 import (
-	"sync"
 	"testing"
 	"time"
 
-	"github.com/Higangssh/homebutler/internal/alerts"
+	"github.com/Higangssh/homebutler/internal/notify"
 )
 
 func makeTestNotifier(s NotifySettings, called *int) *WatchNotifier {
-	var mu sync.Mutex
+	d := notify.NewDispatcher(&notify.ProviderConfig{
+		Telegram: &notify.TelegramConfig{BotToken: "t", ChatID: "c"},
+	}, 5*time.Minute)
+	d.SetSendFunc(func(cfg *notify.ProviderConfig, ev notify.Event) []error {
+		*called++
+		return nil
+	})
 	return &WatchNotifier{
-		Settings:  s,
-		AlertsCfg: &alerts.NotifyConfig{},
-		cooldowns: make(map[string]time.Time),
-		notifyFunc: func(cfg *alerts.NotifyConfig, ev alerts.NotifyEvent) []error {
-			mu.Lock()
-			*called++
-			mu.Unlock()
-			return nil
-		},
+		Settings:   s,
+		Dispatcher: d,
 	}
 }
 
@@ -157,8 +155,7 @@ func TestNotifyIncident_NilAlertsCfg(t *testing.T) {
 			OnIncident: true,
 			Cooldown:   "5m",
 		},
-		AlertsCfg: nil,
-		cooldowns: make(map[string]time.Time),
+		Dispatcher: notify.NewDispatcher(nil, 5*time.Minute),
 	}
 	inc := baseIncident("nginx", time.Now())
 	flap := FlappingResult{IsFlapping: false}
