@@ -145,12 +145,12 @@ func TestBuildYAML(t *testing.T) {
 	}
 
 	// Verify the generated YAML is valid by loading it
-	cfg := AlertsConfig{}
+	cfg := UserConfig{}
 	if err := loadYAMLString(yamlStr, &cfg); err != nil {
 		t.Fatalf("generated YAML is invalid: %v", err)
 	}
-	if len(cfg.Rules) != 4 {
-		t.Errorf("Expected 4 rules, got %d", len(cfg.Rules))
+	if len(cfg.Alerts.Rules) != 4 {
+		t.Errorf("Expected 4 rules, got %d", len(cfg.Alerts.Rules))
 	}
 }
 
@@ -207,6 +207,6 @@ func TestParseContainerSelection(t *testing.T) {
 }
 
 // helper: unmarshal YAML string
-func loadYAMLString(s string, cfg *AlertsConfig) error {
+func loadYAMLString(s string, cfg interface{}) error {
 	return yaml.Unmarshal([]byte(s), cfg)
 }

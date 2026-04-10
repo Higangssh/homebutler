@@ -200,25 +200,35 @@ notify:
     chat_id: "8577492680"
 
 watch:
-  notify:
-    enabled: true
-    on_incident: false
-    on_flapping: true
-    cooldown: 5m
+  enabled: true
+  notify_on: flapping
+  cooldown: 5m
   flapping:
     short_window: 10m
     short_threshold: 3
     long_window: 24h
     long_threshold: 5
+
+alerts:
+  cpu: 90
+  memory: 85
+  disk: 90
+  rules:
+    - name: cpu-spike
+      metric: cpu
+      threshold: 90
+      action: notify
 ```
 
-Legacy `~/.homebutler/watch/config.json` is still read as a fallback for watch-specific settings, and legacy `alerts.yaml` notify/webhook provider settings are still accepted for provider compatibility.
+Legacy `~/.homebutler/watch/config.json` is still read as a fallback for watch-specific settings, and legacy `alerts.yaml` notify/webhook provider settings are still accepted as fallback for older setups.
 
-- `enabled: true` — allow watch to send notifications at all
-- `on_incident: false` — don't alert on every single restart
-- `on_flapping: true` — only alert when it becomes a repeating crash loop
-- `cooldown: 5m` — suppress duplicate notifications for the same event fingerprint during the cooldown window
-- `flapping` — detects repeated restarts in a short window (acute) or long window (chronic)
+- `watch.enabled: true` — allow watch notifications
+- `watch.notify_on: flapping` — notify only when repeated restart loops are detected
+- `watch.notify_on: incident` — notify on every incident
+- `watch.notify_on: all` — notify on both incidents and flapping
+- `watch.notify_on: off` — disable watch notifications without removing provider config
+- `watch.cooldown: 5m` — suppress duplicate notifications for the same event fingerprint during the cooldown window
+- `watch.flapping` — optional advanced tuning for restart-loop detection
 
 #### Manage targets
 
@@ -536,22 +546,9 @@ homebutler alerts history       # view past events
 homebutler alerts test-notify   # test your notification channels
 ```
 
-**Example `~/.homebutler/alerts.yaml`:**
+**Example `~/.config/homebutler/config.yaml`:**
 
 ```yaml
-rules:
-  - name: container-down
-    metric: container
-    watch: [uptime-kuma, vaultwarden]
-    action: restart
-    cooldown: 5m
-
-  - name: disk-full
-    metric: disk
-    threshold: 85
-    action: exec
-    exec: "docker system prune -f"
-
 notify:
   telegram:
     bot_token: "your-bot-token"
@@ -560,6 +557,28 @@ notify:
     webhook_url: "https://hooks.slack.com/..."
   discord:
     webhook_url: "https://discord.com/api/webhooks/..."
+
+watch:
+  enabled: true
+  notify_on: flapping
+  cooldown: 5m
+
+alerts:
+  cpu: 90
+  memory: 85
+  disk: 85
+  rules:
+    - name: container-down
+      metric: container
+      watch: [uptime-kuma, vaultwarden]
+      action: restart
+      cooldown: 5m
+
+    - name: disk-full
+      metric: disk
+      threshold: 85
+      action: exec
+      exec: "docker system prune -f"
 ```
 
 **What it does:**

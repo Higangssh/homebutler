@@ -12,9 +12,11 @@ import (
 	"time"
 
 	"github.com/Higangssh/homebutler/internal/alerts"
+	"github.com/Higangssh/homebutler/internal/config"
 	"github.com/Higangssh/homebutler/internal/docker"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/spf13/cobra"
+	"gopkg.in/yaml.v3"
 )
 
 func newAlertsCmd() *cobra.Command {
@@ -40,7 +42,7 @@ Use --config to load YAML rules for self-healing mode.`,
 			if watchMode {
 				return runAlertsWatch(interval, alertsConfig)
 			}
-			result, err := alerts.Check(&cfg.Alerts)
+			result, err := alerts.Check(&config.AlertConfig{CPU: cfg.Alerts.CPU, Memory: cfg.Alerts.Memory, Disk: cfg.Alerts.Disk})
 			if err != nil {
 				return fmt.Errorf("failed to check alerts: %w", err)
 			}
@@ -62,17 +64,16 @@ Use --config to load YAML rules for self-healing mode.`,
 func newAlertsInitCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "init",
-		Short: "Interactively generate an alerts.yaml config",
+		Short: "Interactively generate a user-friendly config.yaml template",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			home, err := os.UserHomeDir()
 			if err != nil {
 				return fmt.Errorf("cannot determine home directory: %w", err)
 			}
-			dir := filepath.Join(home, ".homebutler")
-			if err := os.MkdirAll(dir, 0o755); err != nil {
+			path := filepath.Join(home, ".config", "homebutler", "config.yaml")
+			if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 				return fmt.Errorf("failed to create directory: %w", err)
 			}
-			path := filepath.Join(dir, "alerts.yaml")
 
 			// If file exists, ask whether to overwrite
 			if _, err := os.Stat(path); err == nil {
@@ -104,6 +105,7 @@ func newAlertsInitCmd() *cobra.Command {
 			fmt.Println()
 			fmt.Println(okStyle.Render(fmt.Sprintf("✅ Created %s", path)))
 			fmt.Println(okStyle.Render("🛡️  Run: homebutler alerts --watch"))
+			fmt.Println("Legacy ~/.homebutler/alerts.yaml is still supported as fallback, but config.yaml is now preferred.")
 			return nil
 		},
 	}
@@ -139,12 +141,12 @@ func newAlertsTestNotifyCmd() *cobra.Command {
 				return err
 			}
 			if rulesCfg == nil {
-				return fmt.Errorf("no alerts config found; use --alerts-config or run 'alerts init' first")
+				return fmt.Errorf("no notification config found; configure notify in config.yaml or use --alerts-config for legacy alerts.yaml")
 			}
 
 			notifyCfg := alerts.ResolveNotifyConfig(rulesCfg)
 			if notifyCfg == nil {
-				return fmt.Errorf("no notification providers configured in alerts.yaml")
+				return fmt.Errorf("no notification providers configured")
 			}
 
 			event := alerts.NotifyEvent{
@@ -203,6 +205,23 @@ func newAlertsTestNotifyCmd() *cobra.Command {
 }
 
 func loadAlertsConfig(alertsConfigPath string) (*alerts.AlertsConfig, error) {
+	if cfg != nil {
+		uc := &alerts.UserConfig{}
+		uc.Notify = cfg.Notify
+		uc.Watch.Enabled = cfg.Watch.Notify.Enabled
+		uc.Watch.NotifyOn = cfg.Watch.Notify.NotifyOn
+		uc.Watch.Cooldown = cfg.Watch.Notify.Cooldown
+		uc.Alerts.CPU = cfg.Alerts.CPU
+		uc.Alerts.Memory = cfg.Alerts.Memory
+		uc.Alerts.Disk = cfg.Alerts.Disk
+		data, err := os.ReadFile(cfg.Path)
+		if err == nil {
+			_ = yaml.Unmarshal(data, uc)
+		}
+		if len(uc.Alerts.Rules) > 0 || !uc.Notify.IsEmpty() {
+			return alerts.FromConfigRules(uc.Alerts.Rules, uc.Notify)
+		}
+	}
 	if alertsConfigPath != "" {
 		return alerts.LoadRules(alertsConfigPath)
 	}
@@ -214,6 +233,7 @@ func loadAlertsConfig(alertsConfigPath string) (*alerts.AlertsConfig, error) {
 	if _, statErr := os.Stat(defaultPath); statErr != nil {
 		return nil, nil
 	}
+	fmt.Fprintln(os.Stderr, "warning: ~/.homebutler/alerts.yaml is deprecated, move rules/notify into config.yaml")
 	return alerts.LoadRules(defaultPath)
 }
 

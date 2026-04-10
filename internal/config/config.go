@@ -118,6 +118,8 @@ func Load(path string) (*Config, error) {
 		return nil, fmt.Errorf("failed to parse config: %w", err)
 	}
 
+	cfg.Watch.Notify.Normalize()
+
 	cfg.Path = path
 
 	// Warn if config contains passwords and file permissions are too open (non-Windows).

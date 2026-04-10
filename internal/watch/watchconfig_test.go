@@ -12,6 +12,9 @@ func TestDefaultWatchConfig(t *testing.T) {
 	if cfg.Notify.Enabled {
 		t.Error("expected Enabled=false")
 	}
+	if cfg.Notify.NotifyOn != "flapping" {
+		t.Errorf("expected NotifyOn=flapping, got %s", cfg.Notify.NotifyOn)
+	}
 	if cfg.Notify.OnIncident {
 		t.Error("expected OnIncident=false")
 	}
@@ -43,8 +46,7 @@ func TestLoadWatchConfig_Valid(t *testing.T) {
 	data := []byte(`{
 		"notify": {
 			"enabled": true,
-			"on_incident": true,
-			"on_flapping": false,
+			"notify_on": "incident",
 			"cooldown": "10m"
 		},
 		"flapping": {}
@@ -59,6 +61,9 @@ func TestLoadWatchConfig_Valid(t *testing.T) {
 	}
 	if !cfg.Notify.Enabled {
 		t.Error("expected Enabled=true")
+	}
+	if cfg.Notify.NotifyOn != "incident" {
+		t.Errorf("expected NotifyOn=incident, got %s", cfg.Notify.NotifyOn)
 	}
 	if !cfg.Notify.OnIncident {
 		t.Error("expected OnIncident=true")
@@ -87,10 +92,9 @@ func TestSaveAndLoadWatchConfig(t *testing.T) {
 	dir := t.TempDir()
 	cfg := &WatchConfig{
 		Notify: NotifySettings{
-			Enabled:    true,
-			OnIncident: true,
-			OnFlapping: false,
-			Cooldown:   "2m",
+			Enabled:  true,
+			NotifyOn: "incident",
+			Cooldown: "2m",
 		},
 	}
 
@@ -104,6 +108,9 @@ func TestSaveAndLoadWatchConfig(t *testing.T) {
 	}
 	if loaded.Notify.Enabled != cfg.Notify.Enabled {
 		t.Error("Enabled mismatch")
+	}
+	if loaded.Notify.NotifyOn != cfg.Notify.NotifyOn {
+		t.Error("NotifyOn mismatch")
 	}
 	if loaded.Notify.OnIncident != cfg.Notify.OnIncident {
 		t.Error("OnIncident mismatch")

@@ -5,6 +5,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/Higangssh/homebutler/internal/notify"
 	"gopkg.in/yaml.v3"
 )
 
@@ -23,16 +24,34 @@ type Rule struct {
 	MaxRetries int      `yaml:"max_retries,omitempty" json:"max_retries,omitempty"`
 }
 
-// WebhookConfig holds webhook endpoint settings.
-type WebhookConfig struct {
-	URL string `yaml:"url" json:"url"`
-}
-
 // AlertsConfig is the top-level YAML structure for self-healing rules.
 type AlertsConfig struct {
 	Rules   []Rule        `yaml:"rules" json:"rules"`
 	Webhook WebhookConfig `yaml:"webhook" json:"webhook"` // legacy, kept for backward compat
 	Notify  NotifyConfig  `yaml:"notify" json:"notify"`
+}
+
+type UserConfig struct {
+	Notify notify.ProviderConfig `yaml:"notify,omitempty" json:"notify,omitempty"`
+	Watch  struct {
+		Enabled  bool   `yaml:"enabled,omitempty" json:"enabled,omitempty"`
+		NotifyOn string `yaml:"notify_on,omitempty" json:"notify_on,omitempty"`
+		Cooldown string `yaml:"cooldown,omitempty" json:"cooldown,omitempty"`
+	} `yaml:"watch,omitempty" json:"watch,omitempty"`
+	Alerts struct {
+		CPU    float64 `yaml:"cpu" json:"cpu"`
+		Memory float64 `yaml:"memory" json:"memory"`
+		Disk   float64 `yaml:"disk" json:"disk"`
+		Rules  []Rule  `yaml:"rules,omitempty" json:"rules,omitempty"`
+	} `yaml:"alerts" json:"alerts"`
+}
+
+func FromConfigRules(rules []Rule, providers NotifyConfig) (*AlertsConfig, error) {
+	cfg := &AlertsConfig{Rules: rules, Notify: providers}
+	if err := validateRules(cfg.Rules); err != nil {
+		return nil, err
+	}
+	return cfg, nil
 }
 
 // CooldownDuration parses the cooldown string into a time.Duration.

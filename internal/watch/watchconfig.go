@@ -13,16 +13,18 @@ type WatchConfig struct {
 }
 
 type NotifySettings struct {
-	Enabled    bool   `json:"enabled"`
-	OnIncident bool   `json:"on_incident"`
-	OnFlapping bool   `json:"on_flapping"`
-	Cooldown   string `json:"cooldown"`
+	Enabled    bool   `yaml:"enabled" json:"enabled"`
+	NotifyOn   string `yaml:"notify_on,omitempty" json:"notify_on,omitempty"`
+	OnIncident bool   `yaml:"on_incident,omitempty" json:"on_incident"`
+	OnFlapping bool   `yaml:"on_flapping,omitempty" json:"on_flapping"`
+	Cooldown   string `yaml:"cooldown" json:"cooldown"`
 }
 
 func DefaultWatchConfig() WatchConfig {
 	return WatchConfig{
 		Notify: NotifySettings{
 			Enabled:    false,
+			NotifyOn:   "flapping",
 			OnIncident: false,
 			OnFlapping: true,
 			Cooldown:   "5m",
@@ -49,13 +51,54 @@ func LoadWatchConfig(dir string) (*WatchConfig, error) {
 	if err := json.Unmarshal(data, &cfg); err != nil {
 		return nil, err
 	}
+	cfg.Notify.Normalize()
 	return &cfg, nil
 }
 
 func SaveWatchConfig(dir string, cfg *WatchConfig) error {
+	if cfg != nil {
+		cfg.Notify.Normalize()
+	}
 	data, err := json.MarshalIndent(cfg, "", "  ")
 	if err != nil {
 		return err
 	}
 	return os.WriteFile(configPath(dir), data, 0644)
+}
+
+func (n *NotifySettings) Normalize() {
+	if n.NotifyOn == "" {
+		switch {
+		case n.OnIncident && n.OnFlapping:
+			n.NotifyOn = "all"
+		case n.OnIncident:
+			n.NotifyOn = "incident"
+		case n.OnFlapping:
+			n.NotifyOn = "flapping"
+		default:
+			n.NotifyOn = "off"
+		}
+	}
+
+	switch n.NotifyOn {
+	case "all":
+		n.OnIncident = true
+		n.OnFlapping = true
+	case "incident":
+		n.OnIncident = true
+		n.OnFlapping = false
+	case "flapping":
+		n.OnIncident = false
+		n.OnFlapping = true
+	case "off":
+		n.OnIncident = false
+		n.OnFlapping = false
+		if !n.Enabled {
+			return
+		}
+	default:
+		n.NotifyOn = "flapping"
+		n.OnIncident = false
+		n.OnFlapping = true
+	}
 }

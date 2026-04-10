@@ -114,44 +114,63 @@ func RunInitPrompt(r io.Reader, w io.Writer, listContainers ContainerLister) (*I
 	return result, nil
 }
 
-// BuildYAML converts an InitResult into an AlertsConfig YAML string.
+// BuildYAML converts an InitResult into a user-friendly config.yaml snippet.
 func BuildYAML(res *InitResult) (string, error) {
-	cfg := AlertsConfig{}
+	type webhookConfig struct {
+		URL string `yaml:"url,omitempty"`
+	}
+	type notifyConfig struct {
+		Webhook *webhookConfig `yaml:"webhook,omitempty"`
+	}
+	type watchConfig struct {
+		Enabled  bool   `yaml:"enabled"`
+		NotifyOn string `yaml:"notify_on"`
+		Cooldown string `yaml:"cooldown,omitempty"`
+	}
+	type alertsSection struct {
+		CPU    float64 `yaml:"cpu"`
+		Memory float64 `yaml:"memory"`
+		Disk   float64 `yaml:"disk"`
+		Rules  []Rule  `yaml:"rules,omitempty"`
+	}
+	type userConfig struct {
+		Notify notifyConfig  `yaml:"notify,omitempty"`
+		Watch  watchConfig   `yaml:"watch"`
+		Alerts alertsSection `yaml:"alerts"`
+	}
 
-	cfg.Rules = append(cfg.Rules, Rule{
-		Name:      "cpu-spike",
-		Metric:    "cpu",
-		Threshold: res.CPUThreshold,
-		Action:    "notify",
-		Notify:    "webhook",
-	})
-	cfg.Rules = append(cfg.Rules, Rule{
-		Name:      "memory-high",
-		Metric:    "memory",
-		Threshold: res.MemoryThreshold,
-		Action:    "notify",
-		Notify:    "webhook",
-	})
-	cfg.Rules = append(cfg.Rules, Rule{
-		Name:      "disk-full",
-		Metric:    "disk",
-		Threshold: res.DiskThreshold,
-		Action:    "notify",
-		Notify:    "webhook",
-	})
+	cfg := userConfig{
+		Watch: watchConfig{
+			Enabled:  res.WebhookURL != "",
+			NotifyOn: "flapping",
+			Cooldown: "5m",
+		},
+		Alerts: alertsSection{
+			CPU:    res.CPUThreshold,
+			Memory: res.MemoryThreshold,
+			Disk:   res.DiskThreshold,
+		},
+	}
+
+	if res.WebhookURL != "" {
+		cfg.Notify.Webhook = &webhookConfig{URL: res.WebhookURL}
+	}
+
+	cfg.Alerts.Rules = append(cfg.Alerts.Rules,
+		Rule{Name: "cpu-spike", Metric: "cpu", Threshold: res.CPUThreshold, Action: "notify"},
+		Rule{Name: "memory-high", Metric: "memory", Threshold: res.MemoryThreshold, Action: "notify"},
+		Rule{Name: "disk-full", Metric: "disk", Threshold: res.DiskThreshold, Action: "notify"},
+	)
 
 	if len(res.Containers) > 0 {
-		cfg.Rules = append(cfg.Rules, Rule{
+		cfg.Alerts.Rules = append(cfg.Alerts.Rules, Rule{
 			Name:     "container-down",
 			Metric:   "container",
 			Watch:    res.Containers,
 			Action:   res.ContainerAction,
-			Notify:   "webhook",
 			Cooldown: "5m",
 		})
 	}
-
-	cfg.Webhook = WebhookConfig{URL: res.WebhookURL}
 
 	data, err := yaml.Marshal(&cfg)
 	if err != nil {
