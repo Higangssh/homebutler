@@ -122,21 +122,105 @@ homebutler serve --demo       # Demo mode with realistic sample data
 
 ### 🔄 Process Restart Watch
 
-`homebutler watch` tracks whether Docker containers, systemd services, or PM2 apps have restarted. When a restart is detected, it captures **pre-death logs** (the last output before the crash) and post-restart logs, then saves the record under `~/.homebutler/watch/`.
+Your container crashed at 3 AM — but **why?** `homebutler watch` catches it the moment it happens, saves the dying logs, figures out the cause, and tells you if it's happening over and over.
 
-Docker targets are monitored via **real-time `docker events`** stream for instant detection. Systemd and PM2 targets use polling.
+**Supported backends:** Docker (real-time event stream) · systemd (polling) · PM2 (polling)
+
+#### Step 1: Add targets to watch
 
 ```bash
-homebutler watch add nginx                    # Interactive: choose docker/systemd/pm2
-homebutler watch add --kind docker nginx      # Docker container
-homebutler watch add --kind systemd nginx.service  # systemd unit
-homebutler watch add --kind pm2 my-api        # PM2 application
-homebutler watch list                         # Show watched targets
-homebutler watch check                        # One-shot restart check
-homebutler watch start                        # Continuous monitoring loop (default 30s)
-homebutler watch history                      # List restart history
-homebutler watch show <id>                    # Show restart details with pre-death & post-restart logs
-homebutler watch remove nginx                 # Stop watching a target
+homebutler watch add nginx              # Interactive: choose Docker / systemd / PM2
+homebutler watch add --kind docker nginx          # or specify directly
+homebutler watch add --kind systemd nginx.service
+homebutler watch add --kind pm2 my-api
+homebutler watch list                   # See what you're watching
+```
+
+#### Step 2: Start monitoring
+
+```bash
+homebutler watch start                  # Foreground, Ctrl+C to stop
+homebutler watch start --interval 10s   # Custom poll interval (default 30s)
+```
+
+When a crash is detected, you'll see:
+
+```
+[03:14:22] INCIDENT: nginx (incident nginx-20260410-031422.581-7a2124)
+  Crash: OOM — process killed by SIGKILL (oom, confidence: high)
+  ⚠ FLAPPING: acute (3 restarts in short window)
+```
+
+#### Step 3: Investigate
+
+```bash
+homebutler watch history                # List all incidents
+homebutler watch show <incident-id>     # Full details
+```
+
+`watch show` output includes:
+- **Pre-death logs** — what the process printed right before it died
+- **Post-restart logs** — what happened after the restart
+- **Crash analysis** — category (oom / panic / segfault / timeout / dependency / error), reason, confidence level, matched log patterns
+- **Flapping status** — if the process is stuck in a crash loop
+
+#### Crash Analysis
+
+Every incident is automatically analyzed using exit codes and log patterns:
+
+| Signal | Exit Code | Meaning |
+|--------|-----------|---------|
+| SIGKILL | 137 | OOM Killer or forced kill |
+| SIGSEGV | 139 | Segmentation fault (memory corruption) |
+| SIGTERM | 143 | Graceful shutdown request |
+| — | 1 | Application error |
+| — | 0 | Clean exit (may be intentional restart) |
+
+Log patterns like `panic:`, `Out of memory`, `Connection refused`, `FATAL`, and `timeout` are matched automatically to help identify the root cause.
+
+#### Flapping Detection
+
+Detects when a process is stuck in a restart loop (e.g., crash → restart → crash again):
+
+- **Acute** — 3+ restarts within 10 minutes (something is broken right now)
+- **Chronic** — 5+ restarts within 24 hours (slow recurring issue)
+
+Flapping incidents are tagged `[FLAPPING]` in history and highlighted in `watch show`.
+
+#### Notifications (optional, off by default)
+
+Notifications are disabled by default — useful for air-gapped or closed networks where everything runs locally.
+
+To enable, create `~/.homebutler/watch/config.json`:
+
+```json
+{
+  "notify": {
+    "enabled": true,
+    "on_incident": false,
+    "on_flapping": true,
+    "cooldown": "5m"
+  },
+  "flapping": {
+    "short_window": "10m",
+    "short_threshold": 3,
+    "long_window": "24h",
+    "long_threshold": 5
+  }
+}
+```
+
+- `on_incident: false` — don't alert on every single restart
+- `on_flapping: true` — only alert when it's a repeating crash loop
+- `cooldown: "5m"` — no duplicate alerts within 5 minutes per container
+
+Notification providers (Telegram, Slack, Discord, Webhook) are configured through the main homebutler alert config.
+
+#### Manage targets
+
+```bash
+homebutler watch remove nginx           # Stop watching
+homebutler watch check                  # One-shot check (no continuous monitoring)
 ```
 
 ### 🖥️ TUI Dashboard
