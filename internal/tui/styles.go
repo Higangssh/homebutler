@@ -87,13 +87,13 @@ func alertStyle(status string) lipgloss.Style {
 	}
 }
 
-// truncate shortens a string to max length with ellipsis.
 func truncate(s string, max int) string {
-	if len(s) <= max {
+	r := []rune(s)
+	if len(r) <= max {
 		return s
 	}
 	if max <= 1 {
-		return s[:max]
+		return string(r[:max])
 	}
-	return s[:max-1] + "~"
+	return string(r[:max-1]) + "~"
 }

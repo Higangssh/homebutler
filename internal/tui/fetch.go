@@ -69,8 +69,7 @@ func fetchLocal(alertCfg *config.AlertConfig) ServerData {
 	data.Status = status
 	data.Name = status.Hostname
 
-	alertResult, _ := alerts.Check(alertCfg)
-	data.Alerts = alertResult
+	data.Alerts = alerts.CheckWithStatus(alertCfg, status)
 
 	procs, _ := system.TopProcesses(5)
 	data.Processes = procs
@@ -132,10 +131,12 @@ func fetchDocker() ([]docker.Container, string) {
 		dockerCacheMu.Unlock()
 		return containers, status
 	case <-time.After(2 * time.Second):
-		// Goroutine will finish eventually and update cache + release flag
 		dockerCacheMu.Lock()
-		dockerCacheCtr, dockerCacheSt = nil, "unavailable"
+		c, s := dockerCacheCtr, dockerCacheSt
 		dockerCacheMu.Unlock()
+		if s != "" {
+			return c, s
+		}
 		return nil, "unavailable"
 	}
 }

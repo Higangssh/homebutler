@@ -128,11 +128,11 @@ func TestSparklineColor(t *testing.T) {
 	}{
 		{"empty", nil},
 		{"green low", []float64{30}},
-		{"yellow mid", []float64{60}},
-		{"red high", []float64{90}},
-		{"boundary 50", []float64{50}},
-		{"boundary 80", []float64{80}},
-		{"boundary 81", []float64{81}},
+		{"green mid", []float64{60}},
+		{"yellow 70", []float64{70}},
+		{"yellow 89", []float64{89}},
+		{"red 90", []float64{90}},
+		{"red high", []float64{95}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

@@ -42,17 +42,15 @@ func sparkline(data []float64, width int) string {
 	return b.String()
 }
 
-// sparklineColor returns the appropriate style for a sparkline
-// based on the last value: green <50%, yellow 50-80%, red >80%.
 func sparklineColor(data []float64) lipgloss.Style {
 	if len(data) == 0 {
 		return greenStyle
 	}
 	last := data[len(data)-1]
 	switch {
-	case last > 80:
+	case last >= 90:
 		return redStyle
-	case last >= 50:
+	case last >= 70:
 		return yellowStyle
 	default:
 		return greenStyle

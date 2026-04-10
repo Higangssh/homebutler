@@ -29,7 +29,10 @@ func Check(cfg *config.AlertConfig) (*AlertResult, error) {
 	if err != nil {
 		return nil, err
 	}
+	return CheckWithStatus(cfg, info), nil
+}
 
+func CheckWithStatus(cfg *config.AlertConfig, info *system.StatusInfo) *AlertResult {
 	result := &AlertResult{
 		CPU: AlertItem{
 			Status:    statusFor(info.CPU.UsagePercent, cfg.CPU),
@@ -52,7 +55,7 @@ func Check(cfg *config.AlertConfig) (*AlertResult, error) {
 		})
 	}
 
-	return result, nil
+	return result
 }
 
 func statusFor(current, threshold float64) string {
