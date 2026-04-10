@@ -175,18 +175,19 @@ func TestSendValidMAC(t *testing.T) {
 			}
 			if result == nil {
 				t.Fatal("expected non-nil result")
-			}
-			if result.Action != "wake" {
-				t.Errorf("Action = %q, want %q", result.Action, "wake")
-			}
-			if result.MAC != tt.mac {
-				t.Errorf("MAC = %q, want %q", result.MAC, tt.mac)
-			}
-			if result.Broadcast != tt.broadcast {
-				t.Errorf("Broadcast = %q, want %q", result.Broadcast, tt.broadcast)
-			}
-			if result.Status != "sent" {
-				t.Errorf("Status = %q, want %q", result.Status, "sent")
+			} else {
+				if result.Action != "wake" {
+					t.Errorf("Action = %q, want %q", result.Action, "wake")
+				}
+				if result.MAC != tt.mac {
+					t.Errorf("MAC = %q, want %q", result.MAC, tt.mac)
+				}
+				if result.Broadcast != tt.broadcast {
+					t.Errorf("Broadcast = %q, want %q", result.Broadcast, tt.broadcast)
+				}
+				if result.Status != "sent" {
+					t.Errorf("Status = %q, want %q", result.Status, "sent")
+				}
 			}
 		})
 	}

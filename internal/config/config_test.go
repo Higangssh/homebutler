@@ -206,8 +206,7 @@ func TestFindServer(t *testing.T) {
 			if !tt.wantNil {
 				if got == nil {
 					t.Fatalf("FindServer(%q) = nil, want non-nil", tt.query)
-				}
-				if got.Host != tt.wantHost {
+				} else if got.Host != tt.wantHost {
 					t.Errorf("FindServer(%q).Host = %q, want %q", tt.query, got.Host, tt.wantHost)
 				}
 			}

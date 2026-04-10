@@ -41,15 +41,16 @@ func TestDetectRestart_RestartCountIncrease(t *testing.T) {
 	ev := DetectRestart(prev, curr)
 	if ev == nil {
 		t.Fatal("expected restart event")
-	}
-	if ev.RestartCount != 5 {
-		t.Errorf("expected RestartCount=5, got %d", ev.RestartCount)
-	}
-	if ev.PrevStarted != "2025-01-01T00:00:00Z" {
-		t.Errorf("unexpected PrevStarted: %s", ev.PrevStarted)
-	}
-	if ev.CurrStarted != "2025-01-01T01:00:00Z" {
-		t.Errorf("unexpected CurrStarted: %s", ev.CurrStarted)
+	} else {
+		if ev.RestartCount != 5 {
+			t.Errorf("expected RestartCount=5, got %d", ev.RestartCount)
+		}
+		if ev.PrevStarted != "2025-01-01T00:00:00Z" {
+			t.Errorf("unexpected PrevStarted: %s", ev.PrevStarted)
+		}
+		if ev.CurrStarted != "2025-01-01T01:00:00Z" {
+			t.Errorf("unexpected CurrStarted: %s", ev.CurrStarted)
+		}
 	}
 }
 
@@ -63,8 +64,7 @@ func TestDetectRestart_StartedAtChange(t *testing.T) {
 	ev := DetectRestart(prev, curr)
 	if ev == nil {
 		t.Fatal("expected restart event from StartedAt change")
-	}
-	if ev.Container != "redis" {
+	} else if ev.Container != "redis" {
 		t.Errorf("expected redis, got %s", ev.Container)
 	}
 }
@@ -92,8 +92,7 @@ func TestDetectRestart_RestartCountTakesPriority(t *testing.T) {
 	ev := DetectRestart(prev, curr)
 	if ev == nil {
 		t.Fatal("expected restart event from RestartCount increase")
-	}
-	if ev.RestartCount != 2 {
+	} else if ev.RestartCount != 2 {
 		t.Errorf("expected RestartCount=2, got %d", ev.RestartCount)
 	}
 }
