@@ -109,8 +109,7 @@ func TestDetectRestart_RestartCountDecrease(t *testing.T) {
 	// Should still detect via StartedAt change
 	if ev == nil {
 		t.Fatal("expected restart event from StartedAt change when count decreased")
-	}
-	if ev.RestartCount != 0 {
+	} else if ev.RestartCount != 0 {
 		t.Errorf("expected RestartCount=0, got %d", ev.RestartCount)
 	}
 }
@@ -139,8 +138,7 @@ func TestDetectRestart_RestartCountIncrease_SameStartedAt(t *testing.T) {
 	ev := DetectRestart(prev, curr)
 	if ev == nil {
 		t.Fatal("expected event from RestartCount increase")
-	}
-	if ev.Container != "app" {
+	} else if ev.Container != "app" {
 		t.Errorf("expected app, got %s", ev.Container)
 	}
 }
