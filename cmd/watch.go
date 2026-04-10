@@ -344,6 +344,19 @@ Docker targets use docker events (real-time). Systemd and PM2 targets use pollin
 				return nil
 			}
 
+			// Load watch config (flapping, notification settings)
+			watchCfg, cfgErr := watch.LoadWatchConfig(dir)
+			if cfgErr != nil {
+				fmt.Fprintf(os.Stderr, "warning: cannot load watch config: %v, using defaults\n", cfgErr)
+				defaultCfg := watch.DefaultWatchConfig()
+				watchCfg = &defaultCfg
+			}
+
+			var notifier *watch.WatchNotifier
+			if watchCfg.Notify.Enabled {
+				notifier = watch.NewWatchNotifier(watchCfg.Notify, nil)
+			}
+
 			// Group targets by kind
 			var dockerTargets, systemdTargets, pm2Targets []watch.Target
 			for _, t := range targets {
@@ -433,9 +446,32 @@ Docker targets use docker events (real-time). Systemd and PM2 targets use pollin
 						fmt.Println("\nAll monitors stopped.")
 						return nil
 					}
+
+					crashInfo := watch.CrashInfo{
+						ErrorLog: inc.PreLogs,
+						Backend:  getBackendKind(inc.Container, targets),
+					}
+					summary := watch.Analyze(crashInfo)
+					inc.CrashAnalysis = &summary
+
+					allIncs, _ := watch.ListIncidents(dir)
+					flapResult := watchCfg.Flapping.Check(inc.Container, allIncs, time.Now())
+					if flapResult.IsFlapping {
+						inc.Flapping = &flapResult
+					}
+
+					_ = watch.SaveIncident(dir, &inc)
+
+					if notifier != nil {
+						_ = notifier.NotifyIncident(inc, flapResult, &summary, time.Now())
+					}
+
 					ts := time.Now().Format("15:04:05")
-					fmt.Printf("[%s] INCIDENT: %s (%s, incident %s)\n",
-						ts, inc.Container, restartLabel(inc.RestartCount), inc.ID)
+					fmt.Printf("[%s] INCIDENT: %s (incident %s)\n", ts, inc.Container, inc.ID)
+					fmt.Printf("  Crash: %s (%s, confidence: %s)\n", summary.Reason, summary.Category, summary.Confidence)
+					if flapResult.IsFlapping {
+						fmt.Printf("  ⚠ FLAPPING: %s (%d restarts in %s window)\n", flapResult.Level, flapResult.Count, flapResult.Window)
+					}
 				case <-sig:
 					fmt.Println("\nStopping all monitors.")
 					cancel()
@@ -471,15 +507,23 @@ func newWatchHistoryCmd() *cobra.Command {
 				return nil
 			}
 
-			fmt.Printf("%-20s  %-36s  %s\n", "CONTAINER", "INCIDENT ID", "DETECTED")
+			fmt.Printf("%-20s  %-36s  %-20s  %s\n", "CONTAINER", "INCIDENT ID", "DETECTED", "INFO")
 			for _, inc := range incidents {
 				id := inc.ID
 				if inc.RestartCount > 0 {
 					id = fmt.Sprintf("%s (restart #%d)", inc.ID, inc.RestartCount)
 				}
-				fmt.Printf("%-20s  %-36s  %s\n",
+				info := ""
+				if inc.Flapping != nil {
+					info += "[FLAPPING] "
+				}
+				if inc.CrashAnalysis != nil {
+					info += inc.CrashAnalysis.Category
+				}
+				fmt.Printf("%-20s  %-36s  %-20s  %s\n",
 					inc.Container, id,
-					inc.DetectedAt.Format("2006-01-02 15:04:05"))
+					inc.DetectedAt.Format("2006-01-02 15:04:05"),
+					info)
 			}
 			return nil
 		},
@@ -512,6 +556,25 @@ func newWatchShowCmd() *cobra.Command {
 			}
 			fmt.Printf("Previous Start: %s\n", inc.PrevStarted)
 			fmt.Printf("Current Start:  %s\n", inc.CurrStarted)
+			if inc.CrashAnalysis != nil {
+				fmt.Println()
+				fmt.Println("=== Crash Analysis ===")
+				fmt.Printf("Category:   %s\n", inc.CrashAnalysis.Category)
+				fmt.Printf("Reason:     %s\n", inc.CrashAnalysis.Reason)
+				fmt.Printf("Confidence: %s\n", inc.CrashAnalysis.Confidence)
+				if inc.CrashAnalysis.Signal != "" {
+					fmt.Printf("Signal:     %s\n", inc.CrashAnalysis.Signal)
+				}
+				if len(inc.CrashAnalysis.Patterns) > 0 {
+					fmt.Printf("Patterns:   %s\n", strings.Join(inc.CrashAnalysis.Patterns, ", "))
+				}
+			}
+			if inc.Flapping != nil {
+				fmt.Println()
+				fmt.Printf("⚠ FLAPPING: %s (%d restarts in %s window, since %s)\n",
+					inc.Flapping.Level, inc.Flapping.Count, inc.Flapping.Window,
+					inc.Flapping.Since.Format("15:04:05"))
+			}
 			fmt.Println()
 			if inc.PreLogs != "" {
 				fmt.Println("=== Pre-Death Logs ===")
@@ -533,6 +596,15 @@ func newWatchShowCmd() *cobra.Command {
 			return nil
 		},
 	}
+}
+
+func getBackendKind(container string, targets []watch.Target) string {
+	for _, t := range targets {
+		if t.Container == container || t.EffectiveUnit() == container {
+			return t.EffectiveKind()
+		}
+	}
+	return "docker"
 }
 
 func restartLabel(count int) string {
