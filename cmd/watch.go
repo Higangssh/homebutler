@@ -359,7 +359,10 @@ Docker targets use docker events (real-time). Systemd and PM2 targets use pollin
 
 			var notifier *watch.WatchNotifier
 			if watchCfg.Notify.Enabled {
-				providers := &cfg.Notify
+				providers := &alerts.NotifyConfig{}
+				if cfg != nil {
+					providers = &cfg.Notify
+				}
 				if providers.IsEmpty() {
 					if alertsCfg, err := loadAlertsConfig(""); err == nil && alertsCfg != nil {
 						providers = alerts.ResolveNotifyConfig(alertsCfg)
