@@ -2,6 +2,29 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.16.0](https://github.com/Higangssh/homebutler/compare/v0.15.0...v0.16.0) - 2026-04-10
+
+**Understand why your processes keep dying.** Automatic crash analysis with exit code + log pattern matching, flapping detection for repeated restarts, and opt-in notification support.
+
+```bash
+homebutler watch start                  # crash analysis runs automatically
+homebutler watch history                # [FLAPPING] tag + crash category
+homebutler watch show <id>              # full crash analysis + flapping status
+```
+
+### ✨ Features
+
+- add 2-tier flapping detection: acute (10m/3x) and chronic (24h/5x) windows
+- add crash analysis with exit code mapping (OOM/SIGSEGV/SIGTERM) and log pattern matching (panic, connection refused, timeout, etc.)
+- add watch notification system with per-container cooldown (default: disabled for air-gapped networks)
+- add watch config file support (`~/.homebutler/watch/config.json`)
+- show [FLAPPING] tag and crash category in `watch history`
+- show full crash analysis and flapping status in `watch show`
+
+### 🧪 Tests
+
+- add 39 new tests covering flapping, crash analysis, notification, and config edge cases
+
 ## [0.15.0](https://github.com/Higangssh/homebutler/compare/v0.14.1...v0.15.0) - 2026-04-10
 
 **Know why your processes died.** `homebutler watch` now monitors Docker containers, systemd services, and PM2 apps — capturing pre-death logs the moment a crash happens.
