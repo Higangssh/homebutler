@@ -7,7 +7,12 @@ import (
 	"io"
 	"net/http"
 	"time"
+
+	"github.com/Higangssh/homebutler/internal/notify"
 )
+
+// WebhookConfig is an alias for backward compatibility.
+type WebhookConfig = notify.WebhookConfig
 
 // WebhookPayload is the JSON body sent to webhook endpoints.
 type WebhookPayload struct {
@@ -21,8 +26,6 @@ type WebhookPayload struct {
 
 // Deprecated: SendWebhook is kept for backward compatibility.
 // Use NotifyAll with NotifyConfig instead.
-// SendWebhook posts a JSON payload to the configured webhook URL.
-// If the URL is empty, it silently returns nil (not an error).
 func SendWebhook(url string, payload WebhookPayload) error {
 	if url == "" {
 		return nil

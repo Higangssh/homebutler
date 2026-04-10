@@ -45,8 +45,7 @@ notify:
 watch:
   notify:
     enabled: true
-    on_incident: true
-    on_flapping: false
+    notify_on: incident
     cooldown: 10m
   flapping:
     short_window: 5m
@@ -84,7 +83,7 @@ wake:
 	if cfg.Notify.Telegram == nil || cfg.Notify.Telegram.ChatID != "999" {
 		t.Fatalf("expected telegram notify config to load, got %+v", cfg.Notify.Telegram)
 	}
-	if !cfg.Watch.Notify.Enabled || cfg.Watch.Notify.OnIncident || !cfg.Watch.Notify.OnFlapping {
+	if !cfg.Watch.Notify.Enabled || !cfg.Watch.Notify.OnIncident || cfg.Watch.Notify.OnFlapping || cfg.Watch.Notify.NotifyOn != "incident" {
 		t.Fatalf("unexpected watch notify config: %+v", cfg.Watch.Notify)
 	}
 	if cfg.Watch.Flapping.ShortThreshold != 4 || cfg.Watch.Flapping.LongThreshold != 6 {
