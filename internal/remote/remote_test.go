@@ -173,8 +173,7 @@ func TestFindServer(t *testing.T) {
 	s := cfg.FindServer("beta")
 	if s == nil {
 		t.Fatal("expected to find server beta")
-	}
-	if s.Host != "10.0.0.2" {
+	} else if s.Host != "10.0.0.2" {
 		t.Errorf("expected host 10.0.0.2, got %s", s.Host)
 	}
 

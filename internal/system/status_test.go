@@ -147,16 +147,17 @@ func TestParseProcStatLine(t *testing.T) {
 	result := parseProcStatLine(line)
 	if result == nil {
 		t.Fatal("expected non-nil result")
-	}
-	// total = 10132153+290696+3084719+46828483+16683+0+25195+0 = 60377929
-	expectedTotal := 10132153.0 + 290696.0 + 3084719.0 + 46828483.0 + 16683.0 + 0.0 + 25195.0 + 0.0
-	if result.total != expectedTotal {
-		t.Errorf("total = %f, want %f", result.total, expectedTotal)
-	}
-	// idle = idle + iowait = 46828483 + 16683 = 46845166
-	expectedIdle := 46828483.0 + 16683.0
-	if result.idle != expectedIdle {
-		t.Errorf("idle = %f, want %f", result.idle, expectedIdle)
+	} else {
+		// total = 10132153+290696+3084719+46828483+16683+0+25195+0 = 60377929
+		expectedTotal := 10132153.0 + 290696.0 + 3084719.0 + 46828483.0 + 16683.0 + 0.0 + 25195.0 + 0.0
+		if result.total != expectedTotal {
+			t.Errorf("total = %f, want %f", result.total, expectedTotal)
+		}
+		// idle = idle + iowait = 46828483 + 16683 = 46845166
+		expectedIdle := 46828483.0 + 16683.0
+		if result.idle != expectedIdle {
+			t.Errorf("idle = %f, want %f", result.idle, expectedIdle)
+		}
 	}
 }
 
@@ -179,10 +180,11 @@ func TestParseProcStatLine_MinimalFields(t *testing.T) {
 	result := parseProcStatLine("cpu  100 50 30 820")
 	if result == nil {
 		t.Fatal("expected non-nil result for minimal valid line")
-	}
-	expectedTotal := 100.0 + 50.0 + 30.0 + 820.0
-	if result.total != expectedTotal {
-		t.Errorf("total = %f, want %f", result.total, expectedTotal)
+	} else {
+		expectedTotal := 100.0 + 50.0 + 30.0 + 820.0
+		if result.total != expectedTotal {
+			t.Errorf("total = %f, want %f", result.total, expectedTotal)
+		}
 	}
 }
 
@@ -195,8 +197,7 @@ func TestReadDarwinCPUTimes(t *testing.T) {
 	result := readDarwinCPUTimes()
 	if result == nil {
 		t.Fatal("expected non-nil result on darwin")
-	}
-	if result.total <= 0 {
+	} else if result.total <= 0 {
 		t.Errorf("expected total > 0, got %f", result.total)
 	}
 }
@@ -210,8 +211,7 @@ func TestReadLinuxCPUTimes(t *testing.T) {
 	result := readLinuxCPUTimes()
 	if result == nil {
 		t.Fatal("expected non-nil result on linux")
-	}
-	if result.total <= 0 {
+	} else if result.total <= 0 {
 		t.Errorf("expected total > 0, got %f", result.total)
 	}
 }
