@@ -73,7 +73,8 @@ This is what homebutler + [OpenClaw](https://github.com/openclaw/openclaw) looks
 - **Backup Drill** — Verify backups actually work by booting them in isolated containers
 - **MCP Server** — Works with Claude Desktop, ChatGPT, Cursor, and any MCP client
 - **Web Dashboard** — Beautiful dark-themed web UI with `homebutler serve`
-- **TUI Dashboard** — Real-time terminal monitoring with `homebutler watch` (btop-style)
+- **Watch & History** — Track Docker container restarts, capture post-restart logs, browse restart history (`homebutler watch`)
+- **TUI Dashboard** — Real-time terminal monitoring with `homebutler watch tui` (btop-style)
 - **Wake-on-LAN** — Power on machines remotely
 - **Port Scanner** — See what's listening and which process owns it
 - **Network Scan** — Discover devices on your LAN
@@ -119,13 +120,27 @@ homebutler serve --demo       # Demo mode with realistic sample data
 
 </details>
 
+### 🔄 Docker Restart Watch
+
+`homebutler watch` tracks whether Docker containers have restarted. When a restart is detected, it captures logs and saves the record under `~/.homebutler/watch/`.
+
+```bash
+homebutler watch add nginx        # Add container to watch list
+homebutler watch list             # Show watched containers
+homebutler watch check            # One-shot restart check
+homebutler watch start            # Continuous monitoring loop (default 30s)
+homebutler watch history          # List restart history
+homebutler watch show <id>        # Show restart details with logs
+homebutler watch remove nginx     # Stop watching a container
+```
+
 ### 🖥️ TUI Dashboard
 
 <p align="center">
   <img src="demo/demo-tui.gif" alt="homebutler TUI dashboard" width="800">
 </p>
 
-> **`homebutler watch`** — A terminal-based dashboard powered by Bubble Tea. Monitors all configured servers with real-time updates, color-coded resource bars, and Docker container status. No browser needed.
+> **`homebutler watch tui`** — A terminal-based dashboard powered by Bubble Tea. Monitors all configured servers with real-time updates, color-coded resource bars, and Docker container status. No browser needed.
 
 ### 🧠 AI-Powered Management (MCP)
 
@@ -148,7 +163,8 @@ homebutler init
 
 # Run
 homebutler status
-homebutler watch             # TUI dashboard (all servers)
+homebutler watch tui         # TUI dashboard (all servers)
+homebutler watch start       # Docker restart monitor (foreground)
 homebutler serve             # Web dashboard at http://localhost:8080
 homebutler docker list
 homebutler wake desktop
@@ -261,7 +277,10 @@ Commands:
   docker list         List running containers
   install <app>       Install a self-hosted app (docker compose)
   alerts              Show current alert status
-  watch               TUI dashboard (monitors all configured servers)
+  watch tui           TUI dashboard (monitors all configured servers)
+  watch add/list/remove  Manage watched containers
+  watch check/start   One-shot or continuous restart detection
+  watch history/show  Browse restart history
   serve               Web dashboard (browser-based, go:embed)
 
 Flags:
@@ -281,7 +300,14 @@ Run `homebutler --help` for all commands.
 Commands:
   init                Interactive setup wizard
   status              System status (CPU, memory, disk, uptime)
-  watch               TUI dashboard (monitors all configured servers)
+  watch tui           TUI dashboard (monitors all configured servers)
+  watch add <name>    Add container to restart watch list
+  watch list          Show watched containers
+  watch remove <name> Remove container from watch list
+  watch check         One-shot restart check
+  watch start         Continuous restart monitoring loop
+  watch history       List restart history (alias: incidents)
+  watch show <id>     Show restart details with logs
   serve               Web dashboard (browser-based, go:embed)
   docker list         List running containers
   docker restart <n>  Restart a container
@@ -346,12 +372,30 @@ homebutler serve --demo         # demo mode with sample data
 </details>
 
 <details>
-<summary>🖥️ TUI Dashboard</summary>
+<summary>🔄 Docker Restart Watch</summary>
 
-`homebutler watch` launches an interactive terminal dashboard (btop-style):
+`homebutler watch` tracks whether Docker containers have restarted and stores the history with captured logs under `~/.homebutler/watch/`.
 
 ```bash
-homebutler watch               # monitors all configured servers
+homebutler watch add myapp          # register container
+homebutler watch start              # continuous monitoring (default 30s)
+homebutler watch start --interval 1m  # custom interval
+homebutler watch check              # one-shot check
+homebutler watch history            # list restart incidents
+homebutler watch show <id>          # show incident details + post-restart logs
+```
+
+Each incident captures the last 100 lines of container logs at the time of detection.
+
+</details>
+
+<details>
+<summary>🖥️ TUI Dashboard</summary>
+
+`homebutler watch tui` launches an interactive terminal dashboard (btop-style):
+
+```bash
+homebutler watch tui           # monitors all configured servers
 ```
 
 Auto-refreshes every 2 seconds. Press `q` to quit.
