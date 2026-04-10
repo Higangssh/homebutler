@@ -8,6 +8,12 @@ import (
 	"github.com/Higangssh/homebutler/internal/util"
 )
 
+// inspectContainerFunc and captureLogsFunc are package-level function variables
+// used by CheckTargets. They default to InspectContainer and CaptureLogs respectively,
+// and can be overridden in tests for isolation.
+var inspectContainerFunc = InspectContainer
+var captureLogsFunc = CaptureLogs
+
 type InspectResult struct {
 	RestartCount int    `json:"restart_count"`
 	StartedAt    string `json:"started_at"`
@@ -88,7 +94,7 @@ func CheckTargets(dir string) ([]Incident, error) {
 		if t.EffectiveKind() != "docker" {
 			continue
 		}
-		curr, err := InspectContainer(t.Container)
+		curr, err := inspectContainerFunc(t.Container)
 		if err != nil {
 			fmt.Fprintf(defaultStderr, "warning: %v\n", err)
 			continue
@@ -96,7 +102,7 @@ func CheckTargets(dir string) ([]Incident, error) {
 
 		prev := states[t.Container]
 		if ev := DetectRestart(prev, curr); ev != nil {
-			postLogs := CaptureLogs(t.Container, "100")
+			postLogs := captureLogsFunc(t.Container, "100")
 			inc := Incident{
 				ID:           GenerateIncidentID(t.Container, now),
 				Container:    t.Container,
