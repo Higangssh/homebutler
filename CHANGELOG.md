@@ -2,6 +2,46 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.15.0](https://github.com/Higangssh/homebutler/compare/v0.14.1...v0.15.0) - 2026-04-10
+
+**Know why your processes died.** `homebutler watch` now monitors Docker containers, systemd services, and PM2 apps — capturing pre-death logs the moment a crash happens.
+
+```bash
+homebutler watch add nginx                          # interactive type selection
+homebutler watch add --kind systemd nginx.service
+homebutler watch start                              # real-time monitoring
+homebutler watch show <id>                          # see why it crashed
+```
+
+### ✨ Features
+
+- add multi-backend watch monitors: Docker (event streaming), systemd (state polling), PM2 (restart detection)
+- capture pre-death logs on container/service crash via `docker events` real-time streaming
+- add interactive process type selection to `watch add` (Docker / systemd / PM2)
+- extend Target with `kind`/`unit` fields for multi-backend support (backward compatible)
+
+### 🐛 Fixes
+
+- eliminate duplicate `system.Status()` call in TUI alert rendering
+- unify sparkline and progress bar color thresholds (70%/90%)
+- preserve docker cache on timeout instead of discarding
+- fix `truncate` to use rune count for proper unicode support
+- apply De Morgan's law to satisfy staticcheck QF1001
+
+### 🧪 Testing
+
+- boost `internal/watch` coverage from 49% to 86%
+- add edge case tests for all three monitors (malformed input, context cancel, error paths)
+- add CheckTargets tests with mixed target kinds
+
+### 📝 Documentation
+
+- update README with multi-backend watch and pre-death log capture
+
+### 🧹 Chores
+
+- remove unused demo and metadata files
+
 ## [0.14.1](https://github.com/Higangssh/homebutler/compare/v0.14.0...v0.14.1) - 2026-04-06
 
 **Harder to misuse, easier to contribute.** This release tightens security around install and alerts, adds local contribution guardrails, and improves test coverage across the core runtime.
