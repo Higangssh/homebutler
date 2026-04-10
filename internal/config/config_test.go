@@ -102,8 +102,7 @@ func TestFindWakeTarget(t *testing.T) {
 	target := cfg.FindWakeTarget("nas")
 	if target == nil {
 		t.Fatal("expected to find 'nas'")
-	}
-	if target.MAC != "AA:BB:CC:DD:EE:FF" {
+	} else if target.MAC != "AA:BB:CC:DD:EE:FF" {
 		t.Errorf("expected MAC AA:BB:CC:DD:EE:FF, got %s", target.MAC)
 	}
 

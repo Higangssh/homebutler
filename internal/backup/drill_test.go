@@ -159,8 +159,7 @@ func TestFindServiceInManifest(t *testing.T) {
 	svc := findServiceInManifest(manifest, "uptime-kuma")
 	if svc == nil {
 		t.Fatal("findServiceInManifest() returned nil for existing service")
-	}
-	if svc.Name != "uptime-kuma" {
+	} else if svc.Name != "uptime-kuma" {
 		t.Errorf("Name = %q, want %q", svc.Name, "uptime-kuma")
 	}
 
@@ -326,12 +325,13 @@ func TestRunDrillIntegrityFailure(t *testing.T) {
 	}
 	if result == nil {
 		t.Fatal("expected result")
-	}
-	if result.Passed {
-		t.Fatal("expected failed result")
-	}
-	if !strings.Contains(result.Error, "integrity check failed") {
-		t.Fatalf("unexpected error: %s", result.Error)
+	} else {
+		if result.Passed {
+			t.Fatal("expected failed result")
+		}
+		if !strings.Contains(result.Error, "integrity check failed") {
+			t.Fatalf("unexpected error: %s", result.Error)
+		}
 	}
 }
 
@@ -344,8 +344,7 @@ func TestRunDrillServiceNotFoundInBackup(t *testing.T) {
 	}
 	if result == nil {
 		t.Fatal("expected result")
-	}
-	if !strings.Contains(result.Error, `service "uptime-kuma" not found in backup`) {
+	} else if !strings.Contains(result.Error, `service "uptime-kuma" not found in backup`) {
 		t.Fatalf("unexpected error: %s", result.Error)
 	}
 }
@@ -660,15 +659,16 @@ func TestExtractAndReadManifest(t *testing.T) {
 	}
 	if m == nil {
 		t.Fatal("manifest should not be nil")
-	}
-	if m.Version != "1" {
-		t.Errorf("Version = %q, want %q", m.Version, "1")
-	}
-	if len(m.Services) != 1 {
-		t.Fatalf("Services count = %d, want 1", len(m.Services))
-	}
-	if m.Services[0].Name != "nginx" {
-		t.Errorf("Service name = %q, want %q", m.Services[0].Name, "nginx")
+	} else {
+		if m.Version != "1" {
+			t.Errorf("Version = %q, want %q", m.Version, "1")
+		}
+		if len(m.Services) != 1 {
+			t.Fatalf("Services count = %d, want 1", len(m.Services))
+		}
+		if m.Services[0].Name != "nginx" {
+			t.Errorf("Service name = %q, want %q", m.Services[0].Name, "nginx")
+		}
 	}
 	if extractedDir == "" {
 		t.Error("extractedDir should not be empty")
