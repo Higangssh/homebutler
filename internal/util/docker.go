@@ -77,4 +77,3 @@ func DockerCmd(args ...string) (string, error) {
 	EnsureDockerHost()
 	return RunCmd("docker", args...)
 }
-

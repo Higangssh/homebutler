@@ -17,4 +17,3 @@ func IsPermissionError(err error) bool {
 	return strings.Contains(msg, "permission denied") ||
 		strings.Contains(msg, "operation not permitted")
 }
-
