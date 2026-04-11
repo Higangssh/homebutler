@@ -18,8 +18,8 @@
 ```yaml
 notify:
   telegram:
-    bot_token: "123456:ABC..."
-    chat_id: "8577492680"
+    bot_token: "your-bot-token"
+    chat_id: "your-chat-id"
   slack:
     webhook_url: "https://hooks.slack.com/services/XXX"
   discord:
@@ -32,6 +32,7 @@ notify:
 - 기존 webhook 동작 깨지면 안 됨 (하위 호환)
 - 외부 라이브러리 추가 금지 (net/http로 충분)
 - bot_token 등 민감 정보는 코드에 하드코딩 금지
+- 문서 예시는 모두 샘플값 사용 (`your-bot-token`, `your-chat-id`)
 
 ### 작업 범위
 - `internal/alerts/notify.go` — 새 파일, NotifyAll() + provider별 Send

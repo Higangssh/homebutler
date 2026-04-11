@@ -188,13 +188,13 @@ Flapping incidents are tagged `[FLAPPING]` in history and highlighted in `watch 
 
 Notifications are disabled by default, which is useful for air-gapped or closed networks where everything runs locally.
 
-Preferred config is now `~/.config/homebutler/config.yaml`:
+A minimal example in `~/.config/homebutler/config.yaml`:
 
 ```yaml
 notify:
   telegram:
-    bot_token: "123456:ABC..."
-    chat_id: "8577492680"
+    bot_token: "your-bot-token"
+    chat_id: "your-chat-id"
 
 watch:
   enabled: true
@@ -217,7 +217,7 @@ alerts:
       action: notify
 ```
 
-Legacy `~/.homebutler/watch/config.json` is still read as a fallback for watch-specific settings, and legacy `alerts.yaml` notify/webhook provider settings are still accepted as fallback for older setups.
+Legacy `~/.homebutler/watch/config.json` is still read as a fallback for watch-specific settings, and legacy `alerts.yaml` notify/webhook provider settings are still accepted for older setups.
 
 - `watch.enabled: true` — allow watch notifications
 - `watch.notify_on: flapping` — notify only when repeated restart loops are detected
