@@ -122,13 +122,12 @@ func Load(path string) (*Config, error) {
 
 	cfg.Path = path
 
-	// Warn if config contains passwords and file permissions are too open (non-Windows).
+	// Refuse unsafe config permissions when plaintext passwords are present (non-Windows).
 	if runtime.GOOS != "windows" && hasSecrets(cfg) {
 		if info, err := os.Stat(path); err == nil {
 			perm := info.Mode().Perm()
 			if perm&0o077 != 0 {
-				fmt.Fprintf(os.Stderr, "⚠️  Config file %s contains passwords but has open permissions (%04o).\n", path, perm)
-				fmt.Fprintf(os.Stderr, "   Run: chmod 600 %s\n\n", path)
+				return nil, fmt.Errorf("config file %s contains plaintext passwords but permissions are too open (%04o); run: chmod 600 %s", path, perm, path)
 			}
 		}
 	}

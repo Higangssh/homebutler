@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"crypto/subtle"
 	"embed"
 	"encoding/json"
 	"fmt"
@@ -184,7 +185,8 @@ func (s *Server) requireAuth(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if s.token != "" && strings.HasPrefix(r.URL.Path, "/api/") {
 			auth := r.Header.Get("Authorization")
-			if auth != "Bearer "+s.token {
+			expected := "Bearer " + s.token
+			if len(auth) != len(expected) || subtle.ConstantTimeCompare([]byte(auth), []byte(expected)) != 1 {
 				writeError(w, http.StatusUnauthorized, "unauthorized")
 				return
 			}

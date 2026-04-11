@@ -197,12 +197,14 @@ func runInit() error {
 	if err := os.MkdirAll(filepath.Dir(cfgPath), 0o755); err != nil {
 		return fmt.Errorf("failed to create config directory: %w", err)
 	}
-	if err := os.WriteFile(cfgPath, data, 0o644); err != nil {
+	if err := os.WriteFile(cfgPath, data, 0o600); err != nil {
 		return fmt.Errorf("failed to write config: %w", err)
 	}
 
 	fmt.Println()
 	fmt.Printf("  ✨ Config saved to %s\n", cfgPath)
+	fmt.Println("  🔐 Config permissions set to 600 (owner-only)")
+	fmt.Println("  💡 Prefer SSH keys over password auth when possible")
 	fmt.Println()
 	fmt.Println("  Try it out:")
 	fmt.Println("    homebutler status")

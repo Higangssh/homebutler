@@ -101,7 +101,7 @@ func newAlertsInitCmd() *cobra.Command {
 				return err
 			}
 
-			if err := os.WriteFile(path, []byte(yamlStr), 0o644); err != nil {
+			if err := os.WriteFile(path, []byte(yamlStr), 0o600); err != nil {
 				return fmt.Errorf("failed to write config: %w", err)
 			}
 

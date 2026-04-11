@@ -2,6 +2,7 @@ package util
 
 import (
 	"os"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -50,7 +51,7 @@ func TestDockerSocket_FallbackToDefault(t *testing.T) {
 	}
 }
 
-func TestItoa(t *testing.T) {
+func TestStrconvItoaBehavior(t *testing.T) {
 	tests := []struct {
 		input    int
 		expected string
@@ -62,9 +63,9 @@ func TestItoa(t *testing.T) {
 		{999999, "999999"},
 	}
 	for _, tt := range tests {
-		result := itoa(tt.input)
+		result := strconv.Itoa(tt.input)
 		if result != tt.expected {
-			t.Errorf("itoa(%d) = %q, want %q", tt.input, result, tt.expected)
+			t.Errorf("strconv.Itoa(%d) = %q, want %q", tt.input, result, tt.expected)
 		}
 	}
 }

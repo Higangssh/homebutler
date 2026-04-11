@@ -1,7 +1,6 @@
 package util
 
 import (
-	"fmt"
 	"os"
 	"strings"
 )
@@ -19,14 +18,3 @@ func IsPermissionError(err error) bool {
 		strings.Contains(msg, "operation not permitted")
 }
 
-// PermissionHint wraps an error with a sudo hint if it's a permission error.
-// command is the suggested sudo command (e.g., "sudo homebutler upgrade").
-func PermissionHint(err error, command string) error {
-	if err == nil {
-		return nil
-	}
-	if IsPermissionError(err) {
-		return fmt.Errorf("%w\n\n  ⚠️  Try: %s", err, command)
-	}
-	return err
-}

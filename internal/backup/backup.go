@@ -354,14 +354,14 @@ func copyComposeFiles(configFiles, destDir string) error {
 		if err != nil {
 			continue
 		}
-		if err := os.WriteFile(filepath.Join(destDir, filepath.Base(f)), data, 0o644); err != nil {
+		if err := os.WriteFile(filepath.Join(destDir, filepath.Base(f)), data, 0o600); err != nil {
 			return fmt.Errorf("failed to write compose file %s: %w", filepath.Base(f), err)
 		}
 
 		// Also try to copy .env from same directory
 		envFile := filepath.Join(filepath.Dir(f), ".env")
 		if envData, err := os.ReadFile(envFile); err == nil {
-			if err := os.WriteFile(filepath.Join(destDir, ".env"), envData, 0o644); err != nil {
+			if err := os.WriteFile(filepath.Join(destDir, ".env"), envData, 0o600); err != nil {
 				return fmt.Errorf("failed to write .env file: %w", err)
 			}
 		}

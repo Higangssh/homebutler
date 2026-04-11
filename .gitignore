@@ -16,6 +16,7 @@ internal/server/web_dist/*
 # IDE
 .idea/
 .vscode/
+.claude/
 *.swp
 *.swo
 *~

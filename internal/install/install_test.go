@@ -489,13 +489,13 @@ func TestPreCheckNoDocker(t *testing.T) {
 }
 
 func TestIsPortInUse(t *testing.T) {
-	if isPortInUse("1") {
+	if portInUseBy("1") != "" {
 		t.Error("port 1 should not be in use")
 	}
 }
 
 func TestIsPortInUseHighPort(t *testing.T) {
-	if isPortInUse("59999") {
+	if portInUseBy("59999") != "" {
 		t.Error("port 59999 should not be in use")
 	}
 }

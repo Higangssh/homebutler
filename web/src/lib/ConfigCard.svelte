@@ -71,7 +71,7 @@
                 {#if srv.password}
                   <div class="row">
                     <span class="label">Password</span>
-                    <code class="value">{srv.password}</code>
+                    <code class="value">configured</code>
                   </div>
                 {/if}
               {/if}

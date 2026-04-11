@@ -627,10 +627,6 @@ func portInUseBy(port string) string {
 	return ""
 }
 
-func isPortInUse(port string) bool {
-	return portInUseBy(port) != ""
-}
-
 // ValidatePort checks that a port string is a valid port number (1-65535).
 func ValidatePort(port string) error {
 	n, err := strconv.Atoi(port)

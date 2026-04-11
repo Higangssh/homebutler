@@ -16,8 +16,7 @@ import (
 )
 
 const (
-	dialTimeout    = 10 * time.Second
-	commandTimeout = 30 * time.Second
+	dialTimeout = 10 * time.Second
 )
 
 // Run executes a homebutler command on a remote server via SSH.
@@ -177,6 +176,9 @@ func tofuConnect(addr string, cfg *ssh.ClientConfig) error {
 	if hostKey == nil {
 		return fmt.Errorf("no host key captured")
 	}
+
+	fingerprint := ssh.FingerprintSHA256(hostKey)
+	fmt.Fprintf(os.Stderr, "[%s] trusting new SSH host key for %s: %s\n", addr, addr, fingerprint)
 
 	// Write to known_hosts
 	line := knownhosts.Line([]string{addr}, hostKey)
