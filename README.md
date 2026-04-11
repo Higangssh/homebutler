@@ -530,7 +530,7 @@ homebutler watch show <incident-id>         # incident details + logs
 homebutler watch tui                        # TUI dashboard
 
 # Notifications
-homebutler alerts test-notify               # test configured notification providers
+homebutler notify test                      # test configured notification providers
 ```
 
 If you only learn one monitoring workflow in homebutler, learn `watch` first.
@@ -559,7 +559,7 @@ homebutler restore ./backup.tar.gz         # restore
 homebutler alerts --watch                  # default: 30s interval
 homebutler alerts --watch --interval 10s   # check every 10 seconds
 homebutler alerts history                  # view alert history
-homebutler alerts test-notify              # test your notification channels
+homebutler notify test                     # test your notification channels
 ```
 
 Default thresholds: CPU 90%, Memory 85%, Disk 90%. If you are starting fresh, begin with `watch` and add `alerts` only if you specifically want threshold-based checks.
@@ -609,7 +609,7 @@ Supports health checks for: `nginx-proxy-manager`, `vaultwarden`, `uptime-kuma`,
 homebutler init    # interactive setup wizard
 ```
 
-📖 **[Configuration details →](docs/configuration.md)** — config file locations, alert thresholds, all options.
+📖 **[Configuration details →](docs/configuration.md)** — config file locations, watch/notify options, and advanced alert thresholds.
 
 ## Multi-server
 

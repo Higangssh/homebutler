@@ -40,6 +40,7 @@ func init() {
 		newProcessesCmd(),
 		newNetworkCmd(),
 		newWakeCmd(),
+		newNotifyCmd(),
 		newAlertsCmd(),
 		newTrustCmd(),
 		newBackupCmd(),

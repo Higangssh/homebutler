@@ -139,6 +139,10 @@ func newAlertsTestNotifyCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "test-notify",
 		Short: "Send a test notification to all configured providers",
+		Long: `Send a test notification to all configured providers.
+
+For new users, prefer 'homebutler notify test'.
+This command remains for backward compatibility.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			rulesCfg, err := loadAlertsConfig(alertsConfig)
 			if err != nil {
