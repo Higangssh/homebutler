@@ -26,8 +26,12 @@ func newAlertsCmd() *cobra.Command {
 
 	cmd := &cobra.Command{
 		Use:   "alerts",
-		Short: "Check resource thresholds (CPU, memory, disk)",
+		Short: "Advanced resource threshold checks (CPU, memory, disk)",
 		Long: `Check system resource thresholds for CPU, memory, and disk usage.
+
+This is an advanced threshold-based workflow. For most users, start with
+'homebutler watch' for restart detection, crash analysis, flapping detection,
+and incident history.
 
 Use --watch to continuously monitor resources (Ctrl+C to stop).
 Use --interval to set the monitoring interval (default: 30s).

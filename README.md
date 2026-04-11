@@ -508,14 +508,14 @@ Auto-refreshes every 2 seconds. Press `q` to quit.
 
 </details>
 
-## Watch (Crash Monitoring)
+## Monitoring
 
-`homebutler watch` is the focused monitoring workflow for restart detection, crash analysis, flapping detection, and incident history.
+`homebutler watch` is the main monitoring workflow. It focuses on restart detection, crash analysis, flapping detection, and incident history.
 
 ```bash
 # Target management
-homebutler watch add nginx                  # add a target (interactive kind selection)
-homebutler watch add --kind docker nginx    # add with explicit kind
+homebutler watch add nginx                  # interactive kind selection
+homebutler watch add --kind docker nginx    # explicit kind
 homebutler watch list                       # show watched targets
 homebutler watch remove nginx               # remove a target
 
@@ -533,16 +533,7 @@ homebutler watch tui                        # TUI dashboard
 homebutler alerts test-notify               # test configured notification providers
 ```
 
-`watch` is the main monitoring story in homebutler. It focuses on service restarts, crash evidence, flapping, and incident review. Resource threshold monitoring under `alerts` remains available today, but `watch` is the primary end-user workflow.
-
-## Alert Monitoring
-
-```bash
-homebutler alerts --watch                  # default: 30s interval
-homebutler alerts --watch --interval 10s   # check every 10 seconds
-```
-
-Default thresholds: CPU 90%, Memory 85%, Disk 90%. Customizable via config.
+If you only learn one monitoring workflow in homebutler, learn `watch` first.
 
 ## Backup & Restore
 
@@ -560,82 +551,18 @@ homebutler restore ./backup.tar.gz         # restore
 
 📖 **[Full backup documentation →](docs/backup.md)** — how it works, archive structure, security notes.
 
-### 🛡️ Self-Healing
+### Alert Thresholds (Advanced)
 
-**Your homelab fixes itself while you sleep.**
-
-Define rules in YAML. homebutler watches your servers and takes action automatically — restart crashed containers, prune disk, or run custom scripts.
+`alerts` still exists for CPU, memory, and disk threshold checks, but it is a more advanced flow than `watch` and is not the recommended first step for new users.
 
 ```bash
-homebutler alerts init          # interactively generate ~/.config/homebutler/config.yaml
-homebutler alerts --watch       # start self-healing daemon
-homebutler alerts history       # view past events
-homebutler alerts test-notify   # test your notification channels
+homebutler alerts --watch                  # default: 30s interval
+homebutler alerts --watch --interval 10s   # check every 10 seconds
+homebutler alerts history                  # view alert history
+homebutler alerts test-notify              # test your notification channels
 ```
 
-**Recommended setup flow:**
-
-1. Run `homebutler alerts init` once to generate a user-friendly `config.yaml` template.
-2. Fill in `notify` with at least one provider (Telegram, Slack, Discord, or webhook).
-3. Set `watch.notify_on` to match how noisy you want alerts to be.
-4. Add `alerts.rules` for actions like restart, notify, or exec.
-5. Start monitoring with `homebutler alerts --watch`.
-
-**Example `~/.config/homebutler/config.yaml`:**
-
-```yaml
-notify:
-  telegram:
-    bot_token: "your-bot-token"
-    chat_id: "your-chat-id"
-  slack:
-    webhook_url: "https://hooks.slack.com/..."
-  discord:
-    webhook_url: "https://discord.com/api/webhooks/..."
-
-watch:
-  enabled: true
-  notify_on: flapping
-  cooldown: 5m
-
-alerts:
-  cpu: 90
-  memory: 85
-  disk: 85
-  rules:
-    - name: container-down
-      metric: container
-      watch: [uptime-kuma, vaultwarden]
-      action: restart
-      cooldown: 5m
-
-    - name: disk-full
-      metric: disk
-      threshold: 85
-      action: exec
-      exec: "docker system prune -f"
-```
-
-**What it does:**
-
-```
-⏱️ 03:14:22  🔴 disk-full triggered (disk 91%)
-             → Executing: docker system prune -f
-             → Reclaimed 4.2 GB
-✓  03:14:29  ✅ Resolved (disk 66%)
-```
-
-**Supported metrics:** `cpu`, `memory`, `disk`, `container`
-**Supported actions:** `notify` (alert only), `restart` (docker restart), `exec` (run any command)
-**Supported channels:** Telegram, Slack, Discord, generic webhook
-
-**Config loading order:**
-
-1. `~/.config/homebutler/config.yaml` (preferred)
-2. `~/.homebutler/alerts.yaml` (legacy fallback, deprecated)
-3. `~/.homebutler/watch/config.json` (legacy watch fallback)
-
-If you are starting fresh, use only `config.yaml`. Legacy files are still read for backward compatibility, but they are no longer the recommended setup path.
+Default thresholds: CPU 90%, Memory 85%, Disk 90%. If you are starting fresh, begin with `watch` and add `alerts` only if you specifically want threshold-based checks.
 
 ### 🔍 Backup Drill
 
