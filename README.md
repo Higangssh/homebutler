@@ -8,7 +8,7 @@
   <a href="https://homebutler.dev">Website</a> · <a href="https://github.com/Higangssh/homebutler#readme">Docs</a> · <a href="https://github.com/Higangssh/homebutler/releases">Releases</a>
 </p>
 
-**Manage your homelab from any AI — Claude, ChatGPT, Cursor, or terminal. One binary. Zero dependencies.**
+**Manage your homelab from chat, AI tools, or the terminal. One binary. Zero dependencies.**
 
 [![Go](https://img.shields.io/badge/Go-1.26+-00ADD8?logo=go&logoColor=white)](https://go.dev)
 [![Go Report Card](https://goreportcard.com/badge/github.com/Higangssh/homebutler)](https://goreportcard.com/report/github.com/Higangssh/homebutler)
@@ -23,21 +23,19 @@ A single-binary CLI + MCP server that lets you monitor servers, control Docker, 
     <img src="assets/demo-thumbnail.png" alt="homebutler demo" width="800" />
   </a>
 </p>
-<p align="center"><em>▶️ Click to watch demo — Alert → Diagnose → Fix, all from chat (34s)</em></p>
+<p align="center"><em>▶️ Click to watch demo — monitor, diagnose, and manage from chat (34s)</em></p>
 
 ## Why homebutler?
 
-> Other tools give you dashboards. homebutler gives you a **conversation**.
+> Other tools give you dashboards. homebutler gives you a **tool layer** you can use from chat, AI tools, or the terminal.
 
-**3 AM. Your server disk is 91% full. Here's what happens next:**
+The clearest story in homebutler today is `watch`:
+- detect service restarts
+- capture crash evidence
+- spot flapping loops
+- review incidents later
 
-<p align="center">
-  <img src="assets/demo-chat.png" alt="HomeButler alert → diagnose → fix via Telegram" width="480" />
-</p>
-
-Alert fires → you check logs from bed → AI restarts the problem container → disk drops to 66%. All from your phone. No SSH, no laptop, no dashboard login.
-
-This is what homebutler + [OpenClaw](https://github.com/openclaw/openclaw) looks like in practice.
+That makes it useful both as a normal CLI and as the execution layer under tools like [OpenClaw](https://github.com/openclaw/openclaw).
 
 <details>
 <summary>📊 Comparison with alternatives</summary>
@@ -57,7 +55,7 @@ This is what homebutler + [OpenClaw](https://github.com/openclaw/openclaw) looks
 | Network scan | ✅ | ❌ | ❌ | ❌ |
 | Remote deploy | ✅ One command | ❌ | ❌ | ❌ |
 | Air-gapped install | ✅ Copy binary | ⚠️ apt/brew | ❌ Docker | ❌ Docker |
-| Resource usage | ~10MB, 0% idle | Medium | High | High |
+| Resource usage | Low single-binary footprint | Medium | High | High |
 
 </details>
 
@@ -67,8 +65,7 @@ This is what homebutler + [OpenClaw](https://github.com/openclaw/openclaw) looks
 - **System Status** — CPU, memory, disk, uptime at a glance
 - **Docker Management** — List, restart, stop, logs for containers
 - **Multi-server** — Manage remote servers over SSH (key & password auth)
-- **Self-Healing** — YAML-defined rules that auto-detect and auto-fix issues (restart containers, prune disk, run scripts)
-- **Alerts & Notifications** — Multi-channel alerts via Telegram, Slack, Discord, or generic webhook
+- **Notifications** — Multi-channel notifications via Telegram, Slack, Discord, or generic webhook
 - **Backup & Restore** — One-command Docker volume backup with compose + env files
 - **Backup Drill** — Verify backups actually work by booting them in isolated containers
 - **MCP Server** — Works with Claude Desktop, ChatGPT, Cursor, and any MCP client
@@ -106,7 +103,7 @@ This is what homebutler + [OpenClaw](https://github.com/openclaw/openclaw) looks
 - **System Metrics** — CPU, memory, disk usage with progress bars and color thresholds
 - **Docker Containers** — Running/stopped status with friendly labels ("Running · 4d", "Stopped · 6h ago")
 - **Top Processes** — Top processes sorted by CPU/memory with zombie detection
-- **Resource Alerts** — Threshold-based warnings with visual progress bars (OK / WARNING / CRITICAL)
+- **Resource Warnings** — Visual CPU, memory, and disk thresholds in the dashboard
 - **Network Ports** — Open ports with process names and bind addresses
 - **Wake-on-LAN** — One-click wake buttons for configured devices
 - **Server Switching** — Dropdown to switch between local and remote servers
@@ -474,40 +471,6 @@ homebutler serve --demo         # demo mode with sample data
 
 </details>
 
-<details>
-<summary>🔄 Process Restart Watch</summary>
-
-`homebutler watch` tracks whether Docker containers, systemd services, or PM2 apps have restarted and stores the history with captured logs under `~/.homebutler/watch/`.
-
-```bash
-homebutler watch add myapp                     # interactive kind selection
-homebutler watch add --kind docker myapp       # Docker container
-homebutler watch add --kind systemd myapp.service  # systemd unit
-homebutler watch add --kind pm2 my-api         # PM2 application
-homebutler watch start                         # continuous monitoring (default 30s)
-homebutler watch start --interval 1m           # custom interval
-homebutler watch check                         # one-shot check
-homebutler watch history                       # list restart incidents
-homebutler watch show <id>                     # show incident details + logs
-```
-
-Each incident captures **pre-death logs** (the last output before the crash) and post-restart logs. Docker targets use real-time `docker events` for instant detection; systemd and PM2 targets use polling.
-
-</details>
-
-<details>
-<summary>🖥️ TUI Dashboard</summary>
-
-`homebutler watch tui` launches an interactive terminal dashboard (btop-style):
-
-```bash
-homebutler watch tui           # monitors all configured servers
-```
-
-Auto-refreshes every 2 seconds. Press `q` to quit.
-
-</details>
-
 ## Monitoring
 
 `homebutler watch` is the main monitoring workflow. It focuses on restart detection, crash analysis, flapping detection, and incident history.
@@ -553,7 +516,7 @@ homebutler restore ./backup.tar.gz         # restore
 
 ### Alert Thresholds (Advanced)
 
-`alerts` still exists for CPU, memory, and disk threshold checks, but it is a more advanced flow than `watch` and is not the recommended first step for new users.
+`alerts` still exists for CPU, memory, and disk threshold checks, but it is an advanced flow and not the recommended first step for new users.
 
 ```bash
 homebutler alerts --watch                  # default: 30s interval
@@ -562,7 +525,7 @@ homebutler alerts history                  # view alert history
 homebutler notify test                     # test your notification channels
 ```
 
-Default thresholds: CPU 90%, Memory 85%, Disk 90%. If you are starting fresh, begin with `watch` and add `alerts` only if you specifically want threshold-based checks.
+Default thresholds: CPU 90%, Memory 85%, Disk 90%. Start with `watch`, then add `alerts` only if you specifically want threshold-based checks.
 
 ### 🔍 Backup Drill
 
