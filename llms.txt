@@ -1,39 +1,88 @@
 # homebutler
 
-> Single-binary homelab management CLI written in Go. Monitor servers, manage Docker containers, install self-hosted apps, Wake-on-LAN, network scanning, alerts, backup/restore, and multi-server SSH — all from one 15MB binary with zero dependencies.
+> Single-binary homelab management CLI for servers, Docker, app installs, backup/restore, Wake-on-LAN, SSH multi-server workflows, and AI/MCP tooling.
 
 ## What it does
-- System monitoring: CPU, memory, disk usage, uptime across multiple servers
-- Docker management: list, restart, stop, logs, stats (per-container resource usage)
-- One-command app install: uptime-kuma, vaultwarden, filebrowser, it-tools, gitea
-- Wake-on-LAN: wake machines by MAC address or configured name
-- Network scanning: discover devices on local network (IP, MAC, hostname)
-- Open ports: list listening ports with process info
-- Alerts: threshold-based monitoring with continuous watch mode
-- Backup/restore: Docker volume backup and restore
-- Multi-server: manage remote servers over SSH from a single CLI
-- Built-in MCP server: 15 AI-compatible tools for Claude, ChatGPT, Cursor, etc.
-- Web dashboard: real-time browser UI with go:embed
-- TUI: terminal dashboard with Bubble Tea
+- `watch`: restart detection, crash analysis, flapping detection, incident history
+- `watch tui`: terminal dashboard for all configured servers
+- `serve`: embedded web dashboard with no separate frontend runtime
+- Docker management: list, restart, stop, logs, stats
+- App install: one-command self-hosted app deployment
+- Backup/restore: Docker volume backup plus backup drill verification
+- Notifications: Telegram, Slack, Discord, webhook
+- Open ports, process list, network scan, Wake-on-LAN
+- Multi-server SSH management and remote deploy
+- Built-in MCP server for AI tools
+- JSON output for scripts and agents
 
-## How it compares
-- vs Portainer: homebutler is CLI-first, single binary, no Docker required to run
-- vs CasaOS: homebutler is not an OS, just a lightweight CLI tool
-- vs btop/htop: homebutler adds Docker, multi-server, app install, and AI integration
-- vs Komodo: homebutler is simpler, single binary, no database required
+## Primary workflow
+For monitoring, the main workflow is `watch`.
+
+Use `watch` when you want to:
+- detect service/container restarts
+- capture pre-death and post-restart logs
+- classify likely crash causes
+- detect flapping loops
+- inspect incident history later
+
+`alerts` still exists, but it is the advanced threshold-based workflow for CPU, memory, and disk checks.
 
 ## Install
+```bash
 brew install Higangssh/homebutler/homebutler
 # or
 curl -fsSL https://raw.githubusercontent.com/Higangssh/homebutler/main/install.sh | sh
+```
 
 ## Quick start
-homebutler init                    # interactive setup
-homebutler status --all            # all servers at once
-homebutler docker list             # list containers
-homebutler install uptime-kuma     # deploy an app
-homebutler docker stats            # container resource usage
-homebutler serve                   # web dashboard
+```bash
+homebutler init
+homebutler status --all
+homebutler watch add nginx
+homebutler watch start
+homebutler watch history
+homebutler notify test
+homebutler serve
+```
+
+## Config
+Primary config path:
+- `~/.config/homebutler/config.yaml`
+
+Resolution order:
+1. `--config <path>`
+2. `$HOMEBUTLER_CONFIG`
+3. `~/.config/homebutler/config.yaml`
+4. `./homebutler.yaml`
+
+Main top-level config sections:
+- `servers`
+- `notify`
+- `watch`
+- `alerts`
+- `wake`
+- `backup_dir`
+
+Legacy fallback config may still be read for compatibility, but `config.yaml` is the preferred source.
+
+## AI / MCP
+homebutler includes an MCP server for AI tools such as Claude, ChatGPT, Cursor, and other MCP-compatible clients.
+
+Representative tools include:
+- `system_status`
+- `docker_list`
+- `docker_restart`
+- `docker_stop`
+- `docker_logs`
+- `wake`
+- `open_ports`
+- `network_scan`
+- `alerts`
+
+## Notes
+- Prefer SSH key auth over password auth.
+- Config files containing plaintext passwords should be owner-readable only.
+- The web dashboard supports bearer token auth with `homebutler serve --token ...`.
 
 ## Links
 - GitHub: https://github.com/Higangssh/homebutler
