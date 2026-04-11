@@ -508,6 +508,33 @@ Auto-refreshes every 2 seconds. Press `q` to quit.
 
 </details>
 
+## Watch (Crash Monitoring)
+
+`homebutler watch` is the focused monitoring workflow for restart detection, crash analysis, flapping detection, and incident history.
+
+```bash
+# Target management
+homebutler watch add nginx                  # add a target (interactive kind selection)
+homebutler watch add --kind docker nginx    # add with explicit kind
+homebutler watch list                       # show watched targets
+homebutler watch remove nginx               # remove a target
+
+# Monitoring
+homebutler watch start                      # start continuous crash/restart monitoring
+homebutler watch start --interval 10s       # custom poll interval for polling-based backends
+homebutler watch check                      # one-shot restart check
+
+# Investigation
+homebutler watch history                    # incident history
+homebutler watch show <incident-id>         # incident details + logs
+homebutler watch tui                        # TUI dashboard
+
+# Notifications
+homebutler alerts test-notify               # test configured notification providers
+```
+
+`watch` is the main monitoring story in homebutler. It focuses on service restarts, crash evidence, flapping, and incident review. Resource threshold monitoring under `alerts` remains available today, but `watch` is the primary end-user workflow.
+
 ## Alert Monitoring
 
 ```bash
