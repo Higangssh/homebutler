@@ -388,7 +388,7 @@ servers:
     host: 127.0.0.1
     local: true
 `
-	os.WriteFile(path, []byte(content), 0644)
+	os.WriteFile(path, []byte(content), 0600)
 
 	cfg, err := Load(path)
 	if err != nil {
