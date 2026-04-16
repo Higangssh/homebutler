@@ -2,6 +2,44 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.16.1](https://github.com/Higangssh/homebutler/compare/v0.16.0...v0.16.1) - 2026-04-17
+
+**Safer defaults and smoother watch notifications.** This patch tightens config and secret handling, adds a clearer `notify test` entry point, and keeps the watch-first config UX intact.
+
+```bash
+homebutler notify test               # send a test notification
+homebutler watch start               # monitor processes with the watch-first flow
+homebutler config path               # confirm the unified config location
+```
+
+### ✨ Features
+
+- add `homebutler notify test` as the main notification test entry point while keeping `alerts test-notify` for backward compatibility
+
+### 🔐 Security
+
+- tighten config and secret handling, including stricter permissions for generated config files and secret-containing files
+- reject insecure config file permissions when plaintext passwords are present
+- use constant-time bearer token comparison in the web server
+- write backup copies of compose and `.env` files with stricter permissions
+
+### 🐛 Fixes
+
+- guard watch notifier config lookup to avoid nil edge cases
+- keep the unified config UX centered on `~/.config/homebutler/config.yaml` with legacy fallback support and deprecation warning for old paths
+- remove the abandoned `monitor` wrapper experiment in favor of the `watch`-first UX
+- clean up dead code and formatting around utility/config handling
+
+### 🧪 Tests
+
+- align config permission coverage with the tightened secret-handling behavior
+- finish staticcheck nil-guard cleanup around alert/notification code paths
+
+### 📝 Documentation
+
+- refresh README watch guidance and notification config examples
+- refresh `llms.txt` summary and remove stale internal planning documents
+
 ## [0.16.0](https://github.com/Higangssh/homebutler/compare/v0.15.0...v0.16.0) - 2026-04-10
 
 **Understand why your processes keep dying.** Automatic crash analysis with exit code + log pattern matching, flapping detection for repeated restarts, and opt-in notification support.
