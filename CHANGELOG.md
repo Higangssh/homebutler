@@ -2,6 +2,33 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.17.0](https://github.com/Higangssh/homebutler/compare/v0.16.1...v0.17.0) - 2026-04-26
+
+**Map your homelab before you fix it.** This release adds an inventory/topology view that turns system status, Docker containers, and open ports into a readable CLI map or Mermaid diagram.
+
+```bash
+homebutler inventory scan
+homebutler inventory export --format mermaid
+homebutler --json inventory scan
+```
+
+### ✨ Features
+
+- add `homebutler inventory scan` and `homebutler inventory show` for a human-readable server inventory
+- add `homebutler inventory export --format mermaid` for topology diagrams in GitHub, Obsidian, docs, and AI workflows
+- connect Docker-published host ports back to the containers that expose them
+- split app ports from system ports, show public vs local bind hints, and dedupe duplicate IPv4/IPv6 listeners
+- keep Docker and port collection best-effort by surfacing warnings instead of failing the whole inventory scan
+
+### 🧪 Tests
+
+- add focused inventory collection, rendering, Mermaid, JSON, Docker port mapping, and dedupe coverage
+- verify inventory on macOS and a Linux arm64 Raspberry Pi
+
+### 📝 Documentation
+
+- document inventory commands, tree output, and Mermaid export in README
+
 ## [0.16.1](https://github.com/Higangssh/homebutler/compare/v0.16.0...v0.16.1) - 2026-04-17
 
 **Safer defaults and smoother watch notifications.** This patch tightens config and secret handling, adds a clearer `notify test` entry point, and keeps the watch-first config UX intact.
