@@ -8,76 +8,82 @@
   <a href="https://homebutler.dev">Website</a> · <a href="https://github.com/Higangssh/homebutler#readme">Docs</a> · <a href="https://github.com/Higangssh/homebutler/releases">Releases</a>
 </p>
 
-**Manage your homelab from chat, AI tools, or the terminal. One binary. Zero dependencies.**
+**A single binary for running a small home server without babysitting it.**
 
-[![Go](https://img.shields.io/badge/Go-1.26+-00ADD8?logo=go&logoColor=white)](https://go.dev)
+[![Go](https://img.shields.io/badge/Go-1.25+-00ADD8?logo=go&logoColor=white)](https://go.dev)
 [![Go Report Card](https://goreportcard.com/badge/github.com/Higangssh/homebutler)](https://goreportcard.com/report/github.com/Higangssh/homebutler)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Release](https://img.shields.io/github/v/release/Higangssh/homebutler)](https://github.com/Higangssh/homebutler/releases)
 [![homebutler MCP server](https://glama.ai/mcp/servers/Higangssh/homebutler/badges/score.svg)](https://glama.ai/mcp/servers/Higangssh/homebutler)
 
-A single-binary CLI + MCP server that lets you monitor servers, control Docker, wake machines, and scan your network — from chat, AI tools, or the command line.
+HomeButler helps you answer the boring but painful questions every homelab eventually creates:
+
+- What is running on my server right now?
+- Which container owns this port?
+- Why did this service restart at 3 AM?
+- Is my backup actually restorable?
+- Can I install this self-hosted app without hand-writing another compose file?
+
+No daemon required. No database. No always-on web service. Just one Go binary you can use from the terminal, scripts, a web dashboard, or AI tools.
 
 <p align="center">
   <a href="https://www.youtube.com/watch?v=MFoDiYRH_nE">
     <img src="assets/demo-thumbnail.png" alt="homebutler demo" width="800" />
   </a>
 </p>
-<p align="center"><em>▶️ Click to watch demo — monitor, diagnose, and manage from chat (34s)</em></p>
+<p align="center"><em>▶️ 34s demo — monitor, diagnose, and manage your homelab</em></p>
+
+## Quick Start
+
+```bash
+# One-line install (auto-detects OS/arch)
+curl -fsSL https://raw.githubusercontent.com/Higangssh/homebutler/main/install.sh | sh
+
+# Or via Homebrew
+brew install Higangssh/homebutler/homebutler
+
+# Interactive setup — add your servers in seconds
+homebutler init
+```
+
+Use it right away:
+
+```bash
+homebutler status                    # CPU, memory, disk, uptime
+homebutler docker list               # running containers
+homebutler inventory scan            # containers + ports + topology
+homebutler install uptime-kuma       # deploy a self-hosted app
+homebutler backup drill uptime-kuma  # verify a backup actually restores
+homebutler watch tui                 # terminal dashboard
+homebutler serve                     # web dashboard at http://localhost:8080
+```
+
+Machine-readable output is available everywhere:
+
+```bash
+homebutler --json status
+homebutler --json inventory scan
+```
+
+## What it does
+
+- **Install apps** — deploy Uptime Kuma, Jellyfin, Pi-hole, Gitea, Portainer, and more with one command
+- **Map your server** — see containers, exposed ports, system ports, and service topology
+- **Catch crashes** — save logs before/after Docker, systemd, or PM2 restarts and detect flapping loops
+- **Verify backups** — boot backups in isolated containers before you trust them
+- **Use it anywhere** — CLI, JSON, web dashboard, or MCP for AI agents
 
 ## Why homebutler?
 
-> Other tools give you dashboards. homebutler gives you a **tool layer** you can use from chat, AI tools, or the terminal.
+Self-hosting is not hard because one `docker compose up` is hard. It is hard because the maintenance never ends: ports collide, containers restart silently, backups look fine until restore day, and every server becomes a slightly different snowflake.
 
-The clearest story in homebutler today is `watch`:
-- detect service restarts
-- capture crash evidence
-- spot flapping loops
-- review incidents later
+HomeButler is a small operations toolkit for that messy middle.
 
-That makes it useful both as a normal CLI and as the execution layer under tools like [OpenClaw](https://github.com/openclaw/openclaw).
+### Why not just use Portainer, Netdata, or CasaOS?
 
-<details>
-<summary>📊 Comparison with alternatives</summary>
+Those are great dashboards. HomeButler is CLI-first, scriptable, JSON-friendly, air-gap friendly, and safe to copy onto any server. Use it when you want commands you can run from a terminal, cron job, SSH session, CI script, or AI agent.
 
-| | homebutler | Glances/btop | Netdata | CasaOS |
-|---|---|---|---|---|
-| TUI dashboard | ✅ Built-in | ✅ | ❌ Web | ❌ Web |
-| Web dashboard | ✅ Embedded | ❌ | ✅ | ✅ |
-| Single binary | ✅ | ❌ | ❌ | ❌ |
-| Optional web server | ✅ On-demand | Always-on | Always-on | Always-on |
-| Multi-server SSH | ✅ Parallel | ❌ | ❌ | ❌ |
-| MCP support | ✅ Built-in | ❌ | ❌ | ❌ |
-| Chat integration | ✅ Native | ❌ | ❌ | ❌ |
-| AI-friendly JSON | ✅ | ❌ | ⚠️ API | ⚠️ API |
-| Docker control | ✅ | ⚠️ Monitor | ❌ | ✅ |
-| Wake-on-LAN | ✅ | ❌ | ❌ | ❌ |
-| Network scan | ✅ | ❌ | ❌ | ❌ |
-| Remote deploy | ✅ One command | ❌ | ❌ | ❌ |
-| Air-gapped install | ✅ Copy binary | ⚠️ apt/brew | ❌ Docker | ❌ Docker |
-| Resource usage | Low single-binary footprint | Medium | High | High |
-
-</details>
-
-## Features
-
-- **App Install** — Deploy 15 self-hosted apps with one command (`uptime-kuma`, `jellyfin`, `pi-hole`, and more)
-- **System Status** — CPU, memory, disk, uptime at a glance
-- **Docker Management** — List, restart, stop, logs for containers
-- **Inventory & Topology** — Map servers, containers, exposed app ports, and system ports in a readable tree or Mermaid graph
-- **Multi-server** — Manage remote servers over SSH (key & password auth)
-- **Notifications** — Multi-channel notifications via Telegram, Slack, Discord, or generic webhook
-- **Backup & Restore** — One-command Docker volume backup with compose + env files
-- **Backup Drill** — Verify backups actually work by booting them in isolated containers
-- **MCP Server** — Works with Claude Desktop, ChatGPT, Cursor, and any MCP client
-- **Web Dashboard** — Beautiful dark-themed web UI with `homebutler serve`
-- **Watch & History** — Track restarts for Docker containers, systemd services, and PM2 apps; capture pre-death and post-restart logs; browse restart history (`homebutler watch`)
-- **TUI Dashboard** — Real-time terminal monitoring with `homebutler watch tui` (btop-style)
-- **Wake-on-LAN** — Power on machines remotely
-- **Port Scanner** — See what's listening and which process owns it
-- **Network Scan** — Discover devices on your LAN
-- **JSON Output** — Pipe-friendly, perfect for AI assistants to parse
-
+## Core workflows
 
 ### 📦 One-Command App Install
 
@@ -281,36 +287,7 @@ homebutler watch check                  # One-shot check (no continuous monitori
 
 ### 🧠 AI-Powered Management (MCP)
 
-> **One natural language prompt manages your entire homelab.** Claude Code calls homebutler MCP tools in parallel — checking server status, listing Docker containers, and alerting on disk usage across multiple servers. [See screenshots & setup →](#mcp-server)
-
-## Quick Start
-
-```bash
-# One-line install (recommended, auto-detects OS/arch)
-curl -fsSL https://raw.githubusercontent.com/Higangssh/homebutler/main/install.sh | sh
-
-# Or via Homebrew
-brew install Higangssh/homebutler/homebutler
-
-# Or via npm (MCP server only)
-npm install -g homebutler
-
-# Interactive setup — adds your servers in seconds
-homebutler init
-
-# Run
-homebutler status
-homebutler watch tui         # TUI dashboard (all servers)
-homebutler watch start       # Process restart monitor (Docker/systemd/PM2)
-homebutler serve             # Web dashboard at http://localhost:8080
-homebutler docker list
-homebutler wake desktop
-homebutler ports
-homebutler status --all
-
-# Install a self-hosted app (e.g. Uptime Kuma monitoring)
-homebutler install uptime-kuma
-```
+> **Use natural language when you want automation.** MCP clients can call homebutler tools to check server status, list Docker containers, inspect ports, or run operational workflows. [See screenshots & setup →](#mcp-server)
 
 ## App Install
 
@@ -358,6 +335,7 @@ homebutler install purge uptime-kuma
 | App | Default Port | Description | Notes |
 |-----|-------------|-------------|-------|
 | `uptime-kuma` | 3001 | Self-hosted monitoring tool | |
+| `plex` | 32400 | Plex Media Server | `--media /path` to mount media dir |
 | `vaultwarden` | 8080 | Bitwarden-compatible password manager | |
 | `filebrowser` | 8081 | Web-based file manager | |
 | `it-tools` | 8082 | Developer utilities (JSON, Base64, Hash, etc.) | |
@@ -507,33 +485,6 @@ homebutler serve --demo         # demo mode with sample data
 📖 **[Web dashboard details →](docs/web-dashboard.md)**
 
 </details>
-
-## Monitoring
-
-`homebutler watch` is the main monitoring workflow. It focuses on restart detection, crash analysis, flapping detection, and incident history.
-
-```bash
-# Target management
-homebutler watch add nginx                  # interactive kind selection
-homebutler watch add --kind docker nginx    # explicit kind
-homebutler watch list                       # show watched targets
-homebutler watch remove nginx               # remove a target
-
-# Monitoring
-homebutler watch start                      # start continuous crash/restart monitoring
-homebutler watch start --interval 10s       # custom poll interval for polling-based backends
-homebutler watch check                      # one-shot restart check
-
-# Investigation
-homebutler watch history                    # incident history
-homebutler watch show <incident-id>         # incident details + logs
-homebutler watch tui                        # TUI dashboard
-
-# Notifications
-homebutler notify test                      # test configured notification providers
-```
-
-If you only learn one monitoring workflow in homebutler, learn `watch` first.
 
 ## Backup & Restore
 
