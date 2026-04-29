@@ -54,6 +54,7 @@ func init() {
 		newWatchCmd(),
 		newInitCmd(),
 		newInventoryCmd(),
+		newReportCmd(),
 	)
 }
 

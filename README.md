@@ -58,6 +58,7 @@ Use it right away:
 homebutler status                    # CPU, memory, disk, uptime
 homebutler docker list               # running containers
 homebutler inventory scan            # containers + ports + topology
+homebutler report                    # butler-style health report + change summary
 homebutler install uptime-kuma       # deploy a self-hosted app
 homebutler backup drill uptime-kuma  # verify a backup actually restores
 homebutler watch tui                 # terminal dashboard
@@ -67,8 +68,9 @@ homebutler serve                     # web dashboard at http://localhost:8080
 Machine-readable output is available everywhere:
 
 ```bash
-homebutler --json status
-homebutler --json inventory scan
+homebutler status --json
+homebutler inventory scan --json
+homebutler report --json
 ```
 
 ## What it does
@@ -90,6 +92,16 @@ HomeButler is a small operations toolkit for that messy middle.
 Those are great dashboards. HomeButler is CLI-first, scriptable, JSON-friendly, air-gap friendly, and safe to copy onto any server. Use it when you want commands you can run from a terminal, cron job, SSH session, CI script, or AI agent.
 
 ## Core workflows
+
+### 🧾 Butler Report
+
+```bash
+homebutler report
+homebutler report --keep 7      # retain only the latest 7 snapshots
+homebutler report --no-save     # preview without writing a snapshot
+```
+
+`report` gives you a concise butler-style summary of your homelab: current health, warnings, notable changes since the previous snapshot, and suggested next commands. On the first run, HomeButler creates a baseline under `~/.homebutler/reports/snapshots/`; later runs compare against the latest snapshot. Old snapshots are pruned automatically (`--keep 30` by default) so reports do not grow forever.
 
 ### 📦 One-Command App Install
 
