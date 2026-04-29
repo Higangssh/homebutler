@@ -2,6 +2,39 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.18.0](https://github.com/Higangssh/homebutler/compare/v0.17.0...v0.18.0) - 2026-04-29
+
+**Your homelab gets a butler report.** This release adds a concise `report` command that snapshots server state, compares it with the previous run, and turns system health, containers, and public ports into a readable next-action summary.
+
+```bash
+homebutler report
+homebutler report --keep 7
+homebutler report --no-save
+homebutler report --json
+```
+
+### ✨ Features
+
+- add `homebutler report` for a butler-style health report with current status, needs attention, notable changes, and suggested actions
+- create a baseline snapshot on first run, then compare future reports against the latest previous snapshot
+- store report snapshots under `~/.homebutler/reports/snapshots/`
+- add retention with `--keep` (default 30, minimum 1) so snapshots do not grow forever
+- add `--no-save` for preview-only report runs
+- support JSON output for automation and AI workflows
+
+### 🎨 Branding
+
+- add the HomeButler mascot to the README while keeping the existing logo as the official mark
+
+### 🧪 Tests
+
+- add report coverage for baseline creation, diff output, retention pruning, no-save behavior, and minimum keep handling
+- verify the report command with real local runs, full test suite, race tests, build, lint, and CI
+
+### 📝 Documentation
+
+- document `report`, retention, preview mode, and JSON usage in README
+
 ## [0.17.0](https://github.com/Higangssh/homebutler/compare/v0.16.1...v0.17.0) - 2026-04-26
 
 **Map your homelab before you fix it.** This release adds an inventory/topology view that turns system status, Docker containers, and open ports into a readable CLI map or Mermaid diagram.
