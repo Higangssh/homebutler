@@ -1,26 +1,31 @@
 <p align="center">
-  <img src="assets/logo.png" alt="HomeButler" width="160">
+  <img src="assets/logo.png" alt="HomeButler logo" width="140">
 </p>
 
-# HomeButler
+<h1 align="center">HomeButler</h1>
 
 <p align="center">
-  <img src="assets/mascot.png" alt="HomeButler mascot" width="180">
-  <br>
-  <sub><em>Your tiny homelab butler.</em></sub>
+  <strong>Your tiny homelab butler.</strong><br>
+  A single Go binary for running a small home server without babysitting it.
 </p>
 
 <p align="center">
-  <a href="https://homebutler.dev">Website</a> · <a href="https://github.com/Higangssh/homebutler#readme">Docs</a> · <a href="https://github.com/Higangssh/homebutler/releases">Releases</a>
+  <a href="https://homebutler.dev">Website</a> ·
+  <a href="https://github.com/Higangssh/homebutler#readme">Docs</a> ·
+  <a href="https://github.com/Higangssh/homebutler/releases">Releases</a>
 </p>
 
-**A single binary for running a small home server without babysitting it.**
+<p align="center">
+  <a href="https://go.dev"><img src="https://img.shields.io/badge/Go-1.25+-00ADD8?logo=go&logoColor=white" alt="Go 1.25+"></a>
+  <a href="https://goreportcard.com/report/github.com/Higangssh/homebutler"><img src="https://goreportcard.com/badge/github.com/Higangssh/homebutler" alt="Go Report Card"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License: MIT"></a>
+  <a href="https://github.com/Higangssh/homebutler/releases"><img src="https://img.shields.io/github/v/release/Higangssh/homebutler" alt="Release"></a>
+  <a href="https://glama.ai/mcp/servers/Higangssh/homebutler"><img src="https://glama.ai/mcp/servers/Higangssh/homebutler/badges/score.svg" alt="homebutler MCP server"></a>
+</p>
 
-[![Go](https://img.shields.io/badge/Go-1.25+-00ADD8?logo=go&logoColor=white)](https://go.dev)
-[![Go Report Card](https://goreportcard.com/badge/github.com/Higangssh/homebutler)](https://goreportcard.com/report/github.com/Higangssh/homebutler)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Release](https://img.shields.io/github/v/release/Higangssh/homebutler)](https://github.com/Higangssh/homebutler/releases)
-[![homebutler MCP server](https://glama.ai/mcp/servers/Higangssh/homebutler/badges/score.svg)](https://glama.ai/mcp/servers/Higangssh/homebutler)
+<p align="center">
+  <img src="assets/mascot.png" alt="HomeButler mascot holding a tiny server" width="220">
+</p>
 
 HomeButler helps you answer the boring but painful questions every homelab eventually creates:
 
