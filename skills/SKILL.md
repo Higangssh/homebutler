@@ -1,6 +1,6 @@
 ---
 name: homeserver
-description: Homelab server management via homebutler CLI. Check system status, manage Docker containers, install self-hosted apps, Wake-on-LAN, port scanning, alerts, backup/restore, and multi-server SSH.
+description: Homelab server operations via homebutler CLI/MCP. Check system status, generate butler reports, scan inventory/topology, manage Docker containers, install self-hosted apps, verify backup drills, Wake-on-LAN, port scanning, alerts, backup/restore, and multi-server SSH.
 metadata:
   {
     "openclaw": {
@@ -13,7 +13,7 @@ metadata:
 
 # Homeserver Management
 
-Manage homelab servers using the [`homebutler`](https://github.com/Higangssh/homebutler) CLI. Single binary, JSON output, AI-friendly.
+Manage homelab servers using the [`homebutler`](https://github.com/Higangssh/homebutler) CLI. Single binary, no daemon/database required, JSON output, MCP-friendly.
 
 ## Prerequisites
 
@@ -49,6 +49,23 @@ homebutler status --server rpi       # Specific remote server
 homebutler status --all              # All servers in parallel
 ```
 Returns: hostname, OS, arch, uptime, CPU (usage%, cores), memory (total/used/%), disks (mount/total/used/%)
+
+### Butler Report
+```bash
+homebutler report                    # Health, warnings, changes, suggested actions
+homebutler report --no-save          # Preview without writing a snapshot
+homebutler report --keep 7           # Retain latest 7 snapshots
+homebutler report --json             # Structured output for automation/MCP
+```
+Use this first when the user asks “how is my homelab/server doing?” and wants a concise operational summary. It snapshots current system/container/port state and compares it with the previous run.
+
+### Inventory & Topology
+```bash
+homebutler inventory scan                     # Tree view of system, containers, ports
+homebutler inventory scan --json              # Structured inventory
+homebutler inventory export --format mermaid  # Mermaid topology diagram
+```
+Use this when the user asks what is running, which container owns a port, or wants topology/context for docs or AI analysis.
 
 ### Docker Management
 ```bash
@@ -138,13 +155,34 @@ homebutler install status <app>      # Check app status
 homebutler install uninstall <app>   # Stop app, keep data
 homebutler install purge <app>       # Stop + delete all data
 ```
-Deploys self-hosted apps via docker compose. Each app gets its own directory at `~/.homebutler/apps/<app>/` with auto-generated `docker-compose.yml` and persistent data. Pre-checks docker availability, port conflicts, and duplicates. Currently available: uptime-kuma, vaultwarden, filebrowser, it-tools, gitea.
+Deploys self-hosted apps via docker compose. Each app gets its own directory at `~/.homebutler/apps/<app>/` with auto-generated `docker-compose.yml` and persistent data. Pre-checks docker availability, port conflicts, and duplicates. Available apps include uptime-kuma, plex, vaultwarden, filebrowser, it-tools, gitea, jellyfin, homepage, stirling-pdf, speedtest-tracker, mealie, pi-hole, adguard-home, portainer, and nginx-proxy-manager.
+
+### Backup, Restore & Backup Drill
+```bash
+homebutler backup                          # Back up Docker compose volumes/files
+homebutler backup --service uptime-kuma    # Back up one service
+homebutler backup list                     # List backup archives
+homebutler backup drill uptime-kuma        # Boot backup in isolation and verify HTTP health
+homebutler backup drill --all              # Drill every supported app in backup
+homebutler backup drill --archive ./file   # Drill a specific archive
+homebutler restore ./backup.tar.gz         # Restore volumes from archive
+```
+Prefer `backup drill` when the user asks whether backups are trustworthy: it validates the archive, boots the app in an isolated Docker environment, health-checks it, and cleans up.
 
 ### MCP Server
 ```bash
 homebutler mcp                       # Start MCP server (JSON-RPC over stdio)
 ```
-Starts a built-in MCP (Model Context Protocol) server for use with Claude Desktop, ChatGPT, Cursor, and other MCP clients. Exposes all homebutler tools (system_status, docker_list, docker_restart, docker_stop, docker_logs, wake, open_ports, network_scan, alerts) via standard MCP protocol. No network ports opened — uses stdio only.
+Starts a built-in MCP (Model Context Protocol) server for use with Claude Desktop, ChatGPT, Cursor, and other MCP clients. No network ports opened — uses stdio only.
+
+Current MCP tools:
+- `system_status`
+- `report`
+- `inventory_scan`, `inventory_export`
+- `docker_list`, `docker_restart`, `docker_stop`, `docker_logs`, `docker_stats`
+- `wake`, `open_ports`, `network_scan`, `alerts`
+- `backup_create`, `backup_list`, `backup_drill`, `backup_restore`
+- `install_list`, `install_app`, `install_status`, `install_uninstall`, `install_purge`
 
 ### Version
 ```bash
@@ -224,7 +262,10 @@ servers:
 ## Example Interactions
 
 User: "How's the server doing?"
-→ Run `homebutler status`, summarize: "CPU 23%, memory 40%, disk 37%. Uptime 42 days. All good 👍"
+→ Prefer `homebutler report`, summarize health, warnings, notable changes, and suggested actions. Use `homebutler status` only for a raw point-in-time status.
+
+User: "What changed / what owns this port / map my homelab"
+→ Run `homebutler inventory scan` or `homebutler inventory export --format mermaid`.
 
 User: "Check all servers"
 → Run `homebutler status --all`, summarize each server's status
@@ -252,3 +293,6 @@ User: "What apps are available?"
 
 User: "Remove vaultwarden completely"
 → Run `homebutler install purge vaultwarden`, confirm deletion
+
+User: "Can I trust my backup?"
+→ Run `homebutler backup drill <app>` or `homebutler backup drill --all`, report pass/fail and health status

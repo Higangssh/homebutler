@@ -77,22 +77,35 @@ Restart your AI client — homebutler tools will appear automatically.
 | Tool | Description |
 |---|---|
 | `system_status` | CPU, memory, disk, uptime |
+| `report` | Butler-style health report with snapshot comparison and suggested actions |
+| `inventory_scan` | Server inventory/topology: system, containers, app ports, system ports |
+| `inventory_export` | Export inventory as Mermaid (local) or JSON |
 | `docker_list` | List containers |
 | `docker_restart` | Restart a container |
 | `docker_stop` | Stop a container |
 | `docker_logs` | Container log output |
+| `docker_stats` | Running container resource usage |
 | `wake` | Wake-on-LAN magic packet |
 | `open_ports` | Open ports with process info |
 | `network_scan` | Discover LAN devices |
 | `alerts` | Resource threshold alerts |
+| `backup_create` | Create Docker compose backup archive |
+| `backup_list` | List backup archives |
+| `backup_drill` | Boot a backup in isolation and verify app health |
+| `backup_restore` | Restore volumes from a backup archive |
+| `install_list` | List installable self-hosted apps |
+| `install_app` | Install an app via generated docker-compose.yml |
+| `install_status` | Check installed app status |
+| `install_uninstall` | Stop an app while preserving data |
+| `install_purge` | Stop an app and delete all data |
 
-All tools support an optional `server` parameter — manage every server from a single prompt.
+Most read/check tools support an optional `server` parameter — manage every server from a single prompt. Destructive tools such as `backup_restore`, `install_purge`, and container stop/restart should only be called after the user clearly confirms intent.
 
 ## How It Works
 
 ```
 You: "Check my servers and find any disk warnings"
-AI → calls system_status + alerts on each server (in parallel)
+AI → calls report or system_status + alerts on each server (in parallel)
 homebutler → reads CPU/RAM/disk on local + remote servers via SSH
 AI: "homelab-server /mnt/data is at 87% — consider cleaning up. Everything else healthy."
 ```

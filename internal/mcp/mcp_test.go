@@ -95,8 +95,8 @@ func TestToolsList(t *testing.T) {
 		t.Fatalf("unmarshal toolsListResult: %v", err)
 	}
 
-	if len(list.Tools) != 15 {
-		t.Errorf("expected 15 tools, got %d", len(list.Tools))
+	if len(list.Tools) != 22 {
+		t.Errorf("expected 22 tools, got %d", len(list.Tools))
 	}
 
 	expectedTools := map[string]bool{
@@ -110,6 +110,13 @@ func TestToolsList(t *testing.T) {
 		"open_ports":        false,
 		"network_scan":      false,
 		"alerts":            false,
+		"inventory_scan":    false,
+		"inventory_export":  false,
+		"report":            false,
+		"backup_create":     false,
+		"backup_list":       false,
+		"backup_drill":      false,
+		"backup_restore":    false,
 		"install_list":      false,
 		"install_app":       false,
 		"install_status":    false,
@@ -301,6 +308,7 @@ func TestToolDefinitionsHaveRequiredFields(t *testing.T) {
 		"install_status":    {"app"},
 		"install_uninstall": {"app"},
 		"install_purge":     {"app"},
+		"backup_restore":    {"archive"},
 	}
 
 	for _, tool := range tools {

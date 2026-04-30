@@ -10,12 +10,15 @@ import (
 	"time"
 
 	"github.com/Higangssh/homebutler/internal/alerts"
+	"github.com/Higangssh/homebutler/internal/backup"
 	"github.com/Higangssh/homebutler/internal/config"
 	"github.com/Higangssh/homebutler/internal/docker"
 	"github.com/Higangssh/homebutler/internal/install"
+	"github.com/Higangssh/homebutler/internal/inventory"
 	"github.com/Higangssh/homebutler/internal/network"
 	"github.com/Higangssh/homebutler/internal/ports"
 	"github.com/Higangssh/homebutler/internal/remote"
+	"github.com/Higangssh/homebutler/internal/report"
 	"github.com/Higangssh/homebutler/internal/system"
 	"github.com/Higangssh/homebutler/internal/wake"
 )
@@ -262,6 +265,57 @@ func (s *Server) executeTool(name string, args map[string]any) (any, error) {
 		return network.ScanWithTimeout(30 * time.Second)
 	case "alerts":
 		return alerts.Check(&s.cfg.Alerts)
+	case "inventory_scan":
+		return inventory.Collect(s.cfg, inventory.DefaultCollectFuncs())
+	case "inventory_export":
+		format := stringArg(args, "format")
+		if format == "" {
+			format = "mermaid"
+		}
+		inv, err := inventory.Collect(s.cfg, inventory.DefaultCollectFuncs())
+		if err != nil {
+			return nil, err
+		}
+		switch format {
+		case "mermaid":
+			return map[string]any{"format": format, "content": inventory.RenderMermaid(inv)}, nil
+		case "json":
+			return inv, nil
+		default:
+			return nil, fmt.Errorf("unsupported format: %q (supported: mermaid, json)", format)
+		}
+	case "report":
+		return report.Run(s.cfg, report.DefaultCollectFuncs(), report.Options{
+			Keep:   intArg(args, "keep", 30),
+			NoSave: boolArg(args, "no_save"),
+		})
+	case "backup_create":
+		backupDir := stringArg(args, "to")
+		if backupDir == "" {
+			backupDir = s.cfg.ResolveBackupDir()
+		}
+		return backup.Run(backupDir, stringArg(args, "service"))
+	case "backup_list":
+		return backup.List(s.cfg.ResolveBackupDir())
+	case "backup_drill":
+		opts := backup.DrillOptions{
+			BackupDir: s.cfg.ResolveBackupDir(),
+			Archive:   stringArg(args, "archive"),
+		}
+		if boolArg(args, "all") {
+			return backup.RunDrillAll(opts)
+		}
+		appName, ok := requireString(args, "app")
+		if !ok {
+			return nil, fmt.Errorf("missing required parameter: app (or set all=true)")
+		}
+		return backup.RunDrill(appName, opts)
+	case "backup_restore":
+		archive, ok := requireString(args, "archive")
+		if !ok {
+			return nil, fmt.Errorf("missing required parameter: archive")
+		}
+		return backup.Restore(archive, stringArg(args, "service"))
 
 	case "install_list":
 		return install.List(), nil
@@ -344,6 +398,56 @@ func (s *Server) executeRemote(srv *config.ServerConfig, tool string, args map[s
 		remoteArgs = []string{"ports", "--json"}
 	case "alerts":
 		remoteArgs = []string{"alerts", "--json"}
+	case "inventory_scan":
+		remoteArgs = []string{"inventory", "scan", "--json"}
+	case "inventory_export":
+		format := stringArg(args, "format")
+		if format == "" {
+			format = "mermaid"
+		}
+		if format == "json" {
+			remoteArgs = []string{"inventory", "export", "--json"}
+		} else {
+			return nil, fmt.Errorf("remote inventory_export only supports format=json; use inventory_scan or run locally for Mermaid output")
+		}
+	case "report":
+		remoteArgs = []string{"report", "--json", "--keep", strconv.Itoa(intArg(args, "keep", 30))}
+		if boolArg(args, "no_save") {
+			remoteArgs = append(remoteArgs, "--no-save")
+		}
+	case "backup_list":
+		remoteArgs = []string{"backup", "list", "--json"}
+	case "backup_create":
+		remoteArgs = []string{"backup", "--json"}
+		if service := stringArg(args, "service"); service != "" {
+			remoteArgs = append(remoteArgs, "--service", service)
+		}
+		if to := stringArg(args, "to"); to != "" {
+			remoteArgs = append(remoteArgs, "--to", to)
+		}
+	case "backup_drill":
+		remoteArgs = []string{"backup", "drill", "--json"}
+		if archive := stringArg(args, "archive"); archive != "" {
+			remoteArgs = append(remoteArgs, "--archive", archive)
+		}
+		if boolArg(args, "all") {
+			remoteArgs = append(remoteArgs, "--all")
+		} else {
+			appName, ok := requireString(args, "app")
+			if !ok {
+				return nil, fmt.Errorf("missing required parameter: app (or set all=true)")
+			}
+			remoteArgs = append(remoteArgs, appName)
+		}
+	case "backup_restore":
+		archive, ok := requireString(args, "archive")
+		if !ok {
+			return nil, fmt.Errorf("missing required parameter: archive")
+		}
+		remoteArgs = []string{"restore", archive, "--json"}
+		if service := stringArg(args, "service"); service != "" {
+			remoteArgs = append(remoteArgs, "--service", service)
+		}
 	default:
 		return nil, fmt.Errorf("tool %q not supported for remote execution", tool)
 	}
@@ -404,6 +508,47 @@ func stringArg(args map[string]any, key string) string {
 func requireString(args map[string]any, key string) (string, bool) {
 	v := stringArg(args, key)
 	return v, v != ""
+}
+
+func boolArg(args map[string]any, key string) bool {
+	if args == nil {
+		return false
+	}
+	v, ok := args[key]
+	if !ok {
+		return false
+	}
+	switch val := v.(type) {
+	case bool:
+		return val
+	case string:
+		b, _ := strconv.ParseBool(val)
+		return b
+	default:
+		return false
+	}
+}
+
+func intArg(args map[string]any, key string, fallback int) int {
+	if args == nil {
+		return fallback
+	}
+	v, ok := args[key]
+	if !ok {
+		return fallback
+	}
+	switch val := v.(type) {
+	case float64:
+		return int(val)
+	case int:
+		return val
+	case string:
+		i, err := strconv.Atoi(val)
+		if err == nil {
+			return i
+		}
+	}
+	return fallback
 }
 
 func toolDefinitions() []toolDef {
@@ -512,6 +657,87 @@ func toolDefinitions() []toolDef {
 				Properties: map[string]propDef{
 					"server": {Type: "string", Description: "Remote server name from config (optional, runs locally if omitted)"},
 				},
+			},
+		},
+		{
+			Name:        "inventory_scan",
+			Description: "Collect server inventory/topology including system status, Docker containers, app ports, and system ports",
+			InputSchema: inputSchema{
+				Type: "object",
+				Properties: map[string]propDef{
+					"server": {Type: "string", Description: "Remote server name from config (optional, runs locally if omitted)"},
+				},
+			},
+		},
+		{
+			Name:        "inventory_export",
+			Description: "Export server inventory/topology as a Mermaid diagram locally, or JSON locally/remotely",
+			InputSchema: inputSchema{
+				Type: "object",
+				Properties: map[string]propDef{
+					"format": {Type: "string", Description: "Export format: mermaid (default, local) or json"},
+					"server": {Type: "string", Description: "Remote server name from config (optional; remote supports format=json)"},
+				},
+			},
+		},
+		{
+			Name:        "report",
+			Description: "Generate a butler-style health report with snapshot comparison, warnings, notable changes, and suggested actions",
+			InputSchema: inputSchema{
+				Type: "object",
+				Properties: map[string]propDef{
+					"keep":    {Type: "number", Description: "Number of snapshots to retain (default: 30)"},
+					"no_save": {Type: "boolean", Description: "Preview without writing a snapshot"},
+					"server":  {Type: "string", Description: "Remote server name from config (optional, runs locally if omitted)"},
+				},
+			},
+		},
+		{
+			Name:        "backup_create",
+			Description: "Create a Docker compose backup archive for all services or one service",
+			InputSchema: inputSchema{
+				Type: "object",
+				Properties: map[string]propDef{
+					"service": {Type: "string", Description: "Specific service to back up (optional)"},
+					"to":      {Type: "string", Description: "Custom backup destination directory (optional)"},
+					"server":  {Type: "string", Description: "Remote server name from config (optional, runs locally if omitted)"},
+				},
+			},
+		},
+		{
+			Name:        "backup_list",
+			Description: "List existing backup archives in the configured backup directory",
+			InputSchema: inputSchema{
+				Type: "object",
+				Properties: map[string]propDef{
+					"server": {Type: "string", Description: "Remote server name from config (optional, runs locally if omitted)"},
+				},
+			},
+		},
+		{
+			Name:        "backup_drill",
+			Description: "Verify a backup by booting an app in an isolated Docker environment and checking that it responds",
+			InputSchema: inputSchema{
+				Type: "object",
+				Properties: map[string]propDef{
+					"app":     {Type: "string", Description: "App/service to drill (required unless all=true)"},
+					"all":     {Type: "boolean", Description: "Drill all supported apps in the backup"},
+					"archive": {Type: "string", Description: "Specific backup archive to verify (optional)"},
+					"server":  {Type: "string", Description: "Remote server name from config (optional, runs locally if omitted)"},
+				},
+			},
+		},
+		{
+			Name:        "backup_restore",
+			Description: "Restore Docker volumes from a backup archive. Destructive: confirm intent before calling.",
+			InputSchema: inputSchema{
+				Type: "object",
+				Properties: map[string]propDef{
+					"archive": {Type: "string", Description: "Backup archive path to restore"},
+					"service": {Type: "string", Description: "Specific service to restore (optional)"},
+					"server":  {Type: "string", Description: "Remote server name from config (optional, runs locally if omitted)"},
+				},
+				Required: []string{"archive"},
 			},
 		},
 		{

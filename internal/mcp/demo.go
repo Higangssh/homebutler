@@ -40,9 +40,64 @@ func (s *Server) executeDemoTool(name string, args map[string]any) (any, error) 
 		return demoNetworkScan(), nil
 	case "alerts":
 		return demoAlerts(server), nil
+	case "inventory_scan":
+		return map[string]any{
+			"server_name": serverOrDefault(server),
+			"system":      demoStatus(server),
+			"containers":  demoDocker(server),
+			"ports":       demoPorts(server),
+		}, nil
+	case "inventory_export":
+		format := stringArg(args, "format")
+		if format == "" {
+			format = "mermaid"
+		}
+		if format == "json" {
+			return map[string]any{"server_name": serverOrDefault(server), "ports": demoPorts(server)}, nil
+		}
+		return map[string]any{"format": "mermaid", "content": "graph TD\n  home[\"🏠 Home Network\"] --> server[\"🖥 " + serverOrDefault(server) + "\"]\n"}, nil
+	case "report":
+		return map[string]any{
+			"server_name":       serverOrDefault(server),
+			"status":            []string{"CPU 23%, memory 39%, disk 38%"},
+			"needs_attention":   []string{},
+			"notable_changes":   []string{"Demo baseline created"},
+			"suggested_actions": []string{"Run inventory_scan for topology details"},
+			"snapshot_saved":    !boolArg(args, "no_save"),
+		}, nil
+	case "backup_create":
+		service := stringArg(args, "service")
+		if service == "" {
+			service = "all"
+		}
+		return map[string]any{"archive": "~/.homebutler/backups/demo.tar.gz", "services": []string{service}, "volumes": 2, "size": "12.3 MB"}, nil
+	case "backup_list":
+		return []map[string]any{{"name": "demo.tar.gz", "path": "~/.homebutler/backups/demo.tar.gz", "size": "12.3 MB", "created_at": "2026-04-30T12:00:00Z"}}, nil
+	case "backup_drill":
+		if boolArg(args, "all") {
+			return map[string]any{"total": 1, "passed": 1, "failed": 0}, nil
+		}
+		app, ok := requireString(args, "app")
+		if !ok {
+			return nil, fmt.Errorf("missing required parameter: app (or set all=true)")
+		}
+		return map[string]any{"app": app, "passed": true, "integrity": true, "booted": true, "health_status": 200}, nil
+	case "backup_restore":
+		archive, ok := requireString(args, "archive")
+		if !ok {
+			return nil, fmt.Errorf("missing required parameter: archive")
+		}
+		return map[string]any{"archive": archive, "services": []string{"demo"}, "volumes": 1}, nil
 	default:
 		return nil, fmt.Errorf("unknown tool: %s", name)
 	}
+}
+
+func serverOrDefault(server string) string {
+	if server != "" {
+		return server
+	}
+	return "homelab-server"
 }
 
 func demoStatus(server string) map[string]any {
