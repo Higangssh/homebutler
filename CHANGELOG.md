@@ -2,6 +2,27 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.18.1](https://github.com/Higangssh/homebutler/compare/v0.18.0...v0.18.1) - 2026-05-03
+
+**More useful MCP operations, cleaner ClawHub identity.** This patch expands the MCP server with operational tools and renames the published OpenClaw skill from `homeserver` to `homebutler` while keeping the old slug redirected.
+
+```bash
+homebutler mcp --demo
+npx clawhub install homebutler
+```
+
+### ✨ Features
+
+- expand MCP operations with additional homelab tools for reports, inventory, installs, backup drills, and related server workflows
+- add demo responses for the expanded MCP tool surface
+
+### 📝 Documentation
+
+- polish the README header
+- refresh MCP documentation for the expanded tool set
+- rename the ClawHub skill identity from `homeserver` to `homebutler`
+- ignore local `requirements.md` planning files so they are not committed accidentally
+
 ## [0.18.0](https://github.com/Higangssh/homebutler/compare/v0.17.0...v0.18.0) - 2026-04-29
 
 **Your homelab gets a butler report.** This release adds a concise `report` command that snapshots server state, compares it with the previous run, and turns system health, containers, and public ports into a readable next-action summary.
