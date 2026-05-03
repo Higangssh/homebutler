@@ -58,4 +58,5 @@ demo-mcp.gif
 !assets/*.mp4
 
 # Requirements docs (local only)
+requirements.md
 requirements-*.md

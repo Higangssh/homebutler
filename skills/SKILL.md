@@ -1,5 +1,5 @@
 ---
-name: homeserver
+name: homebutler
 description: Homelab server operations via homebutler CLI/MCP. Check system status, generate butler reports, scan inventory/topology, manage Docker containers, install self-hosted apps, verify backup drills, Wake-on-LAN, port scanning, alerts, backup/restore, and multi-server SSH.
 metadata:
   {
@@ -11,7 +11,7 @@ metadata:
   }
 ---
 
-# Homeserver Management
+# Homebutler
 
 Manage homelab servers using the [`homebutler`](https://github.com/Higangssh/homebutler) CLI. Single binary, no daemon/database required, JSON output, MCP-friendly.
 
