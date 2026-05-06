@@ -34,8 +34,11 @@ HomeButler helps you answer the boring but painful questions every homelab event
 - Why did this service restart at 3 AM?
 - Is my backup actually restorable?
 - Can I install this self-hosted app without hand-writing another compose file?
+- Can I let an AI assistant inspect my server without handing it a full SSH shell?
 
 No daemon required. No database. No always-on web service. Just one Go binary you can use from the terminal, scripts, a web dashboard, or AI tools.
+
+The design goal is simple: give humans and agents a narrow, structured interface to the server. HomeButler returns readable summaries and JSON instead of asking you to trust a black-box shell session.
 
 <p align="center">
   <a href="https://www.youtube.com/watch?v=MFoDiYRH_nE">
@@ -84,7 +87,7 @@ homebutler report --json
 - **Map your server** — see containers, exposed ports, system ports, and service topology
 - **Catch crashes** — save logs before/after Docker, systemd, or PM2 restarts and detect flapping loops
 - **Verify backups** — boot backups in isolated containers before you trust them
-- **Use it anywhere** — CLI, JSON, web dashboard, or MCP for AI agents
+- **Use it anywhere** — CLI, JSON, web dashboard, or MCP for AI agents without giving them SSH
 
 ## Why homebutler?
 
@@ -94,7 +97,7 @@ HomeButler is a small operations toolkit for that messy middle.
 
 ### Why not just use Portainer, Netdata, or CasaOS?
 
-Those are great dashboards. HomeButler is CLI-first, scriptable, JSON-friendly, air-gap friendly, and safe to copy onto any server. Use it when you want commands you can run from a terminal, cron job, SSH session, CI script, or AI agent.
+Those are great dashboards. HomeButler is CLI-first, scriptable, JSON-friendly, air-gap friendly, and safe to copy onto any server. Use it when you want commands you can run from a terminal, cron job, SSH session, CI script, or AI agent — especially when you care more about “what changed?” than another graph.
 
 ## Core workflows
 
