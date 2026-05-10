@@ -2,6 +2,33 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.19.0](https://github.com/Higangssh/homebutler/compare/v0.18.1...v0.19.0) - 2026-05-10
+
+**Doctor check for the messy middle of self-hosting.** This release adds a read-only `doctor` command that turns common homelab risks into clear findings and next commands.
+
+```bash
+homebutler doctor
+homebutler doctor --strict
+homebutler doctor --json
+```
+
+### ✨ Features
+
+- add `homebutler doctor` for resource pressure, stopped containers, public listeners, backup hygiene, notification readiness, and report baseline checks
+- support `--strict` for CI/cron usage and `--backup-max-age` for backup freshness policy
+- expose doctor through MCP, including remote server routing and demo responses
+- support `doctor --all` summary output across configured servers
+
+### 🧪 Tests
+
+- add doctor unit coverage for healthy output, high memory/disk, stopped containers, public listeners, backup errors, missing backups, stale backups, invalid backup timestamps, and human output
+- verify doctor on macOS and Linux arm64 Raspberry Pi
+- run full test suite, build, JSON smoke test, and cross-compile check
+
+### 📝 Documentation
+
+- document doctor in README core workflows and command list
+
 ## [0.18.1](https://github.com/Higangssh/homebutler/compare/v0.18.0...v0.18.1) - 2026-05-03
 
 **More useful MCP operations, cleaner ClawHub identity.** This patch expands the MCP server with operational tools and renames the published OpenClaw skill from `homeserver` to `homebutler` while keeping the old slug redirected.

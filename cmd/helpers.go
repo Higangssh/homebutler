@@ -11,6 +11,7 @@ import (
 	"github.com/Higangssh/homebutler/internal/backup"
 	"github.com/Higangssh/homebutler/internal/config"
 	"github.com/Higangssh/homebutler/internal/docker"
+	"github.com/Higangssh/homebutler/internal/doctor"
 	"github.com/Higangssh/homebutler/internal/format"
 	"github.com/Higangssh/homebutler/internal/network"
 	"github.com/Higangssh/homebutler/internal/ports"
@@ -131,12 +132,13 @@ func filterFlags(args []string, flags ...string) []string {
 
 // valueFlags are flags that take a value argument.
 var valueFlags = map[string]bool{
-	"--server":  true,
-	"--config":  true,
-	"--local":   true,
-	"--port":    true,
-	"--service": true,
-	"--to":      true,
+	"--server":         true,
+	"--config":         true,
+	"--local":          true,
+	"--port":           true,
+	"--service":        true,
+	"--to":             true,
+	"--backup-max-age": true,
 }
 
 // isFlag checks if a string looks like a CLI flag.
@@ -179,6 +181,12 @@ func runLocalCommand(args []string) ([]byte, error) {
 			return nil, err
 		}
 		return json.Marshal(result.Ports)
+	case "doctor":
+		result, err := doctor.Run(cfg, doctor.DefaultCollectFuncs(), doctor.Options{})
+		if err != nil {
+			return nil, err
+		}
+		return json.Marshal(result)
 	default:
 		return nil, fmt.Errorf("command %q not supported with --all", args[0])
 	}
@@ -233,6 +241,11 @@ func runAllServers(c *config.Config, args []string, jsonOut bool) error {
 				fmt.Fprintf(os.Stdout, "📡 %-12s (parse error)\n", r.Server)
 				continue
 			}
+			if status, ok := data["status"].(string); ok {
+				warn, fail := getSummaryCounts(data)
+				fmt.Fprintf(os.Stdout, "🩺 %-12s %-4s | warn %d | fail %d\n", r.Server, strings.ToUpper(status), warn, fail)
+				continue
+			}
 			cpu := getNestedFloat(data, "cpu", "usage_percent")
 			mem := getNestedFloat(data, "memory", "usage_percent")
 			uptime, _ := data["uptime"].(string)
@@ -278,4 +291,18 @@ func getFirstDiskPercent(data map[string]interface{}) float64 {
 		}
 	}
 	return 0
+}
+
+func getSummaryCounts(data map[string]interface{}) (warn, fail int) {
+	summary, ok := data["summary"].(map[string]interface{})
+	if !ok {
+		return 0, 0
+	}
+	if v, ok := summary["warn"].(float64); ok {
+		warn = int(v)
+	}
+	if v, ok := summary["fail"].(float64); ok {
+		fail = int(v)
+	}
+	return warn, fail
 }

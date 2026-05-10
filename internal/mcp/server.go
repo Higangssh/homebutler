@@ -13,6 +13,7 @@ import (
 	"github.com/Higangssh/homebutler/internal/backup"
 	"github.com/Higangssh/homebutler/internal/config"
 	"github.com/Higangssh/homebutler/internal/docker"
+	"github.com/Higangssh/homebutler/internal/doctor"
 	"github.com/Higangssh/homebutler/internal/install"
 	"github.com/Higangssh/homebutler/internal/inventory"
 	"github.com/Higangssh/homebutler/internal/network"
@@ -289,6 +290,10 @@ func (s *Server) executeTool(name string, args map[string]any) (any, error) {
 			Keep:   intArg(args, "keep", 30),
 			NoSave: boolArg(args, "no_save"),
 		})
+	case "doctor":
+		return doctor.Run(s.cfg, doctor.DefaultCollectFuncs(), doctor.Options{
+			BackupMaxAge: time.Duration(intArg(args, "backup_max_age_hours", 168)) * time.Hour,
+		})
 	case "backup_create":
 		backupDir := stringArg(args, "to")
 		if backupDir == "" {
@@ -415,6 +420,8 @@ func (s *Server) executeRemote(srv *config.ServerConfig, tool string, args map[s
 		if boolArg(args, "no_save") {
 			remoteArgs = append(remoteArgs, "--no-save")
 		}
+	case "doctor":
+		remoteArgs = []string{"doctor", "--json", "--backup-max-age", fmt.Sprintf("%dh", intArg(args, "backup_max_age_hours", 168))}
 	case "backup_list":
 		remoteArgs = []string{"backup", "list", "--json"}
 	case "backup_create":
@@ -689,6 +696,17 @@ func toolDefinitions() []toolDef {
 					"keep":    {Type: "number", Description: "Number of snapshots to retain (default: 30)"},
 					"no_save": {Type: "boolean", Description: "Preview without writing a snapshot"},
 					"server":  {Type: "string", Description: "Remote server name from config (optional, runs locally if omitted)"},
+				},
+			},
+		},
+		{
+			Name:        "doctor",
+			Description: "Run a read-only diagnosis for resource pressure, stopped containers, public ports, backup hygiene, notifications, and report baseline readiness",
+			InputSchema: inputSchema{
+				Type: "object",
+				Properties: map[string]propDef{
+					"backup_max_age_hours": {Type: "number", Description: "Warn when the latest backup is older than this many hours (default: 168)"},
+					"server":               {Type: "string", Description: "Remote server name from config (optional, runs locally if omitted)"},
 				},
 			},
 		},

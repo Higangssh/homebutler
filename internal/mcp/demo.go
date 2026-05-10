@@ -65,6 +65,16 @@ func (s *Server) executeDemoTool(name string, args map[string]any) (any, error) 
 			"suggested_actions": []string{"Run inventory_scan for topology details"},
 			"snapshot_saved":    !boolArg(args, "no_save"),
 		}, nil
+	case "doctor":
+		return map[string]any{
+			"server_name": serverOrDefault(server),
+			"status":      "warn",
+			"summary":     map[string]any{"pass": 0, "warn": 2, "fail": 0},
+			"findings": []map[string]any{
+				{"severity": "warn", "category": "exposure", "title": "4 port(s) are listening on all interfaces", "action": "Make sure each one is intentional and protected.", "command": "homebutler inventory scan"},
+				{"severity": "warn", "category": "backup", "title": "Latest backup is older than expected", "action": "Run a fresh backup. If this app matters, follow up with a backup drill.", "command": "homebutler backup"},
+			},
+		}, nil
 	case "backup_create":
 		service := stringArg(args, "service")
 		if service == "" {

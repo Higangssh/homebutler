@@ -85,6 +85,7 @@ homebutler report --json
 
 - **Install apps** — deploy Uptime Kuma, Jellyfin, Pi-hole, Gitea, Portainer, and more with one command
 - **Map your server** — see containers, exposed ports, system ports, and service topology
+- **Run a doctor check** — diagnose resource pressure, stopped containers, public ports, backup hygiene, notifications, and report baseline readiness
 - **Catch crashes** — save logs before/after Docker, systemd, or PM2 restarts and detect flapping loops
 - **Verify backups** — boot backups in isolated containers before you trust them
 - **Use it anywhere** — CLI, JSON, web dashboard, or MCP for AI agents without giving them SSH
@@ -110,6 +111,16 @@ homebutler report --no-save     # preview without writing a snapshot
 ```
 
 `report` gives you a concise butler-style summary of your homelab: current health, warnings, notable changes since the previous snapshot, and suggested next commands. On the first run, HomeButler creates a baseline under `~/.homebutler/reports/snapshots/`; later runs compare against the latest snapshot. Old snapshots are pruned automatically (`--keep 30` by default) so reports do not grow forever.
+
+### 🩺 Doctor Check
+
+```bash
+homebutler doctor
+homebutler doctor --strict          # non-zero exit if warnings/failures are found
+homebutler doctor --json            # automation / MCP friendly
+```
+
+`doctor` is a read-only preflight for the problems homelab users usually discover too late: high disk or memory usage, stopped containers, public bind ports, stale or missing backups, missing notifications, and whether `report` has a baseline for change detection.
 
 ### 📦 One-Command App Install
 
@@ -415,6 +426,7 @@ homebutler <command> [flags]
 
 Commands:
   status              System status (CPU, memory, disk, uptime)
+  doctor              Diagnose health, exposure, backups, and readiness
   docker list         List running containers
   install <app>       Install a self-hosted app (docker compose)
   alerts              Show current alert status
@@ -441,6 +453,7 @@ Run `homebutler --help` for all commands.
 Commands:
   init                Interactive setup wizard
   status              System status (CPU, memory, disk, uptime)
+  doctor              Diagnose health, exposure, backups, and readiness
   watch tui           TUI dashboard (monitors all configured servers)
   watch add <name>    Add container to restart watch list
   watch list          Show watched containers

@@ -31,6 +31,12 @@ func TestFilterFlags(t *testing.T) {
 			expected: []string{"alerts"},
 		},
 		{
+			name:     "remove doctor backup max age value flag",
+			args:     []string{"doctor", "--backup-max-age", "24h", "--json"},
+			flags:    []string{"--backup-max-age"},
+			expected: []string{"doctor", "--json"},
+		},
+		{
 			name:     "no flags to remove",
 			args:     []string{"status", "--json"},
 			flags:    []string{"--server", "--all"},

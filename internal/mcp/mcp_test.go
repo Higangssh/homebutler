@@ -95,8 +95,8 @@ func TestToolsList(t *testing.T) {
 		t.Fatalf("unmarshal toolsListResult: %v", err)
 	}
 
-	if len(list.Tools) != 22 {
-		t.Errorf("expected 22 tools, got %d", len(list.Tools))
+	if len(list.Tools) != 23 {
+		t.Errorf("expected 23 tools, got %d", len(list.Tools))
 	}
 
 	expectedTools := map[string]bool{
@@ -113,6 +113,7 @@ func TestToolsList(t *testing.T) {
 		"inventory_scan":    false,
 		"inventory_export":  false,
 		"report":            false,
+		"doctor":            false,
 		"backup_create":     false,
 		"backup_list":       false,
 		"backup_drill":      false,
