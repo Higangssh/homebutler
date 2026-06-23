@@ -338,6 +338,31 @@ func TestToolDefinitionsHaveRequiredFields(t *testing.T) {
 	}
 }
 
+func TestCapabilityRegistryMetadata(t *testing.T) {
+	if len(capabilityRegistry) != len(toolDefinitions()) {
+		t.Fatalf("capability registry count mismatch: registry=%d tools=%d", len(capabilityRegistry), len(toolDefinitions()))
+	}
+
+	names := make(map[string]bool)
+	for _, c := range capabilityRegistry {
+		if c.tool.Name == "" {
+			t.Fatal("capability has empty tool name")
+		}
+		if names[c.tool.Name] {
+			t.Fatalf("duplicate capability for tool %q", c.tool.Name)
+		}
+		names[c.tool.Name] = true
+		if c.risk == "" {
+			t.Fatalf("tool %q has empty risk", c.tool.Name)
+		}
+		switch c.risk {
+		case riskRead, riskWrite, riskDestructive:
+		default:
+			t.Fatalf("tool %q has unknown risk %q", c.tool.Name, c.risk)
+		}
+	}
+}
+
 func TestStringArg(t *testing.T) {
 	args := map[string]any{
 		"str":   "hello",

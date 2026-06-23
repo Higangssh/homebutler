@@ -518,7 +518,45 @@ func withMockInstalled(t *testing.T, apps map[string]installedApp) {
 	t.Cleanup(func() { getInstalled = orig })
 }
 
+func withFakeDocker(t *testing.T) {
+	t.Helper()
+	dir := t.TempDir()
+	dockerPath := filepath.Join(dir, "docker")
+	script := `#!/bin/sh
+case "$1" in
+  --version)
+    echo "Docker version 26.0.0"
+    exit 0
+    ;;
+  info)
+    echo "Server Version: 26.0.0"
+    exit 0
+    ;;
+  compose)
+    case "$2" in
+      version)
+        echo "Docker Compose version v2.27.0"
+        exit 0
+        ;;
+      -f)
+        exit 0
+        ;;
+    esac
+    ;;
+  ps)
+    exit 0
+    ;;
+esac
+exit 0
+`
+	if err := os.WriteFile(dockerPath, []byte(script), 0o755); err != nil {
+		t.Fatalf("write fake docker: %v", err)
+	}
+	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+}
+
 func TestPreCheckDNSPort53InUse(t *testing.T) {
+	withFakeDocker(t)
 	// Port 53 is busy → should warn for both pi-hole and adguard-home
 	withMockPortCheck(t, func(port string) string {
 		if port == "53" {
@@ -554,6 +592,7 @@ func TestPreCheckDNSPort53InUse(t *testing.T) {
 }
 
 func TestPreCheckDNSMutualConflict(t *testing.T) {
+	withFakeDocker(t)
 	withMockPortCheck(t, func(port string) string { return "" })
 
 	// pi-hole installed → installing adguard-home should warn
@@ -594,6 +633,7 @@ func TestPreCheckDNSMutualConflict(t *testing.T) {
 }
 
 func TestPreCheckNginxProxyManager80443(t *testing.T) {
+	withFakeDocker(t)
 	withMockInstalled(t, map[string]installedApp{})
 
 	// Both 80 and 443 busy
@@ -668,6 +708,7 @@ func TestIsSpecialWarningOtherApps(t *testing.T) {
 }
 
 func TestPreCheckDNSPort53WarningOSSpecific(t *testing.T) {
+	withFakeDocker(t)
 	// Verify the DNS port 53 warning message is OS-appropriate
 	withMockPortCheck(t, func(port string) string {
 		if port == "53" {
