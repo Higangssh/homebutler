@@ -2,6 +2,29 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.19.1](https://github.com/Higangssh/homebutler/compare/v0.19.0...v0.19.1) - 2026-07-07
+
+**Remote deploy downloads now match published release assets.** This patch fixes `homebutler deploy` so fresh remote installs download the versioned archives produced by GoReleaser.
+
+```bash
+homebutler deploy --server pve1
+homebutler deploy --all
+```
+
+### 🐛 Fixes
+
+- resolve the latest release version before GitHub-backed deploys so versioned assets such as `homebutler_0.19.1_linux_amd64.tar.gz` are downloaded instead of missing unversioned names
+- require versioned release downloads and checksum lookups to prevent regressions to `releases/latest/download/homebutler_<os>_<arch>.tar.gz`
+
+### ♻️ Changed
+
+- split MCP capability metadata into a dedicated registry for cleaner server wiring
+
+### 🧪 Tests
+
+- add release download coverage for versioned asset paths and empty-version rejection
+- verify with targeted remote/cmd tests, full test suite, build, and diff checks
+
 ## [0.19.0](https://github.com/Higangssh/homebutler/compare/v0.18.1...v0.19.0) - 2026-05-10
 
 **Doctor check for the messy middle of self-hosting.** This release adds a read-only `doctor` command that turns common homelab risks into clear findings and next commands.
