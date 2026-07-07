@@ -2,6 +2,23 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.19.2](https://github.com/Higangssh/homebutler/compare/v0.19.1...v0.19.2) - 2026-07-07
+
+**Patch release to complete npm distribution.** This release carries the same remote deploy asset-name fix as v0.19.1 and republishes through the full release pipeline after refreshing npm credentials.
+
+```bash
+homebutler deploy --server pve1
+homebutler deploy --all
+```
+
+### 🐛 Fixes
+
+- keep GitHub-backed deploy downloads on the versioned release asset path used by GoReleaser
+
+### 📦 Distribution
+
+- publish the npm wrapper for the deploy download fix after refreshing the GitHub Actions npm token
+
 ## [0.19.1](https://github.com/Higangssh/homebutler/compare/v0.19.0...v0.19.1) - 2026-07-07
 
 **Remote deploy downloads now match published release assets.** This patch fixes `homebutler deploy` so fresh remote installs download the versioned archives produced by GoReleaser.
