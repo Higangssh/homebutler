@@ -16,10 +16,6 @@ import (
 	"golang.org/x/crypto/ssh"
 )
 
-const (
-	releaseURL = "https://github.com/Higangssh/homebutler/releases/latest/download"
-)
-
 // DeployResult holds the result of a deploy operation.
 type DeployResult struct {
 	Server  string `json:"server"`
@@ -32,7 +28,7 @@ type DeployResult struct {
 // Deploy installs homebutler on a remote server.
 // If localBin is set, it copies that file directly (air-gapped mode).
 // Otherwise, it downloads the correct binary from GitHub Releases.
-func Deploy(server *config.ServerConfig, localBin string) (*DeployResult, error) {
+func Deploy(server *config.ServerConfig, localBin, releaseVersion string) (*DeployResult, error) {
 	result := &DeployResult{Server: server.Name}
 
 	// Connect
@@ -68,7 +64,10 @@ func Deploy(server *config.ServerConfig, localBin string) (*DeployResult, error)
 	} else {
 		// Download from GitHub
 		result.Source = "github"
-		data, err := downloadRelease(remoteOS, remoteArch)
+		if releaseVersion == "" {
+			return nil, fmt.Errorf("release version is required for GitHub deploy")
+		}
+		data, err := downloadRelease(remoteOS, remoteArch, releaseVersion)
 		if err != nil {
 			return nil, fmt.Errorf("download for %s/%s: %w\n\nFor air-gapped environments, use:\n  homebutler deploy --server %s --local ./homebutler-%s-%s",
 				remoteOS, remoteArch, err, server.Name, remoteOS, remoteArch)
@@ -187,15 +186,13 @@ func normalizeArch(arch string) string {
 	}
 }
 
-func downloadRelease(osName, arch string, version ...string) ([]byte, error) {
-	var filename, url string
-	if len(version) > 0 && version[0] != "" {
-		filename = fmt.Sprintf("homebutler_%s_%s_%s.tar.gz", version[0], osName, arch)
-		url = fmt.Sprintf("https://github.com/Higangssh/homebutler/releases/download/v%s/%s", version[0], filename)
-	} else {
-		filename = fmt.Sprintf("homebutler_%s_%s.tar.gz", osName, arch)
-		url = releaseURL + "/" + filename
+func downloadRelease(osName, arch, version string) ([]byte, error) {
+	if version == "" {
+		return nil, fmt.Errorf("version is required")
 	}
+
+	filename := fmt.Sprintf("homebutler_%s_%s_%s.tar.gz", version, osName, arch)
+	url := fmt.Sprintf("https://github.com/Higangssh/homebutler/releases/download/v%s/%s", version, filename)
 
 	resp, err := http.Get(url)
 	if err != nil {
@@ -214,7 +211,7 @@ func downloadRelease(osName, arch string, version ...string) ([]byte, error) {
 	}
 
 	// Verify checksum
-	if err := verifyChecksum(tarData, filename, version...); err != nil {
+	if err := verifyChecksum(tarData, filename, version); err != nil {
 		return nil, fmt.Errorf("checksum verification failed: %w", err)
 	}
 
@@ -222,13 +219,12 @@ func downloadRelease(osName, arch string, version ...string) ([]byte, error) {
 }
 
 // verifyChecksum downloads checksums.txt and verifies the SHA256 hash.
-func verifyChecksum(data []byte, filename string, version ...string) error {
-	var checksumsURL string
-	if len(version) > 0 && version[0] != "" {
-		checksumsURL = fmt.Sprintf("https://github.com/Higangssh/homebutler/releases/download/v%s/checksums.txt", version[0])
-	} else {
-		checksumsURL = releaseURL + "/checksums.txt"
+func verifyChecksum(data []byte, filename, version string) error {
+	if version == "" {
+		return fmt.Errorf("version is required")
 	}
+
+	checksumsURL := fmt.Sprintf("https://github.com/Higangssh/homebutler/releases/download/v%s/checksums.txt", version)
 
 	resp, err := http.Get(checksumsURL)
 	if err != nil {

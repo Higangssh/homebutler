@@ -50,10 +50,20 @@ Use --local to specify a local binary for air-gapped deployment.`,
 				return fmt.Errorf("no remote servers to deploy to")
 			}
 
+			releaseVersion := ""
+			if localBin == "" {
+				latestVersion, err := remote.FetchLatestVersion()
+				if err != nil {
+					return fmt.Errorf("check latest release: %w", err)
+				}
+				releaseVersion = latestVersion
+				fmt.Fprintf(os.Stderr, "latest release: v%s\n", releaseVersion)
+			}
+
 			var results []remote.DeployResult
 			for _, srv := range targets {
 				fmt.Fprintf(os.Stderr, "deploying to %s (%s)...\n", srv.Name, srv.Host)
-				result, err := remote.Deploy(&srv, localBin)
+				result, err := remote.Deploy(&srv, localBin, releaseVersion)
 				if err != nil {
 					results = append(results, remote.DeployResult{
 						Server:  srv.Name,

@@ -899,6 +899,7 @@ func TestDownloadRelease(t *testing.T) {
 	// Compute checksum
 	h := sha256.Sum256(tarData)
 	checksum := hex.EncodeToString(h[:])
+	var requestedArchive string
 
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if strings.HasSuffix(r.URL.Path, "checksums.txt") {
@@ -906,6 +907,7 @@ func TestDownloadRelease(t *testing.T) {
 			return
 		}
 		if strings.Contains(r.URL.Path, ".tar.gz") {
+			requestedArchive = r.URL.Path
 			w.Write(tarData)
 			return
 		}
@@ -936,6 +938,10 @@ func TestDownloadRelease(t *testing.T) {
 	}
 	if !bytes.Equal(data, binaryContent) {
 		t.Errorf("extracted binary mismatch: got %q, want %q", data, binaryContent)
+	}
+	wantPath := "/Higangssh/homebutler/releases/download/v9.9.9/homebutler_9.9.9_linux_amd64.tar.gz"
+	if requestedArchive != wantPath {
+		t.Errorf("download path = %q, want %q", requestedArchive, wantPath)
 	}
 }
 
@@ -968,47 +974,13 @@ func TestDownloadRelease_NotFound(t *testing.T) {
 	}
 }
 
-func TestDownloadRelease_NoVersion(t *testing.T) {
-	binaryContent := []byte("#!/bin/sh\necho homebutler")
-	tarData := createTarGz(t, "homebutler", binaryContent)
-
-	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if strings.HasSuffix(r.URL.Path, "checksums.txt") {
-			// Return 404 to skip checksum verification
-			w.WriteHeader(http.StatusNotFound)
-			return
-		}
-		if strings.Contains(r.URL.Path, ".tar.gz") {
-			w.Write(tarData)
-			return
-		}
-		w.WriteHeader(http.StatusNotFound)
-	}))
-	defer ts.Close()
-
-	origTransport := http.DefaultTransport
-	http.DefaultTransport = &testTransport{
-		wrapped: origTransport,
-		override: func(req *http.Request) *http.Request {
-			if strings.Contains(req.URL.Host, "github.com") {
-				newURL := ts.URL + req.URL.Path
-				newReq, _ := http.NewRequest(req.Method, newURL, req.Body)
-				for k, v := range req.Header {
-					newReq.Header[k] = v
-				}
-				return newReq
-			}
-			return req
-		},
+func TestDownloadRelease_RequiresVersion(t *testing.T) {
+	_, err := downloadRelease("linux", "amd64", "")
+	if err == nil {
+		t.Fatal("expected error for empty version")
 	}
-	defer func() { http.DefaultTransport = origTransport }()
-
-	data, err := downloadRelease("linux", "amd64")
-	if err != nil {
-		t.Fatalf("downloadRelease() error: %v", err)
-	}
-	if !bytes.Equal(data, binaryContent) {
-		t.Errorf("extracted binary mismatch")
+	if !strings.Contains(err.Error(), "version is required") {
+		t.Fatalf("unexpected error: %v", err)
 	}
 }
 

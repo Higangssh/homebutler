@@ -215,7 +215,7 @@ func TestDeploy_ConnectFailure(t *testing.T) {
 		Password: "secret",
 	}
 
-	_, err := Deploy(server, "")
+	_, err := Deploy(server, "", "")
 	if err == nil {
 		t.Fatal("expected deploy connect failure")
 	}
