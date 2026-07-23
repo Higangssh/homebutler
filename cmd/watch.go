@@ -323,6 +323,12 @@ func newWatchStartCmd() *cobra.Command {
 		Long: `Start foreground monitoring using event-based or polling monitors.
 Docker targets use docker events (real-time). Systemd and PM2 targets use polling.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			// Other commands load the global config here; this one didn't,
+			// so config.yaml's notify settings were never reachable below.
+			if err := loadConfig(); err != nil {
+				return err
+			}
+
 			dur, err := time.ParseDuration(interval)
 			if err != nil {
 				return fmt.Errorf("invalid interval %q: %w", interval, err)
