@@ -20,6 +20,9 @@ jobs:
         with:
           go-version: "1.26"
 
+      - name: Verify go.mod is tidy
+        run: go mod tidy -diff
+
       - name: golangci-lint
         uses: golangci/golangci-lint-action@v7
         with:
