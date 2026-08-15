@@ -1,0 +1,6 @@
+COMMAND       PID    USER     FD   TYPE  DEVICE     SIZE/OFF  NODE NAME
+app-api       1001  appuser   3u   IPv4 0xabc123    0t0       TCP *:8080 (LISTEN)
+app-api       1001  appuser   4u   IPv6 0xabc124    0t0       TCP *:8080 (LISTEN)
+demo-service  1002  appuser   6u   IPv4 0xabc125    0t0       TCP *:443 (LISTEN)
+metrics-agent 1003  appuser  22u   IPv4 0xabc126    0t0       TCP 127.0.0.1:9090 (LISTEN)
+edge-router   1004  appuser   3u   IPv4 0xabc127    0t0       TCP *:8443 (LISTEN)
