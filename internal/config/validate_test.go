@@ -460,3 +460,73 @@ servers:
 		t.Errorf("clean config should print no findings section:\n%s", out)
 	}
 }
+
+// WatchRuntimeConfig has a custom unmarshaler, which bypasses KnownFields —
+// so the watch subtree needs its own unknown-key check.
+func TestValidateWatchUnknownKeys(t *testing.T) {
+	path := writeConfig(t, `
+watch:
+  enabld: true
+  notify:
+    cooldwn: 5m
+  flapping:
+    short_windo: 10m
+`)
+
+	r := Validate(path)
+
+	f := requireFinding(t, r, "watch.enabld", SeverityWarning)
+	if !strings.Contains(f.Hint, `"enabled"`) {
+		t.Errorf("expected a did-you-mean hint, got %q", f.Hint)
+	}
+	requireFinding(t, r, "watch.notify.cooldwn", SeverityWarning)
+	requireFinding(t, r, "watch.flapping.short_windo", SeverityWarning)
+}
+
+func TestValidateWatchAcceptsBothForms(t *testing.T) {
+	for name, body := range map[string]string{
+		"flat": `
+watch:
+  enabled: true
+  notify_on: flapping
+  cooldown: 5m
+`,
+		"nested": `
+watch:
+  notify:
+    enabled: true
+    notify_on: flapping
+    cooldown: 5m
+`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			r := Validate(writeConfig(t, body))
+
+			if _, found := findingFor(r, "not found in watch"); found {
+				t.Errorf("%s form should be accepted: %+v", name, r.Findings)
+			}
+			for _, s := range r.Sections {
+				if s.Name == "watch" && !strings.Contains(s.Summary, "enabled=true") {
+					t.Errorf("%s form did not reach the runtime config: %q", name, s.Summary)
+				}
+			}
+		})
+	}
+}
+
+func TestValidateWatchBothFormsWarns(t *testing.T) {
+	path := writeConfig(t, `
+watch:
+  enabled: true
+  cooldown: 9m
+  notify:
+    enabled: false
+`)
+
+	r := Validate(path)
+
+	f := requireFinding(t, r, "Both watch.notify and the flat form", SeverityWarning)
+	if !strings.Contains(f.Message, "enabled") || !strings.Contains(f.Message, "cooldown") {
+		t.Errorf("message should name the flat keys in play, got %q", f.Message)
+	}
+}

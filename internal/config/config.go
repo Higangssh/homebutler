@@ -26,6 +26,80 @@ type WatchRuntimeConfig struct {
 	Flapping watch.FlappingConfig `yaml:"flapping,omitempty"`
 }
 
+// watchRuntimeYAML is the decode target for WatchRuntimeConfig. It carries the
+// canonical nested shape plus the flat keys, as pointers so that "absent" and
+// "set to the zero value" stay distinguishable.
+type watchRuntimeYAML struct {
+	Notify   watch.NotifySettings `yaml:"notify,omitempty"`
+	Flapping watch.FlappingConfig `yaml:"flapping,omitempty"`
+
+	Enabled    *bool   `yaml:"enabled,omitempty"`
+	NotifyOn   *string `yaml:"notify_on,omitempty"`
+	OnIncident *bool   `yaml:"on_incident,omitempty"`
+	OnFlapping *bool   `yaml:"on_flapping,omitempty"`
+	Cooldown   *string `yaml:"cooldown,omitempty"`
+}
+
+// UnmarshalYAML accepts both spellings of the watch notification settings:
+//
+//	watch:            # canonical
+//	  notify:
+//	    enabled: true
+//
+//	watch:            # flat, as the README documented it
+//	  enabled: true
+//
+// The flat keys were never part of the schema, so a config copied from the
+// README parsed without complaint and then ran with notifications off — the
+// same symptom as #31, from a different cause. Correcting only the docs would
+// have left those configs silently broken, so both spellings are read.
+//
+// A file containing both forms gets the nested block; the flat keys are a
+// compatibility path, not an override.
+func (w *WatchRuntimeConfig) UnmarshalYAML(node *yaml.Node) error {
+	// Seeded with the current value so that defaults applied before decoding
+	// survive keys the file does not mention.
+	raw := watchRuntimeYAML{Notify: w.Notify, Flapping: w.Flapping}
+	if err := node.Decode(&raw); err != nil {
+		return err
+	}
+	w.Notify = raw.Notify
+	w.Flapping = raw.Flapping
+
+	if hasMappingKey(node, "notify") {
+		return nil
+	}
+	if raw.Enabled != nil {
+		w.Notify.Enabled = *raw.Enabled
+	}
+	if raw.NotifyOn != nil {
+		w.Notify.NotifyOn = *raw.NotifyOn
+	}
+	if raw.OnIncident != nil {
+		w.Notify.OnIncident = *raw.OnIncident
+	}
+	if raw.OnFlapping != nil {
+		w.Notify.OnFlapping = *raw.OnFlapping
+	}
+	if raw.Cooldown != nil {
+		w.Notify.Cooldown = *raw.Cooldown
+	}
+	return nil
+}
+
+// hasMappingKey reports whether a YAML mapping contains the given key.
+func hasMappingKey(node *yaml.Node, key string) bool {
+	if node == nil || node.Kind != yaml.MappingNode {
+		return false
+	}
+	for i := 0; i+1 < len(node.Content); i += 2 {
+		if node.Content[i].Value == key {
+			return true
+		}
+	}
+	return false
+}
+
 // ResolveBackupDir returns the backup directory from config or the default ~/.homebutler/backups/.
 func (c *Config) ResolveBackupDir() string {
 	if c.BackupDir != "" {

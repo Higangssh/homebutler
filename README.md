@@ -333,6 +333,22 @@ Legacy `~/.homebutler/watch/config.json` is still read as a fallback for watch-s
 - `watch.cooldown: 5m` — suppress duplicate notifications for the same event fingerprint during the cooldown window
 - `watch.flapping` — optional advanced tuning for restart-loop detection
 
+These settings can also be written under a `watch.notify:` block, which is the
+canonical form:
+
+```yaml
+watch:
+  notify:
+    enabled: true
+    notify_on: flapping
+    cooldown: 5m
+  flapping:
+    short_window: 10m
+```
+
+Both spellings are read, so either layout works. If a file contains both, the
+`notify:` block wins and `homebutler config validate` says so.
+
 #### Manage targets
 
 ```bash

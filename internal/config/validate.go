@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -131,8 +132,14 @@ func Validate(explicit string) *ValidationResult {
 	}
 	cfg.Path = path
 
+	// Shape errors were already reported by the decode above; anything that
+	// fails here just yields an empty map and no presence information.
+	var rawTop map[string]yaml.Node
+	_ = yaml.Unmarshal(data, &rawTop)
+
 	r.checkUnknownKeys(data)
-	r.Sections = describeSections(data, cfg)
+	r.checkWatchKeys(rawTop)
+	r.Sections = describeSections(rawTop, cfg)
 	r.checkPermissions(path, cfg)
 	r.checkServers(cfg)
 	r.checkWake(cfg)
@@ -251,15 +258,74 @@ func editDistance(a, b string) int {
 	return prev[len(b)]
 }
 
+// Keys accepted under watch:. The flat spellings are the compatibility path
+// described on WatchRuntimeConfig.UnmarshalYAML.
+var (
+	watchKeys       = []string{"notify", "flapping", "enabled", "notify_on", "on_incident", "on_flapping", "cooldown"}
+	watchNotifyKeys = []string{"enabled", "notify_on", "on_incident", "on_flapping", "cooldown"}
+	watchFlapKeys   = []string{"short_window", "short_threshold", "long_window", "long_threshold"}
+)
+
+// checkWatchKeys inspects the watch subtree by hand.
+//
+// WatchRuntimeConfig has a custom unmarshaler, and a custom unmarshaler
+// decodes its own node without inheriting the parent decoder's KnownFields
+// setting. Unknown keys under watch: would therefore pass unreported, which
+// is the failure this whole command exists to prevent.
+func (r *ValidationResult) checkWatchKeys(rawTop map[string]yaml.Node) {
+	node, ok := rawTop["watch"]
+	if !ok || node.Kind != yaml.MappingNode {
+		return
+	}
+
+	r.reportUnknownKeys(&node, "watch", watchKeys)
+
+	var flat []string
+	for i := 0; i+1 < len(node.Content); i += 2 {
+		switch key := node.Content[i].Value; key {
+		case "notify":
+			r.reportUnknownKeys(node.Content[i+1], "watch.notify", watchNotifyKeys)
+		case "flapping":
+			r.reportUnknownKeys(node.Content[i+1], "watch.flapping", watchFlapKeys)
+		default:
+			if slices.Contains(watchKeys, key) {
+				flat = append(flat, key)
+			}
+		}
+	}
+
+	if len(flat) > 0 && hasMappingKey(&node, "notify") {
+		r.add(SeverityWarning, "watch",
+			fmt.Sprintf("Both watch.notify and the flat form (%s) are set.", strings.Join(flat, ", ")),
+			"The watch.notify block wins and the flat keys are ignored. Keep one form.")
+	}
+}
+
+// reportUnknownKeys flags mapping keys that are not in the accepted set.
+func (r *ValidationResult) reportUnknownKeys(node *yaml.Node, prefix string, known []string) {
+	if node == nil || node.Kind != yaml.MappingNode {
+		return
+	}
+	for i := 0; i+1 < len(node.Content); i += 2 {
+		key := node.Content[i].Value
+		if slices.Contains(known, key) {
+			continue
+		}
+		hint := "Unrecognised keys are ignored silently, so this line currently has no effect."
+		if best, ok := closestKey(key, known); ok {
+			hint = fmt.Sprintf("Did you mean %q? %s", best, hint)
+		}
+		r.add(SeverityWarning, prefix+"."+key,
+			fmt.Sprintf("Line %d: field %s not found in %s", node.Content[i].Line, key, prefix), hint)
+	}
+}
+
 // describeSections reports, for each top-level key, whether the file set it
 // and what the resulting configuration is.
-func describeSections(data []byte, cfg *Config) []Section {
+func describeSections(rawTop map[string]yaml.Node, cfg *Config) []Section {
 	present := map[string]bool{}
-	var raw map[string]yaml.Node
-	if err := yaml.Unmarshal(data, &raw); err == nil {
-		for k := range raw {
-			present[k] = true
-		}
+	for k := range rawTop {
+		present[k] = true
 	}
 
 	sections := make([]Section, 0, len(topLevelKeys))
