@@ -62,35 +62,74 @@ type AlertConfig struct {
 	Disk   float64 `yaml:"disk"`
 }
 
-// Resolve finds the config file path using the following priority:
+// Source identifies which resolution rule produced the config path.
+type Source string
+
+const (
+	SourceFlag Source = "flag" // --config
+	SourceEnv  Source = "env"  // $HOMEBUTLER_CONFIG
+	SourceXDG  Source = "xdg"  // ~/.config/homebutler/config.yaml
+	SourceCwd  Source = "cwd"  // ./homebutler.yaml
+	SourceNone Source = "none" // nothing found; built-in defaults apply
+)
+
+// Describe returns a human-readable form of the rule that produced the path.
+func (s Source) Describe() string {
+	switch s {
+	case SourceFlag:
+		return "--config flag"
+	case SourceEnv:
+		return "$HOMEBUTLER_CONFIG"
+	case SourceXDG:
+		return "~/.config/homebutler/config.yaml (XDG)"
+	case SourceCwd:
+		return "./homebutler.yaml"
+	default:
+		return "no config file found (using defaults)"
+	}
+}
+
+// ResolveWithSource finds the config file path using the following priority:
 //  1. Explicit path (--config flag)
 //  2. $HOMEBUTLER_CONFIG environment variable
 //  3. ~/.config/homebutler/config.yaml (XDG standard)
 //  4. ./homebutler.yaml (current directory)
 //
-// Returns empty string if no config file is found (defaults will be used).
-func Resolve(explicit string) string {
+// Returns an empty path and SourceNone if no config file is found (defaults
+// will be used). Note that the first two rules do not check that the file
+// exists: a path the user named explicitly is returned as-is, so that a
+// mistyped one can be reported rather than silently falling through to the
+// next rule.
+func ResolveWithSource(explicit string) (string, Source) {
 	if explicit != "" {
-		return explicit
+		return explicit, SourceFlag
 	}
 	if env := os.Getenv("HOMEBUTLER_CONFIG"); env != "" {
-		return env
+		return env, SourceEnv
 	}
 	if home, err := os.UserHomeDir(); err == nil {
 		xdg := filepath.Join(home, ".config", "homebutler", "config.yaml")
 		if _, err := os.Stat(xdg); err == nil {
-			return xdg
+			return xdg, SourceXDG
 		}
 	}
 	if _, err := os.Stat("homebutler.yaml"); err == nil {
-		return "homebutler.yaml"
+		return "homebutler.yaml", SourceCwd
 	}
-	return ""
+	return "", SourceNone
 }
 
-func Load(path string) (*Config, error) {
+// Resolve finds the config file path. See ResolveWithSource for the priority.
+func Resolve(explicit string) string {
+	path, _ := ResolveWithSource(explicit)
+	return path
+}
+
+// newDefaultConfig returns the config Load starts from before a file is
+// applied. Validate uses it too, so both see the same baseline.
+func newDefaultConfig() *Config {
 	defaultWatch := watch.DefaultWatchConfig()
-	cfg := &Config{
+	return &Config{
 		Alerts: AlertConfig{
 			CPU:    90,
 			Memory: 85,
@@ -101,6 +140,10 @@ func Load(path string) (*Config, error) {
 			Flapping: defaultWatch.Flapping,
 		},
 	}
+}
+
+func Load(path string) (*Config, error) {
+	cfg := newDefaultConfig()
 
 	if path == "" {
 		return cfg, nil // no config file, use defaults

@@ -33,5 +33,9 @@ alerts:
   memory: 85    # percent
   disk: 90      # percent
 
-# Output format: text, json
-output: json
+# Backup directory (optional)
+# backup_dir: /mnt/nas/backups/homebutler
+
+# Output format is a per-command flag, not a config key: homebutler <cmd> --json
+
+# Check this file with: homebutler config validate

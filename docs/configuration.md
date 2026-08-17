@@ -41,6 +41,45 @@ cp homebutler.example.yaml homebutler.yaml
 
 See [homebutler.example.yaml](../homebutler.example.yaml) for all options.
 
+## Validating Your Config
+
+```bash
+homebutler config validate
+homebutler config validate --config ./homebutler.yaml
+homebutler config validate --strict   # exit non-zero on warnings too
+homebutler config validate --json
+```
+
+`config validate` is read-only: it starts no server, watcher, or install, and
+never connects to a remote host. It reports three things.
+
+**Which file was used, and which rule selected it.** With four resolution rules,
+editing the wrong file is an easy mistake to make.
+
+**What homebutler read from each section.** A section the file never set is
+listed as `not set`, which is usually the answer to "why is my notify config
+being ignored?".
+
+**What is wrong or silently ignored.** Errors mean something will not work;
+warnings mean the config parses but probably does not do what you intended:
+
+```text
+Findings
+   ⚠️ Line 5: field notifiy not found in the homebutler config
+      → Did you mean "notify"? Unrecognised keys are ignored silently, so this
+        line currently has no effect.
+   ❌ servers[0].host: Host is required for remote servers.
+      → Set host, or set local: true if this entry is the machine homebutler runs on.
+```
+
+Two cases are worth calling out because nothing else surfaces them:
+
+- **A key homebutler does not recognise is dropped without a word.** A typo
+  such as `notifiy:` leaves notifications switched off with no error anywhere.
+- **A `--config` path that does not exist falls back to built-in defaults**
+  rather than failing, so commands run and succeed against a config that was
+  never read. `config validate` reports this as an error.
+
 ## Alert Thresholds
 
 **Default thresholds** (no config needed):
@@ -60,11 +99,13 @@ alerts:
 ## Backup Directory
 
 ```yaml
-backup:
-  dir: /mnt/nas/backups/homebutler
+backup_dir: /mnt/nas/backups/homebutler
 ```
 
 Default: `~/.homebutler/backups/`
+
+Run `homebutler config validate` after changing this — a mistyped key here is
+dropped silently, and backups keep going to the default location.
 
 ## Output Format
 

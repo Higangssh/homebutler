@@ -56,6 +56,7 @@ func init() {
 		newInventoryCmd(),
 		newReportCmd(),
 		newDoctorCmd(),
+		newConfigCmd(),
 	)
 }
 
