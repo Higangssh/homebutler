@@ -429,18 +429,15 @@ func (r *ValidationResult) checkServers(cfg *Config) {
 	for i, s := range cfg.Servers {
 		field := fmt.Sprintf("servers[%d]", i)
 
-		switch {
-		case s.Name == "":
+		if s.Name == "" {
 			r.add(SeverityError, field+".name", "Server name is required.",
 				"Names are how --server and the web dashboard refer to this entry.")
-		default:
-			if first, dup := seen[s.Name]; dup {
-				r.add(SeverityError, field+".name",
-					fmt.Sprintf("Duplicate server name %q (first defined at servers[%d]).", s.Name, first),
-					"--server picks the first match, so the later entry is unreachable.")
-			} else {
-				seen[s.Name] = i
-			}
+		} else if first, dup := seen[s.Name]; dup {
+			r.add(SeverityError, field+".name",
+				fmt.Sprintf("Duplicate server name %q (first defined at servers[%d]).", s.Name, first),
+				"--server picks the first match, so the later entry is unreachable.")
+		} else {
+			seen[s.Name] = i
 		}
 
 		if s.Host == "" && !s.Local {
@@ -486,14 +483,11 @@ func (r *ValidationResult) checkWake(cfg *Config) {
 		if t.Name == "" {
 			r.add(SeverityError, field+".name", "Wake target name is required.", "")
 		}
-		switch {
-		case t.MAC == "":
+		if t.MAC == "" {
 			r.add(SeverityError, field+".mac", "MAC address is required.", "")
-		default:
-			if _, err := net.ParseMAC(t.MAC); err != nil {
-				r.add(SeverityError, field+".mac",
-					fmt.Sprintf("Invalid MAC address %q.", t.MAC), "Expected format: AA:BB:CC:DD:EE:FF")
-			}
+		} else if _, err := net.ParseMAC(t.MAC); err != nil {
+			r.add(SeverityError, field+".mac",
+				fmt.Sprintf("Invalid MAC address %q.", t.MAC), "Expected format: AA:BB:CC:DD:EE:FF")
 		}
 	}
 }
