@@ -1,0 +1,6 @@
+State    Recv-Q   Send-Q    Local Address:Port    Peer Address:Port   Process
+LISTEN   0        128        0.0.0.0:8080          0.0.0.0:*           users:(("app-api",pid=1001,fd=3))
+LISTEN   0        511        [::]:443              [::]:*              users:(("demo-service",pid=1002,fd=4))
+LISTEN   0        128        127.0.0.1:9090        0.0.0.0:*           users:(("metrics-agent",pid=1003,fd=5))
+LISTEN   0        128        0.0.0.0:8443          0.0.0.0:*           users:(("edge-router",pid=1004,fd=3))
+LISTEN   0        128        0.0.0.0:22            0.0.0.0:*           users:(("ssh-relay",pid=1005,fd=3))

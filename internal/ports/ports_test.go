@@ -34,7 +34,7 @@ node       1234 sanghee   22u  IPv4 0x123456793      0t0  TCP 127.0.0.1:3000 (LI
 nginx      5678   root     6u  IPv4 0x123456794      0t0  TCP *:80 (LISTEN)
 nginx      5678   root     7u  IPv4 0x123456795      0t0  TCP *:443 (LISTEN)`
 
-	ports := parseDarwinOutput(output)
+	ports := ParseDarwinOutput(output)
 
 	if len(ports) != 5 {
 		t.Fatalf("expected 5 ports (deduped), got %d", len(ports))
@@ -64,7 +64,7 @@ nginx      5678   root     7u  IPv4 0x123456795      0t0  TCP *:443 (LISTEN)`
 }
 
 func TestParseDarwinOutput_Empty(t *testing.T) {
-	ports := parseDarwinOutput("")
+	ports := ParseDarwinOutput("")
 	if len(ports) != 0 {
 		t.Fatalf("expected 0 ports for empty input, got %d", len(ports))
 	}
@@ -72,7 +72,7 @@ func TestParseDarwinOutput_Empty(t *testing.T) {
 
 func TestParseDarwinOutput_HeaderOnly(t *testing.T) {
 	output := "COMMAND     PID   USER   FD   TYPE             DEVICE SIZE/OFF NODE NAME"
-	ports := parseDarwinOutput(output)
+	ports := ParseDarwinOutput(output)
 	if len(ports) != 0 {
 		t.Fatalf("expected 0 ports for header-only input, got %d", len(ports))
 	}
@@ -84,7 +84,7 @@ func TestParseDarwinOutput_Deduplication(t *testing.T) {
 nginx      5678   root     6u  IPv4 0x123456794      0t0  TCP *:80 (LISTEN)
 nginx      5678   root     7u  IPv4 0x123456795      0t0  TCP *:80 (LISTEN)`
 
-	ports := parseDarwinOutput(output)
+	ports := ParseDarwinOutput(output)
 	if len(ports) != 1 {
 		t.Fatalf("expected 1 port (deduped), got %d", len(ports))
 	}
@@ -97,7 +97,7 @@ LISTEN     0      511          0.0.0.0:80          0.0.0.0:*     users:(("nginx"
 LISTEN     0      128        127.0.0.1:3000        0.0.0.0:*     users:(("node",pid=9012,fd=22))
 LISTEN     0      128             [::]:443            [::]:*     users:(("nginx",pid=5678,fd=7))`
 
-	ports := parseLinuxOutput(output)
+	ports := ParseLinuxOutput(output)
 
 	if len(ports) != 4 {
 		t.Fatalf("expected 4 ports, got %d", len(ports))
@@ -124,7 +124,7 @@ LISTEN     0      128             [::]:443            [::]:*     users:(("nginx"
 }
 
 func TestParseLinuxOutput_Empty(t *testing.T) {
-	ports := parseLinuxOutput("")
+	ports := ParseLinuxOutput("")
 	if len(ports) != 0 {
 		t.Fatalf("expected 0 ports for empty input, got %d", len(ports))
 	}
@@ -132,7 +132,7 @@ func TestParseLinuxOutput_Empty(t *testing.T) {
 
 func TestParseLinuxOutput_HeaderOnly(t *testing.T) {
 	output := "State      Recv-Q Send-Q Local Address:Port   Peer Address:Port Process"
-	ports := parseLinuxOutput(output)
+	ports := ParseLinuxOutput(output)
 	if len(ports) != 0 {
 		t.Fatalf("expected 0 ports for header-only input, got %d", len(ports))
 	}
@@ -142,7 +142,7 @@ func TestParseLinuxOutput_NoProcessInfo(t *testing.T) {
 	output := `State      Recv-Q Send-Q Local Address:Port   Peer Address:Port Process
 LISTEN     0      128          0.0.0.0:22          0.0.0.0:*`
 
-	ports := parseLinuxOutput(output)
+	ports := ParseLinuxOutput(output)
 	if len(ports) != 1 {
 		t.Fatalf("expected 1 port, got %d", len(ports))
 	}
@@ -158,7 +158,7 @@ func TestParseLinuxOutput_IPv6(t *testing.T) {
 	output := `State      Recv-Q Send-Q Local Address:Port   Peer Address:Port Process
 LISTEN     0      128             [::]:80              [::]:*     users:(("apache2",pid=999,fd=4))`
 
-	ports := parseLinuxOutput(output)
+	ports := ParseLinuxOutput(output)
 	if len(ports) != 1 {
 		t.Fatalf("expected 1 port, got %d", len(ports))
 	}
