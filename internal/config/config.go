@@ -26,6 +26,80 @@ type WatchRuntimeConfig struct {
 	Flapping watch.FlappingConfig `yaml:"flapping,omitempty"`
 }
 
+// watchRuntimeYAML is the decode target for WatchRuntimeConfig. It carries the
+// canonical nested shape plus the flat keys, as pointers so that "absent" and
+// "set to the zero value" stay distinguishable.
+type watchRuntimeYAML struct {
+	Notify   watch.NotifySettings `yaml:"notify,omitempty"`
+	Flapping watch.FlappingConfig `yaml:"flapping,omitempty"`
+
+	Enabled    *bool   `yaml:"enabled,omitempty"`
+	NotifyOn   *string `yaml:"notify_on,omitempty"`
+	OnIncident *bool   `yaml:"on_incident,omitempty"`
+	OnFlapping *bool   `yaml:"on_flapping,omitempty"`
+	Cooldown   *string `yaml:"cooldown,omitempty"`
+}
+
+// UnmarshalYAML accepts both spellings of the watch notification settings:
+//
+//	watch:            # canonical
+//	  notify:
+//	    enabled: true
+//
+//	watch:            # flat, as the README documented it
+//	  enabled: true
+//
+// The flat keys were never part of the schema, so a config copied from the
+// README parsed without complaint and then ran with notifications off — the
+// same symptom as #31, from a different cause. Correcting only the docs would
+// have left those configs silently broken, so both spellings are read.
+//
+// A file containing both forms gets the nested block; the flat keys are a
+// compatibility path, not an override.
+func (w *WatchRuntimeConfig) UnmarshalYAML(node *yaml.Node) error {
+	// Seeded with the current value so that defaults applied before decoding
+	// survive keys the file does not mention.
+	raw := watchRuntimeYAML{Notify: w.Notify, Flapping: w.Flapping}
+	if err := node.Decode(&raw); err != nil {
+		return err
+	}
+	w.Notify = raw.Notify
+	w.Flapping = raw.Flapping
+
+	if hasMappingKey(node, "notify") {
+		return nil
+	}
+	if raw.Enabled != nil {
+		w.Notify.Enabled = *raw.Enabled
+	}
+	if raw.NotifyOn != nil {
+		w.Notify.NotifyOn = *raw.NotifyOn
+	}
+	if raw.OnIncident != nil {
+		w.Notify.OnIncident = *raw.OnIncident
+	}
+	if raw.OnFlapping != nil {
+		w.Notify.OnFlapping = *raw.OnFlapping
+	}
+	if raw.Cooldown != nil {
+		w.Notify.Cooldown = *raw.Cooldown
+	}
+	return nil
+}
+
+// hasMappingKey reports whether a YAML mapping contains the given key.
+func hasMappingKey(node *yaml.Node, key string) bool {
+	if node == nil || node.Kind != yaml.MappingNode {
+		return false
+	}
+	for i := 0; i+1 < len(node.Content); i += 2 {
+		if node.Content[i].Value == key {
+			return true
+		}
+	}
+	return false
+}
+
 // ResolveBackupDir returns the backup directory from config or the default ~/.homebutler/backups/.
 func (c *Config) ResolveBackupDir() string {
 	if c.BackupDir != "" {
@@ -62,35 +136,74 @@ type AlertConfig struct {
 	Disk   float64 `yaml:"disk"`
 }
 
-// Resolve finds the config file path using the following priority:
+// Source identifies which resolution rule produced the config path.
+type Source string
+
+const (
+	SourceFlag Source = "flag" // --config
+	SourceEnv  Source = "env"  // $HOMEBUTLER_CONFIG
+	SourceXDG  Source = "xdg"  // ~/.config/homebutler/config.yaml
+	SourceCwd  Source = "cwd"  // ./homebutler.yaml
+	SourceNone Source = "none" // nothing found; built-in defaults apply
+)
+
+// Describe returns a human-readable form of the rule that produced the path.
+func (s Source) Describe() string {
+	switch s {
+	case SourceFlag:
+		return "--config flag"
+	case SourceEnv:
+		return "$HOMEBUTLER_CONFIG"
+	case SourceXDG:
+		return "~/.config/homebutler/config.yaml (XDG)"
+	case SourceCwd:
+		return "./homebutler.yaml"
+	default:
+		return "no config file found (using defaults)"
+	}
+}
+
+// ResolveWithSource finds the config file path using the following priority:
 //  1. Explicit path (--config flag)
 //  2. $HOMEBUTLER_CONFIG environment variable
 //  3. ~/.config/homebutler/config.yaml (XDG standard)
 //  4. ./homebutler.yaml (current directory)
 //
-// Returns empty string if no config file is found (defaults will be used).
-func Resolve(explicit string) string {
+// Returns an empty path and SourceNone if no config file is found (defaults
+// will be used). Note that the first two rules do not check that the file
+// exists: a path the user named explicitly is returned as-is, so that a
+// mistyped one can be reported rather than silently falling through to the
+// next rule.
+func ResolveWithSource(explicit string) (string, Source) {
 	if explicit != "" {
-		return explicit
+		return explicit, SourceFlag
 	}
 	if env := os.Getenv("HOMEBUTLER_CONFIG"); env != "" {
-		return env
+		return env, SourceEnv
 	}
 	if home, err := os.UserHomeDir(); err == nil {
 		xdg := filepath.Join(home, ".config", "homebutler", "config.yaml")
 		if _, err := os.Stat(xdg); err == nil {
-			return xdg
+			return xdg, SourceXDG
 		}
 	}
 	if _, err := os.Stat("homebutler.yaml"); err == nil {
-		return "homebutler.yaml"
+		return "homebutler.yaml", SourceCwd
 	}
-	return ""
+	return "", SourceNone
 }
 
-func Load(path string) (*Config, error) {
+// Resolve finds the config file path. See ResolveWithSource for the priority.
+func Resolve(explicit string) string {
+	path, _ := ResolveWithSource(explicit)
+	return path
+}
+
+// newDefaultConfig returns the config Load starts from before a file is
+// applied. Validate uses it too, so both see the same baseline.
+func newDefaultConfig() *Config {
 	defaultWatch := watch.DefaultWatchConfig()
-	cfg := &Config{
+	return &Config{
 		Alerts: AlertConfig{
 			CPU:    90,
 			Memory: 85,
@@ -101,6 +214,10 @@ func Load(path string) (*Config, error) {
 			Flapping: defaultWatch.Flapping,
 		},
 	}
+}
+
+func Load(path string) (*Config, error) {
+	cfg := newDefaultConfig()
 
 	if path == "" {
 		return cfg, nil // no config file, use defaults

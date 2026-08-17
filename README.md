@@ -122,6 +122,32 @@ homebutler doctor --json            # automation / MCP friendly
 
 `doctor` is a read-only preflight for the problems homelab users usually discover too late: high disk or memory usage, stopped containers, public bind ports, stale or missing backups, missing notifications, and whether `report` has a baseline for change detection.
 
+### 🗂 Config Validation
+
+```bash
+homebutler config validate
+homebutler config validate --strict   # exit non-zero on warnings too
+homebutler config validate --json
+```
+
+`config validate` reads your config without starting anything and tells you
+which file was used, which of the four resolution rules picked it, and what
+homebutler actually made of each section. It exists because the two ways config
+goes wrong are both silent: a key homebutler does not recognise is dropped
+without a word, and a `--config` path that does not exist falls back to
+built-in defaults rather than failing.
+
+```text
+Sections
+   ✓ servers     2 servers (homelab, nas)
+   · notify      not set
+   ✓ alerts      cpu 95% · memory 85% · disk 90%
+
+Findings
+   ⚠️ Line 5: field notifiy not found in the homebutler config
+      → Did you mean "notify"? Unrecognised keys are ignored silently.
+```
+
 ### 📦 One-Command App Install
 
 <p align="center">
@@ -307,6 +333,22 @@ Legacy `~/.homebutler/watch/config.json` is still read as a fallback for watch-s
 - `watch.cooldown: 5m` — suppress duplicate notifications for the same event fingerprint during the cooldown window
 - `watch.flapping` — optional advanced tuning for restart-loop detection
 
+These settings can also be written under a `watch.notify:` block, which is the
+canonical form:
+
+```yaml
+watch:
+  notify:
+    enabled: true
+    notify_on: flapping
+    cooldown: 5m
+  flapping:
+    short_window: 10m
+```
+
+Both spellings are read, so either layout works. If a file contains both, the
+`notify:` block wins and `homebutler config validate` says so.
+
 #### Manage targets
 
 ```bash
@@ -427,6 +469,7 @@ homebutler <command> [flags]
 Commands:
   status              System status (CPU, memory, disk, uptime)
   doctor              Diagnose health, exposure, backups, and readiness
+  config validate     Check the config file and report what is ignored
   docker list         List running containers
   install <app>       Install a self-hosted app (docker compose)
   alerts              Show current alert status
@@ -452,6 +495,7 @@ Run `homebutler --help` for all commands.
 ```
 Commands:
   init                Interactive setup wizard
+  config validate     Check the config file and report what is ignored
   status              System status (CPU, memory, disk, uptime)
   doctor              Diagnose health, exposure, backups, and readiness
   watch tui           TUI dashboard (monitors all configured servers)

@@ -420,3 +420,100 @@ func findSubstr(s, substr string) bool {
 	}
 	return false
 }
+
+// The README documented the flat form long before watch.notify existed, so
+// configs written from it must keep working. See WatchRuntimeConfig.UnmarshalYAML.
+func TestLoadFlatWatchForm(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "flat.yaml")
+	content := `
+watch:
+  enabled: true
+  notify_on: incident
+  cooldown: 9m
+  flapping:
+    short_threshold: 7
+`
+	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+
+	if !cfg.Watch.Notify.Enabled {
+		t.Error("watch.enabled should reach Notify.Enabled")
+	}
+	if cfg.Watch.Notify.NotifyOn != "incident" {
+		t.Errorf("notify_on = %q, want incident", cfg.Watch.Notify.NotifyOn)
+	}
+	if cfg.Watch.Notify.Cooldown != "9m" {
+		t.Errorf("cooldown = %q, want 9m", cfg.Watch.Notify.Cooldown)
+	}
+	if cfg.Watch.Flapping.ShortThreshold != 7 {
+		t.Errorf("flapping short_threshold = %d, want 7", cfg.Watch.Flapping.ShortThreshold)
+	}
+	// Normalize still runs, so the derived booleans follow notify_on.
+	if !cfg.Watch.Notify.OnIncident || cfg.Watch.Notify.OnFlapping {
+		t.Errorf("notify_on=incident should set OnIncident only, got %+v", cfg.Watch.Notify)
+	}
+}
+
+func TestLoadNestedWatchFormWinsOverFlat(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "both.yaml")
+	content := `
+watch:
+  enabled: true
+  cooldown: 9m
+  notify:
+    enabled: false
+    cooldown: 1m
+`
+	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+
+	if cfg.Watch.Notify.Enabled {
+		t.Error("the nested block should win over the flat key")
+	}
+	if cfg.Watch.Notify.Cooldown != "1m" {
+		t.Errorf("cooldown = %q, want 1m from the nested block", cfg.Watch.Notify.Cooldown)
+	}
+}
+
+// Keys the file does not mention must keep the defaults Load seeded.
+func TestLoadWatchDefaultsSurvivePartialSpec(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "partial.yaml")
+	content := `
+watch:
+  flapping:
+    short_threshold: 7
+`
+	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+
+	if cfg.Watch.Notify.Cooldown != "5m" {
+		t.Errorf("cooldown = %q, want the 5m default", cfg.Watch.Notify.Cooldown)
+	}
+	if cfg.Watch.Flapping.LongThreshold != 5 {
+		t.Errorf("long_threshold = %d, want the default 5", cfg.Watch.Flapping.LongThreshold)
+	}
+	if cfg.Watch.Flapping.ShortThreshold != 7 {
+		t.Errorf("short_threshold = %d, want the configured 7", cfg.Watch.Flapping.ShortThreshold)
+	}
+}
