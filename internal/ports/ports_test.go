@@ -110,6 +110,9 @@ LISTEN     0      128             [::]:443            [::]:*     users:(("nginx"
 	if ports[0].Process != "sshd" {
 		t.Errorf("expected process sshd, got %s", ports[0].Process)
 	}
+	if ports[0].PID != "1234" {
+		t.Errorf("expected pid 1234, got %s", ports[0].PID)
+	}
 	if ports[0].Address != "0.0.0.0" {
 		t.Errorf("expected address 0.0.0.0, got %s", ports[0].Address)
 	}
@@ -120,6 +123,27 @@ LISTEN     0      128             [::]:443            [::]:*     users:(("nginx"
 	}
 	if ports[2].Process != "node" {
 		t.Errorf("expected process node, got %s", ports[2].Process)
+	}
+	if ports[2].PID != "9012" {
+		t.Errorf("expected pid 9012, got %s", ports[2].PID)
+	}
+}
+
+func TestParseLinuxOutput_MultipleProcesses(t *testing.T) {
+	// ss can list more than one process per socket. PortInfo holds a single
+	// PID, so the first entry must win for both name and PID.
+	output := `State      Recv-Q Send-Q Local Address:Port   Peer Address:Port Process
+LISTEN     0      128          0.0.0.0:22          0.0.0.0:*     users:(("sshd",pid=1234,fd=3),("sshd",pid=5678,fd=4))`
+
+	ports := ParseLinuxOutput(output)
+	if len(ports) != 1 {
+		t.Fatalf("expected 1 port, got %d", len(ports))
+	}
+	if ports[0].Process != "sshd" {
+		t.Errorf("expected process sshd, got %s", ports[0].Process)
+	}
+	if ports[0].PID != "1234" {
+		t.Errorf("expected first pid 1234, got %s", ports[0].PID)
 	}
 }
 
@@ -149,6 +173,9 @@ LISTEN     0      128          0.0.0.0:22          0.0.0.0:*`
 	if ports[0].Process != "" {
 		t.Errorf("expected empty process, got %s", ports[0].Process)
 	}
+	if ports[0].PID != "" {
+		t.Errorf("expected empty pid for unprivileged output, got %s", ports[0].PID)
+	}
 	if ports[0].Port != "22" {
 		t.Errorf("expected port 22, got %s", ports[0].Port)
 	}
@@ -167,6 +194,9 @@ LISTEN     0      128             [::]:80              [::]:*     users:(("apach
 	}
 	if ports[0].Process != "apache2" {
 		t.Errorf("expected process apache2, got %s", ports[0].Process)
+	}
+	if ports[0].PID != "999" {
+		t.Errorf("expected pid 999, got %s", ports[0].PID)
 	}
 }
 
