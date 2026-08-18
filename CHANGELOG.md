@@ -2,6 +2,55 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.20.0](https://github.com/Higangssh/homebutler/compare/v0.19.2...v0.20.0) - 2026-08-18
+
+**Config that fails silently now speaks up.** This release adds `homebutler config validate` and fixes three ways configuration could be ignored without producing any error at all — including a form documented in this project's own README that never worked.
+
+```bash
+homebutler config validate
+homebutler config validate --strict
+homebutler config validate --json
+```
+
+### ✨ Features
+
+- add `homebutler config validate` to check the config file without starting a server, watcher, install, or remote connection
+- report which file was used and which of the four resolution rules selected it
+- report what homebutler made of each top-level section, so a section the file never set reads as `not set`
+- flag keys that do not match the schema, with a did-you-mean suggestion at the top level, since `yaml.Unmarshal` drops them without a word
+- treat a `--config` path that does not exist as an error rather than falling back to built-in defaults
+- validate server names, hosts, ports, auth modes and duplicates, wake MAC addresses, alert thresholds, incomplete notify providers, `watch.notify_on` and `cooldown`, and the case where watch notifications are enabled with no provider configured to deliver them
+- support `--strict` to exit non-zero on warnings as well as errors
+
+### 🐛 Fixes
+
+- load the config file in `watch start`, which never called `loadConfig()` and so could never reach the notify settings in `config.yaml` (#31)
+- read the flat `watch.enabled` / `watch.notify_on` / `watch.cooldown` form the README has always documented; those keys were nested under `watch.notify` in the schema and were being dropped, leaving watch notifications off for anyone who configured them from the docs
+- populate `PID` in the Linux port parser, which discarded the pid that `ss` already reports while the macOS parser kept it (#36)
+
+### ⚠️ Behavior changes
+
+- **watch notifications may start arriving after upgrading.** A config using the flat `watch.*` keys was silently running with notifications disabled; those settings now take effect as written
+- **`homebutler ports` prints `process/PID` on Linux**, matching what macOS already printed. `nginx` now reads `nginx/5678`. The `pid` field in `--json` output is populated rather than empty
+
+### 📝 Documentation
+
+- document `config validate` in the README and `docs/configuration.md`, including the two silent-failure cases it exists to catch
+- note that both the flat and nested `watch` forms are read, and that the nested block wins when a file contains both
+- remove `output: json` from `homebutler.example.yaml`; it is not a config key, and JSON is a per-command flag
+- correct the backup directory key in `docs/configuration.md` from `backup:` / `dir:` to `backup_dir:`
+
+### 🧪 Tests
+
+- add fixture-based tests for Linux `ss` and macOS `lsof` port parsing under `internal/inventory/testdata/` (#29, thanks @lenny-ts)
+- cover multi-process `ss` entries, where a socket lists several pids and the first must win
+- add 27 tests for config validation, covering resolution sources, missing files, unknown keys at any depth, every value check, and both `watch` config forms
+
+### 📦 Distribution
+
+- mark `cobra` and `go-isatty` as direct dependencies
+- fail CI lint when `go.mod` is not tidy
+
 ## [0.19.2](https://github.com/Higangssh/homebutler/compare/v0.19.1...v0.19.2) - 2026-07-07
 
 **Patch release to complete npm distribution.** This release carries the same remote deploy asset-name fix as v0.19.1 and republishes through the full release pipeline after refreshing npm credentials.
