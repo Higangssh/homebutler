@@ -12,6 +12,7 @@ import (
 type portExpect struct {
 	port    string
 	process string
+	pid     string
 	address string
 	public  bool
 }
@@ -25,11 +26,11 @@ func TestParseLinuxSSFixture(t *testing.T) {
 	}
 
 	expects := []portExpect{
-		{port: "8080", process: "app-api", address: "0.0.0.0", public: true},
-		{port: "443", process: "demo-service", address: "[::]", public: true},
-		{port: "9090", process: "metrics-agent", address: "127.0.0.1", public: false},
-		{port: "8443", process: "edge-router", address: "0.0.0.0", public: true},
-		{port: "22", process: "ssh-relay", address: "0.0.0.0", public: true},
+		{port: "8080", process: "app-api", pid: "1001", address: "0.0.0.0", public: true},
+		{port: "443", process: "demo-service", pid: "1002", address: "[::]", public: true},
+		{port: "9090", process: "metrics-agent", pid: "1003", address: "127.0.0.1", public: false},
+		{port: "8443", process: "edge-router", pid: "1004", address: "0.0.0.0", public: true},
+		{port: "22", process: "ssh-relay", pid: "1005", address: "0.0.0.0", public: true},
 	}
 
 	for _, e := range expects {
@@ -52,10 +53,10 @@ func TestParseDarwinLsofFixture(t *testing.T) {
 	}
 
 	expects := []portExpect{
-		{port: "8080", process: "app-api", address: "*", public: true},
-		{port: "443", process: "demo-service", address: "*", public: true},
-		{port: "9090", process: "metrics-agent", address: "127.0.0.1", public: false},
-		{port: "8443", process: "edge-router", address: "*", public: true},
+		{port: "8080", process: "app-api", pid: "1001", address: "*", public: true},
+		{port: "443", process: "demo-service", pid: "1002", address: "*", public: true},
+		{port: "9090", process: "metrics-agent", pid: "1003", address: "127.0.0.1", public: false},
+		{port: "8443", process: "edge-router", pid: "1004", address: "*", public: true},
 	}
 
 	for _, e := range expects {
@@ -96,6 +97,9 @@ func assertPort(t *testing.T, e portExpect, p ports.PortInfo) {
 	}
 	if p.Process != e.process {
 		t.Errorf("port %s: process = %q, want %q", e.port, p.Process, e.process)
+	}
+	if p.PID != e.pid {
+		t.Errorf("port %s: pid = %q, want %q", e.port, p.PID, e.pid)
 	}
 	if p.Address != e.address {
 		t.Errorf("port %s: address = %q, want %q", e.port, p.Address, e.address)

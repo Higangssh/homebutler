@@ -109,7 +109,7 @@ func ParseLinuxOutput(out string) []PortInfo {
 		local := fields[3]
 		addr, port := splitAddrPort(local)
 
-		process := ""
+		var process, pid string
 		if len(fields) >= 6 {
 			// Extract process name from users:(("name",pid=123,fd=4))
 			p := fields[5]
@@ -119,12 +119,23 @@ func ParseLinuxOutput(out string) []PortInfo {
 					process = p[idx+3 : idx+3+end]
 				}
 			}
+			if i := strings.Index(p, "pid="); i >= 0 {
+				start := i + len("pid=")
+				j := start
+				for j < len(p) && p[j] >= '0' && p[j] <= '9' {
+					j++
+				}
+				if j > start {
+					pid = p[start:j]
+				}
+			}
 		}
 
 		ports = append(ports, PortInfo{
 			Protocol: "tcp",
 			Address:  addr,
 			Port:     port,
+			PID:      pid,
 			Process:  process,
 		})
 	}
