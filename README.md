@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/logo.png" alt="HomeButler logo" width="120">
+  <img src="assets/mascot.png" alt="HomeButler mascot holding a tiny server" width="200">
 </p>
 
 <h1 align="center">HomeButler</h1>
@@ -118,7 +118,7 @@ homebutler report --json
 ## Why homebutler?
 
 <p align="center">
-  <img src="assets/mascot.png" alt="HomeButler mascot holding a tiny server" width="180">
+  <img src="assets/logo.png" alt="HomeButler logo" width="110">
 </p>
 
 Self-hosting is not hard because one `docker compose up` is hard. It is hard because the maintenance never ends: ports collide, containers restart silently, backups look fine until restore day, and every server becomes a slightly different snowflake.
