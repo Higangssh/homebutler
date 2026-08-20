@@ -182,6 +182,23 @@ homebutler --json inventory scan
    └─ 🌍 :8080/tcp · api-server
 ```
 
+To answer "what is reachable from outside my machine/network?" without reading the whole tree, filter the scan to exposed ports only:
+
+```bash
+homebutler inventory scan --filter exposed
+```
+
+```text
+🏠 Home Network
+   Server  homelab
+
+🌐 Exposed Ports
+   ├─ :8080/tcp · api-server
+   └─ :8443/tcp · dashboard
+```
+
+Only ports bound to a public interface (`0.0.0.0`, `::`, `*`) are shown; loopback listeners are hidden. Unsupported filter values return an error, and the default `inventory scan` output is unchanged.
+
 Use Mermaid export when you want a diagram for GitHub, Obsidian, docs, or an AI assistant:
 
 ```mermaid
