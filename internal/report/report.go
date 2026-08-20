@@ -13,6 +13,7 @@ import (
 	"github.com/Higangssh/homebutler/internal/docker"
 	"github.com/Higangssh/homebutler/internal/inventory"
 	"github.com/Higangssh/homebutler/internal/ports"
+	"github.com/Higangssh/homebutler/internal/style"
 	"github.com/Higangssh/homebutler/internal/system"
 )
 
@@ -244,8 +245,8 @@ func buildReport(snap *Snapshot, prev *Snapshot) *Report {
 func FormatHuman(r *Report) string {
 	var b strings.Builder
 
-	fmt.Fprintf(&b, "🏠 Homebutler Report — %s\n", r.ServerName)
-	fmt.Fprintf(&b, "   %s\n\n", r.Timestamp)
+	fmt.Fprintf(&b, "🏠 %s\n", style.Title.Render("Homebutler Report — "+r.ServerName))
+	fmt.Fprintf(&b, "   %s\n\n", style.Dim.Render(r.Timestamp))
 
 	if r.IsBaseline {
 		if r.SnapshotSaved {
@@ -255,37 +256,33 @@ func FormatHuman(r *Report) string {
 		}
 	}
 
-	fmt.Fprintf(&b, "── Current Status ──\n")
-	for _, s := range r.Status {
-		fmt.Fprintf(&b, "   %s\n", s)
-	}
+	fmt.Fprintf(&b, "%s\n", style.Section("Current Status"))
+	b.WriteString(style.LabelledBlock(r.Status, "   "))
 	fmt.Fprintln(&b)
 
 	if len(r.NeedsAttention) > 0 {
-		fmt.Fprintf(&b, "── Needs Attention ──\n")
+		fmt.Fprintf(&b, "%s\n", style.Section("Needs Attention"))
 		for _, s := range r.NeedsAttention {
-			fmt.Fprintf(&b, "   ⚠️  %s\n", s)
+			fmt.Fprintf(&b, "   ⚠️  %s\n", style.Warn.Render(s))
 		}
 		fmt.Fprintln(&b)
 	}
 
-	fmt.Fprintf(&b, "── Notable Changes ──\n")
-	for _, s := range r.NotableChanges {
-		fmt.Fprintf(&b, "   %s\n", s)
-	}
+	fmt.Fprintf(&b, "%s\n", style.Section("Notable Changes"))
+	b.WriteString(style.LabelledBlock(r.NotableChanges, "   "))
 	fmt.Fprintln(&b)
 
 	if len(r.SuggestedActions) > 0 {
-		fmt.Fprintf(&b, "── Suggested Actions ──\n")
+		fmt.Fprintf(&b, "%s\n", style.Section("Suggested Actions"))
 		for _, s := range r.SuggestedActions {
-			fmt.Fprintf(&b, "   → %s\n", s)
+			fmt.Fprintf(&b, "   %s %s\n", style.Accent.Render("→"), s)
 		}
 		fmt.Fprintln(&b)
 	}
 
 	if len(r.Warnings) > 0 {
 		for _, w := range r.Warnings {
-			fmt.Fprintf(&b, "   ⚠️  %s\n", w)
+			fmt.Fprintf(&b, "   ⚠️  %s\n", style.Warn.Render(w))
 		}
 		fmt.Fprintln(&b)
 	}

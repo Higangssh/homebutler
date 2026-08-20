@@ -32,26 +32,29 @@ $ homebutler report
 🏠 Homebutler Report — homelab
    2026-08-20T09:14:03Z
 
-── Current Status ──
-   Host: homelab (linux/arm64), uptime 42d 7h
-   CPU: 23.5% (4 cores), Memory: 3.2/8.0 GB (40%)
-   Disk /: 47.0/128.0 GB (37%)
-   Containers: 6 running, 1 stopped
-   Public ports: 2
+── Current Status ────────────────────────────────────────────
+   Host          homelab (linux/arm64), uptime 42d 7h
+   CPU           23.5% (4 cores), Memory: 3.2/8.0 GB (40%)
+   Disk /        47.0/128.0 GB (37%)
+   Containers    6 running, 1 stopped
+   Public ports  2
 
-── Needs Attention ──
+── Needs Attention ───────────────────────────────────────────
    ⚠️  1 container(s) stopped
 
-── Notable Changes ──
-   Disk /: +2.4 GB since last report
-   Running containers: 7 → 6
-   Stopped containers: 0 → 1
-   Public ports: 1 → 2
+── Notable Changes ───────────────────────────────────────────
+   Disk /              +2.4 GB since last report
+   Running containers  7 → 6
+   Stopped containers  0 → 1
+   Public ports        1 → 2
 
-── Suggested Actions ──
+── Suggested Actions ─────────────────────────────────────────
    → New public port(s) detected — verify these are intentional.
    → Container(s) stopped since last report — check logs with 'homebutler docker logs'.
 ```
+
+Section rules, labels, and severities are colour-coded in a terminal. Colour is
+dropped automatically when output is piped, redirected, or run from cron.
 
 That is the whole idea. Most homelab tools show you a graph of right now. HomeButler
 remembers what your server looked like last time and tells you what moved.
@@ -154,7 +157,7 @@ $ homebutler doctor
 🩺 Homebutler Doctor — homelab
    2026-08-20T09:14:11Z
 
-⚠️ Status: WARN  ·  pass 4 / warn 3 / fail 0
+⚠️ Status: WARN  · pass 4 / warn 3 / fail 0
 
 ⚠️ [docker] 1 container(s) are stopped
    vaultwarden
