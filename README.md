@@ -130,28 +130,9 @@ homebutler doctor --strict          # non-zero exit if warnings/failures are fou
 homebutler doctor --json            # automation / MCP friendly
 ```
 
-```console
-$ homebutler doctor
-🩺 Homebutler Doctor — homelab
-   2026-08-20T09:14:11Z
-
-⚠️ Status: WARN  · pass 4 / warn 3 / fail 0
-
-⚠️ [docker] 1 container(s) are stopped
-   vaultwarden
-   → Check the logs before restarting; some stopped containers may be intentional.
-   $ homebutler docker logs vaultwarden
-
-⚠️ [exposure] 2 port(s) are listening on all interfaces
-   :8080/tcp, :32400/tcp
-   → Make sure each one is intentional and protected by firewall, reverse proxy, or login where needed.
-   $ homebutler inventory scan
-
-⚠️ [backup] Latest backup is older than expected
-   Latest backup is 12d old; expected within 7d.
-   → Run a fresh backup. If this app matters, follow up with a backup drill.
-   $ homebutler backup
-```
+<p align="center">
+  <img src="assets/doctor-card.svg" alt="homebutler doctor reporting a full disk, a stopped container, and a missing report baseline, each with the command to run next" width="700">
+</p>
 
 `doctor` is a read-only preflight for the problems homelab users usually discover too late: high disk or memory usage, stopped containers, public bind ports, stale or missing backups, missing notifications, and whether `report` has a baseline for change detection. Every finding names the next command to run, so `--strict` makes it usable from cron or CI.
 

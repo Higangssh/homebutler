@@ -1,0 +1,55 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="760" height="562" viewBox="0 0 760 562" role="img" aria-label="Terminal showing homebutler doctor output: a disk failure, a stopped container, and a missing report baseline, each with the command to run next">
+  <!--
+    Terminal card used in README.md. See assets/README.md.
+
+    Every style is an inline attribute, since GitHub's SVG sanitiser may drop
+    <style> blocks. Columns are positioned with explicit x coordinates rather
+    than runs of spaces: SVG renderers collapse whitespace unless xml:space is
+    honoured, which Chromium does not do reliably, so spacing alone would not
+    survive.
+  -->
+  <rect x="0" y="0" width="760" height="562" rx="10" fill="#11151c"/>
+  <path d="M0 10a10 10 0 0 1 10-10h740a10 10 0 0 1 10 10v30H0z" fill="#1b212a"/>
+  <line x1="0" y1="40" x2="760" y2="40" stroke="#2a323d" stroke-width="1"/>
+  <circle cx="22" cy="20" r="6" fill="#ff5f56"/>
+  <circle cx="42" cy="20" r="6" fill="#ffbd2e"/>
+  <circle cx="62" cy="20" r="6" fill="#27c93f"/>
+  <text x="380" y="25" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="12" fill="#6e7681" text-anchor="middle">homebutler — doctor</text>
+
+  <g font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace" font-size="14">
+    <text x="22" y="74" fill="#7ee787">$</text>
+    <text x="39" y="74" fill="#c9d1d9">homebutler doctor</text>
+
+    <text x="22" y="120" fill="#c9d1d9">🩺</text>
+    <text x="47" y="120" fill="#e6edf3" font-weight="bold">Homebutler Doctor — homelab</text>
+    <text x="47" y="143" fill="#6e7681">2026-08-20T09:14:11Z</text>
+
+    <text x="22" y="189" fill="#f85149">✕</text>
+    <text x="47" y="189" fill="#f85149" font-weight="bold">Status: FAIL</text>
+    <text x="170" y="189" fill="#6e7681">· pass 4 / warn 2 / fail 1</text>
+
+    <text x="22" y="235" fill="#f85149">✕</text>
+    <text x="47" y="235" fill="#00add8">[system]</text>
+    <text x="122" y="235" fill="#e6edf3" font-weight="bold">Disk is almost full</text>
+    <text x="47" y="258" fill="#6e7681">Disk / is 94% full, threshold is 90%.</text>
+    <text x="47" y="281" fill="#00add8">→</text>
+    <text x="72" y="281" fill="#c9d1d9">Free space before apps, databases, or backups start failing.</text>
+    <text x="47" y="304" fill="#8b949e">$ homebutler status</text>
+
+    <text x="22" y="350" fill="#e3b341">⚠</text>
+    <text x="47" y="350" fill="#00add8">[docker]</text>
+    <text x="122" y="350" fill="#e6edf3" font-weight="bold">1 container(s) are stopped</text>
+    <text x="47" y="373" fill="#6e7681">vaultwarden</text>
+    <text x="47" y="396" fill="#00add8">→</text>
+    <text x="72" y="396" fill="#c9d1d9">Check the logs before restarting; some stopped containers may be intentional.</text>
+    <text x="47" y="419" fill="#8b949e">$ homebutler docker logs vaultwarden</text>
+
+    <text x="22" y="465" fill="#e3b341">⚠</text>
+    <text x="47" y="465" fill="#00add8">[report]</text>
+    <text x="122" y="465" fill="#e6edf3" font-weight="bold">No report baseline yet</text>
+    <text x="47" y="488" fill="#6e7681">Doctor did not find previous report snapshots.</text>
+    <text x="47" y="511" fill="#00add8">→</text>
+    <text x="72" y="511" fill="#c9d1d9">Run report once so homebutler can notice what changes later.</text>
+    <text x="47" y="534" fill="#8b949e">$ homebutler report</text>
+  </g>
+</svg>
