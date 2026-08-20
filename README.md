@@ -27,31 +27,9 @@
   <img src="assets/mascot.png" alt="HomeButler mascot holding a tiny server" width="220">
 </p>
 
-```console
-$ homebutler report
-🏠 Homebutler Report — homelab
-   2026-08-20T09:14:03Z
-
-── Current Status ────────────────────────────────────────────
-   Host          homelab (linux/arm64), uptime 42d 7h
-   CPU           23.5% (4 cores), Memory: 3.2/8.0 GB (40%)
-   Disk /        47.0/128.0 GB (37%)
-   Containers    6 running, 1 stopped
-   Public ports  2
-
-── Needs Attention ───────────────────────────────────────────
-   ⚠️  1 container(s) stopped
-
-── Notable Changes ───────────────────────────────────────────
-   Disk /              +2.4 GB since last report
-   Running containers  7 → 6
-   Stopped containers  0 → 1
-   Public ports        1 → 2
-
-── Suggested Actions ─────────────────────────────────────────
-   → New public port(s) detected — verify these are intentional.
-   → Container(s) stopped since last report — check logs with 'homebutler docker logs'.
-```
+<p align="center">
+  <img src="assets/report-card.svg" alt="homebutler report output: current status, needs attention, notable changes, and suggested actions" width="620">
+</p>
 
 Section rules, labels, and severities are colour-coded in a terminal. Colour is
 dropped automatically when output is piped, redirected, or run from cron.
@@ -152,28 +130,9 @@ homebutler doctor --strict          # non-zero exit if warnings/failures are fou
 homebutler doctor --json            # automation / MCP friendly
 ```
 
-```console
-$ homebutler doctor
-🩺 Homebutler Doctor — homelab
-   2026-08-20T09:14:11Z
-
-⚠️ Status: WARN  · pass 4 / warn 3 / fail 0
-
-⚠️ [docker] 1 container(s) are stopped
-   vaultwarden
-   → Check the logs before restarting; some stopped containers may be intentional.
-   $ homebutler docker logs vaultwarden
-
-⚠️ [exposure] 2 port(s) are listening on all interfaces
-   :8080/tcp, :32400/tcp
-   → Make sure each one is intentional and protected by firewall, reverse proxy, or login where needed.
-   $ homebutler inventory scan
-
-⚠️ [backup] Latest backup is older than expected
-   Latest backup is 12d old; expected within 7d.
-   → Run a fresh backup. If this app matters, follow up with a backup drill.
-   $ homebutler backup
-```
+<p align="center">
+  <img src="assets/doctor-card.svg" alt="homebutler doctor reporting a full disk, a stopped container, and a missing report baseline, each with the command to run next" width="700">
+</p>
 
 `doctor` is a read-only preflight for the problems homelab users usually discover too late: high disk or memory usage, stopped containers, public bind ports, stale or missing backups, missing notifications, and whether `report` has a baseline for change detection. Every finding names the next command to run, so `--strict` makes it usable from cron or CI.
 
