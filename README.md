@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/mascot.png" alt="HomeButler mascot holding a tiny server" width="200">
+  <img src="assets/logo.png" alt="HomeButler logo" width="140">
 </p>
 
 <h1 align="center">HomeButler</h1>
@@ -21,6 +21,10 @@
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License: MIT"></a>
   <a href="https://github.com/Higangssh/homebutler/releases"><img src="https://img.shields.io/github/v/release/Higangssh/homebutler" alt="Release"></a>
   <a href="https://glama.ai/mcp/servers/Higangssh/homebutler"><img src="https://glama.ai/mcp/servers/Higangssh/homebutler/badges/score.svg" alt="homebutler MCP server"></a>
+</p>
+
+<p align="center">
+  <img src="assets/mascot.png" alt="HomeButler mascot holding a tiny server" width="220">
 </p>
 
 ```console
@@ -116,10 +120,6 @@ homebutler report --json
 - **Use it anywhere** — CLI, JSON, web dashboard, or MCP for AI agents without giving them SSH
 
 ## Why homebutler?
-
-<p align="center">
-  <img src="assets/logo.png" alt="HomeButler logo" width="110">
-</p>
 
 Self-hosting is not hard because one `docker compose up` is hard. It is hard because the maintenance never ends: ports collide, containers restart silently, backups look fine until restore day, and every server becomes a slightly different snowflake.
 
