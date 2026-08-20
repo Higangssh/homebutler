@@ -1,11 +1,11 @@
 <p align="center">
-  <img src="assets/logo.png" alt="HomeButler logo" width="140">
+  <img src="assets/logo.png" alt="HomeButler logo" width="120">
 </p>
 
 <h1 align="center">HomeButler</h1>
 
 <p align="center">
-  <strong>Your tiny homelab butler.</strong><br>
+  <strong>Know what changed before you fix it.</strong><br>
   A single Go binary for running a small home server without babysitting it.
 </p>
 
@@ -23,9 +23,34 @@
   <a href="https://glama.ai/mcp/servers/Higangssh/homebutler"><img src="https://glama.ai/mcp/servers/Higangssh/homebutler/badges/score.svg" alt="homebutler MCP server"></a>
 </p>
 
-<p align="center">
-  <img src="assets/mascot.png" alt="HomeButler mascot holding a tiny server" width="220">
-</p>
+```console
+$ homebutler report
+🏠 Homebutler Report — homelab
+   2026-08-20T09:14:03Z
+
+── Current Status ──
+   Host: homelab (linux/arm64), uptime 42d 7h
+   CPU: 23.5% (4 cores), Memory: 3.2/8.0 GB (40%)
+   Disk /: 47.0/128.0 GB (37%)
+   Containers: 6 running, 1 stopped
+   Public ports: 2
+
+── Needs Attention ──
+   ⚠️  1 container(s) stopped
+
+── Notable Changes ──
+   Disk /: +2.4 GB since last report
+   Running containers: 7 → 6
+   Stopped containers: 0 → 1
+   Public ports: 1 → 2
+
+── Suggested Actions ──
+   → New public port(s) detected — verify these are intentional.
+   → Container(s) stopped since last report — check logs with 'homebutler docker logs'.
+```
+
+That is the whole idea. Most homelab tools show you a graph of right now. HomeButler
+remembers what your server looked like last time and tells you what moved.
 
 HomeButler helps you answer the boring but painful questions every homelab eventually creates:
 
@@ -92,6 +117,10 @@ homebutler report --json
 
 ## Why homebutler?
 
+<p align="center">
+  <img src="assets/mascot.png" alt="HomeButler mascot holding a tiny server" width="180">
+</p>
+
 Self-hosting is not hard because one `docker compose up` is hard. It is hard because the maintenance never ends: ports collide, containers restart silently, backups look fine until restore day, and every server becomes a slightly different snowflake.
 
 HomeButler is a small operations toolkit for that messy middle.
@@ -120,7 +149,30 @@ homebutler doctor --strict          # non-zero exit if warnings/failures are fou
 homebutler doctor --json            # automation / MCP friendly
 ```
 
-`doctor` is a read-only preflight for the problems homelab users usually discover too late: high disk or memory usage, stopped containers, public bind ports, stale or missing backups, missing notifications, and whether `report` has a baseline for change detection.
+```console
+$ homebutler doctor
+🩺 Homebutler Doctor — homelab
+   2026-08-20T09:14:11Z
+
+⚠️ Status: WARN  ·  pass 4 / warn 3 / fail 0
+
+⚠️ [docker] 1 container(s) are stopped
+   vaultwarden
+   → Check the logs before restarting; some stopped containers may be intentional.
+   $ homebutler docker logs vaultwarden
+
+⚠️ [exposure] 2 port(s) are listening on all interfaces
+   :8080/tcp, :32400/tcp
+   → Make sure each one is intentional and protected by firewall, reverse proxy, or login where needed.
+   $ homebutler inventory scan
+
+⚠️ [backup] Latest backup is older than expected
+   Latest backup is 12d old; expected within 7d.
+   → Run a fresh backup. If this app matters, follow up with a backup drill.
+   $ homebutler backup
+```
+
+`doctor` is a read-only preflight for the problems homelab users usually discover too late: high disk or memory usage, stopped containers, public bind ports, stale or missing backups, missing notifications, and whether `report` has a baseline for change detection. Every finding names the next command to run, so `--strict` makes it usable from cron or CI.
 
 ### 🗂 Config Validation
 
