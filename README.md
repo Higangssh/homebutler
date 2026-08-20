@@ -27,31 +27,9 @@
   <img src="assets/mascot.png" alt="HomeButler mascot holding a tiny server" width="220">
 </p>
 
-```console
-$ homebutler report
-🏠 Homebutler Report — homelab
-   2026-08-20T09:14:03Z
-
-── Current Status ────────────────────────────────────────────
-   Host          homelab (linux/arm64), uptime 42d 7h
-   CPU           23.5% (4 cores), Memory: 3.2/8.0 GB (40%)
-   Disk /        47.0/128.0 GB (37%)
-   Containers    6 running, 1 stopped
-   Public ports  2
-
-── Needs Attention ───────────────────────────────────────────
-   ⚠️  1 container(s) stopped
-
-── Notable Changes ───────────────────────────────────────────
-   Disk /              +2.4 GB since last report
-   Running containers  7 → 6
-   Stopped containers  0 → 1
-   Public ports        1 → 2
-
-── Suggested Actions ─────────────────────────────────────────
-   → New public port(s) detected — verify these are intentional.
-   → Container(s) stopped since last report — check logs with 'homebutler docker logs'.
-```
+<p align="center">
+  <img src="assets/report-card.svg" alt="homebutler report output: current status, needs attention, notable changes, and suggested actions" width="620">
+</p>
 
 Section rules, labels, and severities are colour-coded in a terminal. Colour is
 dropped automatically when output is piped, redirected, or run from cron.
