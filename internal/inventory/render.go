@@ -110,10 +110,16 @@ func renderExposedPorts(inv *Inventory) string {
 	b.WriteString("\n🌐 Exposed Ports\n")
 	if len(exposed) == 0 {
 		b.WriteString("   (none)\n")
-		return b.String()
 	}
 	for i, p := range exposed {
 		fmt.Fprintf(&b, "   %s :%s/%s · %s\n", branch(i == len(exposed)-1), p.Port, p.Protocol, friendlyPortOwner(p, links[p.Port]))
+	}
+
+	if len(inv.Warnings) > 0 {
+		fmt.Fprintf(&b, "\n⚠️  Warnings (%d)\n", len(inv.Warnings))
+		for i, w := range inv.Warnings {
+			fmt.Fprintf(&b, "   %s %s\n", branch(i == len(inv.Warnings)-1), w)
+		}
 	}
 	return b.String()
 }

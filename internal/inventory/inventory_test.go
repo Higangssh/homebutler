@@ -286,6 +286,23 @@ func TestRenderTreeFiltered_ExposedEmpty(t *testing.T) {
 	}
 }
 
+func TestRenderTreeFiltered_ExposedShowsWarnings(t *testing.T) {
+	inv := &Inventory{
+		ServerName: "demo-lab",
+		Host:       "10.0.0.1",
+		Ports:      []ports.PortInfo{},
+		Warnings:   []string{"ports: failed to list ports: exit status 1"},
+	}
+
+	out, err := RenderTreeFiltered(inv, "exposed")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(out, "Warnings (1)") || !strings.Contains(out, "failed to list ports") {
+		t.Errorf("filtered view must surface collection warnings instead of a bare '(none)'\n%s", out)
+	}
+}
+
 func TestRenderTreeFiltered_UnsupportedFilter(t *testing.T) {
 	inv := &Inventory{ServerName: "lab", Host: "10.0.0.1"}
 
