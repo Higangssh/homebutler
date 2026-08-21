@@ -122,7 +122,7 @@ func renderExposedPorts(inv *Inventory) string {
 func exposedPorts(all []ports.PortInfo) []ports.PortInfo {
 	var out []ports.PortInfo
 	for _, p := range all {
-		if isPublicBind(p.Address) {
+		if ports.IsPublicBind(p.Address) {
 			out = append(out, p)
 		}
 	}
