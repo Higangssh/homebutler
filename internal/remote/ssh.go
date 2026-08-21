@@ -94,7 +94,8 @@ func connect(server *config.ServerConfig) (*ssh.Client, error) {
 					"  → If unexpected: do NOT connect and investigate", server.Name, addr, server.Name)
 			}
 			// Unknown host — TOFU: auto-add to known_hosts and retry
-			if tofuErr := tofuConnect(addr, cfg); tofuErr == nil {
+			tofuErr := tofuConnect(addr, cfg)
+			if tofuErr == nil {
 				// Reload known_hosts and retry
 				newCb, cbErr := newKnownHostsCallback()
 				if cbErr == nil {
@@ -107,8 +108,7 @@ func connect(server *config.ServerConfig) (*ssh.Client, error) {
 					return retryClient, nil
 				}
 			}
-			return nil, fmt.Errorf("[%s] failed to auto-register host key for %s\n  → Register manually: homebutler trust %s\n  → Check SSH connectivity: ssh %s@%s -p %d",
-				server.Name, addr, server.Name, server.SSHUser(), server.Host, server.SSHPort())
+			return nil, tofuFailureError(server, addr, tofuErr)
 		}
 		// Generic SSH error
 		return nil, fmt.Errorf("[%s] SSH connection failed (%s): %w\n  → Check: server online? correct host/port? firewall rules?\n  → Config: ~/.config/homebutler/config.yaml", server.Name, addr, err)
@@ -169,7 +169,7 @@ func tofuConnect(addr string, cfg *ssh.ClientConfig) error {
 
 	client, err := ssh.Dial("tcp", addr, &captureCfg)
 	if err != nil {
-		return fmt.Errorf("TOFU dial failed: %w", err)
+		return &tofuDialError{err: err}
 	}
 	client.Close()
 
@@ -338,4 +338,28 @@ func readKey(path string) (ssh.Signer, error) {
 		return nil, err
 	}
 	return ssh.ParsePrivateKey(data)
+}
+
+// tofuDialError marks a TOFU failure whose cause was the SSH connection itself
+// (network or authentication) rather than host key registration.
+type tofuDialError struct{ err error }
+
+func (e *tofuDialError) Error() string { return e.err.Error() }
+func (e *tofuDialError) Unwrap() error { return e.err }
+
+// tofuFailureError builds the error returned when TOFU auto-registration fails.
+func tofuFailureError(server *config.ServerConfig, addr string, tofuErr error) error {
+	connHint := fmt.Sprintf("→ Check SSH connectivity: ssh %s@%s -p %d",
+		server.SSHUser(), server.Host, server.SSHPort())
+
+	// The connection itself failed, so the host key never came into play.
+	// Pointing at `homebutler trust` here would send the user down the wrong path.
+	var dialErr *tofuDialError
+	if errors.As(tofuErr, &dialErr) {
+		return fmt.Errorf("[%s] SSH connection failed while registering a new host key (%s): %w\n  %s",
+			server.Name, addr, tofuErr, connHint)
+	}
+
+	return fmt.Errorf("[%s] failed to auto-register host key for %s: %w\n  → Register manually: homebutler trust %s\n  %s",
+		server.Name, addr, tofuErr, server.Name, connHint)
 }

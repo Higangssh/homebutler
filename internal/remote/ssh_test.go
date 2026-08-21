@@ -7,6 +7,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -215,21 +216,6 @@ func TestErrorMessages_KeyMismatch(t *testing.T) {
 	}
 	if !strings.Contains(msg, "--reset") {
 		t.Error("key mismatch error should contain '--reset' flag")
-	}
-}
-
-// TestErrorMessages_UnknownHost verifies the unknown-host error contains actionable hints.
-func TestErrorMessages_UnknownHost(t *testing.T) {
-	serverName := "newserver"
-	addr := "10.0.0.2:22"
-	msg := fmt.Sprintf("[%s] failed to auto-register host key for %s\n  → Register manually: homebutler trust %s\n  → Check SSH connectivity: ssh %s@%s -p %d",
-		serverName, addr, serverName, "root", "10.0.0.2", 22)
-
-	if !strings.Contains(msg, "homebutler trust") {
-		t.Error("unknown host error should contain 'homebutler trust'")
-	}
-	if !strings.Contains(msg, "ssh root@") {
-		t.Error("unknown host error should contain ssh connection hint")
 	}
 }
 
@@ -1089,4 +1075,49 @@ type testTransport struct {
 func (t *testTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	newReq := t.override(req)
 	return t.wrapped.RoundTrip(newReq)
+}
+
+// TestTofuFailureError_ConnectionCauseNotHostKey verifies that when TOFU
+// registration fails because the SSH connection itself failed (network or auth),
+// the error reports that underlying cause and does NOT point at `homebutler trust`.
+// Regression test for #41.
+func TestTofuFailureError_ConnectionCauseNotHostKey(t *testing.T) {
+	server := &config.ServerConfig{Name: "lenny-remote", Host: "192.168.1.100", User: "lenny", Port: 24}
+	authErr := errors.New("ssh: unable to authenticate, attempted methods [none publickey]")
+
+	err := tofuFailureError(server, "192.168.1.100:24", &tofuDialError{err: authErr})
+	msg := err.Error()
+
+	if strings.Contains(msg, "homebutler trust") {
+		t.Errorf("connection failure must not suggest `homebutler trust`; got:\n%s", msg)
+	}
+	if !strings.Contains(msg, "unable to authenticate") {
+		t.Errorf("underlying cause must be reported; got:\n%s", msg)
+	}
+	if !errors.Is(err, authErr) {
+		t.Error("underlying cause must stay unwrappable via errors.Is")
+	}
+	if !strings.Contains(msg, "ssh lenny@192.168.1.100 -p 24") {
+		t.Errorf("connectivity hint must use the configured user and port; got:\n%s", msg)
+	}
+}
+
+// TestTofuFailureError_HostKeyCause verifies that when registration genuinely
+// failed at the host-key step, the `homebutler trust` hint is still shown.
+func TestTofuFailureError_HostKeyCause(t *testing.T) {
+	server := &config.ServerConfig{Name: "newserver", Host: "10.0.0.2"}
+	cause := errors.New("cannot write known_hosts: permission denied")
+
+	err := tofuFailureError(server, "10.0.0.2:22", cause)
+	msg := err.Error()
+
+	if !strings.Contains(msg, "homebutler trust newserver") {
+		t.Errorf("host key failure should suggest `homebutler trust`; got:\n%s", msg)
+	}
+	if !strings.Contains(msg, "cannot write known_hosts") {
+		t.Errorf("underlying cause must be reported; got:\n%s", msg)
+	}
+	if !errors.Is(err, cause) {
+		t.Error("underlying cause must stay unwrappable via errors.Is")
+	}
 }
