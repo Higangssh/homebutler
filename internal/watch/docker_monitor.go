@@ -31,6 +31,9 @@ type DockerMonitor struct {
 
 	// Events creates the docker events stream. Nil defaults to exec.CommandContext("docker", "events", ...).
 	Events EventStreamer
+
+	// Keep caps how many incidents are retained; zero or less keeps everything.
+	Keep int
 }
 
 type dockerEvent struct {
@@ -182,7 +185,7 @@ func (dm *DockerMonitor) Watch(ctx context.Context, targets []Target, incidents 
 				PostLogs:    postLogs,
 			}
 			if dm.Dir != "" {
-				if err := SaveIncident(dm.Dir, &inc); err != nil {
+				if err := SaveIncident(dm.Dir, &inc, dm.Keep); err != nil {
 					fmt.Fprintf(os.Stderr, "[docker-monitor] warning: save incident: %v\n", err)
 				}
 			}
