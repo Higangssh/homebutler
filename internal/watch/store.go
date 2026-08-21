@@ -27,6 +27,15 @@ func (t Target) EffectiveKind() string {
 	return t.Kind
 }
 
+// CheckSupported reports whether a one-shot check can inspect this target.
+//
+// Docker records restart count and start time on the container itself, so a
+// single inspect call is enough. Systemd and pm2 state is only meaningful when
+// compared against a previous poll, which is what `watch start` does.
+func (t Target) CheckSupported() bool {
+	return t.EffectiveKind() == "docker"
+}
+
 // EffectiveUnit returns the unit name, defaulting to Container.
 func (t Target) EffectiveUnit() string {
 	if t.Unit == "" {
