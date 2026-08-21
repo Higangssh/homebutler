@@ -1,0 +1,97 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>homebutler social preview</title>
+<!--
+  Source for the GitHub social preview card (assets/social-preview.png).
+  See assets/README.md for how to re-render it.
+
+  The viewport is fixed at 1280x640 because that is the size GitHub renders
+  social previews at; anything else is letterboxed or cropped by the platforms
+  that read the og:image tag.
+-->
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html,body { width:1280px; height:640px; overflow:hidden; }
+  body {
+    background:#0d1117;
+    font-family:"Segoe UI", -apple-system, system-ui, sans-serif;
+    display:flex; align-items:center;
+    position:relative;
+  }
+  /* Keeps the card from reading flat when a feed scales it down to a thumbnail. */
+  body::after{
+    content:""; position:absolute; inset:0;
+    background:radial-gradient(120% 90% at 22% 40%, rgba(0,173,216,.10), transparent 62%);
+    pointer-events:none;
+  }
+  .left { width:760px; padding:0 0 0 72px; position:relative; z-index:2; }
+
+  .brand { display:flex; align-items:center; gap:12px; margin-bottom:30px; }
+  .brand .dot { width:10px; height:10px; border-radius:50%; background:#00add8; }
+  .brand span {
+    font:600 19px/1 ui-monospace, Consolas, monospace;
+    letter-spacing:.22em; color:#00add8; text-transform:uppercase;
+  }
+
+  h1 {
+    font-size:64px; line-height:1.1; font-weight:800;
+    color:#e6edf3; letter-spacing:-.022em; margin-bottom:26px;
+  }
+  h1 em { font-style:normal; color:#7ee787; }
+
+  p.sub {
+    font-size:25px; line-height:1.45; color:#8b949e;
+    max-width:610px; margin-bottom:36px;
+  }
+
+  .chips { display:flex; gap:10px; margin-bottom:38px; }
+  .chip {
+    font:500 17px/1 ui-monospace, Consolas, monospace;
+    color:#c9d1d9; background:#161b22;
+    border:1px solid #2a323d; border-radius:999px;
+    padding:11px 18px;
+  }
+
+  .term {
+    display:inline-flex; align-items:center; gap:14px;
+    background:#11151c; border:1px solid #2a323d;
+    border-radius:10px; padding:16px 24px;
+    font:16px/1 ui-monospace, Consolas, monospace;
+  }
+  .term .p { color:#7ee787; }
+  .term .c { color:#c9d1d9; }
+  .term .sep { color:#2a323d; }
+  .term .k { color:#8b949e; }
+  .term .v { color:#e3b341; }
+
+  .right {
+    width:520px; height:640px; position:relative; z-index:2;
+    display:flex; align-items:flex-end; justify-content:center;
+  }
+  .right img { height:600px; width:auto; filter:drop-shadow(0 24px 60px rgba(0,0,0,.6)); }
+</style>
+</head>
+<body>
+  <div class="left">
+    <div class="brand"><i class="dot"></i><span>HomeButler</span></div>
+    <h1>Know what changed<br>before you <em>fix it</em>.</h1>
+    <p class="sub">A single Go binary for running a small home server without babysitting it.</p>
+    <div class="chips">
+      <div class="chip">no daemon</div>
+      <div class="chip">no database</div>
+      <div class="chip">CLI · JSON · MCP</div>
+    </div>
+    <div class="term">
+      <span class="p">$</span><span class="c">homebutler report</span>
+      <span class="sep">│</span>
+      <span class="k">Public ports</span>
+      <span class="v">1 → 2</span>
+    </div>
+  </div>
+  <div class="right">
+    <img src="mascot.png" alt="">
+  </div>
+</body>
+</html>
