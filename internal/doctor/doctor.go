@@ -177,7 +177,7 @@ func checkPublicPorts(r *Result, pp []ports.PortInfo) {
 	var exposed []string
 	seen := map[string]bool{}
 	for _, p := range pp {
-		if !isPublicBind(p.Address) {
+		if !ports.IsPublicBind(p.Address) {
 			continue
 		}
 		label := strings.TrimSpace(fmt.Sprintf("%s/%s %s", p.Port, p.Protocol, p.Process))
@@ -275,16 +275,6 @@ func overallStatus(s Summary) string {
 		return SeverityWarn
 	}
 	return SeverityPass
-}
-
-func isPublicBind(addr string) bool {
-	addr = strings.Trim(addr, "[]")
-	switch addr {
-	case "*", "0.0.0.0", "::", "":
-		return true
-	default:
-		return false
-	}
 }
 
 func latestBackup(entries []backup.ListEntry) (time.Time, bool) {

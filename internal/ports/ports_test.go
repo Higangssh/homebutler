@@ -215,3 +215,51 @@ func TestPortInfoStruct(t *testing.T) {
 		t.Errorf("Port = %q, want 8080", p.Port)
 	}
 }
+
+func TestIsPublicBind(t *testing.T) {
+	tests := []struct {
+		name string
+		addr string
+		want bool
+	}{
+		{"lsof wildcard", "*", true},
+		{"ipv4 wildcard", "0.0.0.0", true},
+		{"ipv6 wildcard", "::", true},
+		{"ipv6 wildcard bracketed", "[::]", true},
+		{"empty address parses as wildcard", "", true},
+		{"ipv4 loopback", "127.0.0.1", false},
+		{"ipv6 loopback", "::1", false},
+		{"ipv6 loopback bracketed", "[::1]", false},
+		{"routable address", "172.31.11.103", false},
+		{"routable ipv6 bracketed", "[2001:db8::1]", false},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := IsPublicBind(tc.addr); got != tc.want {
+				t.Errorf("IsPublicBind(%q) = %v, want %v", tc.addr, got, tc.want)
+			}
+		})
+	}
+}
+
+// splitAddrPort is what feeds IsPublicBind in practice, so the two must agree
+// on the forms ss and lsof actually emit.
+func TestIsPublicBind_MatchesSplitAddrPortOutput(t *testing.T) {
+	tests := []struct {
+		local string
+		want  bool
+	}{
+		{"0.0.0.0:22", true}, // ss, ipv4 wildcard
+		{"[::]:22", true},    // ss, ipv6-only wildcard
+		{"*:8080", true},     // ss dual-stack socket, and lsof
+		{"127.0.0.1:8080", false},
+		{"[::1]:3000", false},
+		{":::22", true}, // netstat-style ipv6 wildcard
+	}
+	for _, tc := range tests {
+		addr, _ := splitAddrPort(tc.local)
+		if got := IsPublicBind(addr); got != tc.want {
+			t.Errorf("%q -> addr %q: IsPublicBind = %v, want %v", tc.local, addr, got, tc.want)
+		}
+	}
+}
