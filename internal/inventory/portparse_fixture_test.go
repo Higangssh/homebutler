@@ -104,7 +104,7 @@ func assertPort(t *testing.T, e portExpect, p ports.PortInfo) {
 	if p.Address != e.address {
 		t.Errorf("port %s: address = %q, want %q", e.port, p.Address, e.address)
 	}
-	if got := isPublicBind(p.Address); got != e.public {
+	if got := ports.IsPublicBind(p.Address); got != e.public {
 		t.Errorf("port %s: exposure public = %v, want %v (address %q)", e.port, got, e.public, p.Address)
 	}
 }

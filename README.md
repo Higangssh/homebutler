@@ -5,7 +5,7 @@
 <h1 align="center">HomeButler</h1>
 
 <p align="center">
-  <strong>Your tiny homelab butler.</strong><br>
+  <strong>Know what changed before you fix it.</strong><br>
   A single Go binary for running a small home server without babysitting it.
 </p>
 
@@ -26,6 +26,16 @@
 <p align="center">
   <img src="assets/mascot.png" alt="HomeButler mascot holding a tiny server" width="220">
 </p>
+
+<p align="center">
+  <img src="assets/report-card.svg" alt="homebutler report output: current status, needs attention, notable changes, and suggested actions" width="620">
+</p>
+
+Section rules, labels, and severities are colour-coded in a terminal. Colour is
+dropped automatically when output is piped, redirected, or run from cron.
+
+That is the whole idea. Most homelab tools show you a graph of right now. HomeButler
+remembers what your server looked like last time and tells you what moved.
 
 HomeButler helps you answer the boring but painful questions every homelab eventually creates:
 
@@ -120,7 +130,11 @@ homebutler doctor --strict          # non-zero exit if warnings/failures are fou
 homebutler doctor --json            # automation / MCP friendly
 ```
 
-`doctor` is a read-only preflight for the problems homelab users usually discover too late: high disk or memory usage, stopped containers, public bind ports, stale or missing backups, missing notifications, and whether `report` has a baseline for change detection.
+<p align="center">
+  <img src="assets/doctor-card.svg" alt="homebutler doctor reporting a full disk, a stopped container, and a missing report baseline, each with the command to run next" width="700">
+</p>
+
+`doctor` is a read-only preflight for the problems homelab users usually discover too late: high disk or memory usage, stopped containers, public bind ports, stale or missing backups, missing notifications, and whether `report` has a baseline for change detection. Every finding names the next command to run, so `--strict` makes it usable from cron or CI.
 
 ### 🗂 Config Validation
 
@@ -328,6 +342,8 @@ watch:
     short_threshold: 3
     long_window: 24h
     long_threshold: 5
+  retention:
+    max_incidents: 200
 
 alerts:
   cpu: 90
@@ -349,6 +365,7 @@ Legacy `~/.homebutler/watch/config.json` is still read as a fallback for watch-s
 - `watch.notify_on: off` — disable watch notifications without removing provider config
 - `watch.cooldown: 5m` — suppress duplicate notifications for the same event fingerprint during the cooldown window
 - `watch.flapping` — optional advanced tuning for restart-loop detection
+- `watch.retention.max_incidents: 200` — how many incidents to keep on disk, newest first. Each incident stores up to 100 captured log lines, so the directory grows fastest exactly when a service is restarting in a loop. Set `-1` to keep everything.
 
 These settings can also be written under a `watch.notify:` block, which is the
 canonical form:

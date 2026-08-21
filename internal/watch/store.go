@@ -27,6 +27,15 @@ func (t Target) EffectiveKind() string {
 	return t.Kind
 }
 
+// CheckSupported reports whether a one-shot check can inspect this target.
+//
+// Docker records restart count and start time on the container itself, so a
+// single inspect call is enough. Systemd and pm2 state is only meaningful when
+// compared against a previous poll, which is what `watch start` does.
+func (t Target) CheckSupported() bool {
+	return t.EffectiveKind() == "docker"
+}
+
 // EffectiveUnit returns the unit name, defaulting to Container.
 func (t Target) EffectiveUnit() string {
 	if t.Unit == "" {
@@ -139,7 +148,13 @@ func SaveState(dir string, states map[string]*ContainerState) error {
 	return os.WriteFile(statePath(dir), data, 0o644)
 }
 
-func SaveIncident(dir string, inc *Incident) error {
+// SaveIncident writes an incident and then enforces the retention cap.
+//
+// keep is the number of incidents to retain; zero or less keeps everything.
+// Pruning happens here rather than at the call sites because every monitor
+// writes through this function, and a cap that each caller had to remember to
+// apply would be a cap that one of them eventually forgets.
+func SaveIncident(dir string, inc *Incident, keep int) error {
 	idir := incidentsDir(dir)
 	if err := ensureDir(idir); err != nil {
 		return err
@@ -149,7 +164,48 @@ func SaveIncident(dir string, inc *Incident) error {
 		return err
 	}
 	path := filepath.Join(idir, inc.ID+".json")
-	return os.WriteFile(path, data, 0o644)
+	if err := os.WriteFile(path, data, 0o644); err != nil {
+		return err
+	}
+
+	// The incident is already on disk. A failed prune is a housekeeping problem,
+	// not a reason to tell the caller the incident was lost.
+	if _, err := PruneIncidents(dir, keep); err != nil {
+		fmt.Fprintf(os.Stderr, "warning: prune incidents: %v\n", err)
+	}
+	return nil
+}
+
+// PruneIncidents deletes the oldest incidents until at most keep remain, and
+// reports how many it removed. keep of zero or less keeps everything.
+//
+// Incident files that cannot be read or parsed are left alone: ListIncidents
+// skips them, so they are never selected for deletion. Refusing to delete a
+// file we do not understand is the safer half of that trade.
+func PruneIncidents(dir string, keep int) (int, error) {
+	if keep <= 0 {
+		return 0, nil
+	}
+	incidents, err := ListIncidents(dir)
+	if err != nil {
+		return 0, err
+	}
+	if len(incidents) <= keep {
+		return 0, nil
+	}
+
+	idir := incidentsDir(dir)
+	removed := 0
+	for _, inc := range incidents[keep:] { // ListIncidents sorts newest first
+		if err := os.Remove(filepath.Join(idir, inc.ID+".json")); err != nil {
+			if os.IsNotExist(err) {
+				continue
+			}
+			return removed, err
+		}
+		removed++
+	}
+	return removed, nil
 }
 
 func ListIncidents(dir string) ([]Incident, error) {

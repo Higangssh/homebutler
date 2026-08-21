@@ -23,6 +23,9 @@ type PM2Monitor struct {
 
 	// ReadFile reads a file's contents. Nil defaults to os.ReadFile.
 	ReadFile func(path string) ([]byte, error)
+
+	// Keep caps how many incidents are retained; zero or less keeps everything.
+	Keep int
 }
 
 type pm2Process struct {
@@ -120,7 +123,7 @@ func (pm *PM2Monitor) Watch(ctx context.Context, targets []Target, incidents cha
 						PostLogs:     fmt.Sprintf("status=%s", p.PM2Env.Status),
 					}
 					if pm.Dir != "" {
-						if err := SaveIncident(pm.Dir, &inc); err != nil {
+						if err := SaveIncident(pm.Dir, &inc, pm.Keep); err != nil {
 							fmt.Fprintf(os.Stderr, "[pm2-monitor] warning: save incident: %v\n", err)
 						}
 					}

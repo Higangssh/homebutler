@@ -12,6 +12,8 @@ import (
 	"github.com/Higangssh/homebutler/internal/config"
 	"github.com/Higangssh/homebutler/internal/inventory"
 	"github.com/Higangssh/homebutler/internal/ports"
+	"github.com/Higangssh/homebutler/internal/style"
+	"github.com/charmbracelet/lipgloss"
 )
 
 const (
@@ -175,7 +177,7 @@ func checkPublicPorts(r *Result, pp []ports.PortInfo) {
 	var exposed []string
 	seen := map[string]bool{}
 	for _, p := range pp {
-		if !isPublicBind(p.Address) {
+		if !ports.IsPublicBind(p.Address) {
 			continue
 		}
 		label := strings.TrimSpace(fmt.Sprintf("%s/%s %s", p.Port, p.Protocol, p.Process))
@@ -275,16 +277,6 @@ func overallStatus(s Summary) string {
 	return SeverityPass
 }
 
-func isPublicBind(addr string) bool {
-	addr = strings.Trim(addr, "[]")
-	switch addr {
-	case "*", "0.0.0.0", "::", "":
-		return true
-	default:
-		return false
-	}
-}
-
 func latestBackup(entries []backup.ListEntry) (time.Time, bool) {
 	var latest time.Time
 	for _, e := range entries {
@@ -332,6 +324,21 @@ func defaultSnapshotDir() string {
 }
 
 // FormatHuman renders the doctor result as a concise CLI report.
+// severityStyle maps a severity onto the shared palette. Unknown values fall
+// back to the plain label style rather than picking an arbitrary colour.
+func severityStyle(severity string) lipgloss.Style {
+	switch severity {
+	case SeverityPass:
+		return style.OK
+	case SeverityWarn:
+		return style.Warn
+	case SeverityFail:
+		return style.Fail
+	default:
+		return style.Label
+	}
+}
+
 func FormatHuman(r *Result) string {
 	var b strings.Builder
 	statusIcon := map[string]string{SeverityPass: "✅", SeverityWarn: "⚠️", SeverityFail: "❌"}[r.Status]
@@ -339,21 +346,28 @@ func FormatHuman(r *Result) string {
 		statusIcon = "•"
 	}
 
-	fmt.Fprintf(&b, "🩺 Homebutler Doctor — %s\n", r.ServerName)
-	fmt.Fprintf(&b, "   %s\n\n", r.Timestamp)
-	fmt.Fprintf(&b, "%s Status: %s  ·  pass %d / warn %d / fail %d\n\n", statusIcon, strings.ToUpper(r.Status), r.Summary.Pass, r.Summary.Warn, r.Summary.Fail)
+	fmt.Fprintf(&b, "🩺 %s\n", style.Title.Render("Homebutler Doctor — "+r.ServerName))
+	fmt.Fprintf(&b, "   %s\n\n", style.Dim.Render(r.Timestamp))
+	fmt.Fprintf(&b, "%s %s  %s\n\n",
+		statusIcon,
+		severityStyle(r.Status).Bold(true).Render("Status: "+strings.ToUpper(r.Status)),
+		style.Dim.Render(fmt.Sprintf("· pass %d / warn %d / fail %d", r.Summary.Pass, r.Summary.Warn, r.Summary.Fail)),
+	)
 
 	for _, f := range r.Findings {
 		icon := map[string]string{SeverityPass: "✅", SeverityWarn: "⚠️", SeverityFail: "❌"}[f.Severity]
-		fmt.Fprintf(&b, "%s [%s] %s\n", icon, f.Category, f.Title)
+		fmt.Fprintf(&b, "%s %s %s\n",
+			icon,
+			style.Accent.Render("["+f.Category+"]"),
+			style.Title.Render(f.Title))
 		if f.Detail != "" {
-			fmt.Fprintf(&b, "   %s\n", f.Detail)
+			fmt.Fprintf(&b, "   %s\n", style.Dim.Render(f.Detail))
 		}
 		if f.Action != "" {
-			fmt.Fprintf(&b, "   → %s\n", f.Action)
+			fmt.Fprintf(&b, "   %s %s\n", style.Accent.Render("→"), f.Action)
 		}
 		if f.Command != "" {
-			fmt.Fprintf(&b, "   $ %s\n", f.Command)
+			fmt.Fprintf(&b, "   %s\n", style.Label.Render("$ "+f.Command))
 		}
 		fmt.Fprintln(&b)
 	}

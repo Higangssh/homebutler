@@ -169,12 +169,12 @@ func TestRunResultStruct(t *testing.T) {
 
 func TestCheckTargets_NoTargets(t *testing.T) {
 	dir := t.TempDir()
-	incidents, err := CheckTargets(dir)
+	res, err := CheckTargets(dir, 0)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if incidents != nil {
-		t.Errorf("expected nil incidents, got %v", incidents)
+	if res.Incidents != nil {
+		t.Errorf("expected nil incidents, got %v", res.Incidents)
 	}
 }
 
@@ -196,12 +196,12 @@ func TestCheckTargets_SkipsNonDocker(t *testing.T) {
 		return nil, fmt.Errorf("should not be called")
 	}
 
-	incidents, err := CheckTargets(dir)
+	res, err := CheckTargets(dir, 0)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if len(incidents) != 0 {
-		t.Errorf("expected 0 incidents, got %d", len(incidents))
+	if len(res.Incidents) != 0 {
+		t.Errorf("expected 0 incidents, got %d", len(res.Incidents))
 	}
 }
 
@@ -245,18 +245,18 @@ func TestCheckTargets_DetectsRestart(t *testing.T) {
 		return "captured log lines"
 	}
 
-	incidents, err := CheckTargets(dir)
+	res, err := CheckTargets(dir, 0)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if len(incidents) != 1 {
-		t.Fatalf("expected 1 incident, got %d", len(incidents))
+	if len(res.Incidents) != 1 {
+		t.Fatalf("expected 1 incident, got %d", len(res.Incidents))
 	}
-	if incidents[0].Container != "nginx" {
-		t.Errorf("expected nginx, got %s", incidents[0].Container)
+	if res.Incidents[0].Container != "nginx" {
+		t.Errorf("expected nginx, got %s", res.Incidents[0].Container)
 	}
-	if incidents[0].RestartCount != 5 {
-		t.Errorf("expected RestartCount=5, got %d", incidents[0].RestartCount)
+	if res.Incidents[0].RestartCount != 5 {
+		t.Errorf("expected RestartCount=5, got %d", res.Incidents[0].RestartCount)
 	}
 }
 
@@ -288,12 +288,12 @@ func TestCheckTargets_NoRestart(t *testing.T) {
 		}, nil
 	}
 
-	incidents, err := CheckTargets(dir)
+	res, err := CheckTargets(dir, 0)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if len(incidents) != 0 {
-		t.Errorf("expected 0 incidents, got %d", len(incidents))
+	if len(res.Incidents) != 0 {
+		t.Errorf("expected 0 incidents, got %d", len(res.Incidents))
 	}
 }
 
@@ -317,12 +317,12 @@ func TestCheckTargets_InspectError(t *testing.T) {
 		return nil, fmt.Errorf("container not found")
 	}
 
-	incidents, err := CheckTargets(dir)
+	res, err := CheckTargets(dir, 0)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if len(incidents) != 0 {
-		t.Errorf("expected 0 incidents when inspect fails, got %d", len(incidents))
+	if len(res.Incidents) != 0 {
+		t.Errorf("expected 0 incidents when inspect fails, got %d", len(res.Incidents))
 	}
 }
 
@@ -344,13 +344,13 @@ func TestCheckTargets_NoPrevState(t *testing.T) {
 	}
 
 	// No previous state exists
-	incidents, err := CheckTargets(dir)
+	res, err := CheckTargets(dir, 0)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	// First observation, no restart detected
-	if len(incidents) != 0 {
-		t.Errorf("expected 0 incidents for first observation, got %d", len(incidents))
+	if len(res.Incidents) != 0 {
+		t.Errorf("expected 0 incidents for first observation, got %d", len(res.Incidents))
 	}
 
 	// Verify state was saved
@@ -387,7 +387,7 @@ func TestCheckTargets_MixedDockerAndOther(t *testing.T) {
 		return &InspectResult{RestartCount: 0, StartedAt: "ts1", Running: true}, nil
 	}
 
-	_, err := CheckTargets(dir)
+	_, err := CheckTargets(dir, 0)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -397,12 +397,112 @@ func TestCheckTargets_MixedDockerAndOther(t *testing.T) {
 	}
 }
 
+func TestCheckTargets_ReportsSkippedTargets(t *testing.T) {
+	dir := t.TempDir()
+	targets := []Target{
+		{Container: "nginx", Kind: "docker"},
+		{Container: "lh-elsa-monitor.service", Kind: "systemd", Unit: "lh-elsa-monitor.service"},
+		{Container: "api", Kind: "pm2", Unit: "api"},
+	}
+	if err := SaveTargets(dir, targets); err != nil {
+		t.Fatal(err)
+	}
+
+	origInspect := inspectContainerFunc
+	defer func() { inspectContainerFunc = origInspect }()
+	inspectContainerFunc = func(name string) (*InspectResult, error) {
+		return &InspectResult{RestartCount: 0, StartedAt: "ts1", Running: true}, nil
+	}
+
+	res, err := CheckTargets(dir, 0)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Checked must count what was actually inspected, not every registered target.
+	if res.Checked != 1 {
+		t.Errorf("expected Checked=1 (docker only), got %d", res.Checked)
+	}
+	if len(res.Skipped) != 2 {
+		t.Fatalf("expected 2 skipped targets, got %d: %+v", len(res.Skipped), res.Skipped)
+	}
+
+	kinds := map[string]string{}
+	for _, s := range res.Skipped {
+		kinds[s.Name] = s.Kind
+	}
+	if kinds["lh-elsa-monitor.service"] != "systemd" {
+		t.Errorf("expected the systemd target reported as skipped, got %+v", res.Skipped)
+	}
+	if kinds["api"] != "pm2" {
+		t.Errorf("expected the pm2 target reported as skipped, got %+v", res.Skipped)
+	}
+}
+
+func TestCheckTargets_DockerOnlyReportsNoSkips(t *testing.T) {
+	dir := t.TempDir()
+	targets := []Target{
+		{Container: "nginx", Kind: "docker"},
+		{Container: "api", Kind: ""}, // empty kind defaults to docker
+	}
+	if err := SaveTargets(dir, targets); err != nil {
+		t.Fatal(err)
+	}
+
+	origInspect := inspectContainerFunc
+	defer func() { inspectContainerFunc = origInspect }()
+	inspectContainerFunc = func(name string) (*InspectResult, error) {
+		return &InspectResult{RestartCount: 0, StartedAt: "ts1", Running: true}, nil
+	}
+
+	res, err := CheckTargets(dir, 0)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if res.Checked != 2 {
+		t.Errorf("expected Checked=2, got %d", res.Checked)
+	}
+	if len(res.Skipped) != 0 {
+		t.Errorf("expected no skipped targets, got %+v", res.Skipped)
+	}
+}
+
+func TestCheckTargets_InspectErrorStillCountsAsChecked(t *testing.T) {
+	// A docker target that fails to inspect was still attempted — it must not be
+	// reported as "skipped", which is reserved for kinds check cannot handle at all.
+	dir := t.TempDir()
+	targets := []Target{
+		{Container: "gone", Kind: "docker"},
+		{Container: "svc", Kind: "systemd", Unit: "svc.service"},
+	}
+	if err := SaveTargets(dir, targets); err != nil {
+		t.Fatal(err)
+	}
+
+	origInspect := inspectContainerFunc
+	defer func() { inspectContainerFunc = origInspect }()
+	inspectContainerFunc = func(name string) (*InspectResult, error) {
+		return nil, fmt.Errorf("no such container: %s", name)
+	}
+
+	res, err := CheckTargets(dir, 0)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if res.Checked != 1 {
+		t.Errorf("expected Checked=1 (the docker target was attempted), got %d", res.Checked)
+	}
+	if len(res.Skipped) != 1 || res.Skipped[0].Kind != "systemd" {
+		t.Errorf("expected only the systemd target skipped, got %+v", res.Skipped)
+	}
+}
+
 func TestCheckTargets_CorruptTargets(t *testing.T) {
 	dir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(dir, "targets.json"), []byte("not json"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	_, err := CheckTargets(dir)
+	_, err := CheckTargets(dir, 0)
 	if err == nil {
 		t.Fatal("expected error for corrupt targets")
 	}
@@ -417,7 +517,7 @@ func TestCheckTargets_CorruptState(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "state.json"), []byte("not json"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	_, err := CheckTargets(dir)
+	_, err := CheckTargets(dir, 0)
 	if err == nil {
 		t.Fatal("expected error for corrupt state")
 	}
@@ -449,16 +549,16 @@ func TestCheckTargets_SavesIncident(t *testing.T) {
 		return "post logs"
 	}
 
-	incidents, err := CheckTargets(dir)
+	res, err := CheckTargets(dir, 0)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if len(incidents) != 1 {
-		t.Fatalf("expected 1 incident, got %d", len(incidents))
+	if len(res.Incidents) != 1 {
+		t.Fatalf("expected 1 incident, got %d", len(res.Incidents))
 	}
 
 	// Verify incident was saved to disk
-	loaded, lerr := LoadIncident(dir, incidents[0].ID)
+	loaded, lerr := LoadIncident(dir, res.Incidents[0].ID)
 	if lerr != nil {
 		t.Errorf("failed to load saved incident: %v", lerr)
 	}

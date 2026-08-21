@@ -195,7 +195,7 @@ func inventorySummary(inv *Inventory, appPorts, systemPorts []ports.PortInfo) st
 	}
 	public, local := 0, 0
 	for _, p := range append(append([]ports.PortInfo{}, appPorts...), systemPorts...) {
-		if isPublicBind(p.Address) {
+		if ports.IsPublicBind(p.Address) {
 			public++
 		} else {
 			local++
@@ -298,19 +298,10 @@ func isForwarderProcess(process string) bool {
 }
 
 func exposureIcon(p ports.PortInfo) string {
-	if isPublicBind(p.Address) {
+	if ports.IsPublicBind(p.Address) {
 		return "🌍"
 	}
 	return "🔒"
-}
-
-func isPublicBind(address string) bool {
-	switch address {
-	case "*", "0.0.0.0", "::", "[::]", "":
-		return true
-	default:
-		return false
-	}
 }
 
 var mappedPortRe = regexp.MustCompile(`(?:^|[\s,])(?:[\d.:\[\]]+:)?(\d+)->(\d+)/(tcp|udp)`)
