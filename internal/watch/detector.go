@@ -72,28 +72,42 @@ func CaptureLogs(container string, lines string) string {
 	return out
 }
 
-func CheckTargets(dir string) ([]Incident, error) {
+// CheckTargets runs a one-shot restart check over the watch list.
+//
+// Only docker targets expose their restart state without a running monitor, so
+// systemd and pm2 targets cannot be inspected here. They are reported in
+// RunResult.Skipped rather than dropped silently — a caller that printed only
+// "no restarts detected" would be claiming those targets are healthy when they
+// were never looked at.
+func CheckTargets(dir string) (RunResult, error) {
+	var result RunResult
+
 	targets, err := LoadTargets(dir)
 	if err != nil {
-		return nil, err
+		return result, err
 	}
 	if len(targets) == 0 {
-		return nil, nil
+		return result, nil
 	}
 
 	states, err := LoadState(dir)
 	if err != nil {
-		return nil, err
+		return result, err
 	}
 
 	var incidents []Incident
 	now := time.Now()
 
 	for _, t := range targets {
-		// CheckTargets only handles docker targets; skip others
-		if t.EffectiveKind() != "docker" {
+		if !t.CheckSupported() {
+			result.Skipped = append(result.Skipped, SkippedTarget{
+				Name: t.Container,
+				Kind: t.EffectiveKind(),
+			})
 			continue
 		}
+		result.Checked++
+
 		curr, err := inspectContainerFunc(t.Container)
 		if err != nil {
 			fmt.Fprintf(defaultStderr, "warning: %v\n", err)
@@ -127,13 +141,25 @@ func CheckTargets(dir string) ([]Incident, error) {
 		}
 	}
 
+	result.Incidents = incidents
+
 	if err := SaveState(dir, states); err != nil {
-		return incidents, fmt.Errorf("save state: %w", err)
+		return result, fmt.Errorf("save state: %w", err)
 	}
-	return incidents, nil
+	return result, nil
+}
+
+// SkippedTarget is a watch target that a one-shot check could not inspect,
+// because its kind needs a running monitor rather than a point-in-time lookup.
+type SkippedTarget struct {
+	Name string `json:"name"`
+	Kind string `json:"kind"`
 }
 
 type RunResult struct {
-	Checked   int        `json:"checked"`
-	Incidents []Incident `json:"incidents,omitempty"`
+	// Checked counts the targets that were actually inspected, not every target
+	// on the watch list.
+	Checked   int             `json:"checked"`
+	Skipped   []SkippedTarget `json:"skipped,omitempty"`
+	Incidents []Incident      `json:"incidents,omitempty"`
 }

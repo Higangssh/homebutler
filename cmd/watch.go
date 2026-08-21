@@ -284,30 +284,37 @@ func newWatchCheckCmd() *cobra.Command {
 				return err
 			}
 			if len(targets) == 0 {
-				fmt.Println("No containers being watched.")
+				fmt.Println("No targets being watched.")
 				return nil
 			}
 
-			incidents, err := watch.CheckTargets(dir)
+			result, err := watch.CheckTargets(dir)
 			if err != nil {
 				return err
 			}
 
-			result := watch.RunResult{
-				Checked:   len(targets),
-				Incidents: incidents,
-			}
 			if jsonOutput {
 				return output(result, true)
 			}
-			fmt.Printf("Checked %d container(s).\n", result.Checked)
-			if len(incidents) == 0 {
+
+			fmt.Printf("Checked %d docker target(s).\n", result.Checked)
+			if len(result.Incidents) == 0 {
 				fmt.Println("No restarts detected.")
 			} else {
-				fmt.Printf("%d restart(s) detected:\n", len(incidents))
-				for _, inc := range incidents {
+				fmt.Printf("%d restart(s) detected:\n", len(result.Incidents))
+				for _, inc := range result.Incidents {
 					fmt.Printf("  %s: %s (%s)\n", inc.Container, inc.ID, restartLabel(inc.RestartCount))
 				}
+			}
+
+			// Without this, a watch list of only systemd/pm2 targets prints
+			// "No restarts detected" without having looked at anything.
+			if len(result.Skipped) > 0 {
+				fmt.Printf("\n⚠️  Skipped %d target(s) that check cannot inspect:\n", len(result.Skipped))
+				for _, s := range result.Skipped {
+					fmt.Printf("  %s (%s)\n", s.Name, s.Kind)
+				}
+				fmt.Println("  → These are only monitored while running: homebutler watch start")
 			}
 			return nil
 		},
