@@ -275,6 +275,11 @@ func newWatchCheckCmd() *cobra.Command {
 		Use:   "check",
 		Short: "Run a one-shot restart check on all watched containers",
 		RunE: func(cmd *cobra.Command, args []string) error {
+			// Loaded so config.yaml's watch settings reach this command too;
+			// without it check and start would disagree about retention.
+			if err := loadConfig(); err != nil {
+				return err
+			}
 			dir, err := watch.WatchDir()
 			if err != nil {
 				return err
@@ -288,7 +293,7 @@ func newWatchCheckCmd() *cobra.Command {
 				return nil
 			}
 
-			result, err := watch.CheckTargets(dir)
+			result, err := watch.CheckTargets(dir, resolveIncidentCap(dir))
 			if err != nil {
 				return err
 			}
@@ -368,7 +373,9 @@ Docker targets use docker events (real-time). Systemd and PM2 targets use pollin
 			if cfg != nil {
 				watchCfg.Notify = cfg.Watch.Notify
 				watchCfg.Flapping = cfg.Watch.Flapping
+				watchCfg.Retention = cfg.Watch.Retention
 			}
+			watchCfg.Retention.Normalize()
 
 			var notifier *watch.WatchNotifier
 			if watchCfg.Notify.Enabled {
@@ -487,7 +494,7 @@ Docker targets use docker events (real-time). Systemd and PM2 targets use pollin
 						inc.Flapping = &flapResult
 					}
 
-					_ = watch.SaveIncident(dir, &inc)
+					_ = watch.SaveIncident(dir, &inc, watchCfg.Retention.MaxIncidents)
 
 					if notifier != nil {
 						_ = notifier.NotifyIncident(inc, flapResult, &summary, time.Now())
@@ -510,6 +517,22 @@ Docker targets use docker events (real-time). Systemd and PM2 targets use pollin
 
 	cmd.Flags().StringVar(&interval, "interval", "30s", "Check/poll interval (e.g. 30s, 1m, 5m)")
 	return cmd
+}
+
+// resolveIncidentCap resolves the incident retention cap the way watch start
+// does: config.yaml wins over watch/config.json, and an unset value takes the
+// default rather than reading as unlimited.
+func resolveIncidentCap(dir string) int {
+	watchCfg, err := watch.LoadWatchConfig(dir)
+	if err != nil || watchCfg == nil {
+		defaults := watch.DefaultWatchConfig()
+		watchCfg = &defaults
+	}
+	if cfg != nil {
+		watchCfg.Retention = cfg.Watch.Retention
+	}
+	watchCfg.Retention.Normalize()
+	return watchCfg.Retention.MaxIncidents
 }
 
 func newWatchHistoryCmd() *cobra.Command {

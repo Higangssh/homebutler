@@ -18,6 +18,9 @@ type SystemdMonitor struct {
 
 	// Interval is the polling interval.
 	Interval time.Duration
+
+	// Keep caps how many incidents are retained; zero or less keeps everything.
+	Keep int
 }
 
 type systemdState struct {
@@ -113,7 +116,7 @@ func (sm *SystemdMonitor) Watch(ctx context.Context, targets []Target, incidents
 						PostLogs:    fmt.Sprintf("ActiveState=%s SubState=%s", curr.ActiveState, curr.SubState),
 					}
 					if sm.Dir != "" {
-						if err := SaveIncident(sm.Dir, &inc); err != nil {
+						if err := SaveIncident(sm.Dir, &inc, sm.Keep); err != nil {
 							fmt.Fprintf(os.Stderr, "[systemd-monitor] warning: save incident: %v\n", err)
 						}
 					}

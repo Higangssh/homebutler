@@ -1,6 +1,7 @@
 package watch
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -178,7 +179,7 @@ func TestIncidentRoundTrip(t *testing.T) {
 		PostLogs:     "post-restart log lines",
 	}
 
-	if err := SaveIncident(dir, inc); err != nil {
+	if err := SaveIncident(dir, inc, 0); err != nil {
 		t.Fatalf("SaveIncident: %v", err)
 	}
 
@@ -271,7 +272,7 @@ func TestListIncidents_Sorted(t *testing.T) {
 			Container:  pair.name,
 			DetectedAt: pair.t,
 		}
-		if err := SaveIncident(dir, inc); err != nil {
+		if err := SaveIncident(dir, inc, 0); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -311,7 +312,7 @@ func TestListIncidents_SkipsNonJSON(t *testing.T) {
 		Container:  "nginx",
 		DetectedAt: time.Now(),
 	}
-	if err := SaveIncident(dir, inc); err != nil {
+	if err := SaveIncident(dir, inc, 0); err != nil {
 		t.Fatal(err)
 	}
 
@@ -340,7 +341,7 @@ func TestListIncidents_CorruptJSON(t *testing.T) {
 		Container:  "nginx",
 		DetectedAt: time.Now(),
 	}
-	if err := SaveIncident(dir, inc); err != nil {
+	if err := SaveIncident(dir, inc, 0); err != nil {
 		t.Fatal(err)
 	}
 
@@ -484,7 +485,165 @@ func TestSaveIncident_CreatesDir(t *testing.T) {
 		ID:        GenerateIncidentID("x", time.Now()),
 		Container: "x",
 	}
-	if err := SaveIncident(dir, inc); err != nil {
+	if err := SaveIncident(dir, inc, 0); err != nil {
 		t.Fatalf("SaveIncident should create dir: %v", err)
+	}
+}
+
+func TestPruneIncidents_KeepsNewestAndDeletesOldest(t *testing.T) {
+	dir := t.TempDir()
+	base := time.Date(2026, 8, 21, 2, 0, 0, 0, time.UTC)
+
+	// Saved oldest-first so file order cannot be what makes the test pass.
+	var ids []string
+	for i := 0; i < 5; i++ {
+		inc := Incident{
+			ID:         fmt.Sprintf("svc-%02d", i),
+			Container:  "svc",
+			DetectedAt: base.Add(time.Duration(i) * time.Minute),
+		}
+		if err := SaveIncident(dir, &inc, 0); err != nil {
+			t.Fatal(err)
+		}
+		ids = append(ids, inc.ID)
+	}
+
+	removed, err := PruneIncidents(dir, 2)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if removed != 3 {
+		t.Errorf("expected 3 removed, got %d", removed)
+	}
+
+	left, err := ListIncidents(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(left) != 2 {
+		t.Fatalf("expected 2 incidents kept, got %d", len(left))
+	}
+	// ListIncidents sorts newest first.
+	if left[0].ID != ids[4] || left[1].ID != ids[3] {
+		t.Errorf("expected the two newest kept, got %s and %s", left[0].ID, left[1].ID)
+	}
+}
+
+func TestPruneIncidents_UnderCapIsNoop(t *testing.T) {
+	dir := t.TempDir()
+	for i := 0; i < 3; i++ {
+		inc := Incident{ID: fmt.Sprintf("svc-%02d", i), Container: "svc", DetectedAt: time.Now()}
+		if err := SaveIncident(dir, &inc, 0); err != nil {
+			t.Fatal(err)
+		}
+	}
+	removed, err := PruneIncidents(dir, 10)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if removed != 0 {
+		t.Errorf("expected nothing removed, got %d", removed)
+	}
+	left, _ := ListIncidents(dir)
+	if len(left) != 3 {
+		t.Errorf("expected 3 incidents, got %d", len(left))
+	}
+}
+
+func TestPruneIncidents_NonPositiveKeepsEverything(t *testing.T) {
+	dir := t.TempDir()
+	for i := 0; i < 4; i++ {
+		inc := Incident{ID: fmt.Sprintf("svc-%02d", i), Container: "svc", DetectedAt: time.Now()}
+		if err := SaveIncident(dir, &inc, 0); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, keep := range []int{0, -1} {
+		removed, err := PruneIncidents(dir, keep)
+		if err != nil {
+			t.Fatalf("keep=%d: unexpected error: %v", keep, err)
+		}
+		if removed != 0 {
+			t.Errorf("keep=%d: expected nothing removed, got %d", keep, removed)
+		}
+	}
+	left, _ := ListIncidents(dir)
+	if len(left) != 4 {
+		t.Errorf("expected all 4 incidents kept, got %d", len(left))
+	}
+}
+
+func TestPruneIncidents_MissingDirIsNoop(t *testing.T) {
+	removed, err := PruneIncidents(t.TempDir(), 5)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if removed != 0 {
+		t.Errorf("expected 0 removed, got %d", removed)
+	}
+}
+
+func TestSaveIncident_EnforcesCap(t *testing.T) {
+	// The cap has to apply on the write path — a monitor that never calls prune
+	// explicitly must still not grow the directory without bound.
+	dir := t.TempDir()
+	base := time.Date(2026, 8, 21, 2, 0, 0, 0, time.UTC)
+	for i := 0; i < 6; i++ {
+		inc := Incident{
+			ID:         fmt.Sprintf("svc-%02d", i),
+			Container:  "svc",
+			DetectedAt: base.Add(time.Duration(i) * time.Minute),
+		}
+		if err := SaveIncident(dir, &inc, 3); err != nil {
+			t.Fatal(err)
+		}
+	}
+	left, err := ListIncidents(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(left) != 3 {
+		t.Fatalf("expected the directory capped at 3, got %d", len(left))
+	}
+	if left[0].ID != "svc-05" {
+		t.Errorf("expected newest incident kept, got %s", left[0].ID)
+	}
+}
+
+func TestRetentionConfig_Normalize(t *testing.T) {
+	tests := []struct {
+		name string
+		in   int
+		want int
+	}{
+		{"unset falls back to the default", 0, defaultMaxIncidents},
+		{"negative means keep everything", -1, 0},
+		{"explicit value is kept", 50, 50},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			r := RetentionConfig{MaxIncidents: tc.in}
+			r.Normalize()
+			if r.MaxIncidents != tc.want {
+				t.Errorf("Normalize(%d) = %d, want %d", tc.in, r.MaxIncidents, tc.want)
+			}
+		})
+	}
+}
+
+func TestLoadWatchConfig_AppliesRetentionDefault(t *testing.T) {
+	// Configs written before retention existed have no such key. They must get
+	// the default cap, not "keep everything".
+	dir := t.TempDir()
+	legacy := `{"notify":{"enabled":false},"flapping":{}}`
+	if err := os.WriteFile(filepath.Join(dir, "config.json"), []byte(legacy), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := LoadWatchConfig(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Retention.MaxIncidents != defaultMaxIncidents {
+		t.Errorf("expected default cap %d, got %d", defaultMaxIncidents, cfg.Retention.MaxIncidents)
 	}
 }

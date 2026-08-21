@@ -7,9 +7,41 @@ import (
 	"path/filepath"
 )
 
+// defaultMaxIncidents caps the incident directory by default. Each incident
+// file carries up to 100 lines of captured logs, so an uncapped directory grows
+// fastest exactly when something is wrong — a service restarting every 30s
+// writes thousands of them a day.
+const defaultMaxIncidents = 200
+
 type WatchConfig struct {
-	Notify   NotifySettings `json:"notify"`
-	Flapping FlappingConfig `json:"flapping"`
+	Notify    NotifySettings  `json:"notify"`
+	Flapping  FlappingConfig  `json:"flapping"`
+	Retention RetentionConfig `json:"retention"`
+}
+
+// RetentionConfig bounds how much incident history is kept on disk.
+type RetentionConfig struct {
+	// MaxIncidents is how many incidents to keep, newest first.
+	//
+	// Zero means "not configured" and takes the default, so that config files
+	// written before this setting existed do not silently read as unlimited.
+	// A negative value is the explicit way to ask for unlimited history.
+	MaxIncidents int `yaml:"max_incidents,omitempty" json:"max_incidents"`
+}
+
+func DefaultRetentionConfig() RetentionConfig {
+	return RetentionConfig{MaxIncidents: defaultMaxIncidents}
+}
+
+// Normalize resolves the sentinel values into the number PruneIncidents wants,
+// where zero or less means keep everything.
+func (r *RetentionConfig) Normalize() {
+	switch {
+	case r.MaxIncidents < 0:
+		r.MaxIncidents = 0
+	case r.MaxIncidents == 0:
+		r.MaxIncidents = defaultMaxIncidents
+	}
 }
 
 type NotifySettings struct {
@@ -29,7 +61,8 @@ func DefaultWatchConfig() WatchConfig {
 			OnFlapping: true,
 			Cooldown:   "5m",
 		},
-		Flapping: DefaultFlappingConfig(),
+		Flapping:  DefaultFlappingConfig(),
+		Retention: DefaultRetentionConfig(),
 	}
 }
 
@@ -52,6 +85,7 @@ func LoadWatchConfig(dir string) (*WatchConfig, error) {
 		return nil, err
 	}
 	cfg.Notify.Normalize()
+	cfg.Retention.Normalize()
 	return &cfg, nil
 }
 

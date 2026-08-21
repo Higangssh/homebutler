@@ -530,3 +530,34 @@ watch:
 		t.Errorf("message should name the flat keys in play, got %q", f.Message)
 	}
 }
+
+func TestValidateAcceptsWatchRetention(t *testing.T) {
+	path := writeConfig(t, `
+watch:
+  retention:
+    max_incidents: 50
+`)
+
+	r := Validate(path)
+
+	// watch has a custom unmarshaler, so a new subtree that nobody added to the
+	// key list gets reported as unknown even though it parses fine.
+	if _, ok := findingFor(r, "retention"); ok {
+		t.Errorf("watch.retention should be a known key, got %+v", r.Findings)
+	}
+	if !r.Valid {
+		t.Error("a config setting only watch.retention should be valid")
+	}
+}
+
+func TestValidateUnknownWatchRetentionKey(t *testing.T) {
+	path := writeConfig(t, `
+watch:
+  retention:
+    max_incident: 50
+`)
+
+	r := Validate(path)
+
+	requireFinding(t, r, "max_incident", SeverityWarning)
+}

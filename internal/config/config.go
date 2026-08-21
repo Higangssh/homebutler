@@ -22,16 +22,18 @@ type Config struct {
 }
 
 type WatchRuntimeConfig struct {
-	Notify   watch.NotifySettings `yaml:"notify,omitempty"`
-	Flapping watch.FlappingConfig `yaml:"flapping,omitempty"`
+	Notify    watch.NotifySettings  `yaml:"notify,omitempty"`
+	Flapping  watch.FlappingConfig  `yaml:"flapping,omitempty"`
+	Retention watch.RetentionConfig `yaml:"retention,omitempty"`
 }
 
 // watchRuntimeYAML is the decode target for WatchRuntimeConfig. It carries the
 // canonical nested shape plus the flat keys, as pointers so that "absent" and
 // "set to the zero value" stay distinguishable.
 type watchRuntimeYAML struct {
-	Notify   watch.NotifySettings `yaml:"notify,omitempty"`
-	Flapping watch.FlappingConfig `yaml:"flapping,omitempty"`
+	Notify    watch.NotifySettings  `yaml:"notify,omitempty"`
+	Flapping  watch.FlappingConfig  `yaml:"flapping,omitempty"`
+	Retention watch.RetentionConfig `yaml:"retention,omitempty"`
 
 	Enabled    *bool   `yaml:"enabled,omitempty"`
 	NotifyOn   *string `yaml:"notify_on,omitempty"`
@@ -59,12 +61,13 @@ type watchRuntimeYAML struct {
 func (w *WatchRuntimeConfig) UnmarshalYAML(node *yaml.Node) error {
 	// Seeded with the current value so that defaults applied before decoding
 	// survive keys the file does not mention.
-	raw := watchRuntimeYAML{Notify: w.Notify, Flapping: w.Flapping}
+	raw := watchRuntimeYAML{Notify: w.Notify, Flapping: w.Flapping, Retention: w.Retention}
 	if err := node.Decode(&raw); err != nil {
 		return err
 	}
 	w.Notify = raw.Notify
 	w.Flapping = raw.Flapping
+	w.Retention = raw.Retention
 
 	if hasMappingKey(node, "notify") {
 		return nil
@@ -210,8 +213,9 @@ func newDefaultConfig() *Config {
 			Disk:   90,
 		},
 		Watch: WatchRuntimeConfig{
-			Notify:   defaultWatch.Notify,
-			Flapping: defaultWatch.Flapping,
+			Notify:    defaultWatch.Notify,
+			Flapping:  defaultWatch.Flapping,
+			Retention: defaultWatch.Retention,
 		},
 	}
 }
@@ -236,6 +240,7 @@ func Load(path string) (*Config, error) {
 	}
 
 	cfg.Watch.Notify.Normalize()
+	cfg.Watch.Retention.Normalize()
 
 	cfg.Path = path
 
