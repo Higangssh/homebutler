@@ -79,7 +79,8 @@ func CaptureLogs(container string, lines string) string {
 // RunResult.Skipped rather than dropped silently — a caller that printed only
 // "no restarts detected" would be claiming those targets are healthy when they
 // were never looked at.
-func CheckTargets(dir string) (RunResult, error) {
+// keep caps how many incidents are retained on disk; see SaveIncident.
+func CheckTargets(dir string, keep int) (RunResult, error) {
 	var result RunResult
 
 	targets, err := LoadTargets(dir)
@@ -127,7 +128,7 @@ func CheckTargets(dir string) (RunResult, error) {
 				PreLogs:      "(captured at detection — see post_logs for current state)",
 				PostLogs:     postLogs,
 			}
-			if err := SaveIncident(dir, &inc); err != nil {
+			if err := SaveIncident(dir, &inc, keep); err != nil {
 				fmt.Fprintf(defaultStderr, "warning: save incident: %v\n", err)
 			}
 			incidents = append(incidents, inc)

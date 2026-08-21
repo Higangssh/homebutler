@@ -261,9 +261,10 @@ func editDistance(a, b string) int {
 // Keys accepted under watch:. The flat spellings are the compatibility path
 // described on WatchRuntimeConfig.UnmarshalYAML.
 var (
-	watchKeys       = []string{"notify", "flapping", "enabled", "notify_on", "on_incident", "on_flapping", "cooldown"}
-	watchNotifyKeys = []string{"enabled", "notify_on", "on_incident", "on_flapping", "cooldown"}
-	watchFlapKeys   = []string{"short_window", "short_threshold", "long_window", "long_threshold"}
+	watchKeys          = []string{"notify", "flapping", "retention", "enabled", "notify_on", "on_incident", "on_flapping", "cooldown"}
+	watchNotifyKeys    = []string{"enabled", "notify_on", "on_incident", "on_flapping", "cooldown"}
+	watchFlapKeys      = []string{"short_window", "short_threshold", "long_window", "long_threshold"}
+	watchRetentionKeys = []string{"max_incidents"}
 )
 
 // checkWatchKeys inspects the watch subtree by hand.
@@ -287,6 +288,8 @@ func (r *ValidationResult) checkWatchKeys(rawTop map[string]yaml.Node) {
 			r.reportUnknownKeys(node.Content[i+1], "watch.notify", watchNotifyKeys)
 		case "flapping":
 			r.reportUnknownKeys(node.Content[i+1], "watch.flapping", watchFlapKeys)
+		case "retention":
+			r.reportUnknownKeys(node.Content[i+1], "watch.retention", watchRetentionKeys)
 		default:
 			if slices.Contains(watchKeys, key) {
 				flat = append(flat, key)

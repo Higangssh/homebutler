@@ -517,3 +517,73 @@ watch:
 		t.Errorf("short_threshold = %d, want the configured 7", cfg.Watch.Flapping.ShortThreshold)
 	}
 }
+
+func TestLoadWatchRetention(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "retention.yaml")
+	content := `
+watch:
+  retention:
+    max_incidents: 25
+`
+	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	if cfg.Watch.Retention.MaxIncidents != 25 {
+		t.Errorf("max_incidents = %d, want the configured 25", cfg.Watch.Retention.MaxIncidents)
+	}
+	// Setting retention must not disturb the neighbouring watch defaults.
+	if cfg.Watch.Notify.Cooldown != "5m" {
+		t.Errorf("cooldown = %q, want the 5m default", cfg.Watch.Notify.Cooldown)
+	}
+}
+
+func TestLoadWatchRetentionDefaultsWhenUnset(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "no-retention.yaml")
+	content := `
+watch:
+  notify:
+    enabled: true
+`
+	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	// A config that predates the setting must not read as unlimited history.
+	if cfg.Watch.Retention.MaxIncidents != 200 {
+		t.Errorf("max_incidents = %d, want the default 200", cfg.Watch.Retention.MaxIncidents)
+	}
+}
+
+func TestLoadWatchRetentionNegativeMeansUnlimited(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "unlimited.yaml")
+	content := `
+watch:
+  retention:
+    max_incidents: -1
+`
+	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	// Normalize turns the explicit opt-out into the "keep everything" zero that
+	// PruneIncidents understands.
+	if cfg.Watch.Retention.MaxIncidents != 0 {
+		t.Errorf("max_incidents = %d, want 0 (unlimited)", cfg.Watch.Retention.MaxIncidents)
+	}
+}
