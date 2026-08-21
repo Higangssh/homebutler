@@ -16,6 +16,27 @@ type PortInfo struct {
 	Process  string `json:"process,omitempty"`
 }
 
+// IsPublicBind reports whether a listener's bind address covers every
+// interface rather than loopback or one specific address.
+//
+// The address comes straight from the platform tool, which spells the wildcard
+// several ways: ss prints 0.0.0.0 for IPv4, [::] for an IPv6-only socket and *
+// for a dual-stack one, lsof prints * for all of them, and netstat prints ::.
+// An empty address means the parser could not read the column — treated as
+// public so an unreadable listener is flagged rather than quietly cleared.
+//
+// This is the single predicate behind exposure reporting in both `inventory
+// scan` and `doctor`. Keep it that way: two copies would let those commands
+// disagree about what "public" means.
+func IsPublicBind(addr string) bool {
+	switch strings.Trim(addr, "[]") {
+	case "*", "0.0.0.0", "::", "":
+		return true
+	default:
+		return false
+	}
+}
+
 // Result holds the port list and metadata about the scan.
 type Result struct {
 	Ports          []PortInfo `json:"ports"`
