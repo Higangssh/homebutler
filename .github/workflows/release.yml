@@ -7,6 +7,7 @@ on:
 
 permissions:
   contents: write
+  id-token: write # MCP Registry OIDC login
 
 jobs:
   release:
@@ -115,11 +116,13 @@ jobs:
           git push
 
       - name: Publish npm wrapper
+        id: npm
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
           if [ -z "$NODE_AUTH_TOKEN" ]; then
             echo "NPM_TOKEN not set, skipping npm publish"
+            echo "published=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
@@ -129,3 +132,21 @@ jobs:
           echo "//registry.npmjs.org/:_authToken=${NODE_AUTH_TOKEN}" > .npmrc
           npm publish --access public
           rm .npmrc
+          echo "published=true" >> "$GITHUB_OUTPUT"
+
+      # The registry stores metadata only. It verifies ownership by reading the
+      # mcpName field back out of the published npm package, so this cannot run
+      # before the npm publish above succeeds.
+      - name: Publish to MCP Registry
+        if: steps.npm.outputs.published == 'true'
+        run: |
+          TAG=${GITHUB_REF#refs/tags/v}
+
+          # Both fields have to carry the tag: the registry rejects a server
+          # version whose package version does not exist on npm.
+          jq --arg v "$TAG" '.version = $v | .packages[0].version = $v' \
+            server.json > server.tmp && mv server.tmp server.json
+
+          curl -L "https://github.com/modelcontextprotocol/registry/releases/latest/download/mcp-publisher_$(uname -s | tr '[:upper:]' '[:lower:]')_$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/').tar.gz" | tar xz mcp-publisher
+          ./mcp-publisher login github-oidc
+          ./mcp-publisher publish
