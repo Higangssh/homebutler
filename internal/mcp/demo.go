@@ -75,6 +75,28 @@ func (s *Server) executeDemoTool(name string, args map[string]any) (any, error) 
 				{"severity": "warn", "category": "backup", "title": "Latest backup is older than expected", "action": "Run a fresh backup. If this app matters, follow up with a backup drill.", "command": "homebutler backup"},
 			},
 		}, nil
+	case "watch_check":
+		// Carries a skipped target on purpose: a demo that only ever returned
+		// incidents would teach a caller that an empty incident list means the
+		// whole watch list is healthy, which is the misreading the real
+		// command's Skipped field exists to prevent.
+		return map[string]any{
+			"checked": 2,
+			"incidents": []map[string]any{
+				{
+					"id":              "demo-nextcloud-20260430T120000Z",
+					"container":       "nextcloud",
+					"detected_at":     "2026-04-30T12:00:00Z",
+					"restart_count":   3,
+					"prev_started_at": "2026-04-30T09:14:02Z",
+					"curr_started_at": "2026-04-30T11:58:41Z",
+					"post_logs":       "MySQL server has gone away\nRetrying connection (1/5)",
+				},
+			},
+			"skipped": []map[string]any{
+				{"name": "caddy.service", "kind": "systemd"},
+			},
+		}, nil
 	case "backup_create":
 		service := stringArg(args, "service")
 		if service == "" {
