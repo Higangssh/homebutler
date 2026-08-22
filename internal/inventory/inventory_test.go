@@ -212,6 +212,130 @@ func TestRenderDedupesIPv4IPv6DuplicatePorts(t *testing.T) {
 	}
 }
 
+func TestRenderTreeFiltered_Exposed(t *testing.T) {
+	inv := &Inventory{
+		ServerName: "demo-lab",
+		Host:       "10.0.0.1",
+		Containers: []docker.Container{
+			{Name: "app-api", State: "running", Image: "app:1", Ports: "0.0.0.0:8080->8080/tcp"},
+		},
+		Ports: []ports.PortInfo{
+			{Port: "8080", Protocol: "tcp", Address: "0.0.0.0", Process: "docker-proxy"},
+			{Port: "8443", Protocol: "tcp", Address: "0.0.0.0", Process: "dashboard"},
+			{Port: "5432", Protocol: "tcp", Address: "127.0.0.1", Process: "postgres"},
+		},
+	}
+
+	out, err := RenderTreeFiltered(inv, "exposed")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	for _, want := range []string{"Home Network", "demo-lab", "Exposed Ports", "├─ :8080/tcp · app-api", "└─ :8443/tcp · dashboard"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("exposed output missing %q\n%s", want, out)
+		}
+	}
+	for _, notWant := range []string{"5432", "postgres", "App Ports", "Containers", "Summary"} {
+		if strings.Contains(out, notWant) {
+			t.Errorf("exposed output should not contain %q\n%s", notWant, out)
+		}
+	}
+}
+
+func TestRenderTreeFiltered_ExposedPublicIPv6(t *testing.T) {
+	inv := &Inventory{
+		ServerName: "demo-lab",
+		Host:       "10.0.0.1",
+		Ports: []ports.PortInfo{
+			{Port: "443", Protocol: "tcp", Address: "[::]", Process: "nginx"},
+			{Port: "22", Protocol: "tcp", Address: "127.0.0.1", Process: "sshd"},
+		},
+	}
+
+	out, err := RenderTreeFiltered(inv, "exposed")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(out, ":443/tcp · nginx") {
+		t.Errorf("exposed output missing public IPv6 port\n%s", out)
+	}
+	if strings.Contains(out, ":22/tcp") {
+		t.Errorf("exposed output should not contain loopback port\n%s", out)
+	}
+}
+
+func TestRenderTreeFiltered_ExposedEmpty(t *testing.T) {
+	inv := &Inventory{
+		ServerName: "demo-lab",
+		Host:       "10.0.0.1",
+		Ports: []ports.PortInfo{
+			{Port: "5432", Protocol: "tcp", Address: "127.0.0.1", Process: "postgres"},
+		},
+	}
+
+	out, err := RenderTreeFiltered(inv, "exposed")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(out, "(none)") {
+		t.Errorf("expected empty exposed view to show '(none)'\n%s", out)
+	}
+	if strings.Contains(out, "5432") {
+		t.Errorf("empty exposed view should not contain local port\n%s", out)
+	}
+}
+
+func TestRenderTreeFiltered_ExposedShowsWarnings(t *testing.T) {
+	inv := &Inventory{
+		ServerName: "demo-lab",
+		Host:       "10.0.0.1",
+		Ports:      []ports.PortInfo{},
+		Warnings:   []string{"ports: failed to list ports: exit status 1"},
+	}
+
+	out, err := RenderTreeFiltered(inv, "exposed")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(out, "Warnings (1)") || !strings.Contains(out, "failed to list ports") {
+		t.Errorf("filtered view must surface collection warnings instead of a bare '(none)'\n%s", out)
+	}
+	if strings.Contains(out, "(none)") {
+		t.Errorf("(none) must not print when the scan failed; it reads as an authoritative count\n%s", out)
+	}
+}
+
+func TestRenderTreeFiltered_UnsupportedFilter(t *testing.T) {
+	inv := &Inventory{ServerName: "lab", Host: "10.0.0.1"}
+
+	_, err := RenderTreeFiltered(inv, "bogus")
+	if err == nil {
+		t.Fatal("expected error for unsupported filter")
+	}
+	if !strings.Contains(err.Error(), "unsupported filter") || !strings.Contains(err.Error(), "exposed") {
+		t.Errorf("unhelpful error for unsupported filter: %v", err)
+	}
+}
+
+func TestSupportedFilters(t *testing.T) {
+	got := SupportedFilters()
+	if len(got) != 1 || got[0] != "exposed" {
+		t.Errorf("SupportedFilters() = %v, want [exposed]", got)
+	}
+}
+
+func TestIsSupportedFilter(t *testing.T) {
+	if !IsSupportedFilter("exposed") {
+		t.Error("expected 'exposed' to be a supported filter")
+	}
+	for _, f := range []string{"", "bogus", "public"} {
+		if IsSupportedFilter(f) {
+			t.Errorf("did not expect %q to be a supported filter", f)
+		}
+	}
+}
+
 func TestJSON_Roundtrip(t *testing.T) {
 	inv := &Inventory{
 		ServerName: "s1",

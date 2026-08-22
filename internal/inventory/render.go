@@ -71,6 +71,70 @@ func RenderTree(inv *Inventory) string {
 	return b.String()
 }
 
+// RenderTreeFiltered renders a filtered view of the inventory.
+// Supported filters: "exposed" (only ports bound to public interfaces).
+func RenderTreeFiltered(inv *Inventory, filter string) (string, error) {
+	switch filter {
+	case "exposed":
+		return renderExposedPorts(inv), nil
+	default:
+		return "", fmt.Errorf("unsupported filter %q (supported: %s)", filter, strings.Join(SupportedFilters(), ", "))
+	}
+}
+
+// SupportedFilters returns the filter values accepted by RenderTreeFiltered.
+func SupportedFilters() []string {
+	return []string{"exposed"}
+}
+
+// IsSupportedFilter reports whether filter is accepted by RenderTreeFiltered.
+func IsSupportedFilter(filter string) bool {
+	for _, f := range SupportedFilters() {
+		if f == filter {
+			return true
+		}
+	}
+	return false
+}
+
+// renderExposedPorts renders a compact view of the ports bound to public interfaces.
+func renderExposedPorts(inv *Inventory) string {
+	var b strings.Builder
+	links := dockerPortLinks(inv.Containers)
+	displayPorts := dedupeDisplayPorts(inv.Ports, links)
+	exposed := exposedPorts(displayPorts)
+
+	b.WriteString("🏠 Home Network\n")
+	fmt.Fprintf(&b, "   Server  %s\n", inv.ServerName)
+
+	b.WriteString("\n🌐 Exposed Ports\n")
+	if len(exposed) == 0 && len(inv.Warnings) == 0 {
+		b.WriteString("   (none)\n")
+	}
+	for i, p := range exposed {
+		fmt.Fprintf(&b, "   %s :%s/%s · %s\n", branch(i == len(exposed)-1), p.Port, p.Protocol, friendlyPortOwner(p, links[p.Port]))
+	}
+
+	if len(inv.Warnings) > 0 {
+		fmt.Fprintf(&b, "\n⚠️  Warnings (%d)\n", len(inv.Warnings))
+		for i, w := range inv.Warnings {
+			fmt.Fprintf(&b, "   %s %s\n", branch(i == len(inv.Warnings)-1), w)
+		}
+	}
+	return b.String()
+}
+
+// exposedPorts returns only ports bound to public interfaces, preserving order.
+func exposedPorts(all []ports.PortInfo) []ports.PortInfo {
+	var out []ports.PortInfo
+	for _, p := range all {
+		if ports.IsPublicBind(p.Address) {
+			out = append(out, p)
+		}
+	}
+	return out
+}
+
 // RenderMermaid returns a Mermaid graph TD diagram of the inventory.
 func RenderMermaid(inv *Inventory) string {
 	var b strings.Builder

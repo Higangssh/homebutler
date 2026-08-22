@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/Higangssh/homebutler/internal/inventory"
 	"github.com/spf13/cobra"
@@ -24,22 +25,36 @@ func newInventoryCmd() *cobra.Command {
 }
 
 func newInventoryScanCmd() *cobra.Command {
-	return &cobra.Command{
+	var filter string
+	cmd := &cobra.Command{
 		Use:   "scan",
 		Short: "Scan and display current server inventory",
-		RunE:  runInventoryScan,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return runInventoryScan(filter)
+		},
 	}
+	cmd.Flags().StringVar(&filter, "filter", "", "Filter inventory output (supported: exposed)")
+	return cmd
 }
 
 func newInventoryShowCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "show",
 		Short: "Show current server inventory (same as scan)",
-		RunE:  runInventoryScan,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return runInventoryScan("")
+		},
 	}
 }
 
-func runInventoryScan(cmd *cobra.Command, args []string) error {
+func runInventoryScan(filter string) error {
+	if filter != "" && !inventory.IsSupportedFilter(filter) {
+		return fmt.Errorf("unsupported filter %q (supported: %s)", filter, strings.Join(inventory.SupportedFilters(), ", "))
+	}
+	if filter != "" && jsonOutput {
+		return fmt.Errorf("--filter is not supported with --json; JSON output is always the full inventory")
+	}
+
 	if err := loadConfig(); err != nil {
 		return err
 	}
@@ -52,6 +67,16 @@ func runInventoryScan(cmd *cobra.Command, args []string) error {
 	if jsonOutput {
 		return output(inv, true)
 	}
+
+	if filter != "" {
+		out, err := inventory.RenderTreeFiltered(inv, filter)
+		if err != nil {
+			return err
+		}
+		fmt.Print(out)
+		return nil
+	}
+
 	fmt.Print(inventory.RenderTree(inv))
 	return nil
 }
