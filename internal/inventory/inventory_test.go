@@ -301,6 +301,9 @@ func TestRenderTreeFiltered_ExposedShowsWarnings(t *testing.T) {
 	if !strings.Contains(out, "Warnings (1)") || !strings.Contains(out, "failed to list ports") {
 		t.Errorf("filtered view must surface collection warnings instead of a bare '(none)'\n%s", out)
 	}
+	if strings.Contains(out, "(none)") {
+		t.Errorf("(none) must not print when the scan failed; it reads as an authoritative count\n%s", out)
+	}
 }
 
 func TestRenderTreeFiltered_UnsupportedFilter(t *testing.T) {

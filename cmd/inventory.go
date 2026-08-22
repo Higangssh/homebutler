@@ -51,6 +51,9 @@ func runInventoryScan(filter string) error {
 	if filter != "" && !inventory.IsSupportedFilter(filter) {
 		return fmt.Errorf("unsupported filter %q (supported: %s)", filter, strings.Join(inventory.SupportedFilters(), ", "))
 	}
+	if filter != "" && jsonOutput {
+		return fmt.Errorf("--filter is not supported with --json; JSON output is always the full inventory")
+	}
 
 	if err := loadConfig(); err != nil {
 		return err

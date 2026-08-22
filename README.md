@@ -211,7 +211,7 @@ homebutler inventory scan --filter exposed
    └─ :8443/tcp · dashboard
 ```
 
-Only ports bound to a public interface (`0.0.0.0`, `::`, `*`) are shown; loopback listeners are hidden. Unsupported filter values return an error, JSON output is not filtered, and the default `inventory scan` output is unchanged.
+Only ports listening on all interfaces (`0.0.0.0`, `::`, `*`) are shown. Anything bound to a specific address is hidden, including loopback and LAN addresses. Unsupported filter values return an error, as does combining `--filter` with `--json`; the default `inventory scan` output is unchanged.
 
 Use Mermaid export when you want a diagram for GitHub, Obsidian, docs, or an AI assistant:
 

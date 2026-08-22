@@ -108,7 +108,7 @@ func renderExposedPorts(inv *Inventory) string {
 	fmt.Fprintf(&b, "   Server  %s\n", inv.ServerName)
 
 	b.WriteString("\n🌐 Exposed Ports\n")
-	if len(exposed) == 0 {
+	if len(exposed) == 0 && len(inv.Warnings) == 0 {
 		b.WriteString("   (none)\n")
 	}
 	for i, p := range exposed {
