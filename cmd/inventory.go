@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/Higangssh/homebutler/internal/inventory"
 	"github.com/spf13/cobra"
@@ -23,9 +24,11 @@ func newInventoryCmd() *cobra.Command {
 	return invCmd
 }
 
-// addInventoryFilterFlag registers --filter on an inventory command.
+// addInventoryFilterFlag registers --filter on an inventory command. The usage
+// string is derived from SupportedFilters so it cannot go stale.
 func addInventoryFilterFlag(cmd *cobra.Command, filter *string) {
-	cmd.Flags().StringVar(filter, "filter", "", "Filter inventory output (supported: exposed)")
+	usage := fmt.Sprintf("Filter inventory output (supported: %s)", strings.Join(inventory.SupportedFilters(), ", "))
+	cmd.Flags().StringVar(filter, "filter", "", usage)
 }
 
 func newInventoryScanCmd() *cobra.Command {
