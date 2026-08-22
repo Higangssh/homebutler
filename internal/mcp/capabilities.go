@@ -230,6 +230,23 @@ var capabilityRegistry = []capability{
 		},
 	},
 	{
+		// Write rather than read: CheckTargets records the new container state
+		// and saves any incident it detects, so a caller cannot treat this as a
+		// free query the way system_status is.
+		risk:          riskWrite,
+		remoteSupport: true,
+		tool: toolDef{
+			Name:        "watch_check",
+			Description: "Run a one-shot restart check on watched targets and report restarts detected since the last check. Only docker targets can be inspected this way; systemd and pm2 targets are reported as skipped rather than assumed healthy",
+			InputSchema: inputSchema{
+				Type: "object",
+				Properties: map[string]propDef{
+					"server": {Type: "string", Description: "Remote server name from config (optional, runs locally if omitted)"},
+				},
+			},
+		},
+	},
+	{
 		risk:          riskWrite,
 		remoteSupport: true,
 		tool: toolDef{
