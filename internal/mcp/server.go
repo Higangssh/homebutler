@@ -22,6 +22,7 @@ import (
 	"github.com/Higangssh/homebutler/internal/report"
 	"github.com/Higangssh/homebutler/internal/system"
 	"github.com/Higangssh/homebutler/internal/wake"
+	"github.com/Higangssh/homebutler/internal/watch"
 )
 
 // JSON-RPC 2.0 types
@@ -294,6 +295,12 @@ func (s *Server) executeTool(name string, args map[string]any) (any, error) {
 		return doctor.Run(s.cfg, doctor.DefaultCollectFuncs(), doctor.Options{
 			BackupMaxAge: time.Duration(intArg(args, "backup_max_age_hours", 168)) * time.Hour,
 		})
+	case "watch_check":
+		dir, err := watch.WatchDir()
+		if err != nil {
+			return nil, err
+		}
+		return watch.CheckTargets(dir, s.resolveIncidentCap(dir))
 	case "backup_create":
 		backupDir := stringArg(args, "to")
 		if backupDir == "" {
@@ -379,6 +386,26 @@ func (s *Server) executeTool(name string, args map[string]any) (any, error) {
 	}
 }
 
+// resolveIncidentCap resolves the incident retention cap the same way the
+// watch commands do: config.yaml wins over watch/config.json, and an unset
+// value takes the default rather than reading as unlimited.
+//
+// Without this, watch_check would prune on a different rule than `watch check`
+// and `watch start`, and the incident history an agent reads would not match
+// the one the terminal shows.
+func (s *Server) resolveIncidentCap(dir string) int {
+	watchCfg, err := watch.LoadWatchConfig(dir)
+	if err != nil || watchCfg == nil {
+		defaults := watch.DefaultWatchConfig()
+		watchCfg = &defaults
+	}
+	if s.cfg != nil {
+		watchCfg.Retention = s.cfg.Watch.Retention
+	}
+	watchCfg.Retention.Normalize()
+	return watchCfg.Retention.MaxIncidents
+}
+
 func (s *Server) executeRemote(srv *config.ServerConfig, tool string, args map[string]any) (any, error) {
 	// Build remote command args
 	var remoteArgs []string
@@ -422,6 +449,8 @@ func (s *Server) executeRemote(srv *config.ServerConfig, tool string, args map[s
 		}
 	case "doctor":
 		remoteArgs = []string{"doctor", "--json", "--backup-max-age", fmt.Sprintf("%dh", intArg(args, "backup_max_age_hours", 168))}
+	case "watch_check":
+		remoteArgs = []string{"watch", "check", "--json"}
 	case "backup_list":
 		remoteArgs = []string{"backup", "list", "--json"}
 	case "backup_create":

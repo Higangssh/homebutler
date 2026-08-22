@@ -57,7 +57,7 @@ jobs:
           go tool cover -func=coverage.out | tail -1
 
   build:
-    name: Build (${{ matrix.os }})
+    name: Build (${{ matrix.goos }}/${{ matrix.goarch }})
     runs-on: ubuntu-latest
     strategy:
       matrix:
