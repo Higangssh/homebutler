@@ -173,6 +173,7 @@ Findings
 
 ```bash
 homebutler inventory scan
+homebutler inventory show --filter exposed
 homebutler inventory export --format mermaid
 homebutler --json inventory scan
 ```

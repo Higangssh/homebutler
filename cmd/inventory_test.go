@@ -20,3 +20,15 @@ func TestRunInventoryScanRejectsJSONWithFilter(t *testing.T) {
 		t.Errorf("unhelpful error for --filter + --json: %v", err)
 	}
 }
+
+// show advertises "same as scan", so it must accept the same flags.
+func TestNewInventoryShowCmdAcceptsFilter(t *testing.T) {
+	cmd := newInventoryShowCmd()
+	if err := cmd.ParseFlags([]string{"--filter", "exposed"}); err != nil {
+		t.Fatalf("show must accept --filter: %v", err)
+	}
+	got, _ := cmd.Flags().GetString("filter")
+	if got != "exposed" {
+		t.Errorf("show --filter parsed %q, want \"exposed\"", got)
+	}
+}

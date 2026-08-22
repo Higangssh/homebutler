@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"fmt"
-	"strings"
 
 	"github.com/Higangssh/homebutler/internal/inventory"
 	"github.com/spf13/cobra"
@@ -24,6 +23,11 @@ func newInventoryCmd() *cobra.Command {
 	return invCmd
 }
 
+// addInventoryFilterFlag registers --filter on an inventory command.
+func addInventoryFilterFlag(cmd *cobra.Command, filter *string) {
+	cmd.Flags().StringVar(filter, "filter", "", "Filter inventory output (supported: exposed)")
+}
+
 func newInventoryScanCmd() *cobra.Command {
 	var filter string
 	cmd := &cobra.Command{
@@ -33,23 +37,26 @@ func newInventoryScanCmd() *cobra.Command {
 			return runInventoryScan(filter)
 		},
 	}
-	cmd.Flags().StringVar(&filter, "filter", "", "Filter inventory output (supported: exposed)")
+	addInventoryFilterFlag(cmd, &filter)
 	return cmd
 }
 
 func newInventoryShowCmd() *cobra.Command {
-	return &cobra.Command{
+	var filter string
+	cmd := &cobra.Command{
 		Use:   "show",
 		Short: "Show current server inventory (same as scan)",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runInventoryScan("")
+			return runInventoryScan(filter)
 		},
 	}
+	addInventoryFilterFlag(cmd, &filter)
+	return cmd
 }
 
 func runInventoryScan(filter string) error {
 	if filter != "" && !inventory.IsSupportedFilter(filter) {
-		return fmt.Errorf("unsupported filter %q (supported: %s)", filter, strings.Join(inventory.SupportedFilters(), ", "))
+		return inventory.UnsupportedFilterError(filter)
 	}
 	if filter != "" && jsonOutput {
 		return fmt.Errorf("--filter is not supported with --json; JSON output is always the full inventory")
