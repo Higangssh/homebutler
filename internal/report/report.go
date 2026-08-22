@@ -130,7 +130,7 @@ func buildSnapshot(inv *inventory.Inventory) *Snapshot {
 func countPublicPorts(pp []ports.PortInfo) int {
 	count := 0
 	for _, p := range pp {
-		if p.Address == "*" || p.Address == "0.0.0.0" || p.Address == "::" {
+		if ports.IsPublicBind(p.Address) {
 			count++
 		}
 	}
