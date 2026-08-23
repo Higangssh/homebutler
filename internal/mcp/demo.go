@@ -1,6 +1,10 @@
 package mcp
 
-import "fmt"
+import (
+	"fmt"
+
+	"github.com/Higangssh/homebutler/internal/install"
+)
 
 func (s *Server) executeDemoTool(name string, args map[string]any) (any, error) {
 	server := stringArg(args, "server")
@@ -10,6 +14,8 @@ func (s *Server) executeDemoTool(name string, args map[string]any) (any, error) 
 		return demoStatus(server), nil
 	case "docker_list":
 		return demoDocker(server), nil
+	case "docker_stats":
+		return demoDockerStats(server), nil
 	case "docker_restart":
 		cname, ok := requireString(args, "name")
 		if !ok {
@@ -120,8 +126,77 @@ func (s *Server) executeDemoTool(name string, args map[string]any) (any, error) 
 			return nil, fmt.Errorf("missing required parameter: archive")
 		}
 		return map[string]any{"archive": archive, "services": []string{"demo"}, "volumes": 1}, nil
+	case "install_list":
+		// The catalogue is a static map compiled into the binary, so demo mode
+		// can answer this truthfully instead of inventing apps that would drift
+		// away from the real list.
+		return install.List(), nil
+
+	case "install_status":
+		app := stringArg(args, "app")
+		if _, ok := install.Registry[app]; !ok {
+			return nil, fmt.Errorf("unknown app %q, use install_list to see available apps", app)
+		}
+		return map[string]any{"app": app, "state": "running"}, nil
+
+	case "install_app":
+		app := stringArg(args, "app")
+		a, ok := install.Registry[app]
+		if !ok {
+			return nil, fmt.Errorf("unknown app %q, use install_list to see available apps", app)
+		}
+		port := a.DefaultPort
+		if p := stringArg(args, "port"); p != "" {
+			port = p
+		}
+		return map[string]any{
+			"status": "installed",
+			"app":    a.Name,
+			"port":   port,
+			"path":   "/home/demo/.homebutler/apps/" + a.Name,
+			"state":  "running",
+		}, nil
+
+	case "install_uninstall":
+		app := stringArg(args, "app")
+		if _, ok := install.Registry[app]; !ok {
+			return nil, fmt.Errorf("unknown app %q, use install_list to see available apps", app)
+		}
+		return map[string]any{"status": "uninstalled", "app": app, "data_preserved": true}, nil
+
+	case "install_purge":
+		app := stringArg(args, "app")
+		if _, ok := install.Registry[app]; !ok {
+			return nil, fmt.Errorf("unknown app %q, use install_list to see available apps", app)
+		}
+		return map[string]any{"status": "purged", "app": app}, nil
+
 	default:
 		return nil, fmt.Errorf("unknown tool: %s", name)
+	}
+}
+
+// demoDockerStats mirrors demoDocker's containers so the two tools do not
+// describe different machines.
+func demoDockerStats(server string) []map[string]any {
+	switch server {
+	case "nas-box":
+		return []map[string]any{
+			{"id": "aa11bb22cc33", "name": "samba", "cpu_percent": "0.42%", "mem_usage": "88MiB / 8GiB", "mem_percent": "1.07%", "net_io": "1.2GB / 340MB", "block_io": "820MB / 4.1GB", "pids": "12"},
+			{"id": "dd44ee55ff66", "name": "plex", "cpu_percent": "18.30%", "mem_usage": "1.4GiB / 8GiB", "mem_percent": "17.50%", "net_io": "44GB / 2.1GB", "block_io": "12GB / 900MB", "pids": "48"},
+		}
+	case "raspberry-pi":
+		return []map[string]any{
+			{"id": "pi11pi22pi33", "name": "pihole", "cpu_percent": "1.10%", "mem_usage": "76MiB / 1GiB", "mem_percent": "7.42%", "net_io": "3.4GB / 2.9GB", "block_io": "120MB / 640MB", "pids": "9"},
+		}
+	default:
+		return []map[string]any{
+			{"id": "a1b2c3d4e5f6", "name": "nginx", "cpu_percent": "0.15%", "mem_usage": "24MiB / 16GiB", "mem_percent": "0.15%", "net_io": "890MB / 1.1GB", "block_io": "12MB / 8MB", "pids": "5"},
+			{"id": "b2c3d4e5f6a1", "name": "postgres", "cpu_percent": "2.80%", "mem_usage": "412MiB / 16GiB", "mem_percent": "2.51%", "net_io": "220MB / 180MB", "block_io": "3.4GB / 9.8GB", "pids": "21"},
+			{"id": "c3d4e5f6a1b2", "name": "redis", "cpu_percent": "0.60%", "mem_usage": "38MiB / 16GiB", "mem_percent": "0.23%", "net_io": "140MB / 96MB", "block_io": "44MB / 12MB", "pids": "6"},
+			{"id": "d4e5f6a1b2c3", "name": "grafana", "cpu_percent": "1.90%", "mem_usage": "186MiB / 16GiB", "mem_percent": "1.13%", "net_io": "310MB / 420MB", "block_io": "88MB / 210MB", "pids": "14"},
+			{"id": "e5f6a1b2c3d4", "name": "prometheus", "cpu_percent": "4.20%", "mem_usage": "740MiB / 16GiB", "mem_percent": "4.51%", "net_io": "1.8GB / 640MB", "block_io": "5.2GB / 14GB", "pids": "17"},
+		}
 	}
 }
 
