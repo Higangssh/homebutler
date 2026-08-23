@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"syscall"
 	"time"
@@ -14,6 +15,7 @@ import (
 	"github.com/Higangssh/homebutler/internal/alerts"
 	"github.com/Higangssh/homebutler/internal/config"
 	"github.com/Higangssh/homebutler/internal/docker"
+	"github.com/Higangssh/homebutler/internal/watch"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v3"
@@ -314,13 +316,75 @@ func runSelfHealingWatch(interval time.Duration, rulesCfg *alerts.AlertsConfig) 
 		cancel()
 	}()
 
+	warnUnprivilegedSystemdRules(rulesCfg)
+
 	fmt.Fprintf(os.Stderr, "🛡️ Self-Healing active — watching %d rules (interval: %s, Ctrl+C to stop)\n\n",
 		len(rulesCfg.Rules), interval)
 
-	events := alerts.WatchRules(ctx, interval, rulesCfg)
+	// Restarting a target that is already in a restart loop feeds the loop, so
+	// the playbook asks the recorded incident history before acting. A watch
+	// directory that cannot be resolved means no history to consult, not a
+	// reason to refuse to run.
+	var flap alerts.FlapChecker
+	if dir, err := watch.WatchDir(); err == nil {
+		flap = watch.IncidentHistory{Dir: dir, Flapping: resolveFlappingConfig(dir)}
+	}
+
+	events := alerts.WatchRules(ctx, interval, rulesCfg, flap)
 	for e := range events {
 		fmt.Println(e)
 	}
 	fmt.Fprintln(os.Stderr, "\n👋 Stopped watching.")
 	return nil
+}
+
+// resolveFlappingConfig resolves the flapping thresholds the way `watch start`
+// does: config.yaml wins over watch/config.json, defaults fill the rest. The
+// two must not disagree about what counts as flapping, or a target would be
+// suppressed by one command and restarted by the other.
+func resolveFlappingConfig(dir string) watch.FlappingConfig {
+	watchCfg, err := watch.LoadWatchConfig(dir)
+	if err != nil || watchCfg == nil {
+		d := watch.DefaultWatchConfig()
+		watchCfg = &d
+	}
+	if cfg != nil {
+		watchCfg.Flapping = cfg.Watch.Flapping
+	}
+	return watchCfg.Flapping
+}
+
+// warnUnprivilegedSystemdRules says up front that a systemd restart rule will
+// not work, rather than letting the user find out when it matters.
+//
+// systemctl restart needs root or a polkit rule. A remediation that silently
+// no-ops is worse than one that was never configured, and the moment it fires
+// is the worst time to discover the problem.
+func warnUnprivilegedSystemdRules(rulesCfg *alerts.AlertsConfig) {
+	if rulesCfg == nil || runtime.GOOS == "windows" || os.Geteuid() == 0 {
+		return
+	}
+
+	var names []string
+	for _, rule := range rulesCfg.Rules {
+		if rule.Action == "restart" && rule.EffectiveKind() == watch.KindSystemd {
+			names = append(names, rule.Name)
+		}
+	}
+	if len(names) == 0 {
+		return
+	}
+
+	fmt.Fprintf(os.Stderr,
+		"⚠️  %s restart systemd units but homebutler is not running as root: %s\n"+
+			"   systemctl will refuse, and the restart will be reported as failed.\n"+
+			"   Run as root, or grant a polkit rule for the units involved.\n\n",
+		plural(len(names), "rule"), strings.Join(names, ", "))
+}
+
+func plural(n int, noun string) string {
+	if n == 1 {
+		return "1 " + noun + " will"
+	}
+	return fmt.Sprintf("%d %ss will", n, noun)
 }

@@ -41,7 +41,7 @@ func TestIsDangerousCommandAllowed(t *testing.T) {
 
 func TestExecuteActionNotify(t *testing.T) {
 	rule := Rule{Action: "notify"}
-	result := ExecuteAction(rule)
+	result := ExecuteAction(rule, nil)
 	if !result.Success {
 		t.Error("notify action should succeed")
 	}
@@ -52,7 +52,7 @@ func TestExecuteActionNotify(t *testing.T) {
 
 func TestExecuteActionExecSafe(t *testing.T) {
 	rule := Rule{Action: "exec", Exec: "echo hello"}
-	result := ExecuteAction(rule)
+	result := ExecuteAction(rule, nil)
 	if !result.Success {
 		t.Errorf("exec 'echo hello' should succeed: %s", result.Output)
 	}
@@ -63,7 +63,7 @@ func TestExecuteActionExecSafe(t *testing.T) {
 
 func TestExecuteActionExecDangerous(t *testing.T) {
 	rule := Rule{Action: "exec", Exec: "rm -rf /"}
-	result := ExecuteAction(rule)
+	result := ExecuteAction(rule, nil)
 	if result.Success {
 		t.Error("dangerous command should be blocked")
 	}
@@ -74,7 +74,7 @@ func TestExecuteActionExecDangerous(t *testing.T) {
 
 func TestExecuteActionExecEmpty(t *testing.T) {
 	rule := Rule{Action: "exec", Exec: ""}
-	result := ExecuteAction(rule)
+	result := ExecuteAction(rule, nil)
 	if result.Success {
 		t.Error("empty exec should fail")
 	}
@@ -82,7 +82,7 @@ func TestExecuteActionExecEmpty(t *testing.T) {
 
 func TestExecuteActionUnknown(t *testing.T) {
 	rule := Rule{Action: "unknown"}
-	result := ExecuteAction(rule)
+	result := ExecuteAction(rule, nil)
 	if result.Success {
 		t.Error("unknown action should fail")
 	}
@@ -127,7 +127,7 @@ func TestCooldownTrackerExpired(t *testing.T) {
 
 func TestExecuteRestartNoContainers(t *testing.T) {
 	rule := Rule{Action: "restart", Watch: nil}
-	result := ExecuteAction(rule)
+	result := ExecuteAction(rule, nil)
 	if result.Success {
 		t.Error("restart with no containers should fail")
 	}
@@ -135,7 +135,7 @@ func TestExecuteRestartNoContainers(t *testing.T) {
 
 func TestExecTimeout(t *testing.T) {
 	rule := Rule{Action: "exec", Exec: "sleep 10", Timeout: "1s"}
-	result := ExecuteAction(rule)
+	result := ExecuteAction(rule, nil)
 	if result.Success {
 		t.Error("long-running command should fail with timeout")
 	}
@@ -146,7 +146,7 @@ func TestExecTimeout(t *testing.T) {
 
 func TestExecDefaultTimeout(t *testing.T) {
 	rule := Rule{Action: "exec", Exec: "echo fast"}
-	result := ExecuteAction(rule)
+	result := ExecuteAction(rule, nil)
 	if !result.Success {
 		t.Errorf("fast command should succeed: %s", result.Output)
 	}
@@ -154,7 +154,7 @@ func TestExecDefaultTimeout(t *testing.T) {
 
 func TestExecCustomTimeout(t *testing.T) {
 	rule := Rule{Action: "exec", Exec: "echo ok", Timeout: "5s"}
-	result := ExecuteAction(rule)
+	result := ExecuteAction(rule, nil)
 	if !result.Success {
 		t.Errorf("command should succeed within timeout: %s", result.Output)
 	}
@@ -194,8 +194,65 @@ func TestIsDangerousCommandComment(t *testing.T) {
 func TestExecWithStrings(t *testing.T) {
 	// Verify the strings import is used
 	rule := Rule{Action: "exec", Exec: "echo hello"}
-	result := ExecuteAction(rule)
+	result := ExecuteAction(rule, nil)
 	if result.Output != "hello" {
 		t.Errorf("expected 'hello', got %q", result.Output)
+	}
+}
+
+// fakeFlap reports the listed targets as flapping.
+type fakeFlap map[string]bool
+
+func (f fakeFlap) IsFlapping(target string) bool { return f[target] }
+
+// Restarting something already in a restart loop feeds the loop. Most systemd
+// units carry Restart=always, so homebutler restarting them is redundant at
+// best and fighting systemd's backoff at worst.
+func TestRestartSkipsAFlappingTarget(t *testing.T) {
+	rule := Rule{
+		Name:   "elsa-down",
+		Action: "restart",
+		Kind:   "systemd",
+		Watch:  []string{"lh-elsa-monitor.service"},
+	}
+
+	res := ExecuteAction(rule, fakeFlap{"lh-elsa-monitor.service": true})
+
+	if res.Success {
+		t.Error("nothing was restarted, so this must not report success")
+	}
+	if !strings.Contains(res.Output, "skipped while flapping") {
+		t.Errorf("the output should say why nothing happened, got %q", res.Output)
+	}
+	if strings.Contains(res.Output, "failed") {
+		t.Errorf("a suppressed restart is not a failure, got %q", res.Output)
+	}
+}
+
+// A rule with no kind is a rule written before kind existed, and it has to
+// keep meaning exactly what it meant.
+func TestRuleKindDefaultsToDocker(t *testing.T) {
+	if got := (Rule{}).EffectiveKind(); got != "docker" {
+		t.Errorf("EffectiveKind() = %q, want docker", got)
+	}
+	if got := (Rule{Kind: "systemd"}).EffectiveKind(); got != "systemd" {
+		t.Errorf("EffectiveKind() = %q, want systemd", got)
+	}
+}
+
+// An unknown kind is refused before anything is run, and the message lists
+// what would have worked.
+func TestRestartRejectsAnUnknownKind(t *testing.T) {
+	rule := Rule{Name: "k8s", Action: "restart", Kind: "kubernetes", Watch: []string{"pod"}}
+
+	res := ExecuteAction(rule, nil)
+
+	if res.Success {
+		t.Error("an unknown kind must not report success")
+	}
+	for _, want := range []string{"kubernetes", "docker", "systemd", "pm2"} {
+		if !strings.Contains(res.Output, want) {
+			t.Errorf("output should mention %q, got %q", want, res.Output)
+		}
 	}
 }

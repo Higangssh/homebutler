@@ -199,7 +199,8 @@ func FormatEvent(e Event) string {
 
 // WatchRules runs the self-healing watch loop using YAML-defined rules.
 // Returns a channel of formatted log lines. Cancel the context to stop.
-func WatchRules(ctx context.Context, interval time.Duration, rulesCfg *AlertsConfig) <-chan string {
+// flap may be nil, which disables flapping suppression on restart actions.
+func WatchRules(ctx context.Context, interval time.Duration, rulesCfg *AlertsConfig, flap FlapChecker) <-chan string {
 	ch := make(chan string, 32)
 
 	go func() {
@@ -207,7 +208,7 @@ func WatchRules(ctx context.Context, interval time.Duration, rulesCfg *AlertsCon
 		cooldowns := newCooldownTracker()
 
 		// Check immediately
-		evaluateRules(rulesCfg, cooldowns, ch)
+		evaluateRules(rulesCfg, cooldowns, ch, flap)
 
 		ticker := time.NewTicker(interval)
 		defer ticker.Stop()
@@ -217,7 +218,7 @@ func WatchRules(ctx context.Context, interval time.Duration, rulesCfg *AlertsCon
 			case <-ctx.Done():
 				return
 			case <-ticker.C:
-				evaluateRules(rulesCfg, cooldowns, ch)
+				evaluateRules(rulesCfg, cooldowns, ch, flap)
 			}
 		}
 	}()
@@ -225,7 +226,7 @@ func WatchRules(ctx context.Context, interval time.Duration, rulesCfg *AlertsCon
 	return ch
 }
 
-func evaluateRules(rulesCfg *AlertsConfig, cooldowns *cooldownTracker, ch chan<- string) {
+func evaluateRules(rulesCfg *AlertsConfig, cooldowns *cooldownTracker, ch chan<- string, flap FlapChecker) {
 	now := time.Now()
 	ts := now.Format("15:04:05")
 
@@ -307,7 +308,7 @@ func evaluateRules(rulesCfg *AlertsConfig, cooldowns *cooldownTracker, ch chan<-
 		ch <- fmt.Sprintf("  ⏱️  %s  %s  %s triggered (%s)", ts, icon, rule.Name, details)
 
 		// Execute action
-		result := ExecuteAction(rule)
+		result := ExecuteAction(rule, flap)
 		resultStatus := "success"
 		if !result.Success {
 			resultStatus = "failed"

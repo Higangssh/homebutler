@@ -354,7 +354,37 @@ alerts:
       metric: cpu
       threshold: 90
       action: notify
+
+    - name: elsa-monitor-down
+      metric: container
+      kind: systemd          # docker (default) | systemd | pm2
+      watch: [lh-elsa-monitor.service]
+      action: restart
 ```
+
+### Restarting things that are not containers
+
+`action: restart` restarts Docker containers unless the rule says otherwise.
+`kind: systemd` or `kind: pm2` points it at a service or a PM2 app instead.
+
+The kind is written on the rule rather than looked up from the watch list, so
+restarting a host service is something you asked for in the config. It also
+means every rule written before `kind` existed keeps meaning exactly what it
+meant.
+
+Two things worth knowing before using it:
+
+**`systemctl restart` needs root or a polkit rule.** Running homebutler
+unprivileged, a systemd restart will be refused, reported as failed, and
+warned about when `alerts --watch` starts rather than when the rule first
+fires.
+
+**A target that is flapping is not restarted.** Restarting something already
+in a restart loop feeds the loop, and most systemd units carry
+`Restart=always`, so homebutler restarting them fights systemd's own backoff.
+The thresholds are the `watch.flapping` ones above, and the skip is reported
+rather than counted as either success or failure. This applies to Docker
+targets too.
 
 Legacy `~/.homebutler/watch/config.json` is still read as a fallback for watch-specific settings, and legacy `alerts.yaml` notify/webhook provider settings are still accepted for older setups.
 
