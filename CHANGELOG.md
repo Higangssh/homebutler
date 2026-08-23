@@ -2,6 +2,23 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.21.2](https://github.com/Higangssh/homebutler/compare/v0.21.1...v0.21.2) - 2026-08-23
+
+**Second attempt at the MCP Registry listing.** v0.21.1 cleared the description limit and was then rejected with a 403: the registry grants publish rights to `io.github.<login>/*` from the GitHub OIDC token and keeps the login's casing, while `server.json` claimed `io.github.higangssh/homebutler` against a grant for `io.github.Higangssh/*`.
+
+```bash
+npx -y homebutler@latest
+```
+
+### 🐛 Fixes
+
+- declare the server namespace with the repository owner's actual casing, in both `server.json` and the `mcpName` the npm package carries. The registry reads `mcpName` to confirm ownership of the package, so correcting one without the other would have traded the 403 for a different rejection at the same step. Nothing else about v0.21.1 changes
+
+### 🧪 Tests
+
+- derive the expected namespace from `repository.url` and assert `server.json` matches it, casing included
+- assert the npm package's `mcpName` and the server name agree
+
 ## [0.21.1](https://github.com/Higangssh/homebutler/compare/v0.21.0...v0.21.1) - 2026-08-23
 
 **Patch release to complete the MCP Registry listing.** v0.21.0 published its binaries, Homebrew tap and npm package, then failed on the last step of the release: the registry rejected a `server.json` description three characters over its 100-character limit. That step shipped in v0.21.0 itself, so the rejection means homebutler has never appeared in the registry at all.
