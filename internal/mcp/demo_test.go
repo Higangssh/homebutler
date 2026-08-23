@@ -92,3 +92,47 @@ func TestEveryAdvertisedToolHasADemoImplementation(t *testing.T) {
 		}
 	}
 }
+
+// The arguments have to reach the demo the same way they reach the real tool.
+// A demo that ignored include_logs would teach the opposite of what that
+// argument is for, since the whole point is that the expensive shape is opt-in.
+func TestDemoWatchHistoryHonoursItsArguments(t *testing.T) {
+	s := NewServer(&config.Config{}, "dev", true)
+
+	call := func(args map[string]any) []map[string]any {
+		t.Helper()
+		got, err := s.executeDemoTool("watch_history", args)
+		if err != nil {
+			t.Fatalf("watch_history%v: %v", args, err)
+		}
+		list, ok := got.([]map[string]any)
+		if !ok {
+			t.Fatalf("watch_history returned %T, want a list", got)
+		}
+		return list
+	}
+
+	if n := len(call(map[string]any{"limit": "2"})); n != 2 {
+		t.Errorf("limit 2 returned %d incidents", n)
+	}
+
+	withoutLogs := call(map[string]any{"limit": "1"})
+	if _, ok := withoutLogs[0]["pre_logs"]; ok {
+		t.Error("logs must be absent unless include_logs is set")
+	}
+
+	withLogs := call(map[string]any{"limit": "1", "include_logs": true})
+	if _, ok := withLogs[0]["pre_logs"]; !ok {
+		t.Error("include_logs must bring the captured logs back")
+	}
+
+	filtered := call(map[string]any{"container": "postgres"})
+	if len(filtered) == 0 {
+		t.Fatal("container filter returned nothing; the demo data no longer has a postgres incident")
+	}
+	for _, inc := range filtered {
+		if inc["container"] != "postgres" {
+			t.Errorf("container filter returned an incident for %v", inc["container"])
+		}
+	}
+}
