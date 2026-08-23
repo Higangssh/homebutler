@@ -262,3 +262,32 @@ func join(ss []string) string {
 	}
 	return result
 }
+
+// countPublicPorts must agree with ports.IsPublicBind. It used to compare
+// addresses inline, missing bracketed IPv6 and the empty address, so report
+// and doctor could disagree about the same port.
+func TestCountPublicPortsMatchesIsPublicBind(t *testing.T) {
+	pp := []ports.PortInfo{
+		{Port: "80", Address: "0.0.0.0"},
+		{Port: "443", Address: "::"},
+		{Port: "8080", Address: "*"},
+		{Port: "8443", Address: "[::]"},
+		{Port: "9000", Address: ""},
+		{Port: "5432", Address: "127.0.0.1"},
+		{Port: "6379", Address: "192.168.1.10"},
+	}
+
+	want := 0
+	for _, p := range pp {
+		if ports.IsPublicBind(p.Address) {
+			want++
+		}
+	}
+	if want != 5 {
+		t.Fatalf("fixture no longer exercises the cases it was written for: %d public binds", want)
+	}
+
+	if got := countPublicPorts(pp); got != want {
+		t.Errorf("countPublicPorts = %d, ports.IsPublicBind classifies %d as public", got, want)
+	}
+}

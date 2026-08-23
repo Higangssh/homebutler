@@ -73,8 +73,12 @@ func (s *Server) Handler() http.Handler {
 
 // Run starts the HTTP server.
 func (s *Server) Run() error {
-	if s.host == "0.0.0.0" {
-		fmt.Fprintln(os.Stderr, "⚠️  WARNING: binding to 0.0.0.0 exposes the dashboard to all network interfaces.")
+	if ports.IsPublicBind(s.host) {
+		bound := s.host
+		if bound == "" {
+			bound = "all interfaces"
+		}
+		fmt.Fprintf(os.Stderr, "⚠️  WARNING: binding to %s exposes the dashboard to all network interfaces.\n", bound)
 		if s.token == "" {
 			fmt.Fprintln(os.Stderr, "   Consider using --token to require authentication.")
 		}
