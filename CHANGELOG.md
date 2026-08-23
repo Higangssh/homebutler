@@ -2,6 +2,55 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.22.0](https://github.com/Higangssh/homebutler/compare/v0.21.2...v0.22.0) - 2026-08-24
+
+**Two guards that were never running now run.** `watch` could detect a systemd or pm2 incident and had no way to act on one, so `action: restart` on a service failed with a docker error about a container that does not exist. And `config.Load` refuses a world-readable config holding plaintext secrets, but only ever looked at `servers[].password` — a config whose only credential was a Telegram bot token or a Slack webhook was never checked at all, which is the common case rather than a rare one.
+
+```bash
+homebutler inventory show --filter exposed
+homebutler watch history --limit 10 --container nginx
+homebutler watch list --json
+```
+
+### ✨ Features
+
+- restart systemd units and pm2 apps from an alert rule. A rule carries `kind: docker` (default), `systemd` or `pm2`, written on the rule rather than resolved from the watch list so that restarting a host service is something asked for in the config rather than implied by a name appearing in another file (#49)
+- warn at `alerts --watch` startup when a systemd restart rule is configured and homebutler is not running as root, rather than leaving it to be discovered when the rule first fires. `systemctl` needs root or a polkit rule, and a remediation that silently no-ops is worse than one that was never configured
+- expose `watch_history`, `watch_list`, `processes` and `config_validate` over MCP, closing the gap where the README's own "why did this service restart at 3 AM?" was the question an agent could not ask (#54)
+- add `--json` to `watch list`, which only ever printed a table, and `--limit`, `--container` and `--logs` to `watch history`
+- accept `--filter` on `inventory show`, which advertised "same as scan" while rejecting the flag (#60, thanks @lenny-ts)
+- record which collector failed in `Inventory.Failed` and the report snapshot, so an empty result can be told from a missing one. The exposed filter now withholds its `(none)` line only when the port scan itself failed, rather than whenever anything did (#69)
+
+### 🐛 Fixes
+
+- check permissions on a config whose only credential is a notification token. `hasSecrets` now walks the config for fields declaring themselves secret instead of naming the ones it knows, so the next credential-bearing section is covered by tagging its field rather than by remembering a list somewhere else (#61)
+- tag credential fields `json:"-"` so they cannot be serialized at all. Nothing serializes a config today, but that was a property of the call sites rather than of the types
+- collapse the two lists of supported inventory filters into one. Adding a filter to the slice and forgetting the renderer produced `unsupported filter "listening" (supported: exposed, listening)` — an error naming the value it had just rejected (#60, thanks @lenny-ts)
+
+### ⚠️ Behavior changes
+
+- **A config holding a notification credential with permissions looser than `0600` is now refused on load.** Telegram, Slack, Discord and generic webhook credentials all count. This check has always existed; it simply never ran for these fields. If homebutler starts refusing a config it used to accept, `chmod 600` it — the credential was readable by every user on the machine
+- **A target that is flapping is no longer restarted automatically, including Docker targets.** Restarting something already in a restart loop feeds the loop, and most systemd units carry `Restart=always`, so homebutler restarting them fights systemd's own backoff. The thresholds are the existing `watch.flapping` ones, and the skip is reported rather than counted as either success or failure
+- **`homebutler inventory scan --filter exposed` prints `(none)` in cases where it previously printed nothing.** It used to withhold the line whenever any collector had failed, so a host with Docker down and a healthy port scan finding nothing exposed was told nothing at all
+- `watch list` says "No targets being watched" rather than "No containers", matching the rest of the command since systemd and pm2 support landed
+
+### 📝 Documentation
+
+- add `SECURITY.md` and enable private vulnerability reporting. Until now, anyone finding a vulnerability had a choice between a public issue and an email address the repository does not publish
+- write down in `CONTRIBUTING.md` what homebutler accepts: the two-tier bar, what a new target has to prove, and what is waiting until 1.0
+- document what is deliberately not exposed over MCP — `trust`, `upgrade`, the daemons, and `deploy` — so the omissions read as decisions
+- document the `kind` field, the privilege requirement and the flapping interaction in the README
+
+### ♻️ Internal
+
+- make the MCP capability registry decide what a tool can be pointed at. `remoteSupport` read as the gate and was not one: nothing consulted it, and the real decision lived in the argv switch. They agreed by coincidence; they now agree structurally, before 1.0 freezes the surface (#56)
+- fix demo mode advertising six tools it could not run (#56)
+- give `report` and `doctor` the same answer about which ports are public (#57)
+
+### 📦 Distribution
+
+- validate the MCP Registry manifest before anything is published. v0.21.0 and v0.21.1 each spent a tag learning one rejection, because the only thing that read `server.json` was the registry itself, in the last step of the release, after the binaries and the npm package had already gone out
+
 ## [0.21.2](https://github.com/Higangssh/homebutler/compare/v0.21.1...v0.21.2) - 2026-08-23
 
 **Second attempt at the MCP Registry listing.** v0.21.1 cleared the description limit and was then rejected with a 403: the registry grants publish rights to `io.github.<login>/*` from the GitHub OIDC token and keeps the login's casing, while `server.json` claimed `io.github.higangssh/homebutler` against a grant for `io.github.Higangssh/*`.
