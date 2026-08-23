@@ -337,15 +337,16 @@ func TestIsSupportedFilter(t *testing.T) {
 }
 
 // Pins the single-source-of-truth invariant: everything SupportedFilters()
-// lists must be accepted by the renderer, so the two can never disagree.
+// lists must be accepted by the renderer and by IsSupportedFilter, so the
+// three can never disagree.
 func TestRenderTreeFiltered_AgreesWithSupportedFilters(t *testing.T) {
 	for _, f := range SupportedFilters() {
 		if _, err := RenderTreeFiltered(&Inventory{ServerName: "lab"}, f); err != nil {
 			t.Errorf("SupportedFilters() lists %q but RenderTreeFiltered rejects it: %v", f, err)
 		}
-	}
-	if !IsSupportedFilter(SupportedFilters()[0]) {
-		t.Error("first supported filter is not accepted by IsSupportedFilter")
+		if !IsSupportedFilter(f) {
+			t.Errorf("SupportedFilters() lists %q but IsSupportedFilter rejects it", f)
+		}
 	}
 }
 

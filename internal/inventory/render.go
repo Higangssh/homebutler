@@ -74,7 +74,11 @@ func RenderTree(inv *Inventory) string {
 // filterRenderers is the single source of truth for supported filters.
 // Registering an entry here wires up validation, listing, dispatch, and the
 // error message everywhere, with no second list to drift out of sync.
+// Describe each filter's semantics on its entry: this map is the one place a
+// reader of the exported API can see what each value means.
 var filterRenderers = map[string]func(*Inventory) string{
+	// "exposed" shows only ports listening on all interfaces (0.0.0.0, ::, *);
+	// anything bound to a specific address is hidden.
 	"exposed": renderExposedPorts,
 }
 
