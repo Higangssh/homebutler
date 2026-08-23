@@ -2,6 +2,7 @@ package mcp
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/Higangssh/homebutler/internal/install"
 )
@@ -103,6 +104,21 @@ func (s *Server) executeDemoTool(name string, args map[string]any) (any, error) 
 				{"name": "caddy.service", "kind": "systemd"},
 			},
 		}, nil
+
+	case "watch_history":
+		return demoWatchHistory(args), nil
+
+	case "watch_list":
+		// Mirrors demoWatchHistory's targets, and carries a systemd entry with
+		// no last_checked: watch check cannot inspect those, so a caller that
+		// only ever saw polled docker targets would not learn that some of the
+		// list is only covered while watch start is running.
+		return []map[string]any{
+			{"container": "nextcloud", "kind": "docker", "added_at": "2026-04-12 09:31:00", "restart_count": 3, "last_checked": "2026-04-30 12:00:00"},
+			{"container": "postgres", "kind": "docker", "added_at": "2026-04-12 09:31:12", "restart_count": 0, "last_checked": "2026-04-30 12:00:00"},
+			{"container": "caddy.service", "kind": "systemd", "added_at": "2026-04-18 22:04:00", "restart_count": 0},
+		}, nil
+
 	case "backup_create":
 		service := stringArg(args, "service")
 		if service == "" {
@@ -354,4 +370,65 @@ func demoAlerts(server string) map[string]any {
 			},
 		}
 	}
+}
+
+// demoWatchHistory honours limit, container and include_logs so a caller can
+// see what those arguments actually do. A demo that ignored them would teach
+// the wrong thing about the tool it is demonstrating — particularly
+// include_logs, whose whole purpose is that the expensive shape is opt-in.
+func demoWatchHistory(args map[string]any) []map[string]any {
+	incidents := []map[string]any{
+		{
+			"id": "demo-nextcloud-20260430T120000Z", "container": "nextcloud",
+			"detected_at": "2026-04-30T12:00:00Z", "restart_count": 3,
+			"prev_started_at": "2026-04-30T09:14:02Z", "curr_started_at": "2026-04-30T11:58:41Z",
+			"pre_logs":  "PHP Fatal error: Allowed memory size exhausted",
+			"post_logs": "MySQL server has gone away\nRetrying connection (1/5)",
+		},
+		{
+			"id": "demo-nextcloud-20260429T031500Z", "container": "nextcloud",
+			"detected_at": "2026-04-29T03:15:00Z", "restart_count": 2,
+			"prev_started_at": "2026-04-28T20:02:11Z", "curr_started_at": "2026-04-29T03:14:47Z",
+			"pre_logs":  "Redis connection refused",
+			"post_logs": "Starting apache2",
+		},
+		{
+			"id": "demo-postgres-20260427T181200Z", "container": "postgres",
+			"detected_at": "2026-04-27T18:12:00Z", "restart_count": 1,
+			"prev_started_at": "2026-04-20T11:00:00Z", "curr_started_at": "2026-04-27T18:11:30Z",
+			"pre_logs":  "received fast shutdown request",
+			"post_logs": "database system is ready to accept connections",
+		},
+	}
+
+	if c := stringArg(args, "container"); c != "" {
+		filtered := incidents[:0:0]
+		for _, inc := range incidents {
+			if strings.EqualFold(inc["container"].(string), c) {
+				filtered = append(filtered, inc)
+			}
+		}
+		incidents = filtered
+	}
+
+	if n := intArg(args, "limit", 10); n > 0 && len(incidents) > n {
+		incidents = incidents[:n]
+	}
+
+	if !boolArg(args, "include_logs") {
+		stripped := make([]map[string]any, 0, len(incidents))
+		for _, inc := range incidents {
+			c := make(map[string]any, len(inc))
+			for k, v := range inc {
+				if k == "pre_logs" || k == "post_logs" {
+					continue
+				}
+				c[k] = v
+			}
+			stripped = append(stripped, c)
+		}
+		incidents = stripped
+	}
+
+	return incidents
 }

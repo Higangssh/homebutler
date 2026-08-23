@@ -312,6 +312,22 @@ func (s *Server) executeTool(name string, args map[string]any) (any, error) {
 			return nil, err
 		}
 		return watch.CheckTargets(dir, s.resolveIncidentCap(dir))
+	case "watch_history":
+		dir, err := watch.WatchDir()
+		if err != nil {
+			return nil, err
+		}
+		return watch.History(dir, watch.HistoryOptions{
+			Limit:     intArg(args, "limit", 10),
+			Container: stringArg(args, "container"),
+			Logs:      boolArg(args, "include_logs"),
+		})
+	case "watch_list":
+		dir, err := watch.WatchDir()
+		if err != nil {
+			return nil, err
+		}
+		return watch.ListWatched(dir)
 	case "backup_create":
 		backupDir := stringArg(args, "to")
 		if backupDir == "" {
@@ -462,6 +478,20 @@ func (s *Server) executeRemote(srv *config.ServerConfig, tool string, args map[s
 		remoteArgs = []string{"doctor", "--json", "--backup-max-age", fmt.Sprintf("%dh", intArg(args, "backup_max_age_hours", 168))}
 	case "watch_check":
 		remoteArgs = []string{"watch", "check", "--json"}
+	case "watch_history":
+		// The flags go over rather than being applied to the response, so the
+		// remote answer is the same shape the local one is and the logs are
+		// left on the remote host unless they were asked for.
+		remoteArgs = []string{"watch", "history", "--json",
+			"--limit", strconv.Itoa(intArg(args, "limit", 10))}
+		if c := stringArg(args, "container"); c != "" {
+			remoteArgs = append(remoteArgs, "--container", c)
+		}
+		if boolArg(args, "include_logs") {
+			remoteArgs = append(remoteArgs, "--logs")
+		}
+	case "watch_list":
+		remoteArgs = []string{"watch", "list", "--json"}
 	case "backup_list":
 		remoteArgs = []string{"backup", "list", "--json"}
 	case "backup_create":

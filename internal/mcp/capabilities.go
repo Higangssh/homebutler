@@ -279,6 +279,37 @@ var capabilityRegistry = []capability{
 		},
 	},
 	{
+		risk:    riskRead,
+		targets: []targetKind{targetLocal, targetServer},
+		tool: toolDef{
+			Name:        "watch_history",
+			Description: "List recorded restart incidents, newest first. Captured logs are excluded unless include_logs is set, because every incident carries a hundred lines of output twice over",
+			InputSchema: inputSchema{
+				Type: "object",
+				Properties: map[string]propDef{
+					"limit":        {Type: "string", Description: "Most recent N incidents (default: 10, 0 for all)"},
+					"container":    {Type: "string", Description: "Only incidents for this target (optional)"},
+					"include_logs": {Type: "boolean", Description: "Include the logs captured before and after each restart (default: false)"},
+					"server":       {Type: "string", Description: "Remote server name from config (optional, runs locally if omitted)"},
+				},
+			},
+		},
+	},
+	{
+		risk:    riskRead,
+		targets: []targetKind{targetLocal, targetServer},
+		tool: toolDef{
+			Name:        "watch_list",
+			Description: "List the targets being watched, with their kind and what the last check recorded",
+			InputSchema: inputSchema{
+				Type: "object",
+				Properties: map[string]propDef{
+					"server": {Type: "string", Description: "Remote server name from config (optional, runs locally if omitted)"},
+				},
+			},
+		},
+	},
+	{
 		risk:    riskWrite,
 		targets: []targetKind{targetLocal, targetServer},
 		tool: toolDef{
