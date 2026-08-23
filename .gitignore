@@ -46,6 +46,7 @@ demo-chat.sh
 demo-chat.cast
 # /demo
 docs/TUI_SPEC.md
+docs/DIRECTION_SPEC.md
 demo-mcp.gif
 *.bak
 *.tmp

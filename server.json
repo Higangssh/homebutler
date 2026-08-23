@@ -1,17 +1,17 @@
 {
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
-  "name": "io.github.higangssh/homebutler",
-  "description": "Inspect and manage a homelab over MCP - status, Docker, ports, backups - without granting shell access.",
+  "name": "io.github.Higangssh/homebutler",
+  "description": "Inspect and manage a homelab over MCP - status, Docker, ports, backups - without shell access.",
   "repository": {
     "url": "https://github.com/Higangssh/homebutler",
     "source": "github"
   },
-  "version": "0.21.0",
+  "version": "0.21.2",
   "packages": [
     {
       "registryType": "npm",
       "identifier": "homebutler",
-      "version": "0.21.0",
+      "version": "0.21.2",
       "transport": {
         "type": "stdio"
       }

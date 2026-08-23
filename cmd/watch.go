@@ -204,28 +204,27 @@ func newWatchListCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			targets, err := watch.LoadTargets(dir)
+			watched, err := watch.ListWatched(dir)
 			if err != nil {
 				return err
 			}
-			if len(targets) == 0 {
-				fmt.Println("No containers being watched. Use 'homebutler watch add <container>' to add one.")
+			if jsonOutput {
+				return output(watched, true)
+			}
+			if len(watched) == 0 {
+				fmt.Println("No targets being watched. Use 'homebutler watch add <name>' to add one.")
 				return nil
 			}
 
-			states, _ := watch.LoadState(dir)
 			fmt.Printf("%-25s %-10s %-22s %-10s %s\n", "NAME", "KIND", "ADDED", "RESTARTS", "LAST CHECKED")
-			for _, t := range targets {
-				added := t.AddedAt.Format("2006-01-02 15:04")
+			for _, w := range watched {
 				restarts := "-"
 				lastChecked := "-"
-				if s, ok := states[t.Container]; ok {
-					restarts = fmt.Sprintf("%d", s.RestartCount)
-					if !s.LastChecked.IsZero() {
-						lastChecked = s.LastChecked.Format("15:04:05")
-					}
+				if w.LastChecked != "" {
+					restarts = fmt.Sprintf("%d", w.RestartCount)
+					lastChecked = w.LastChecked
 				}
-				fmt.Printf("%-25s %-10s %-22s %-10s %s\n", t.Container, t.EffectiveKind(), added, restarts, lastChecked)
+				fmt.Printf("%-25s %-10s %-22s %-10s %s\n", w.Container, w.Kind, w.AddedAt, restarts, lastChecked)
 			}
 			return nil
 		},
@@ -536,7 +535,12 @@ func resolveIncidentCap(dir string) int {
 }
 
 func newWatchHistoryCmd() *cobra.Command {
-	return &cobra.Command{
+	var (
+		limit     int
+		container string
+		logs      bool
+	)
+	cmd := &cobra.Command{
 		Use:     "history",
 		Aliases: []string{"incidents"},
 		Short:   "List restart history",
@@ -545,7 +549,11 @@ func newWatchHistoryCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			incidents, err := watch.ListIncidents(dir)
+			incidents, err := watch.History(dir, watch.HistoryOptions{
+				Limit:     limit,
+				Container: container,
+				Logs:      logs,
+			})
 			if err != nil {
 				return err
 			}
@@ -578,6 +586,13 @@ func newWatchHistoryCmd() *cobra.Command {
 			return nil
 		},
 	}
+
+	cmd.Flags().IntVar(&limit, "limit", 0, "Show only the most recent N incidents (0 = all)")
+	cmd.Flags().StringVar(&container, "container", "", "Show only incidents for this target")
+	// Only affects --json. The table never printed logs, and a hundred lines of
+	// container output twice per incident is not something to put in a table.
+	cmd.Flags().BoolVar(&logs, "logs", false, "Include captured logs in --json output")
+	return cmd
 }
 
 func newWatchShowCmd() *cobra.Command {

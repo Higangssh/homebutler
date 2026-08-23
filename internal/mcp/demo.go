@@ -1,6 +1,12 @@
 package mcp
 
-import "fmt"
+import (
+	"fmt"
+	"sort"
+	"strings"
+
+	"github.com/Higangssh/homebutler/internal/install"
+)
 
 func (s *Server) executeDemoTool(name string, args map[string]any) (any, error) {
 	server := stringArg(args, "server")
@@ -10,6 +16,8 @@ func (s *Server) executeDemoTool(name string, args map[string]any) (any, error) 
 		return demoStatus(server), nil
 	case "docker_list":
 		return demoDocker(server), nil
+	case "docker_stats":
+		return demoDockerStats(server), nil
 	case "docker_restart":
 		cname, ok := requireString(args, "name")
 		if !ok {
@@ -97,6 +105,49 @@ func (s *Server) executeDemoTool(name string, args map[string]any) (any, error) 
 				{"name": "caddy.service", "kind": "systemd"},
 			},
 		}, nil
+
+	case "processes":
+		return demoProcesses(args), nil
+
+	case "config_validate":
+		// Reports a warning rather than a clean bill of health. A demo that
+		// only ever passed would teach a caller that this tool has nothing to
+		// say, when catching the silently-ignored key is the reason it exists.
+		strict := boolArg(args, "strict")
+		return map[string]any{
+			"passed":   !strict,
+			"errors":   0,
+			"warnings": 1,
+			"result": map[string]any{
+				"path":   "/home/demo/.homebutler/config.yaml",
+				"source": "default location (~/.homebutler/config.yaml)",
+				"exists": true,
+				"valid":  true,
+				"findings": []map[string]any{
+					{
+						"severity": "warning",
+						"section":  "watch",
+						"message":  "unknown key \"cooldwn\" is ignored",
+						"hint":     "did you mean \"cooldown\"?",
+					},
+				},
+			},
+		}, nil
+
+	case "watch_history":
+		return demoWatchHistory(args), nil
+
+	case "watch_list":
+		// Mirrors demoWatchHistory's targets, and carries a systemd entry with
+		// no last_checked: watch check cannot inspect those, so a caller that
+		// only ever saw polled docker targets would not learn that some of the
+		// list is only covered while watch start is running.
+		return []map[string]any{
+			{"container": "nextcloud", "kind": "docker", "added_at": "2026-04-12 09:31:00", "restart_count": 3, "last_checked": "2026-04-30 12:00:00"},
+			{"container": "postgres", "kind": "docker", "added_at": "2026-04-12 09:31:12", "restart_count": 0, "last_checked": "2026-04-30 12:00:00"},
+			{"container": "caddy.service", "kind": "systemd", "added_at": "2026-04-18 22:04:00", "restart_count": 0},
+		}, nil
+
 	case "backup_create":
 		service := stringArg(args, "service")
 		if service == "" {
@@ -120,8 +171,77 @@ func (s *Server) executeDemoTool(name string, args map[string]any) (any, error) 
 			return nil, fmt.Errorf("missing required parameter: archive")
 		}
 		return map[string]any{"archive": archive, "services": []string{"demo"}, "volumes": 1}, nil
+	case "install_list":
+		// The catalogue is a static map compiled into the binary, so demo mode
+		// can answer this truthfully instead of inventing apps that would drift
+		// away from the real list.
+		return install.List(), nil
+
+	case "install_status":
+		app := stringArg(args, "app")
+		if _, ok := install.Registry[app]; !ok {
+			return nil, fmt.Errorf("unknown app %q, use install_list to see available apps", app)
+		}
+		return map[string]any{"app": app, "state": "running"}, nil
+
+	case "install_app":
+		app := stringArg(args, "app")
+		a, ok := install.Registry[app]
+		if !ok {
+			return nil, fmt.Errorf("unknown app %q, use install_list to see available apps", app)
+		}
+		port := a.DefaultPort
+		if p := stringArg(args, "port"); p != "" {
+			port = p
+		}
+		return map[string]any{
+			"status": "installed",
+			"app":    a.Name,
+			"port":   port,
+			"path":   "/home/demo/.homebutler/apps/" + a.Name,
+			"state":  "running",
+		}, nil
+
+	case "install_uninstall":
+		app := stringArg(args, "app")
+		if _, ok := install.Registry[app]; !ok {
+			return nil, fmt.Errorf("unknown app %q, use install_list to see available apps", app)
+		}
+		return map[string]any{"status": "uninstalled", "app": app, "data_preserved": true}, nil
+
+	case "install_purge":
+		app := stringArg(args, "app")
+		if _, ok := install.Registry[app]; !ok {
+			return nil, fmt.Errorf("unknown app %q, use install_list to see available apps", app)
+		}
+		return map[string]any{"status": "purged", "app": app}, nil
+
 	default:
 		return nil, fmt.Errorf("unknown tool: %s", name)
+	}
+}
+
+// demoDockerStats mirrors demoDocker's containers so the two tools do not
+// describe different machines.
+func demoDockerStats(server string) []map[string]any {
+	switch server {
+	case "nas-box":
+		return []map[string]any{
+			{"id": "aa11bb22cc33", "name": "samba", "cpu_percent": "0.42%", "mem_usage": "88MiB / 8GiB", "mem_percent": "1.07%", "net_io": "1.2GB / 340MB", "block_io": "820MB / 4.1GB", "pids": "12"},
+			{"id": "dd44ee55ff66", "name": "plex", "cpu_percent": "18.30%", "mem_usage": "1.4GiB / 8GiB", "mem_percent": "17.50%", "net_io": "44GB / 2.1GB", "block_io": "12GB / 900MB", "pids": "48"},
+		}
+	case "raspberry-pi":
+		return []map[string]any{
+			{"id": "pi11pi22pi33", "name": "pihole", "cpu_percent": "1.10%", "mem_usage": "76MiB / 1GiB", "mem_percent": "7.42%", "net_io": "3.4GB / 2.9GB", "block_io": "120MB / 640MB", "pids": "9"},
+		}
+	default:
+		return []map[string]any{
+			{"id": "a1b2c3d4e5f6", "name": "nginx", "cpu_percent": "0.15%", "mem_usage": "24MiB / 16GiB", "mem_percent": "0.15%", "net_io": "890MB / 1.1GB", "block_io": "12MB / 8MB", "pids": "5"},
+			{"id": "b2c3d4e5f6a1", "name": "postgres", "cpu_percent": "2.80%", "mem_usage": "412MiB / 16GiB", "mem_percent": "2.51%", "net_io": "220MB / 180MB", "block_io": "3.4GB / 9.8GB", "pids": "21"},
+			{"id": "c3d4e5f6a1b2", "name": "redis", "cpu_percent": "0.60%", "mem_usage": "38MiB / 16GiB", "mem_percent": "0.23%", "net_io": "140MB / 96MB", "block_io": "44MB / 12MB", "pids": "6"},
+			{"id": "d4e5f6a1b2c3", "name": "grafana", "cpu_percent": "1.90%", "mem_usage": "186MiB / 16GiB", "mem_percent": "1.13%", "net_io": "310MB / 420MB", "block_io": "88MB / 210MB", "pids": "14"},
+			{"id": "e5f6a1b2c3d4", "name": "prometheus", "cpu_percent": "4.20%", "mem_usage": "740MiB / 16GiB", "mem_percent": "4.51%", "net_io": "1.8GB / 640MB", "block_io": "5.2GB / 14GB", "pids": "17"},
+		}
 	}
 }
 
@@ -278,5 +398,99 @@ func demoAlerts(server string) map[string]any {
 				{"mount": "/mnt/data", "status": "warning", "current": 87.0, "threshold": 90.0},
 			},
 		}
+	}
+}
+
+// demoWatchHistory honours limit, container and include_logs so a caller can
+// see what those arguments actually do. A demo that ignored them would teach
+// the wrong thing about the tool it is demonstrating — particularly
+// include_logs, whose whole purpose is that the expensive shape is opt-in.
+func demoWatchHistory(args map[string]any) []map[string]any {
+	incidents := []map[string]any{
+		{
+			"id": "demo-nextcloud-20260430T120000Z", "container": "nextcloud",
+			"detected_at": "2026-04-30T12:00:00Z", "restart_count": 3,
+			"prev_started_at": "2026-04-30T09:14:02Z", "curr_started_at": "2026-04-30T11:58:41Z",
+			"pre_logs":  "PHP Fatal error: Allowed memory size exhausted",
+			"post_logs": "MySQL server has gone away\nRetrying connection (1/5)",
+		},
+		{
+			"id": "demo-nextcloud-20260429T031500Z", "container": "nextcloud",
+			"detected_at": "2026-04-29T03:15:00Z", "restart_count": 2,
+			"prev_started_at": "2026-04-28T20:02:11Z", "curr_started_at": "2026-04-29T03:14:47Z",
+			"pre_logs":  "Redis connection refused",
+			"post_logs": "Starting apache2",
+		},
+		{
+			"id": "demo-postgres-20260427T181200Z", "container": "postgres",
+			"detected_at": "2026-04-27T18:12:00Z", "restart_count": 1,
+			"prev_started_at": "2026-04-20T11:00:00Z", "curr_started_at": "2026-04-27T18:11:30Z",
+			"pre_logs":  "received fast shutdown request",
+			"post_logs": "database system is ready to accept connections",
+		},
+	}
+
+	if c := stringArg(args, "container"); c != "" {
+		filtered := incidents[:0:0]
+		for _, inc := range incidents {
+			if strings.EqualFold(inc["container"].(string), c) {
+				filtered = append(filtered, inc)
+			}
+		}
+		incidents = filtered
+	}
+
+	if n := intArg(args, "limit", 10); n > 0 && len(incidents) > n {
+		incidents = incidents[:n]
+	}
+
+	if !boolArg(args, "include_logs") {
+		stripped := make([]map[string]any, 0, len(incidents))
+		for _, inc := range incidents {
+			c := make(map[string]any, len(inc))
+			for k, v := range inc {
+				if k == "pre_logs" || k == "post_logs" {
+					continue
+				}
+				c[k] = v
+			}
+			stripped = append(stripped, c)
+		}
+		incidents = stripped
+	}
+
+	return incidents
+}
+
+// demoProcesses honours limit and sort_by, and always carries a zombie. The
+// real tool breaks zombies out separately because they do not show up in a
+// CPU-sorted top ten while still being worth knowing about; a demo without one
+// would hide the field that exists for that.
+func demoProcesses(args map[string]any) map[string]any {
+	procs := []map[string]any{
+		{"pid": 1187, "name": "postgres", "cpu": 12.4, "mem": 8.1, "rss": 1329152},
+		{"pid": 902, "name": "plex", "cpu": 9.7, "mem": 14.6, "rss": 2394112},
+		{"pid": 1544, "name": "prometheus", "cpu": 4.2, "mem": 4.5, "rss": 738304},
+		{"pid": 311, "name": "dockerd", "cpu": 2.1, "mem": 2.2, "rss": 360448},
+		{"pid": 1290, "name": "nginx", "cpu": 0.4, "mem": 0.2, "rss": 24576},
+	}
+
+	if stringArg(args, "sort_by") == "mem" {
+		sort.SliceStable(procs, func(i, j int) bool {
+			return procs[i]["mem"].(float64) > procs[j]["mem"].(float64)
+		})
+	}
+
+	total := len(procs) + 173
+	if n := intArg(args, "limit", 10); n > 0 && len(procs) > n {
+		procs = procs[:n]
+	}
+
+	return map[string]any{
+		"processes": procs,
+		"total":     total,
+		"zombies": []map[string]any{
+			{"pid": 2077, "name": "ffmpeg", "cpu": 0.0, "mem": 0.0, "rss": 0, "state": "Z", "zombie": true},
+		},
 	}
 }

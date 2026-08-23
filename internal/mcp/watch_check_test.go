@@ -20,7 +20,7 @@ func TestWatchCheckCapabilityIsWriteAndRemoteCapable(t *testing.T) {
 		if c.risk != riskWrite {
 			t.Errorf("watch_check risk = %q, want %q", c.risk, riskWrite)
 		}
-		if !c.remoteSupport {
+		if !c.supports(targetServer) {
 			t.Error("watch_check should be routable to a remote server")
 		}
 		if _, ok := c.tool.InputSchema.Properties["server"]; !ok {

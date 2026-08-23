@@ -2,6 +2,88 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.21.2](https://github.com/Higangssh/homebutler/compare/v0.21.1...v0.21.2) - 2026-08-23
+
+**Second attempt at the MCP Registry listing.** v0.21.1 cleared the description limit and was then rejected with a 403: the registry grants publish rights to `io.github.<login>/*` from the GitHub OIDC token and keeps the login's casing, while `server.json` claimed `io.github.higangssh/homebutler` against a grant for `io.github.Higangssh/*`.
+
+```bash
+npx -y homebutler@latest
+```
+
+### 🐛 Fixes
+
+- declare the server namespace with the repository owner's actual casing, in both `server.json` and the `mcpName` the npm package carries. The registry reads `mcpName` to confirm ownership of the package, so correcting one without the other would have traded the 403 for a different rejection at the same step. Nothing else about v0.21.1 changes
+
+### 🧪 Tests
+
+- derive the expected namespace from `repository.url` and assert `server.json` matches it, casing included
+- assert the npm package's `mcpName` and the server name agree
+
+## [0.21.1](https://github.com/Higangssh/homebutler/compare/v0.21.0...v0.21.1) - 2026-08-23
+
+**Patch release to complete the MCP Registry listing.** v0.21.0 published its binaries, Homebrew tap and npm package, then failed on the last step of the release: the registry rejected a `server.json` description three characters over its 100-character limit. That step shipped in v0.21.0 itself, so the rejection means homebutler has never appeared in the registry at all.
+
+```bash
+npx -y homebutler@latest
+```
+
+### 🐛 Fixes
+
+- shorten the `server.json` description to 94 characters so the MCP Registry accepts it. Nothing else about v0.21.0 changes; the binaries, tap and npm package are identical
+
+### 🧪 Tests
+
+- assert in CI that the `server.json` description fits the registry limit, and that the server version and its npm package version agree. Both constraints were previously only enforced by the registry, at the end of a release that had already published everything else
+
+## [0.21.0](https://github.com/Higangssh/homebutler/compare/v0.20.0...v0.21.0) - 2026-08-23
+
+**Three commands were confidently answering the wrong question.** `watch check` called systemd and pm2 targets clean without inspecting them, `report` counted fewer public ports than `doctor` did on the same scan, and a failed first connection blamed the host key rather than the reason it failed.
+
+```bash
+homebutler inventory scan --filter exposed
+```
+
+### ✨ Features
+
+- add `inventory scan --filter exposed` to answer "what is reachable from outside" without reading the whole tree, reusing the container-owner and dedupe logic the default view already has (#51, thanks @lenny-ts)
+- surface collection warnings in the filtered view, so a failed port scan never renders as an authoritative empty list
+- expose `watch_check` over MCP, so an agent can ask what broke and not just what changed. Classified `riskWrite` rather than `riskRead`, since it records container state and saves any incident it finds (#55)
+- cap incident history with `watch.retention.max_incidents`, default 200. `SaveIncident` wrote one file per incident and nothing ever deleted them, so the watch directory grew fastest exactly when something was wrong — a service restarting every 30s wrote roughly 2,880 files a day, each carrying 100 lines of captured logs (#50)
+- align and colour the `report` and `doctor` output, with colour dropped automatically when piped, redirected, or run from cron (#42)
+
+### 🐛 Fixes
+
+- report what `watch check` actually inspected. It only examines docker targets — systemd and pm2 need a previous poll to compare against — but the skip was silent and the count included every registered target, so a watch list holding one systemd unit printed "Checked 1 container(s). No restarts detected." having looked at nothing (#46)
+- count `[::]` and empty-address binds as public in `report`, which used its own inline comparison while `doctor` and the new exposure filter used `ports.IsPublicBind`. The same scan produced two different answers
+- warn when `serve` binds to any wildcard address. The check matched only `0.0.0.0`, so `--host ::` exposed the dashboard with nothing printed
+- don't blame the host key when the TOFU connection fails (#44)
+- name the build matrix jobs after the platform they build. All four reported as "Build ()", so a cross-compile failure gave no way to tell which platform had broken (#53)
+
+### ⚠️ Behavior changes
+
+- **`watch check` now reports zero for a list it cannot inspect.** A watch list holding only systemd or pm2 targets previously read as a clean bill of health. It now prints what was checked, lists what was skipped, and points at `homebutler watch start`, which does monitor them
+- **`PublicPortCount` in `report --json` rises on hosts with IPv6 wildcard listeners**, and now matches `doctor`. Anything comparing the two across versions will see the corrected value
+- **`serve --host ::` now prints the exposure warning** it should always have printed
+- **Incident files are pruned to the newest 200.** Existing directories are trimmed on the next write. Set `watch.retention.max_incidents` to change it; a negative value keeps everything. Files that cannot be parsed are never deleted
+
+### 📝 Documentation
+
+- write down which contributions homebutler accepts in `CONTRIBUTING.md`: the two-tier bar, what a new target has to prove, and what is waiting until 1.0
+- replace the README `report` and `doctor` blocks with hand-written SVG terminal cards, since a fenced code block cannot show the colour that does most of the visual work (#43)
+- add `doctor` to the tool table in `docs/mcp-server.md`, missing since it shipped in v0.19.0
+- lead the README with what homebutler actually prints, and restore the logo and mascot placement
+
+### 📦 Distribution
+
+- publish releases to the MCP Registry after the npm step that proves ownership, now that `modelcontextprotocol/servers` has retired its third-party list (#52)
+- drop the Go Report Card badge, which rendered as "go report | retired" after the service shut down and told every visitor the project was abandoned
+- add the social preview card
+
+### ♻️ Internal
+
+- consolidate `isPublicBind` into `internal/ports` (#47)
+- move the docker-only rule for `watch check` onto `Target.CheckSupported` so callers stop duplicating it
+
 ## [0.20.0](https://github.com/Higangssh/homebutler/compare/v0.19.2...v0.20.0) - 2026-08-18
 
 **Config that fails silently now speaks up.** This release adds `homebutler config validate` and fixes three ways configuration could be ignored without producing any error at all — including a form documented in this project's own README that never worked.

@@ -95,35 +95,18 @@ func TestToolsList(t *testing.T) {
 		t.Fatalf("unmarshal toolsListResult: %v", err)
 	}
 
-	if len(list.Tools) != 24 {
-		t.Errorf("expected 24 tools, got %d", len(list.Tools))
+	// Derived from the registry rather than repeated here. The count and the
+	// name set were hardcoded, so adding a tool meant a failure in a test that
+	// had nothing to say about the change — it only knew the list had moved.
+	// What is worth asserting is that tools/list reports exactly what the
+	// registry holds, which is the thing that could actually be wrong.
+	if len(list.Tools) != len(capabilityRegistry) {
+		t.Errorf("tools/list returned %d tools, registry holds %d", len(list.Tools), len(capabilityRegistry))
 	}
 
-	expectedTools := map[string]bool{
-		"system_status":     false,
-		"docker_list":       false,
-		"docker_restart":    false,
-		"docker_stop":       false,
-		"docker_logs":       false,
-		"docker_stats":      false,
-		"wake":              false,
-		"open_ports":        false,
-		"network_scan":      false,
-		"alerts":            false,
-		"inventory_scan":    false,
-		"inventory_export":  false,
-		"report":            false,
-		"doctor":            false,
-		"watch_check":       false,
-		"backup_create":     false,
-		"backup_list":       false,
-		"backup_drill":      false,
-		"backup_restore":    false,
-		"install_list":      false,
-		"install_app":       false,
-		"install_status":    false,
-		"install_uninstall": false,
-		"install_purge":     false,
+	expectedTools := make(map[string]bool, len(capabilityRegistry))
+	for _, c := range capabilityRegistry {
+		expectedTools[c.tool.Name] = false
 	}
 
 	for _, tool := range list.Tools {
