@@ -211,6 +211,17 @@ func (s *Server) executeTool(name string, args map[string]any) (any, error) {
 			return nil, fmt.Errorf("server %q not found in config", server)
 		}
 		if !srv.Local {
+			// The registry decides what a tool can be pointed at. Before this,
+			// the decision lived in executeRemote's switch default, so the
+			// registry described a behaviour it did not control and the two
+			// could disagree without any test noticing.
+			cap, ok := capabilityFor(name)
+			if !ok {
+				return nil, fmt.Errorf("unknown tool: %s", name)
+			}
+			if !cap.supports(targetServer) {
+				return nil, fmt.Errorf("tool %q cannot be pointed at a server", name)
+			}
 			return s.executeRemote(srv, name, args)
 		}
 	}
@@ -485,7 +496,10 @@ func (s *Server) executeRemote(srv *config.ServerConfig, tool string, args map[s
 			remoteArgs = append(remoteArgs, "--service", service)
 		}
 	default:
-		return nil, fmt.Errorf("tool %q not supported for remote execution", tool)
+		// Unreachable: executeTool checks the registry before routing here.
+		// Kept so a tool added to the registry with targetServer but no argv
+		// mapping fails loudly instead of running an empty remote command.
+		return nil, fmt.Errorf("tool %q has no remote command mapping", tool)
 	}
 
 	out, err := remote.Run(srv, remoteArgs...)
