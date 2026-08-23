@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/Higangssh/homebutler/internal/docker"
+	"github.com/Higangssh/homebutler/internal/watch"
 )
 
 // ActionResult holds the outcome of a playbook action.
@@ -81,11 +82,24 @@ func IsDangerousCommand(cmd string) bool {
 	return false
 }
 
+// FlapChecker reports whether a target is in a restart loop right now.
+//
+// Restarting something that is already restarting feeds the loop, and most
+// systemd units carry Restart=always, so homebutler restarting them is at best
+// redundant and at worst fighting systemd's own backoff. Implemented by
+// internal/watch from the recorded incident history; a nil checker disables
+// the suppression.
+type FlapChecker interface {
+	IsFlapping(target string) bool
+}
+
 // ExecuteAction runs the appropriate playbook action for a triggered rule.
-func ExecuteAction(rule Rule) PlaybookResult {
+//
+// flap may be nil, which disables flapping suppression.
+func ExecuteAction(rule Rule, flap FlapChecker) PlaybookResult {
 	switch rule.Action {
 	case "restart":
-		return executeRestart(rule)
+		return executeRestart(rule, flap)
 	case "exec":
 		return executeExec(rule)
 	case "notify":
@@ -95,15 +109,35 @@ func ExecuteAction(rule Rule) PlaybookResult {
 	}
 }
 
-func executeRestart(rule Rule) PlaybookResult {
+func executeRestart(rule Rule, flap FlapChecker) PlaybookResult {
 	if len(rule.Watch) == 0 {
-		return PlaybookResult{Action: "restart", Success: false, Output: "no containers to restart"}
+		return PlaybookResult{Action: "restart", Success: false, Output: "no targets to restart"}
 	}
 
-	var failed []string
-	var restarted []string
+	kind := rule.EffectiveKind()
+	if !validKind(kind) {
+		return PlaybookResult{
+			Action:  "restart",
+			Success: false,
+			Output:  fmt.Sprintf("unknown kind %q (supported: %s)", kind, strings.Join(watch.Kinds(), ", ")),
+		}
+	}
+
+	var failed, restarted, skipped []string
 	for _, name := range rule.Watch {
-		_, err := docker.Restart(name)
+		if flap != nil && flap.IsFlapping(name) {
+			// Not a failure. The target is already restarting on its own and
+			// adding to that is the pathology, not the fix.
+			skipped = append(skipped, name)
+			continue
+		}
+
+		var err error
+		if kind == watch.KindDocker {
+			_, err = docker.Restart(name)
+		} else {
+			_, err = watch.Restart(kind, name, nil)
+		}
 		if err != nil {
 			failed = append(failed, fmt.Sprintf("%s: %v", name, err))
 		} else {
@@ -115,7 +149,16 @@ func executeRestart(rule Rule) PlaybookResult {
 		return PlaybookResult{
 			Action:  "restart",
 			Success: false,
-			Output:  fmt.Sprintf("restarted: [%s], failed: [%s]", strings.Join(restarted, ", "), strings.Join(failed, "; ")),
+			Output:  restartSummary(restarted, skipped, failed),
+		}
+	}
+	if len(restarted) == 0 && len(skipped) > 0 {
+		// Everything was suppressed. Reporting success would claim a
+		// remediation that did not happen.
+		return PlaybookResult{
+			Action:  "restart",
+			Success: false,
+			Output:  restartSummary(restarted, skipped, failed),
 		}
 	}
 
@@ -173,4 +216,42 @@ func executeExec(rule Rule) PlaybookResult {
 		Success: true,
 		Output:  output,
 	}
+}
+
+// EffectiveKind returns the rule's target kind, defaulting to docker so that
+// configs written before kind existed keep meaning what they meant.
+func (r Rule) EffectiveKind() string {
+	if r.Kind == "" {
+		return watch.KindDocker
+	}
+	return r.Kind
+}
+
+func validKind(kind string) bool {
+	for _, k := range watch.Kinds() {
+		if k == kind {
+			return true
+		}
+	}
+	return false
+}
+
+// restartSummary reports every outcome rather than only the good one. A
+// suppressed target is neither a success nor a failure and saying so is the
+// difference between "nothing needed doing" and "we chose not to".
+func restartSummary(restarted, skipped, failed []string) string {
+	var parts []string
+	if len(restarted) > 0 {
+		parts = append(parts, fmt.Sprintf("restarted: [%s]", strings.Join(restarted, ", ")))
+	}
+	if len(skipped) > 0 {
+		parts = append(parts, fmt.Sprintf("skipped while flapping: [%s]", strings.Join(skipped, ", ")))
+	}
+	if len(failed) > 0 {
+		parts = append(parts, fmt.Sprintf("failed: [%s]", strings.Join(failed, "; ")))
+	}
+	if len(parts) == 0 {
+		return "nothing to restart"
+	}
+	return strings.Join(parts, ", ")
 }

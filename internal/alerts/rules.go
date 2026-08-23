@@ -3,25 +3,33 @@ package alerts
 import (
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/Higangssh/homebutler/internal/notify"
+	"github.com/Higangssh/homebutler/internal/watch"
 	"gopkg.in/yaml.v3"
 )
 
 // Rule defines a single alert rule from the YAML configuration.
 type Rule struct {
-	Name       string   `yaml:"name" json:"name"`
-	Metric     string   `yaml:"metric" json:"metric"`       // "cpu", "memory", "disk", "container"
-	Threshold  float64  `yaml:"threshold" json:"threshold"` // percentage for cpu/memory/disk
-	Duration   string   `yaml:"duration,omitempty" json:"duration,omitempty"`
-	Watch      []string `yaml:"watch,omitempty" json:"watch,omitempty"` // container names
-	Action     string   `yaml:"action" json:"action"`                   // "notify", "restart", "exec"
-	Exec       string   `yaml:"exec,omitempty" json:"exec,omitempty"`
-	Timeout    string   `yaml:"timeout,omitempty" json:"timeout,omitempty"` // exec timeout (default 30s)
-	Notify     string   `yaml:"notify,omitempty" json:"notify,omitempty"`   // "webhook"
-	Cooldown   string   `yaml:"cooldown,omitempty" json:"cooldown,omitempty"`
-	MaxRetries int      `yaml:"max_retries,omitempty" json:"max_retries,omitempty"`
+	Name      string   `yaml:"name" json:"name"`
+	Metric    string   `yaml:"metric" json:"metric"`       // "cpu", "memory", "disk", "container"
+	Threshold float64  `yaml:"threshold" json:"threshold"` // percentage for cpu/memory/disk
+	Duration  string   `yaml:"duration,omitempty" json:"duration,omitempty"`
+	Watch     []string `yaml:"watch,omitempty" json:"watch,omitempty"` // target names
+	// Kind is what the names in Watch are: "docker" (default), "systemd" or
+	// "pm2". Written on the rule rather than looked up in the watch list so
+	// that restarting a host service is something asked for in the config
+	// rather than implied by a name appearing in another file, and so existing
+	// docker-only configs keep meaning exactly what they meant.
+	Kind       string `yaml:"kind,omitempty" json:"kind,omitempty"`
+	Action     string `yaml:"action" json:"action"` // "notify", "restart", "exec"
+	Exec       string `yaml:"exec,omitempty" json:"exec,omitempty"`
+	Timeout    string `yaml:"timeout,omitempty" json:"timeout,omitempty"` // exec timeout (default 30s)
+	Notify     string `yaml:"notify,omitempty" json:"notify,omitempty"`   // "webhook"
+	Cooldown   string `yaml:"cooldown,omitempty" json:"cooldown,omitempty"`
+	MaxRetries int    `yaml:"max_retries,omitempty" json:"max_retries,omitempty"`
 }
 
 // AlertsConfig is the top-level YAML structure for self-healing rules.
@@ -117,6 +125,12 @@ func validateRules(rules []Rule) error {
 			return fmt.Errorf("duplicate rule name: %s", r.Name)
 		}
 		names[r.Name] = true
+
+		// Caught at load rather than when the rule fires. A typo here would
+		// otherwise sit quietly until the moment remediation was needed.
+		if r.Kind != "" && !validKind(r.Kind) {
+			return fmt.Errorf("rule %q: unknown kind %q (must be %s)", r.Name, r.Kind, strings.Join(watch.Kinds(), ", "))
+		}
 
 		switch r.Metric {
 		case "cpu", "memory", "disk":

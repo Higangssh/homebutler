@@ -12,6 +12,18 @@ import (
 	"time"
 )
 
+// The kinds of thing homebutler can watch. Spelled out here rather than as
+// bare strings in each place that compares one, so adding a kind is a change
+// in one file rather than a search.
+const (
+	KindDocker  = "docker"
+	KindSystemd = "systemd"
+	KindPM2     = "pm2"
+)
+
+// Kinds returns every valid target kind.
+func Kinds() []string { return []string{KindDocker, KindSystemd, KindPM2} }
+
 type Target struct {
 	Container string    `json:"container"`
 	Kind      string    `json:"kind,omitempty"` // "docker" | "systemd" | "pm2"
@@ -22,7 +34,7 @@ type Target struct {
 // EffectiveKind returns the target kind, defaulting to "docker".
 func (t Target) EffectiveKind() string {
 	if t.Kind == "" {
-		return "docker"
+		return KindDocker
 	}
 	return t.Kind
 }
@@ -33,7 +45,7 @@ func (t Target) EffectiveKind() string {
 // single inspect call is enough. Systemd and pm2 state is only meaningful when
 // compared against a previous poll, which is what `watch start` does.
 func (t Target) CheckSupported() bool {
-	return t.EffectiveKind() == "docker"
+	return t.EffectiveKind() == KindDocker
 }
 
 // EffectiveUnit returns the unit name, defaulting to Container.
@@ -101,11 +113,14 @@ func LoadTargets(dir string) ([]Target, error) {
 		return nil, fmt.Errorf("corrupt targets.json: %w", err)
 	}
 	// Validate kind values
-	validKinds := map[string]bool{"": true, "docker": true, "systemd": true, "pm2": true}
+	validKinds := map[string]bool{"": true}
+	for _, k := range Kinds() {
+		validKinds[k] = true
+	}
 	for i, t := range targets {
 		if !validKinds[t.Kind] {
 			fmt.Fprintf(os.Stderr, "warning: target %q has unknown kind %q, defaulting to docker\n", t.Container, t.Kind)
-			targets[i].Kind = "docker"
+			targets[i].Kind = KindDocker
 		}
 	}
 	return targets, nil
