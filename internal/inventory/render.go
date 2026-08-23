@@ -71,30 +71,46 @@ func RenderTree(inv *Inventory) string {
 	return b.String()
 }
 
-// RenderTreeFiltered renders a filtered view of the inventory.
-// Supported filters: "exposed" (only ports bound to public interfaces).
-func RenderTreeFiltered(inv *Inventory, filter string) (string, error) {
-	switch filter {
-	case "exposed":
-		return renderExposedPorts(inv), nil
-	default:
-		return "", fmt.Errorf("unsupported filter %q (supported: %s)", filter, strings.Join(SupportedFilters(), ", "))
-	}
+// filterRenderers is the single source of truth for supported filters.
+// Registering an entry here wires up validation, listing, dispatch, and the
+// error message everywhere, with no second list to drift out of sync.
+// Describe each filter's semantics on its entry: this map is the one place a
+// reader of the exported API can see what each value means.
+var filterRenderers = map[string]func(*Inventory) string{
+	// "exposed" shows only ports listening on all interfaces (0.0.0.0, ::, *);
+	// anything bound to a specific address is hidden.
+	"exposed": renderExposedPorts,
 }
 
-// SupportedFilters returns the filter values accepted by RenderTreeFiltered.
+// RenderTreeFiltered renders a filtered view of the inventory.
+func RenderTreeFiltered(inv *Inventory, filter string) (string, error) {
+	render, ok := filterRenderers[filter]
+	if !ok {
+		return "", UnsupportedFilterError(filter)
+	}
+	return render(inv), nil
+}
+
+// SupportedFilters returns the sorted filter values accepted by RenderTreeFiltered.
 func SupportedFilters() []string {
-	return []string{"exposed"}
+	names := make([]string, 0, len(filterRenderers))
+	for name := range filterRenderers {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return names
 }
 
 // IsSupportedFilter reports whether filter is accepted by RenderTreeFiltered.
 func IsSupportedFilter(filter string) bool {
-	for _, f := range SupportedFilters() {
-		if f == filter {
-			return true
-		}
-	}
-	return false
+	_, ok := filterRenderers[filter]
+	return ok
+}
+
+// UnsupportedFilterError builds the one error message for an unknown filter,
+// shared by every caller so the wording cannot drift apart.
+func UnsupportedFilterError(filter string) error {
+	return fmt.Errorf("unsupported filter %q (supported: %s)", filter, strings.Join(SupportedFilters(), ", "))
 }
 
 // renderExposedPorts renders a compact view of the ports bound to public interfaces.

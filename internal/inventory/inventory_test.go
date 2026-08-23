@@ -336,6 +336,27 @@ func TestIsSupportedFilter(t *testing.T) {
 	}
 }
 
+// Pins the single-source-of-truth invariant: everything SupportedFilters()
+// lists must be accepted by the renderer and by IsSupportedFilter, so the
+// three can never disagree.
+func TestRenderTreeFiltered_AgreesWithSupportedFilters(t *testing.T) {
+	for _, f := range SupportedFilters() {
+		if _, err := RenderTreeFiltered(&Inventory{ServerName: "lab"}, f); err != nil {
+			t.Errorf("SupportedFilters() lists %q but RenderTreeFiltered rejects it: %v", f, err)
+		}
+		if !IsSupportedFilter(f) {
+			t.Errorf("SupportedFilters() lists %q but IsSupportedFilter rejects it", f)
+		}
+	}
+}
+
+func TestUnsupportedFilterError(t *testing.T) {
+	err := UnsupportedFilterError("bogus")
+	if !strings.Contains(err.Error(), `"bogus"`) || !strings.Contains(err.Error(), "exposed") {
+		t.Errorf("unhelpful unsupported-filter error: %v", err)
+	}
+}
+
 func TestJSON_Roundtrip(t *testing.T) {
 	inv := &Inventory{
 		ServerName: "s1",
