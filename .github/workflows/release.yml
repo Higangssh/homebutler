@@ -31,6 +31,45 @@ jobs:
       - name: Run tests
         run: go test ./...
 
+      # Everything the registry can reject runs before anything is published.
+      # The publish itself has to stay at the end - the registry reads mcpName
+      # back out of the npm package - so a rejection there costs a tag and
+      # cannot be retried. v0.21.0 and v0.21.1 were both spent that way.
+      - name: Validate the registry manifest
+        run: |
+          TAG=${GITHUB_REF#refs/tags/v}
+
+          # The registry grants io.github.<login>/* from the OIDC token and
+          # keeps the login's casing, and it matches the npm package's mcpName
+          # against the server name. Checked against the real owner rather
+          # than anything the repository declares about itself.
+          WANT="io.github.${GITHUB_REPOSITORY%%/*}/${GITHUB_REPOSITORY##*/}"
+          for file_field in "server.json:.name" "npm/package.json:.mcpName"; do
+            file=${file_field%%:*}
+            got=$(jq -r "${file_field##*:}" "$file")
+            if [ "$got" != "$WANT" ]; then
+              echo "::error file=$file::expected $WANT, found $got"
+              exit 1
+            fi
+          done
+
+          # Staged outside the checkout: GoReleaser refuses to run on a dirty
+          # tree, so nothing here may leave a modified or untracked file behind.
+          # Publishing later from this same directory also means the bytes that
+          # were validated are the bytes that go to the registry.
+          mkdir -p "$RUNNER_TEMP/registry"
+
+          # Both fields have to carry the tag: the registry rejects a server
+          # version whose package version does not exist on npm.
+          jq --arg v "$TAG" '.version = $v | .packages[0].version = $v' \
+            server.json > "$RUNNER_TEMP/registry/server.json"
+
+          curl -L "https://github.com/modelcontextprotocol/registry/releases/latest/download/mcp-publisher_$(uname -s | tr '[:upper:]' '[:lower:]')_$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/').tar.gz" \
+            | tar xz -C "$RUNNER_TEMP/registry" mcp-publisher
+
+          cd "$RUNNER_TEMP/registry"
+          ./mcp-publisher validate
+
       - name: Run GoReleaser
         uses: goreleaser/goreleaser-action@v6
         with:
@@ -136,17 +175,11 @@ jobs:
 
       # The registry stores metadata only. It verifies ownership by reading the
       # mcpName field back out of the published npm package, so this cannot run
-      # before the npm publish above succeeds.
+      # before the npm publish above succeeds. The manifest was stamped and
+      # validated before anything was published; this publishes that same copy.
       - name: Publish to MCP Registry
         if: steps.npm.outputs.published == 'true'
         run: |
-          TAG=${GITHUB_REF#refs/tags/v}
-
-          # Both fields have to carry the tag: the registry rejects a server
-          # version whose package version does not exist on npm.
-          jq --arg v "$TAG" '.version = $v | .packages[0].version = $v' \
-            server.json > server.tmp && mv server.tmp server.json
-
-          curl -L "https://github.com/modelcontextprotocol/registry/releases/latest/download/mcp-publisher_$(uname -s | tr '[:upper:]' '[:lower:]')_$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/').tar.gz" | tar xz mcp-publisher
+          cd "$RUNNER_TEMP/registry"
           ./mcp-publisher login github-oidc
           ./mcp-publisher publish
