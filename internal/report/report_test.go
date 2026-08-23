@@ -4,11 +4,14 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
+	"github.com/Higangssh/homebutler/internal/config"
 	"github.com/Higangssh/homebutler/internal/docker"
 	"github.com/Higangssh/homebutler/internal/inventory"
+	"github.com/Higangssh/homebutler/internal/notify"
 	"github.com/Higangssh/homebutler/internal/ports"
 	"github.com/Higangssh/homebutler/internal/system"
 )
@@ -289,5 +292,62 @@ func TestCountPublicPortsMatchesIsPublicBind(t *testing.T) {
 
 	if got := countPublicPorts(pp); got != want {
 		t.Errorf("countPublicPorts = %d, ports.IsPublicBind classifies %d as public", got, want)
+	}
+}
+
+// report takes the config and writes snapshots to disk that persist for as
+// long as retention keeps them. Neither the report nor the snapshot has any
+// reason to carry a credential, and the config fields are tagged json:"-" so
+// they cannot. This is the behavioural end of that: give Run a config full of
+// secrets and check that nothing it produces contains one.
+func TestReportAndSnapshotLeakNoCredentials(t *testing.T) {
+	const (
+		pw    = "sup3r-secret-password"
+		token = "9876543:AAH-telegram-bot-token"
+		slack = "https://hooks.slack.com/services/T00/B00/leaked"
+	)
+
+	cfg := &config.Config{
+		Servers: []config.ServerConfig{{Name: "pve1", Host: "10.0.0.1", Local: true, Password: pw}},
+		Notify: notify.ProviderConfig{
+			Telegram: &notify.TelegramConfig{BotToken: token, ChatID: "42"},
+			Slack:    &notify.SlackConfig{WebhookURL: slack},
+		},
+	}
+
+	dir := t.TempDir()
+	rep, err := Run(cfg, fakeFuncs(nil, nil), Options{SnapshotDir: dir, Keep: 3})
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+
+	reportJSON, err := json.Marshal(rep)
+	if err != nil {
+		t.Fatalf("marshal report: %v", err)
+	}
+
+	files, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatalf("reading snapshot dir: %v", err)
+	}
+	if len(files) == 0 {
+		t.Fatal("no snapshot was written, so this test is not checking what it claims to")
+	}
+
+	haystacks := map[string]string{"report --json": string(reportJSON)}
+	for _, f := range files {
+		data, err := os.ReadFile(filepath.Join(dir, f.Name()))
+		if err != nil {
+			t.Fatalf("reading %s: %v", f.Name(), err)
+		}
+		haystacks[f.Name()] = string(data)
+	}
+
+	for where, body := range haystacks {
+		for _, secret := range []string{pw, token, slack} {
+			if strings.Contains(body, secret) {
+				t.Errorf("%s contains the credential %q", where, secret)
+			}
+		}
 	}
 }

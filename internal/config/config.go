@@ -122,7 +122,7 @@ type ServerConfig struct {
 	User     string `yaml:"user,omitempty"`
 	Port     int    `yaml:"port,omitempty"`
 	KeyFile  string `yaml:"key,omitempty"`
-	Password string `yaml:"password,omitempty"`
+	Password string `yaml:"password,omitempty" json:"-" secret:"true"`
 	AuthMode string `yaml:"auth,omitempty"` // "key" (default) or "password"
 	BinPath  string `yaml:"bin,omitempty"`  // remote homebutler path (default: homebutler)
 }
@@ -255,16 +255,6 @@ func Load(path string) (*Config, error) {
 	}
 
 	return cfg, nil
-}
-
-// hasSecrets returns true if any server uses password auth.
-func hasSecrets(cfg *Config) bool {
-	for _, s := range cfg.Servers {
-		if s.Password != "" {
-			return true
-		}
-	}
-	return false
 }
 
 // FindServer returns the server config by name, or nil if not found.

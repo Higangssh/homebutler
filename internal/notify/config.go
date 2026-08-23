@@ -9,21 +9,27 @@ const (
 	ChannelWebhook  Channel = "webhook"
 )
 
+// The credential fields below carry json:"-" so they cannot be serialized at
+// all, and secret:"true" so config.hasSecrets finds them without having to be
+// told about each new section. Nothing serializes a *config.Config today, but
+// that is a property of the current call sites rather than of these types, and
+// report, doctor and the MCP tools all serialize a growing amount of state.
+
 type TelegramConfig struct {
-	BotToken string `yaml:"bot_token" json:"bot_token"`
+	BotToken string `yaml:"bot_token" json:"-" secret:"true"`
 	ChatID   string `yaml:"chat_id" json:"chat_id"`
 }
 
 type SlackConfig struct {
-	WebhookURL string `yaml:"webhook_url" json:"webhook_url"`
+	WebhookURL string `yaml:"webhook_url" json:"-" secret:"true"`
 }
 
 type DiscordConfig struct {
-	WebhookURL string `yaml:"webhook_url" json:"webhook_url"`
+	WebhookURL string `yaml:"webhook_url" json:"-" secret:"true"`
 }
 
 type WebhookConfig struct {
-	URL string `yaml:"url" json:"url"`
+	URL string `yaml:"url" json:"-" secret:"true"`
 }
 
 type ProviderConfig struct {
