@@ -19,15 +19,19 @@ import (
 
 // Snapshot persists inventory state for future comparison.
 type Snapshot struct {
-	Timestamp       string             `json:"timestamp"`
-	ServerName      string             `json:"server_name"`
-	System          *system.StatusInfo `json:"system"`
-	Containers      []docker.Container `json:"containers"`
-	Ports           []ports.PortInfo   `json:"ports"`
-	Warnings        []string           `json:"warnings,omitempty"`
-	RunningCount    int                `json:"running_count"`
-	StoppedCount    int                `json:"stopped_count"`
-	PublicPortCount int                `json:"public_port_count"`
+	Timestamp  string             `json:"timestamp"`
+	ServerName string             `json:"server_name"`
+	System     *system.StatusInfo `json:"system"`
+	Containers []docker.Container `json:"containers"`
+	Ports      []ports.PortInfo   `json:"ports"`
+	Warnings   []string           `json:"warnings,omitempty"`
+	// Failed records which collectors did not answer when this snapshot was
+	// taken. A diff that does not know this would report every container as
+	// having disappeared when Docker was simply down at collection time.
+	Failed          []string `json:"failed_collectors,omitempty"`
+	RunningCount    int      `json:"running_count"`
+	StoppedCount    int      `json:"stopped_count"`
+	PublicPortCount int      `json:"public_port_count"`
 }
 
 // Report is the structured output of a report run.
@@ -114,6 +118,7 @@ func buildSnapshot(inv *inventory.Inventory) *Snapshot {
 		Containers: inv.Containers,
 		Ports:      inv.Ports,
 		Warnings:   inv.Warnings,
+		Failed:     inv.Failed,
 	}
 	for _, c := range inv.Containers {
 		switch c.State {

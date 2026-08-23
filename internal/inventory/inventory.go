@@ -17,6 +17,30 @@ type Inventory struct {
 	Containers []docker.Container `json:"containers"`
 	Ports      []ports.PortInfo   `json:"ports"`
 	Warnings   []string           `json:"warnings,omitempty"`
+	// Failed names the collectors that did not answer, so a reader can ask
+	// which part of the snapshot is missing rather than matching on the
+	// prefix of a warning string. Warnings stays the human-readable list;
+	// this is the machine-readable half, kept separate so the two do not have
+	// to be one field doing both jobs.
+	Failed []string `json:"failed_collectors,omitempty"`
+}
+
+// Collector names recorded in Failed.
+const (
+	CollectorDocker = "docker"
+	CollectorPorts  = "ports"
+)
+
+// CollectorFailed reports whether the named collector failed during Collect.
+// An empty Ports slice means either "nothing is listening" or "the scan did
+// not run", and only this can tell them apart.
+func (inv *Inventory) CollectorFailed(name string) bool {
+	for _, f := range inv.Failed {
+		if f == name {
+			return true
+		}
+	}
+	return false
 }
 
 // CollectFuncs allows injecting data sources for testing.
@@ -56,7 +80,8 @@ func Collect(cfg *config.Config, fns CollectFuncs) (*Inventory, error) {
 	// Docker: best-effort.
 	containers, err := fns.DockerListFn()
 	if err != nil {
-		inv.Warnings = append(inv.Warnings, "docker: "+err.Error())
+		inv.Warnings = append(inv.Warnings, CollectorDocker+": "+err.Error())
+		inv.Failed = append(inv.Failed, CollectorDocker)
 	} else {
 		inv.Containers = containers
 	}
@@ -64,7 +89,8 @@ func Collect(cfg *config.Config, fns CollectFuncs) (*Inventory, error) {
 	// Ports: best-effort.
 	result, err := fns.PortsListFn()
 	if err != nil {
-		inv.Warnings = append(inv.Warnings, "ports: "+err.Error())
+		inv.Warnings = append(inv.Warnings, CollectorPorts+": "+err.Error())
+		inv.Failed = append(inv.Failed, CollectorPorts)
 	} else {
 		inv.Ports = result.Ports
 	}
