@@ -136,3 +136,35 @@ func TestDemoWatchHistoryHonoursItsArguments(t *testing.T) {
 		}
 	}
 }
+
+// strict is the difference between "there are warnings" and "that counts as a
+// failure". The findings travel either way, so a caller that gates on passed
+// still gets to see what it is gating on.
+func TestDemoConfigValidateStrictChangesTheVerdictNotTheFindings(t *testing.T) {
+	s := NewServer(&config.Config{}, "dev", true)
+
+	lax, err := s.executeDemoTool("config_validate", map[string]any{})
+	if err != nil {
+		t.Fatalf("config_validate: %v", err)
+	}
+	strict, err := s.executeDemoTool("config_validate", map[string]any{"strict": true})
+	if err != nil {
+		t.Fatalf("config_validate strict: %v", err)
+	}
+
+	laxMap := lax.(map[string]any)
+	strictMap := strict.(map[string]any)
+
+	if laxMap["passed"] != true {
+		t.Error("warnings alone should not fail without strict")
+	}
+	if strictMap["passed"] != false {
+		t.Error("strict should turn a warning into a failure")
+	}
+	if laxMap["warnings"] != strictMap["warnings"] {
+		t.Error("strict must change the verdict, not what was found")
+	}
+	if strictMap["result"] == nil {
+		t.Error("the findings must travel with a failing verdict, or a caller cannot see why it failed")
+	}
+}

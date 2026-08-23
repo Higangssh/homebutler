@@ -104,11 +104,20 @@ type toolsCallResult struct {
 // Server is the MCP server.
 type Server struct {
 	cfg     *config.Config
+	cfgPath string
 	version string
 	demo    bool
 	in      io.Reader
 	out     io.Writer
 }
+
+// SetConfigPath records the --config path this server was started with.
+//
+// config_validate answers "is the config this server is running on valid", and
+// without the path it would resolve one itself and check whatever the default
+// rules select. That is a different file, correctly labelled in the result but
+// not the one that was asked about.
+func (s *Server) SetConfigPath(path string) { s.cfgPath = path }
 
 // NewServer creates a new MCP server.
 func NewServer(cfg *config.Config, version string, demo ...bool) *Server {
@@ -312,6 +321,25 @@ func (s *Server) executeTool(name string, args map[string]any) (any, error) {
 			return nil, err
 		}
 		return watch.CheckTargets(dir, s.resolveIncidentCap(dir))
+	case "processes":
+		return system.ListProcesses(intArg(args, "limit", 10), stringArg(args, "sort_by"))
+	case "config_validate":
+		// Deliberately not s.cfg: that is the already-loaded config, and
+		// loading treats an unreadable or missing file as "use defaults",
+		// which is exactly the failure this answers. Validate reads the file.
+		result := config.Validate(s.cfgPath)
+		passed := result.Errors() == 0
+		if boolArg(args, "strict") && result.Warnings() > 0 {
+			passed = false
+		}
+		// The result travels with the verdict rather than the verdict being an
+		// error, so a caller that gates on passed still gets to see why.
+		return map[string]any{
+			"passed":   passed,
+			"errors":   result.Errors(),
+			"warnings": result.Warnings(),
+			"result":   result,
+		}, nil
 	case "watch_history":
 		dir, err := watch.WatchDir()
 		if err != nil {
@@ -478,6 +506,12 @@ func (s *Server) executeRemote(srv *config.ServerConfig, tool string, args map[s
 		remoteArgs = []string{"doctor", "--json", "--backup-max-age", fmt.Sprintf("%dh", intArg(args, "backup_max_age_hours", 168))}
 	case "watch_check":
 		remoteArgs = []string{"watch", "check", "--json"}
+	case "processes":
+		remoteArgs = []string{"processes", "--json",
+			"--limit", strconv.Itoa(intArg(args, "limit", 10))}
+		if by := stringArg(args, "sort_by"); by != "" {
+			remoteArgs = append(remoteArgs, "--sort", by)
+		}
 	case "watch_history":
 		// The flags go over rather than being applied to the response, so the
 		// remote answer is the same shape the local one is and the logs are

@@ -102,8 +102,22 @@ Restart your AI client — homebutler tools will appear automatically.
 | `install_status` | Check installed app status |
 | `install_uninstall` | Stop an app while preserving data |
 | `install_purge` | Stop an app and delete all data |
+| `processes` | Top processes by CPU or memory, with zombies broken out separately |
+| `config_validate` | Check the config file this server is running on |
 
 Most read/check tools support an optional `server` parameter — manage every server from a single prompt. Destructive tools such as `backup_restore`, `install_purge`, and container stop/restart should only be called after the user clearly confirms intent.
+
+`config_validate` is the exception: it has no `server` parameter. It answers whether the config this MCP server is running on is valid, which is a question about this machine, and pointing it at a remote would answer about a different file.
+
+### What is deliberately not exposed
+
+Omissions worth stating, so they read as decisions rather than gaps.
+
+**`trust`** accepts SSH host keys on first use. An agent auto-accepting TOFU is exactly the boundary this project promises not to cross, so there is no tool for it and there will not be one.
+
+**`upgrade`** replaces the running binary. **`serve`**, **`init`**, **`watch start`** and **`watch tui`** are daemons or interactive; neither shape fits a stdio request and response.
+
+**`deploy`** is deferred past 1.0. Remote install is the highest-risk surface here and should not be frozen into the first stable tool set.
 
 ## How It Works
 
