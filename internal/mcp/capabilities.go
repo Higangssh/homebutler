@@ -282,6 +282,39 @@ var capabilityRegistry = []capability{
 		risk:    riskRead,
 		targets: []targetKind{targetLocal, targetServer},
 		tool: toolDef{
+			Name:        "processes",
+			Description: "List the top processes by CPU or memory, with a total count and any zombies broken out separately",
+			InputSchema: inputSchema{
+				Type: "object",
+				Properties: map[string]propDef{
+					"limit":   {Type: "string", Description: "Number of processes to return (default: 10, 0 for all)"},
+					"sort_by": {Type: "string", Description: "Sort by cpu (default) or mem"},
+					"server":  {Type: "string", Description: "Remote server name from config (optional, runs locally if omitted)"},
+				},
+			},
+		},
+	},
+	{
+		// Local only. It answers "is the config this MCP server is running on
+		// valid", which is a question about this machine. Pointing it at a
+		// remote would silently answer about a different file.
+		risk:    riskRead,
+		targets: []targetKind{targetLocal},
+		tool: toolDef{
+			Name:        "config_validate",
+			Description: "Check the config file this server is running on: which file was used, which rule selected it, what was read from each section, and anything wrong or silently ignored",
+			InputSchema: inputSchema{
+				Type: "object",
+				Properties: map[string]propDef{
+					"strict": {Type: "boolean", Description: "Treat warnings as failures in the passed field (default: false)"},
+				},
+			},
+		},
+	},
+	{
+		risk:    riskRead,
+		targets: []targetKind{targetLocal, targetServer},
+		tool: toolDef{
 			Name:        "watch_history",
 			Description: "List recorded restart incidents, newest first. Captured logs are excluded unless include_logs is set, because every incident carries a hundred lines of output twice over",
 			InputSchema: inputSchema{

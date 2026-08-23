@@ -114,3 +114,23 @@ func TestUnknownServerStillReportedBeforeTheGate(t *testing.T) {
 		t.Errorf("an unknown server should be reported as such, got: %v", err)
 	}
 }
+
+// config_validate answers "is the config this server is running on valid".
+// Pointing it at a remote would answer about a different file, so the registry
+// declares it local-only and the gate has to enforce that.
+func TestConfigValidateCannotBePointedAtAServer(t *testing.T) {
+	c, ok := capabilityFor("config_validate")
+	if !ok {
+		t.Fatal("config_validate is not registered")
+	}
+	if c.supports(targetServer) {
+		t.Error("config_validate must not declare targetServer; it would validate a different file than the one asked about")
+	}
+
+	s := NewServer(&config.Config{
+		Servers: []config.ServerConfig{{Name: "pve1", Host: "192.0.2.1"}},
+	}, "test")
+	if _, err := s.executeTool("config_validate", map[string]any{"server": "pve1"}); err == nil {
+		t.Error("expected config_validate pointed at a server to be rejected")
+	}
+}

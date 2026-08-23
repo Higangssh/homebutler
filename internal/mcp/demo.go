@@ -2,6 +2,7 @@ package mcp
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/Higangssh/homebutler/internal/install"
@@ -102,6 +103,34 @@ func (s *Server) executeDemoTool(name string, args map[string]any) (any, error) 
 			},
 			"skipped": []map[string]any{
 				{"name": "caddy.service", "kind": "systemd"},
+			},
+		}, nil
+
+	case "processes":
+		return demoProcesses(args), nil
+
+	case "config_validate":
+		// Reports a warning rather than a clean bill of health. A demo that
+		// only ever passed would teach a caller that this tool has nothing to
+		// say, when catching the silently-ignored key is the reason it exists.
+		strict := boolArg(args, "strict")
+		return map[string]any{
+			"passed":   !strict,
+			"errors":   0,
+			"warnings": 1,
+			"result": map[string]any{
+				"path":   "/home/demo/.homebutler/config.yaml",
+				"source": "default location (~/.homebutler/config.yaml)",
+				"exists": true,
+				"valid":  true,
+				"findings": []map[string]any{
+					{
+						"severity": "warning",
+						"section":  "watch",
+						"message":  "unknown key \"cooldwn\" is ignored",
+						"hint":     "did you mean \"cooldown\"?",
+					},
+				},
 			},
 		}, nil
 
@@ -431,4 +460,37 @@ func demoWatchHistory(args map[string]any) []map[string]any {
 	}
 
 	return incidents
+}
+
+// demoProcesses honours limit and sort_by, and always carries a zombie. The
+// real tool breaks zombies out separately because they do not show up in a
+// CPU-sorted top ten while still being worth knowing about; a demo without one
+// would hide the field that exists for that.
+func demoProcesses(args map[string]any) map[string]any {
+	procs := []map[string]any{
+		{"pid": 1187, "name": "postgres", "cpu": 12.4, "mem": 8.1, "rss": 1329152},
+		{"pid": 902, "name": "plex", "cpu": 9.7, "mem": 14.6, "rss": 2394112},
+		{"pid": 1544, "name": "prometheus", "cpu": 4.2, "mem": 4.5, "rss": 738304},
+		{"pid": 311, "name": "dockerd", "cpu": 2.1, "mem": 2.2, "rss": 360448},
+		{"pid": 1290, "name": "nginx", "cpu": 0.4, "mem": 0.2, "rss": 24576},
+	}
+
+	if stringArg(args, "sort_by") == "mem" {
+		sort.SliceStable(procs, func(i, j int) bool {
+			return procs[i]["mem"].(float64) > procs[j]["mem"].(float64)
+		})
+	}
+
+	total := len(procs) + 173
+	if n := intArg(args, "limit", 10); n > 0 && len(procs) > n {
+		procs = procs[:n]
+	}
+
+	return map[string]any{
+		"processes": procs,
+		"total":     total,
+		"zombies": []map[string]any{
+			{"pid": 2077, "name": "ffmpeg", "cpu": 0.0, "mem": 0.0, "rss": 0, "state": "Z", "zombie": true},
+		},
+	}
 }
