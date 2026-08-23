@@ -16,7 +16,11 @@ func newMCPCmd() *cobra.Command {
 			if err := loadConfig(); err != nil {
 				return err
 			}
-			return mcp.NewServer(cfg, Version, demo).Run()
+			srv := mcp.NewServer(cfg, Version, demo)
+			// So config_validate checks the file this server is running on
+			// rather than resolving one of its own.
+			srv.SetConfigPath(cfgPath)
+			return srv.Run()
 		},
 	}
 

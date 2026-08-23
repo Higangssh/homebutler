@@ -823,6 +823,15 @@ All three call the same `internal/` packages — no code duplication.
 ## Contributing
 
 Contributions welcome! Please open an issue first to discuss what you'd like to change.
+[CONTRIBUTING.md](CONTRIBUTING.md) covers what homebutler accepts and what a new
+target has to prove.
+
+## Security
+
+Found a vulnerability? Report it privately through
+[the Security tab](https://github.com/Higangssh/homebutler/security/advisories/new)
+rather than a public issue. [SECURITY.md](SECURITY.md) covers what is in scope
+and what to expect.
 
 ## License
 

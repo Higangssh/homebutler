@@ -8,10 +8,42 @@ const (
 	riskDestructive capabilityRisk = "destructive"
 )
 
+// targetKind is what a tool can be pointed at. A bool could only ask "is this a
+// named SSH server from servers:", which is the only kind of target homebutler
+// has had so far. An API-backed target has no agent on the far side and a
+// different way of being addressed, so the question has to be open-ended before
+// 1.0 freezes the answer.
+type targetKind string
+
+const (
+	targetLocal  targetKind = "local"  // this machine; no target argument
+	targetServer targetKind = "server" // a named SSH server from servers:
+)
+
 type capability struct {
-	tool          toolDef
-	risk          capabilityRisk
-	remoteSupport bool
+	tool    toolDef
+	risk    capabilityRisk
+	targets []targetKind
+}
+
+// supports reports whether the tool can be pointed at kind.
+func (c capability) supports(kind targetKind) bool {
+	for _, t := range c.targets {
+		if t == kind {
+			return true
+		}
+	}
+	return false
+}
+
+// capabilityFor returns the registry entry for a tool name.
+func capabilityFor(name string) (capability, bool) {
+	for _, c := range capabilityRegistry {
+		if c.tool.Name == name {
+			return c, true
+		}
+	}
+	return capability{}, false
 }
 
 func toolDefinitions() []toolDef {
@@ -24,8 +56,8 @@ func toolDefinitions() []toolDef {
 
 var capabilityRegistry = []capability{
 	{
-		risk:          riskRead,
-		remoteSupport: true,
+		risk:    riskRead,
+		targets: []targetKind{targetLocal, targetServer},
 		tool: toolDef{
 			Name:        "system_status",
 			Description: "Get system status including CPU, memory, disk usage, and uptime",
@@ -38,8 +70,8 @@ var capabilityRegistry = []capability{
 		},
 	},
 	{
-		risk:          riskRead,
-		remoteSupport: true,
+		risk:    riskRead,
+		targets: []targetKind{targetLocal, targetServer},
 		tool: toolDef{
 			Name:        "docker_list",
 			Description: "List Docker containers with their status, image, and ports",
@@ -52,8 +84,8 @@ var capabilityRegistry = []capability{
 		},
 	},
 	{
-		risk:          riskWrite,
-		remoteSupport: true,
+		risk:    riskWrite,
+		targets: []targetKind{targetLocal, targetServer},
 		tool: toolDef{
 			Name:        "docker_restart",
 			Description: "Restart a Docker container by name",
@@ -68,8 +100,8 @@ var capabilityRegistry = []capability{
 		},
 	},
 	{
-		risk:          riskDestructive,
-		remoteSupport: true,
+		risk:    riskDestructive,
+		targets: []targetKind{targetLocal, targetServer},
 		tool: toolDef{
 			Name:        "docker_stop",
 			Description: "Stop a Docker container by name",
@@ -84,8 +116,8 @@ var capabilityRegistry = []capability{
 		},
 	},
 	{
-		risk:          riskRead,
-		remoteSupport: true,
+		risk:    riskRead,
+		targets: []targetKind{targetLocal, targetServer},
 		tool: toolDef{
 			Name:        "docker_logs",
 			Description: "Get logs from a Docker container",
@@ -101,8 +133,8 @@ var capabilityRegistry = []capability{
 		},
 	},
 	{
-		risk:          riskRead,
-		remoteSupport: true,
+		risk:    riskRead,
+		targets: []targetKind{targetLocal, targetServer},
 		tool: toolDef{
 			Name:        "docker_stats",
 			Description: "Get resource usage statistics (CPU, memory, network, block I/O) for all running Docker containers",
@@ -115,8 +147,8 @@ var capabilityRegistry = []capability{
 		},
 	},
 	{
-		risk:          riskWrite,
-		remoteSupport: false,
+		risk:    riskWrite,
+		targets: []targetKind{targetLocal},
 		tool: toolDef{
 			Name:        "wake",
 			Description: "Send a Wake-on-LAN magic packet to wake a machine",
@@ -131,8 +163,8 @@ var capabilityRegistry = []capability{
 		},
 	},
 	{
-		risk:          riskRead,
-		remoteSupport: true,
+		risk:    riskRead,
+		targets: []targetKind{targetLocal, targetServer},
 		tool: toolDef{
 			Name:        "open_ports",
 			Description: "List open network ports with associated process information",
@@ -145,8 +177,8 @@ var capabilityRegistry = []capability{
 		},
 	},
 	{
-		risk:          riskRead,
-		remoteSupport: false,
+		risk:    riskRead,
+		targets: []targetKind{targetLocal},
 		tool: toolDef{
 			Name:        "network_scan",
 			Description: "Scan the local network to discover devices (IP, MAC, hostname)",
@@ -156,8 +188,8 @@ var capabilityRegistry = []capability{
 		},
 	},
 	{
-		risk:          riskRead,
-		remoteSupport: true,
+		risk:    riskRead,
+		targets: []targetKind{targetLocal, targetServer},
 		tool: toolDef{
 			Name:        "alerts",
 			Description: "Check resource alerts for CPU, memory, and disk usage against configured thresholds",
@@ -170,8 +202,8 @@ var capabilityRegistry = []capability{
 		},
 	},
 	{
-		risk:          riskRead,
-		remoteSupport: true,
+		risk:    riskRead,
+		targets: []targetKind{targetLocal, targetServer},
 		tool: toolDef{
 			Name:        "inventory_scan",
 			Description: "Collect server inventory/topology including system status, Docker containers, app ports, and system ports",
@@ -184,8 +216,8 @@ var capabilityRegistry = []capability{
 		},
 	},
 	{
-		risk:          riskRead,
-		remoteSupport: true,
+		risk:    riskRead,
+		targets: []targetKind{targetLocal, targetServer},
 		tool: toolDef{
 			Name:        "inventory_export",
 			Description: "Export server inventory/topology as a Mermaid diagram locally, or JSON locally/remotely",
@@ -199,8 +231,8 @@ var capabilityRegistry = []capability{
 		},
 	},
 	{
-		risk:          riskWrite,
-		remoteSupport: true,
+		risk:    riskWrite,
+		targets: []targetKind{targetLocal, targetServer},
 		tool: toolDef{
 			Name:        "report",
 			Description: "Generate a butler-style health report with snapshot comparison, warnings, notable changes, and suggested actions",
@@ -215,8 +247,8 @@ var capabilityRegistry = []capability{
 		},
 	},
 	{
-		risk:          riskRead,
-		remoteSupport: true,
+		risk:    riskRead,
+		targets: []targetKind{targetLocal, targetServer},
 		tool: toolDef{
 			Name:        "doctor",
 			Description: "Run a read-only diagnosis for resource pressure, stopped containers, public ports, backup hygiene, notifications, and report baseline readiness",
@@ -233,8 +265,8 @@ var capabilityRegistry = []capability{
 		// Write rather than read: CheckTargets records the new container state
 		// and saves any incident it detects, so a caller cannot treat this as a
 		// free query the way system_status is.
-		risk:          riskWrite,
-		remoteSupport: true,
+		risk:    riskWrite,
+		targets: []targetKind{targetLocal, targetServer},
 		tool: toolDef{
 			Name:        "watch_check",
 			Description: "Run a one-shot restart check on watched targets and report restarts detected since the last check. Only docker targets can be inspected this way; systemd and pm2 targets are reported as skipped rather than assumed healthy",
@@ -247,8 +279,72 @@ var capabilityRegistry = []capability{
 		},
 	},
 	{
-		risk:          riskWrite,
-		remoteSupport: true,
+		risk:    riskRead,
+		targets: []targetKind{targetLocal, targetServer},
+		tool: toolDef{
+			Name:        "processes",
+			Description: "List the top processes by CPU or memory, with a total count and any zombies broken out separately",
+			InputSchema: inputSchema{
+				Type: "object",
+				Properties: map[string]propDef{
+					"limit":   {Type: "string", Description: "Number of processes to return (default: 10, 0 for all)"},
+					"sort_by": {Type: "string", Description: "Sort by cpu (default) or mem"},
+					"server":  {Type: "string", Description: "Remote server name from config (optional, runs locally if omitted)"},
+				},
+			},
+		},
+	},
+	{
+		// Local only. It answers "is the config this MCP server is running on
+		// valid", which is a question about this machine. Pointing it at a
+		// remote would silently answer about a different file.
+		risk:    riskRead,
+		targets: []targetKind{targetLocal},
+		tool: toolDef{
+			Name:        "config_validate",
+			Description: "Check the config file this server is running on: which file was used, which rule selected it, what was read from each section, and anything wrong or silently ignored",
+			InputSchema: inputSchema{
+				Type: "object",
+				Properties: map[string]propDef{
+					"strict": {Type: "boolean", Description: "Treat warnings as failures in the passed field (default: false)"},
+				},
+			},
+		},
+	},
+	{
+		risk:    riskRead,
+		targets: []targetKind{targetLocal, targetServer},
+		tool: toolDef{
+			Name:        "watch_history",
+			Description: "List recorded restart incidents, newest first. Captured logs are excluded unless include_logs is set, because every incident carries a hundred lines of output twice over",
+			InputSchema: inputSchema{
+				Type: "object",
+				Properties: map[string]propDef{
+					"limit":        {Type: "string", Description: "Most recent N incidents (default: 10, 0 for all)"},
+					"container":    {Type: "string", Description: "Only incidents for this target (optional)"},
+					"include_logs": {Type: "boolean", Description: "Include the logs captured before and after each restart (default: false)"},
+					"server":       {Type: "string", Description: "Remote server name from config (optional, runs locally if omitted)"},
+				},
+			},
+		},
+	},
+	{
+		risk:    riskRead,
+		targets: []targetKind{targetLocal, targetServer},
+		tool: toolDef{
+			Name:        "watch_list",
+			Description: "List the targets being watched, with their kind and what the last check recorded",
+			InputSchema: inputSchema{
+				Type: "object",
+				Properties: map[string]propDef{
+					"server": {Type: "string", Description: "Remote server name from config (optional, runs locally if omitted)"},
+				},
+			},
+		},
+	},
+	{
+		risk:    riskWrite,
+		targets: []targetKind{targetLocal, targetServer},
 		tool: toolDef{
 			Name:        "backup_create",
 			Description: "Create a Docker compose backup archive for all services or one service",
@@ -263,8 +359,8 @@ var capabilityRegistry = []capability{
 		},
 	},
 	{
-		risk:          riskRead,
-		remoteSupport: true,
+		risk:    riskRead,
+		targets: []targetKind{targetLocal, targetServer},
 		tool: toolDef{
 			Name:        "backup_list",
 			Description: "List existing backup archives in the configured backup directory",
@@ -277,8 +373,8 @@ var capabilityRegistry = []capability{
 		},
 	},
 	{
-		risk:          riskWrite,
-		remoteSupport: true,
+		risk:    riskWrite,
+		targets: []targetKind{targetLocal, targetServer},
 		tool: toolDef{
 			Name:        "backup_drill",
 			Description: "Verify a backup by booting an app in an isolated Docker environment and checking that it responds",
@@ -294,8 +390,8 @@ var capabilityRegistry = []capability{
 		},
 	},
 	{
-		risk:          riskDestructive,
-		remoteSupport: true,
+		risk:    riskDestructive,
+		targets: []targetKind{targetLocal, targetServer},
 		tool: toolDef{
 			Name:        "backup_restore",
 			Description: "Restore Docker volumes from a backup archive. Destructive: confirm intent before calling.",
@@ -311,8 +407,8 @@ var capabilityRegistry = []capability{
 		},
 	},
 	{
-		risk:          riskRead,
-		remoteSupport: false,
+		risk:    riskRead,
+		targets: []targetKind{targetLocal},
 		tool: toolDef{
 			Name:        "install_list",
 			Description: "List available self-hosted apps that can be installed",
@@ -322,8 +418,8 @@ var capabilityRegistry = []capability{
 		},
 	},
 	{
-		risk:          riskWrite,
-		remoteSupport: false,
+		risk:    riskWrite,
+		targets: []targetKind{targetLocal},
 		tool: toolDef{
 			Name:        "install_app",
 			Description: "Install a self-hosted app via docker compose. Pre-checks docker, ports, and duplicates automatically.",
@@ -338,8 +434,8 @@ var capabilityRegistry = []capability{
 		},
 	},
 	{
-		risk:          riskRead,
-		remoteSupport: false,
+		risk:    riskRead,
+		targets: []targetKind{targetLocal},
 		tool: toolDef{
 			Name:        "install_status",
 			Description: "Check the status of an installed app",
@@ -353,8 +449,8 @@ var capabilityRegistry = []capability{
 		},
 	},
 	{
-		risk:          riskWrite,
-		remoteSupport: false,
+		risk:    riskWrite,
+		targets: []targetKind{targetLocal},
 		tool: toolDef{
 			Name:        "install_uninstall",
 			Description: "Stop an installed app and remove its containers. Data is preserved.",
@@ -368,8 +464,8 @@ var capabilityRegistry = []capability{
 		},
 	},
 	{
-		risk:          riskDestructive,
-		remoteSupport: false,
+		risk:    riskDestructive,
+		targets: []targetKind{targetLocal},
 		tool: toolDef{
 			Name:        "install_purge",
 			Description: "Stop an installed app and delete all data including containers, config, and volumes.",
