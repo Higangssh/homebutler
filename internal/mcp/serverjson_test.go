@@ -39,6 +39,12 @@ func loadServerManifest(t *testing.T) serverManifest {
 // happens in the last step of the release, after the binaries, the Homebrew
 // tap and the npm package have already been published. v0.21.0 shipped with a
 // 103-character description and never reached the registry. Fail here instead.
+//
+// The limit is not ours: it is ServerDetail.description.maxLength in the
+// schema server.json already names in its $schema field, generated from the
+// registry's own openapi.yaml. Hardcoded rather than fetched so the test does
+// not need the network; check the schema if a future release is rejected for
+// a field this does not cover.
 func TestServerJSONDescriptionWithinRegistryLimit(t *testing.T) {
 	const maxDescription = 100
 
