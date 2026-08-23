@@ -2,6 +2,22 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.21.1](https://github.com/Higangssh/homebutler/compare/v0.21.0...v0.21.1) - 2026-08-23
+
+**Patch release to complete the MCP Registry listing.** v0.21.0 published its binaries, Homebrew tap and npm package, then failed on the last step of the release: the registry rejected a `server.json` description three characters over its 100-character limit. That step shipped in v0.21.0 itself, so the rejection means homebutler has never appeared in the registry at all.
+
+```bash
+npx -y homebutler@latest
+```
+
+### 🐛 Fixes
+
+- shorten the `server.json` description to 94 characters so the MCP Registry accepts it. Nothing else about v0.21.0 changes; the binaries, tap and npm package are identical
+
+### 🧪 Tests
+
+- assert in CI that the `server.json` description fits the registry limit, and that the server version and its npm package version agree. Both constraints were previously only enforced by the registry, at the end of a release that had already published everything else
+
 ## [0.21.0](https://github.com/Higangssh/homebutler/compare/v0.20.0...v0.21.0) - 2026-08-23
 
 **Three commands were confidently answering the wrong question.** `watch check` called systemd and pm2 targets clean without inspecting them, `report` counted fewer public ports than `doctor` did on the same scan, and a failed first connection blamed the host key rather than the reason it failed.
