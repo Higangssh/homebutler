@@ -292,6 +292,7 @@ func TestRenderTreeFiltered_ExposedShowsWarnings(t *testing.T) {
 		Host:       "10.0.0.1",
 		Ports:      []ports.PortInfo{},
 		Warnings:   []string{"ports: failed to list ports: exit status 1"},
+		Failed:     []string{CollectorPorts},
 	}
 
 	out, err := RenderTreeFiltered(inv, "exposed")
@@ -303,6 +304,30 @@ func TestRenderTreeFiltered_ExposedShowsWarnings(t *testing.T) {
 	}
 	if strings.Contains(out, "(none)") {
 		t.Errorf("(none) must not print when the scan failed; it reads as an authoritative count\n%s", out)
+	}
+}
+
+// A Docker failure says nothing about whether the port scan ran. Withholding
+// (none) here would hide a good answer on a host where Docker happens to be
+// down, which is a common state on a machine someone is checking ports on.
+func TestRenderTreeFiltered_ExposedStillAnswersWhenOnlyDockerFailed(t *testing.T) {
+	inv := &Inventory{
+		ServerName: "demo-lab",
+		Host:       "10.0.0.1",
+		Ports:      []ports.PortInfo{{Port: "5432", Protocol: "tcp", Address: "127.0.0.1", Process: "postgres"}},
+		Warnings:   []string{"docker: cannot connect to the Docker daemon"},
+		Failed:     []string{CollectorDocker},
+	}
+
+	out, err := RenderTreeFiltered(inv, "exposed")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(out, "(none)") {
+		t.Errorf("the port scan succeeded and found nothing exposed; that answer should be given\n%s", out)
+	}
+	if !strings.Contains(out, "Warnings (1)") {
+		t.Errorf("the docker failure should still be surfaced\n%s", out)
 	}
 }
 
@@ -384,3 +409,52 @@ func TestJSON_Roundtrip(t *testing.T) {
 type errTest string
 
 func (e errTest) Error() string { return string(e) }
+
+// Collect has to record the failure in both places: Warnings for a person and
+// Failed for a caller that needs to know which half of the snapshot is
+// missing. An empty Ports slice cannot tell those apart on its own.
+func TestCollectRecordsWhichCollectorFailed(t *testing.T) {
+	inv, err := Collect(&config.Config{}, fakeFuncs(nil, nil, errTest("docker down"), nil))
+	if err != nil {
+		t.Fatalf("Collect: %v", err)
+	}
+
+	if !inv.CollectorFailed(CollectorDocker) {
+		t.Error("a docker failure should be recorded in Failed")
+	}
+	if inv.CollectorFailed(CollectorPorts) {
+		t.Error("the port scan succeeded and must not be reported as failed")
+	}
+	if len(inv.Warnings) != 1 {
+		t.Errorf("the human-readable warning should still be there, got %v", inv.Warnings)
+	}
+
+	both, err := Collect(&config.Config{}, fakeFuncs(nil, nil, errTest("docker down"), errTest("no lsof")))
+	if err != nil {
+		t.Fatalf("Collect: %v", err)
+	}
+	if !both.CollectorFailed(CollectorDocker) || !both.CollectorFailed(CollectorPorts) {
+		t.Errorf("both failures should be recorded, got %v", both.Failed)
+	}
+}
+
+// Nothing failed, so Failed stays empty and omitempty keeps it out of the JSON
+// entirely. Adding the field has to be invisible to existing readers and to
+// snapshots written before it existed.
+func TestCollectLeavesFailedEmptyOnSuccess(t *testing.T) {
+	inv, err := Collect(&config.Config{}, fakeFuncs(nil, nil, nil, nil))
+	if err != nil {
+		t.Fatalf("Collect: %v", err)
+	}
+	if len(inv.Failed) != 0 {
+		t.Errorf("nothing failed, Failed should be empty, got %v", inv.Failed)
+	}
+
+	data, err := json.Marshal(inv)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	if strings.Contains(string(data), "failed_collectors") {
+		t.Errorf("an empty Failed must not appear in JSON\n%s", data)
+	}
+}

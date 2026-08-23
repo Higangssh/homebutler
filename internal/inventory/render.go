@@ -124,7 +124,11 @@ func renderExposedPorts(inv *Inventory) string {
 	fmt.Fprintf(&b, "   Server  %s\n", inv.ServerName)
 
 	b.WriteString("\n🌐 Exposed Ports\n")
-	if len(exposed) == 0 && len(inv.Warnings) == 0 {
+	// (none) is an authoritative answer, so it is only printed when the port
+	// scan actually ran. Suppressing on any warning was the safe first cut but
+	// it withheld a good answer whenever Docker happened to be down, which is
+	// common on a host someone is checking ports on.
+	if len(exposed) == 0 && !inv.CollectorFailed(CollectorPorts) {
 		b.WriteString("   (none)\n")
 	}
 	for i, p := range exposed {
