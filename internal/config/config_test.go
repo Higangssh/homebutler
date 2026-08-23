@@ -57,7 +57,11 @@ wake:
     mac: "AA:BB:CC:DD:EE:FF"
     ip: "192.168.1.255"
 `
-	if err := os.WriteFile(path, []byte(content), 0644); err != nil {
+	// 0600 because this fixture holds a bot token. Written 0644 it used to
+	// load without complaint, only because hasSecrets could not see notify
+	// credentials. Load now refuses that, which is what
+	// TestLoadRefusesAnOpenFileHoldingOnlyANotifyCredential covers.
+	if err := os.WriteFile(path, []byte(content), 0600); err != nil {
 		t.Fatalf("failed to write test config: %v", err)
 	}
 

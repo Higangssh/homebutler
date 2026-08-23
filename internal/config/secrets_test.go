@@ -2,7 +2,10 @@ package config
 
 import (
 	"encoding/json"
+	"os"
+	"path/filepath"
 	"reflect"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -124,5 +127,35 @@ func TestMarshallingAConfigLeaksNoCredentials(t *testing.T) {
 		if strings.Contains(string(data), secret) {
 			t.Errorf("serialized config contains %q\n%s", secret, data)
 		}
+	}
+}
+
+// The end of the whole change, through Load rather than through hasSecrets: a
+// config whose only credential is a notification token must be refused when
+// its permissions are open. Before this it loaded without complaint, and the
+// guard that exists to prevent exactly that never ran.
+func TestLoadRefusesAnOpenFileHoldingOnlyANotifyCredential(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Load only enforces permissions on non-Windows")
+	}
+
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.yaml")
+	content := "notify:\n  telegram:\n    bot_token: \"123:abc\"\n    chat_id: \"999\"\n"
+
+	if err := os.WriteFile(path, []byte(content), 0644); err != nil {
+		t.Fatalf("writing config: %v", err)
+	}
+	if _, err := Load(path); err == nil {
+		t.Fatal("a world-readable config holding a bot token should be refused")
+	} else if !strings.Contains(err.Error(), "chmod 600") {
+		t.Errorf("the refusal should say how to fix it, got: %v", err)
+	}
+
+	if err := os.Chmod(path, 0600); err != nil {
+		t.Fatalf("chmod: %v", err)
+	}
+	if _, err := Load(path); err != nil {
+		t.Errorf("the same config at 0600 should load: %v", err)
 	}
 }
