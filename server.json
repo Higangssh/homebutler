@@ -6,12 +6,12 @@
     "url": "https://github.com/Higangssh/homebutler",
     "source": "github"
   },
-  "version": "0.21.2",
+  "version": "0.22.0",
   "packages": [
     {
       "registryType": "npm",
       "identifier": "homebutler",
-      "version": "0.21.2",
+      "version": "0.22.0",
       "transport": {
         "type": "stdio"
       }
