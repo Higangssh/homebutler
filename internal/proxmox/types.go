@@ -256,8 +256,15 @@ type DefaultView struct {
 	Cluster   []ClusterStatus `json:"cluster"`
 	Resources Resources       `json:"resources"`
 	Warnings  []string        `json:"warnings,omitempty"`
-	Failed    []string        `json:"failed,omitempty"`
+	Failed    []string        `json:"failed_collectors,omitempty"`
 }
+
+// Collector names recorded in DefaultView.Failed.
+const (
+	CollectorVersion   = "version"
+	CollectorCluster   = "cluster"
+	CollectorResources = "resources"
+)
 
 // CollectorFailed reports whether a default status collector failed.
 func (v DefaultView) CollectorFailed(name string) bool {

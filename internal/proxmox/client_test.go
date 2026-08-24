@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"encoding/pem"
 	"net/http"
 	"net/http/httptest"
@@ -108,8 +109,12 @@ func TestDefaultViewKeepsSuccessfulResponses(t *testing.T) {
 	if err != nil {
 		t.Fatalf("DefaultView() error: %v", err)
 	}
-	if view.Version.Version != "9.1.4" || len(view.Resources.Guests) != 3 || !view.CollectorFailed("cluster") || len(view.Warnings) != 1 {
+	if view.Version.Version != "9.1.4" || len(view.Resources.Guests) != 3 || !view.CollectorFailed(CollectorCluster) || len(view.Warnings) != 1 {
 		t.Errorf("DefaultView() = %#v", view)
+	}
+	data, err := json.Marshal(view)
+	if err != nil || !strings.Contains(string(data), `"failed_collectors"`) || strings.Contains(string(data), `"failed":`) {
+		t.Fatalf("DefaultView JSON = %s, error = %v", data, err)
 	}
 }
 

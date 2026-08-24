@@ -213,19 +213,19 @@ func (c *Client) DefaultView(ctx context.Context) (DefaultView, error) {
 	view := DefaultView{}
 	if version, err := c.Version(ctx); err != nil {
 		view.Warnings = append(view.Warnings, "version: "+err.Error())
-		view.Failed = append(view.Failed, "version")
+		view.Failed = append(view.Failed, CollectorVersion)
 	} else {
 		view.Version = version
 	}
 	if cluster, err := c.ClusterStatus(ctx); err != nil {
 		view.Warnings = append(view.Warnings, "cluster: "+err.Error())
-		view.Failed = append(view.Failed, "cluster")
+		view.Failed = append(view.Failed, CollectorCluster)
 	} else {
 		view.Cluster = cluster
 	}
 	if resources, err := c.Resources(ctx); err != nil {
 		view.Warnings = append(view.Warnings, "resources: "+err.Error())
-		view.Failed = append(view.Failed, "resources")
+		view.Failed = append(view.Failed, CollectorResources)
 	} else {
 		view.Resources = resources
 	}

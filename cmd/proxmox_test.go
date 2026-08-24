@@ -318,6 +318,9 @@ func TestProxmoxTasksReportsUnavailableNodes(t *testing.T) {
 	if len(view.Tasks) != 3 || len(view.Failed) != 1 || view.Failed[0] != "pve2" || len(view.Warnings) != 1 {
 		t.Errorf("tasks view = %#v", view)
 	}
+	if !bytes.Contains(output.Bytes(), []byte(`"failed_collectors"`)) {
+		t.Errorf("tasks JSON must expose failed_collectors: %s", output.Bytes())
+	}
 }
 
 func TestProxmoxTasksReportsNoVisibleNodes(t *testing.T) {

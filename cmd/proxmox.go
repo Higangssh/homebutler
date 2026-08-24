@@ -192,7 +192,7 @@ type proxmoxTasksView struct {
 	Nodes    []string       `json:"nodes"`
 	Tasks    []proxmox.Task `json:"tasks"`
 	Warnings []string       `json:"warnings,omitempty"`
-	Failed   []string       `json:"failed,omitempty"`
+	Failed   []string       `json:"failed_collectors,omitempty"`
 }
 
 func writeProxmox(cmd *cobra.Command, value any, jsonOutput bool, heading string, human func(*strings.Builder)) error {
@@ -215,12 +215,12 @@ func writeProxmoxStatus(cmd *cobra.Command, endpoint string, view proxmox.Defaul
 
 	var b strings.Builder
 	fmt.Fprintf(&b, "Proxmox endpoint: %s\n", endpoint)
-	if view.CollectorFailed("version") {
+	if view.CollectorFailed(proxmox.CollectorVersion) {
 		fmt.Fprintln(&b, "Version: unavailable")
 	} else {
 		fmt.Fprintf(&b, "Version: %s\n", view.Version.Version)
 	}
-	if view.CollectorFailed("cluster") {
+	if view.CollectorFailed(proxmox.CollectorCluster) {
 		fmt.Fprintln(&b, "Cluster: unavailable")
 	} else {
 		clusterName, quorum := "standalone", "n/a"
@@ -244,7 +244,7 @@ func writeProxmoxStatus(cmd *cobra.Command, endpoint string, view proxmox.Defaul
 		}
 		fmt.Fprintf(&b, "Cluster: %s | quorum: %s | nodes: %d/%d online\n", clusterName, quorum, online, nodes)
 	}
-	if view.CollectorFailed("resources") {
+	if view.CollectorFailed(proxmox.CollectorResources) {
 		fmt.Fprintln(&b, "Resources: unavailable")
 	} else {
 		fmt.Fprintf(&b, "Resources: %d nodes | %d guests | %d storage\n", len(view.Resources.Nodes), len(view.Resources.Guests), len(view.Resources.Storage))
