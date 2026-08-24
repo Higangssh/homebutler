@@ -9,21 +9,21 @@ import (
 	"github.com/Higangssh/homebutler/internal/config"
 )
 
-// Every registry entry declares at least targetLocal. A tool that can be
-// pointed nowhere is registered but unreachable, which is a mistake rather than
-// a configuration.
+// Every registry entry declares at least one target. Proxmox is an API target,
+// not the local machine or an SSH server, so its tools deliberately declare
+// only targetProxmox.
 func TestEveryCapabilityDeclaresATarget(t *testing.T) {
 	for _, c := range capabilityRegistry {
 		if len(c.targets) == 0 {
 			t.Errorf("tool %q declares no targets", c.tool.Name)
 			continue
 		}
-		if !c.supports(targetLocal) {
-			t.Errorf("tool %q does not support targetLocal; every tool runs on this machine", c.tool.Name)
+		if !c.supports(targetLocal) && !c.supports(targetProxmox) {
+			t.Errorf("tool %q declares neither targetLocal nor targetProxmox", c.tool.Name)
 		}
 		for _, k := range c.targets {
 			switch k {
-			case targetLocal, targetServer:
+			case targetLocal, targetServer, targetProxmox:
 			default:
 				t.Errorf("tool %q declares unknown target %q", c.tool.Name, k)
 			}

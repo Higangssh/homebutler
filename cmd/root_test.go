@@ -37,6 +37,12 @@ func TestFilterFlags(t *testing.T) {
 			expected: []string{"doctor", "--json"},
 		},
 		{
+			name:     "remove proxmox endpoint value flag",
+			args:     []string{"proxmox", "status", "--endpoint", "pve", "--json"},
+			flags:    []string{"--endpoint"},
+			expected: []string{"proxmox", "status", "--json"},
+		},
+		{
 			name:     "no flags to remove",
 			args:     []string{"status", "--json"},
 			flags:    []string{"--server", "--all"},
