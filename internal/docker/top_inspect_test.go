@@ -246,7 +246,8 @@ func TestParseDockerInspectVariants(t *testing.T) {
 // Top and Inspect validate the name before shelling out, so these run without
 // a docker daemon and still prove the injection guard sits in front of exec.
 func TestTopAndInspectRejectInvalidNames(t *testing.T) {
-	for _, name := range []string{"", "nginx;rm -rf /", "../etc/passwd"} {
+	for _, name := range []string{"", "nginx;rm -rf /", "../etc/passwd",
+		"--tls", "-ldebug", "-Htcp://192.0.2.1:2375"} {
 		if _, err := Top(name); err == nil {
 			t.Errorf("Top(%q) passed validation", name)
 		}

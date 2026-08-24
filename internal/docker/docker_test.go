@@ -22,6 +22,10 @@ func TestIsValidName(t *testing.T) {
 		{"space", "my container", false},
 		{"slash", "../etc/passwd", false},
 		{"ampersand", "nginx&&echo pwned", false},
+		{"leading-dash-flag", "--tls", false},
+		{"leading-dash-shorthand", "-ldebug", false},
+		{"leading-dash-host", "-Htcp://evil", false},
+		{"dash-inside-ok", "my-app", true},
 		{"too-long", string(make([]byte, 129)), false},
 		{"max-length", string(make([]byte, 128)), false}, // all zero bytes → invalid
 	}

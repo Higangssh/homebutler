@@ -419,7 +419,10 @@ func shortenDuration(s string) string {
 	return s
 }
 
-// isValidName prevents command injection by allowing only safe characters.
+// isValidName prevents command injection by allowing only safe characters,
+// and blocks a leading dash so a name can never be parsed as a docker CLI
+// flag rather than an argument (CWE-88). The first character rule mirrors
+// docker's own name grammar: [a-zA-Z0-9][a-zA-Z0-9_.-]*.
 func isValidName(name string) bool {
 	for _, c := range name {
 		if !((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || //nolint:staticcheck // readability
@@ -427,7 +430,7 @@ func isValidName(name string) bool {
 			return false
 		}
 	}
-	return len(name) > 0 && len(name) <= 128
+	return len(name) > 0 && name[0] != '-' && len(name) <= 128
 }
 
 func splitLines(s string) []string {
