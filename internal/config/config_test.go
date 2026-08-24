@@ -224,6 +224,80 @@ func TestFindServer(t *testing.T) {
 	}
 }
 
+func TestProxmoxConfigTokenValue(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("HOME", dir)
+	t.Setenv("USERPROFILE", dir)
+	path := filepath.Join(dir, "pve.token")
+	if err := os.WriteFile(path, []byte("  from-file\n"), 0600); err != nil {
+		t.Fatalf("write token: %v", err)
+	}
+
+	fromFile := ProxmoxConfig{TokenFile: "~/pve.token"}
+	if got := fromFile.TokenFilePath(); got != path {
+		t.Errorf("TokenFilePath() = %q, want %q", got, path)
+	}
+	if got, err := fromFile.TokenValue(); err != nil || got != "from-file" {
+		t.Errorf("TokenValue() = (%q, %v), want (from-file, nil)", got, err)
+	}
+
+	inline := ProxmoxConfig{Token: "inline-token"}
+	if got, err := inline.TokenValue(); err != nil || got != "inline-token" {
+		t.Errorf("TokenValue() = (%q, %v), want (inline-token, nil)", got, err)
+	}
+	if _, err := (ProxmoxConfig{}).TokenValue(); err == nil {
+		t.Error("TokenValue() should fail without a token source")
+	}
+
+	if _, err := (ProxmoxConfig{TokenFile: filepath.Join(dir, "missing")}).TokenValue(); err == nil {
+		t.Error("TokenValue() should fail for a missing token file")
+	}
+	if err := os.WriteFile(filepath.Join(dir, "empty"), []byte(" \n"), 0600); err != nil {
+		t.Fatalf("write empty token: %v", err)
+	}
+	if _, err := (ProxmoxConfig{TokenFile: filepath.Join(dir, "empty")}).TokenValue(); err == nil {
+		t.Error("TokenValue() should fail for an empty token file")
+	}
+}
+
+func TestProxmoxConfigDefaults(t *testing.T) {
+	p := ProxmoxConfig{}
+	if got := p.APIPort(); got != 8006 {
+		t.Errorf("APIPort() = %d, want 8006", got)
+	}
+	if got := p.TimeoutDuration(); got.String() != "10s" {
+		t.Errorf("TimeoutDuration() = %s, want 10s", got)
+	}
+}
+
+func TestLoadProxmoxConfig(t *testing.T) {
+	dir := t.TempDir()
+	tokenPath := filepath.Join(dir, "pve.token")
+	if err := os.WriteFile(tokenPath, []byte("token"), 0600); err != nil {
+		t.Fatalf("write token: %v", err)
+	}
+	path := filepath.Join(dir, "config.yaml")
+	content := "proxmox:\n  - name: pve\n    host: pve.example\n    port: 8007\n    token_id: monitoring@pve!readonly\n    token_file: " + tokenPath + "\n    fingerprint: AB:CD\n    ca_file: /etc/pve/ca.pem\n    insecure: true\n    timeout: 15s\n"
+	if err := os.WriteFile(path, []byte(content), 0600); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if len(cfg.Proxmox) != 1 {
+		t.Fatalf("Proxmox entries = %d, want 1", len(cfg.Proxmox))
+	}
+	p := cfg.Proxmox[0]
+	if p.Name != "pve" || p.Host != "pve.example" || p.APIPort() != 8007 || p.TokenID != "monitoring@pve!readonly" || p.TokenFile != tokenPath || p.Fingerprint != "AB:CD" || p.CAFile != "/etc/pve/ca.pem" || !p.Insecure || p.TimeoutDuration().String() != "15s" {
+		t.Errorf("unexpected Proxmox config: %+v", p)
+	}
+	if got := cfg.FindProxmox("pve"); got == nil || got.Host != "pve.example" {
+		t.Errorf("FindProxmox(pve) = %+v", got)
+	}
+}
+
 func TestResolveBackupDir(t *testing.T) {
 	tests := []struct {
 		name      string

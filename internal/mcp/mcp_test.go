@@ -294,6 +294,8 @@ func TestToolDefinitionsHaveRequiredFields(t *testing.T) {
 		"install_uninstall": {"app"},
 		"install_purge":     {"app"},
 		"backup_restore":    {"archive"},
+		"proxmox_node":      {"node"},
+		"proxmox_tasks":     {"node"},
 	}
 
 	for _, tool := range tools {

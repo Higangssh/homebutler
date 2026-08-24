@@ -21,6 +21,16 @@ servers:
   #   auth: password
   #   password: "your-password"
 
+# Proxmox VE API endpoints (read-only token recommended)
+proxmox:
+  # - name: pve
+  #   host: 192.168.1.10
+  #   port: 8006
+  #   token_id: monitoring@pve!readonly
+  #   token_file: ~/.config/homebutler/pve.token
+  #   fingerprint: "AB:CD:EF:..."
+  #   timeout: 10s
+
 # Wake-on-LAN targets
 wake:
   # - name: desktop

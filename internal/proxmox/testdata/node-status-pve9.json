@@ -1,0 +1,1 @@
+{"data":{"loadavg":["0.42","0.35","0.37"],"cpuinfo":{"cores":8,"cpus":16,"mhz":"3460.659","hvm":"1","user_hz":100},"boot-info":{"mode":"efi","secureboot":0},"memory":{"total":30261309440,"used":21632675840,"free":490299392,"available":8628633600},"cpu":0.012113083387472,"wait":0.000293396483433577,"uptime":2679284,"pveversion":"pve-manager/9.1.4/sanitized"}}

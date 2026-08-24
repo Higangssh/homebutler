@@ -79,7 +79,7 @@ func (r *ValidationResult) add(severity, field, message, hint string) {
 }
 
 // topLevelKeys mirrors the yaml tags on Config, in the order they are reported.
-var topLevelKeys = []string{"servers", "wake", "alerts", "notify", "watch", "backup_dir"}
+var topLevelKeys = []string{"servers", "proxmox", "wake", "alerts", "notify", "watch", "backup_dir"}
 
 // Validate resolves the config the same way every other command does, then
 // reports what it found without applying it. It never contacts a remote
@@ -142,6 +142,7 @@ func Validate(explicit string) *ValidationResult {
 	r.Sections = describeSections(rawTop, cfg)
 	r.checkPermissions(path, cfg)
 	r.checkServers(cfg)
+	r.checkProxmox(cfg)
 	r.checkWake(cfg)
 	r.checkAlerts(cfg)
 	r.checkNotify(cfg)
@@ -207,6 +208,7 @@ func cleanYAMLError(msg string) string {
 	replacements := []struct{ from, to string }{
 		{"type config.Config", "the homebutler config"},
 		{"type config.ServerConfig", "a servers[] entry"},
+		{"type config.ProxmoxConfig", "a proxmox[] entry"},
 		{"type config.WakeTarget", "a wake[] entry"},
 		{"type config.AlertConfig", "alerts"},
 		{"type config.WatchRuntimeConfig", "watch"},
@@ -354,6 +356,16 @@ func sectionSummary(name string, present bool, cfg *Config) string {
 		}
 		return fmt.Sprintf("%s (%s)", plural(len(cfg.Servers), "server"), strings.Join(names, ", "))
 
+	case "proxmox":
+		if len(cfg.Proxmox) == 0 {
+			return "not set"
+		}
+		names := make([]string, 0, len(cfg.Proxmox))
+		for _, p := range cfg.Proxmox {
+			names = append(names, p.Name)
+		}
+		return fmt.Sprintf("%s (%s)", plural(len(cfg.Proxmox), "endpoint"), strings.Join(names, ", "))
+
 	case "wake":
 		if len(cfg.Wake) == 0 {
 			return "not set"
@@ -422,7 +434,7 @@ func (r *ValidationResult) checkPermissions(path string, cfg *Config) {
 	}
 	if perm := info.Mode().Perm(); perm&0o077 != 0 {
 		r.add(SeverityError, "",
-			fmt.Sprintf("Config contains plaintext passwords but permissions are too open (%04o).", perm),
+			fmt.Sprintf("Config contains plaintext secrets but permissions are too open (%04o).", perm),
 			fmt.Sprintf("Run: chmod 600 %s", path))
 	}
 }
@@ -475,6 +487,54 @@ func (r *ValidationResult) checkServers(cfg *Config) {
 				r.add(SeverityWarning, field+".key",
 					fmt.Sprintf("Key file %s does not exist.", s.KeyFile),
 					"Connections to this server will fail when they are attempted.")
+			}
+		}
+	}
+}
+
+func (r *ValidationResult) checkProxmox(cfg *Config) {
+	seen := map[string]int{}
+	for i, p := range cfg.Proxmox {
+		field := fmt.Sprintf("proxmox[%d]", i)
+
+		if p.Name == "" {
+			r.add(SeverityError, field+".name", "Proxmox endpoint name is required.",
+				"Names are how the Proxmox CLI and MCP tools refer to this entry.")
+		} else if first, dup := seen[p.Name]; dup {
+			r.add(SeverityError, field+".name",
+				fmt.Sprintf("Duplicate Proxmox endpoint name %q (first defined at proxmox[%d]).", p.Name, first),
+				"Endpoint selection picks the first match, so the later entry is unreachable.")
+		} else {
+			seen[p.Name] = i
+		}
+
+		if p.Host == "" {
+			r.add(SeverityError, field+".host", "Proxmox host is required.", "Set the IP address or hostname for this endpoint.")
+		}
+		if p.TokenID == "" {
+			r.add(SeverityError, field+".token_id", "Proxmox token_id is required.", "Set the API token ID, such as monitoring@pve!readonly.")
+		}
+		if p.Port < 0 || p.Port > 65535 {
+			r.add(SeverityError, field+".port", fmt.Sprintf("Port %d is out of range.", p.Port),
+				"Valid ports are 1-65535; omit the key to use 8006.")
+		}
+		if p.Token == "" && p.TokenFile == "" {
+			r.add(SeverityError, field, "A Proxmox token or token_file is required.",
+				"token_file is preferred so the token is not stored in the config file.")
+		}
+		if p.Token != "" && p.TokenFile != "" {
+			r.add(SeverityError, field, "Both Proxmox token and token_file are set.",
+				"Keep token_file (preferred) or token, but not both.")
+		}
+		if p.TokenFile != "" {
+			if _, err := os.Stat(p.TokenFilePath()); os.IsNotExist(err) {
+				r.add(SeverityError, field+".token_file", fmt.Sprintf("Token file %s does not exist.", p.TokenFile), "Create the file or set token instead.")
+			}
+		}
+		if p.Timeout != "" {
+			timeout, err := time.ParseDuration(p.Timeout)
+			if err != nil || timeout <= 0 {
+				r.add(SeverityError, field+".timeout", fmt.Sprintf("Invalid duration %q.", p.Timeout), `Use a positive Go duration such as "10s".`)
 			}
 		}
 	}

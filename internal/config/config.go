@@ -5,6 +5,8 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
+	"time"
 
 	"github.com/Higangssh/homebutler/internal/notify"
 	"github.com/Higangssh/homebutler/internal/watch"
@@ -14,6 +16,7 @@ import (
 type Config struct {
 	Path      string                `yaml:"-"` // resolved config file path (not serialized)
 	Servers   []ServerConfig        `yaml:"servers"`
+	Proxmox   []ProxmoxConfig       `yaml:"proxmox,omitempty"`
 	Wake      []WakeTarget          `yaml:"wake,omitempty"`
 	Alerts    AlertConfig           `yaml:"alerts"`
 	Notify    notify.ProviderConfig `yaml:"notify,omitempty"`
@@ -125,6 +128,66 @@ type ServerConfig struct {
 	Password string `yaml:"password,omitempty" json:"-" secret:"true"`
 	AuthMode string `yaml:"auth,omitempty"` // "key" (default) or "password"
 	BinPath  string `yaml:"bin,omitempty"`  // remote homebutler path (default: homebutler)
+}
+
+// ProxmoxConfig describes one Proxmox VE API endpoint. It is separate from
+// ServerConfig because Proxmox uses its HTTP API rather than SSH.
+type ProxmoxConfig struct {
+	Name        string `yaml:"name"`
+	Host        string `yaml:"host"`
+	Port        int    `yaml:"port,omitempty"`
+	TokenID     string `yaml:"token_id"`
+	Token       string `yaml:"token,omitempty" json:"-" secret:"true"`
+	TokenFile   string `yaml:"token_file,omitempty"`
+	Fingerprint string `yaml:"fingerprint,omitempty"`
+	CAFile      string `yaml:"ca_file,omitempty"`
+	Insecure    bool   `yaml:"insecure,omitempty"`
+	Timeout     string `yaml:"timeout,omitempty"`
+}
+
+// APIPort returns the configured API port or Proxmox's default HTTPS port.
+func (p ProxmoxConfig) APIPort() int {
+	if p.Port != 0 {
+		return p.Port
+	}
+	return 8006
+}
+
+// TimeoutDuration returns the configured timeout or the default 10 seconds.
+// Validation reports malformed values before a client is constructed.
+func (p ProxmoxConfig) TimeoutDuration() time.Duration {
+	if p.Timeout != "" {
+		if timeout, err := time.ParseDuration(p.Timeout); err == nil && timeout > 0 {
+			return timeout
+		}
+	}
+	return 10 * time.Second
+}
+
+// TokenFilePath expands a leading ~/ in the configured token file path.
+func (p ProxmoxConfig) TokenFilePath() string {
+	return expandHome(p.TokenFile)
+}
+
+// TokenValue returns the API token from the configured file or inline value.
+// Validation rejects configuring both sources, but the file takes precedence
+// here to keep token_file the preferred source for direct callers.
+func (p ProxmoxConfig) TokenValue() (string, error) {
+	if p.TokenFile == "" {
+		if p.Token == "" {
+			return "", fmt.Errorf("proxmox token is not configured")
+		}
+		return p.Token, nil
+	}
+
+	data, err := os.ReadFile(p.TokenFilePath())
+	if err != nil {
+		return "", fmt.Errorf("read Proxmox token file %s: %w", p.TokenFile, err)
+	}
+	if token := strings.TrimSpace(string(data)); token != "" {
+		return token, nil
+	}
+	return "", fmt.Errorf("proxmox token file %s is empty", p.TokenFile)
 }
 
 type WakeTarget struct {
@@ -244,12 +307,12 @@ func Load(path string) (*Config, error) {
 
 	cfg.Path = path
 
-	// Refuse unsafe config permissions when plaintext passwords are present (non-Windows).
+	// Refuse unsafe config permissions when plaintext secrets are present (non-Windows).
 	if runtime.GOOS != "windows" && hasSecrets(cfg) {
 		if info, err := os.Stat(path); err == nil {
 			perm := info.Mode().Perm()
 			if perm&0o077 != 0 {
-				return nil, fmt.Errorf("config file %s contains plaintext passwords but permissions are too open (%04o); run: chmod 600 %s", path, perm, path)
+				return nil, fmt.Errorf("config file %s contains plaintext secrets but permissions are too open (%04o); run: chmod 600 %s", path, perm, path)
 			}
 		}
 	}
@@ -265,6 +328,42 @@ func (c *Config) FindServer(name string) *ServerConfig {
 		}
 	}
 	return nil
+}
+
+// FindProxmox returns the Proxmox endpoint config by name, or nil if absent.
+func (c *Config) FindProxmox(name string) *ProxmoxConfig {
+	for i := range c.Proxmox {
+		if c.Proxmox[i].Name == name {
+			return &c.Proxmox[i]
+		}
+	}
+	return nil
+}
+
+// SelectProxmox returns the named endpoint, or the sole configured endpoint.
+func (c *Config) SelectProxmox(name string) (*ProxmoxConfig, error) {
+	if name != "" {
+		endpoint := c.FindProxmox(name)
+		if endpoint == nil {
+			return nil, fmt.Errorf("proxmox endpoint %q not found in config. Available endpoints: %s", name, c.listProxmoxNames())
+		}
+		return endpoint, nil
+	}
+	if len(c.Proxmox) == 0 {
+		return nil, fmt.Errorf("no Proxmox endpoints configured. Add proxmox entries to your config file")
+	}
+	if len(c.Proxmox) > 1 {
+		return nil, fmt.Errorf("multiple Proxmox endpoints configured; specify endpoint. Available endpoints: %s", c.listProxmoxNames())
+	}
+	return &c.Proxmox[0], nil
+}
+
+func (c *Config) listProxmoxNames() string {
+	names := make([]string, len(c.Proxmox))
+	for i, endpoint := range c.Proxmox {
+		names[i] = endpoint.Name
+	}
+	return fmt.Sprintf("%v", names)
 }
 
 // SSHPort returns the configured port or default 22.

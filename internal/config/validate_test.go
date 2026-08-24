@@ -191,6 +191,48 @@ servers:
 	requireFinding(t, r, "servers[2].name", SeverityError) // missing
 }
 
+func TestValidateProxmoxErrors(t *testing.T) {
+	path := writeConfig(t, `
+proxmox:
+  - name: pve
+    port: 65536
+    timeout: 0s
+  - name: pve
+    host: pve.example
+    token_id: monitoring@pve!readonly
+    token: inline-token
+    token_file: /does/not/exist
+`)
+
+	r := Validate(path)
+	if r.Valid {
+		t.Fatal("expected invalid config")
+	}
+	for _, field := range []string{
+		"proxmox[0].host", "proxmox[0].token_id", "proxmox[0].port", "proxmox[0].timeout",
+		"proxmox[0]", "proxmox[1].name", "Both Proxmox token and token_file", "proxmox[1].token_file",
+	} {
+		requireFinding(t, r, field, SeverityError)
+	}
+}
+
+func TestValidateProxmoxTokenFile(t *testing.T) {
+	dir := t.TempDir()
+	tokenPath := filepath.Join(dir, "pve.token")
+	if err := os.WriteFile(tokenPath, []byte("token"), 0600); err != nil {
+		t.Fatalf("write token: %v", err)
+	}
+	path := filepath.Join(dir, "config.yaml")
+	if err := os.WriteFile(path, []byte("proxmox:\n  - name: pve\n    host: pve.example\n    token_id: monitoring@pve!readonly\n    token_file: "+tokenPath+"\n"), 0600); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	r := Validate(path)
+	if !r.Valid {
+		t.Errorf("expected valid config, got findings: %+v", r.Findings)
+	}
+}
+
 // local: true means "the machine homebutler runs on", so host is optional.
 func TestValidateLocalServerNeedsNoHost(t *testing.T) {
 	path := writeConfig(t, `

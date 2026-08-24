@@ -211,6 +211,13 @@ func (s *Server) executeTool(name string, args map[string]any) (any, error) {
 		return s.executeDemoTool(name, args)
 	}
 
+	if cap, ok := capabilityFor(name); ok && cap.supports(targetProxmox) {
+		if stringArg(args, "server") != "" {
+			return nil, fmt.Errorf("tool %q cannot be pointed at a server; use endpoint", name)
+		}
+		return s.executeProxmox(name, args)
+	}
+
 	server := stringArg(args, "server")
 
 	// Route to remote if server is specified and not local
