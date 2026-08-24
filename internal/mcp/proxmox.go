@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/Higangssh/homebutler/internal/config"
 	"github.com/Higangssh/homebutler/internal/proxmox"
 )
 
@@ -18,7 +17,7 @@ func (s *Server) executeProxmox(name string, args map[string]any) (any, error) {
 	if (name == "proxmox_node" || name == "proxmox_tasks") && stringArg(args, "node") == "" {
 		return nil, fmt.Errorf("missing required parameter: node")
 	}
-	endpoint, err := selectProxmoxEndpoint(s.cfg, stringArg(args, "endpoint"))
+	endpoint, err := s.cfg.SelectProxmox(stringArg(args, "endpoint"))
 	if err != nil {
 		return nil, err
 	}
@@ -51,23 +50,6 @@ func (s *Server) executeProxmox(name string, args map[string]any) (any, error) {
 	default:
 		return nil, fmt.Errorf("unknown tool: %s", name)
 	}
-}
-
-func selectProxmoxEndpoint(c *config.Config, name string) (*config.ProxmoxConfig, error) {
-	if name != "" {
-		endpoint := c.FindProxmox(name)
-		if endpoint == nil {
-			return nil, fmt.Errorf("proxmox endpoint %q not found in config", name)
-		}
-		return endpoint, nil
-	}
-	if len(c.Proxmox) == 0 {
-		return nil, fmt.Errorf("no Proxmox endpoints configured")
-	}
-	if len(c.Proxmox) > 1 {
-		return nil, fmt.Errorf("multiple Proxmox endpoints configured; use endpoint")
-	}
-	return &c.Proxmox[0], nil
 }
 
 func filterProxmoxGuests(guests []proxmox.Guest, node, status, kind string) []proxmox.Guest {

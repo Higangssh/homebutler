@@ -51,7 +51,7 @@ func openProxmoxClient(endpointName string) (*config.ProxmoxConfig, *proxmox.Cli
 	if err := loadConfig(); err != nil {
 		return nil, nil, err
 	}
-	endpoint, err := selectProxmoxEndpoint(cfg, endpointName)
+	endpoint, err := cfg.SelectProxmox(endpointName)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -159,17 +159,25 @@ func newProxmoxTasksCmd() *cobra.Command {
 					nodes[i] = resourceNode.Name
 				}
 			}
-			tasks := make([]proxmox.Task, 0)
+			view := proxmoxTasksView{Nodes: nodes, Tasks: make([]proxmox.Task, 0)}
 			for _, taskNode := range nodes {
 				entries, err := client.TasksLimit(context.Background(), taskNode, limit)
 				if err != nil {
-					return fmt.Errorf("get Proxmox tasks for node %q: %w", taskNode, err)
+					view.Warnings = append(view.Warnings, fmt.Sprintf("tasks for node %q: %v", taskNode, err))
+					view.Failed = append(view.Failed, taskNode)
+					continue
 				}
-				tasks = append(tasks, entries...)
+				view.Tasks = append(view.Tasks, entries...)
 			}
-			return writeProxmox(cmd, tasks, jsonOutput, "Tasks", func(b *strings.Builder) {
-				for _, task := range tasks {
+			return writeProxmox(cmd, view, jsonOutput, "Tasks", func(b *strings.Builder) {
+				if len(view.Nodes) == 0 {
+					fmt.Fprintln(b, "No nodes visible; no tasks queried.")
+				}
+				for _, task := range view.Tasks {
 					fmt.Fprintf(b, "%s\t%s\t%s\t%s\n", task.Node, task.Type, task.Status, task.ID)
+				}
+				for _, warning := range view.Warnings {
+					fmt.Fprintf(b, "Warning: %s\n", warning)
 				}
 			})
 		},
@@ -178,6 +186,13 @@ func newProxmoxTasksCmd() *cobra.Command {
 	cmd.Flags().StringVar(&node, "node", "", "Node name")
 	cmd.Flags().IntVar(&limit, "limit", 50, "Maximum tasks per node")
 	return cmd
+}
+
+type proxmoxTasksView struct {
+	Nodes    []string       `json:"nodes"`
+	Tasks    []proxmox.Task `json:"tasks"`
+	Warnings []string       `json:"warnings,omitempty"`
+	Failed   []string       `json:"failed,omitempty"`
 }
 
 func writeProxmox(cmd *cobra.Command, value any, jsonOutput bool, heading string, human func(*strings.Builder)) error {
@@ -191,31 +206,6 @@ func writeProxmox(cmd *cobra.Command, value any, jsonOutput bool, heading string
 	return err
 }
 
-func selectProxmoxEndpoint(c *config.Config, name string) (*config.ProxmoxConfig, error) {
-	if name != "" {
-		endpoint := c.FindProxmox(name)
-		if endpoint == nil {
-			return nil, fmt.Errorf("proxmox endpoint %q not found in config. Available endpoints: %s", name, listProxmoxNames(c))
-		}
-		return endpoint, nil
-	}
-	if len(c.Proxmox) == 0 {
-		return nil, fmt.Errorf("no Proxmox endpoints configured. Add proxmox entries to your config file")
-	}
-	if len(c.Proxmox) > 1 {
-		return nil, fmt.Errorf("multiple proxmox endpoints configured; use --endpoint. Available endpoints: %s", listProxmoxNames(c))
-	}
-	return &c.Proxmox[0], nil
-}
-
-func listProxmoxNames(c *config.Config) string {
-	names := make([]string, len(c.Proxmox))
-	for i, endpoint := range c.Proxmox {
-		names[i] = endpoint.Name
-	}
-	return fmt.Sprintf("%v", names)
-}
-
 func writeProxmoxStatus(cmd *cobra.Command, endpoint string, view proxmox.DefaultView, jsonOutput bool) error {
 	if jsonOutput {
 		encoder := json.NewEncoder(cmd.OutOrStdout())
@@ -225,28 +215,43 @@ func writeProxmoxStatus(cmd *cobra.Command, endpoint string, view proxmox.Defaul
 
 	var b strings.Builder
 	fmt.Fprintf(&b, "Proxmox endpoint: %s\n", endpoint)
-	fmt.Fprintf(&b, "Version: %s\n", view.Version.Version)
-	clusterName, quorum := "standalone", "n/a"
-	var online, nodes int
-	for _, entry := range view.Cluster {
-		switch entry.Type {
-		case "cluster":
-			clusterName = entry.Name
-			if entry.Quorate != nil {
-				quorum = "no"
-				if *entry.Quorate {
-					quorum = "yes"
+	if view.CollectorFailed("version") {
+		fmt.Fprintln(&b, "Version: unavailable")
+	} else {
+		fmt.Fprintf(&b, "Version: %s\n", view.Version.Version)
+	}
+	if view.CollectorFailed("cluster") {
+		fmt.Fprintln(&b, "Cluster: unavailable")
+	} else {
+		clusterName, quorum := "standalone", "n/a"
+		var online, nodes int
+		for _, entry := range view.Cluster {
+			switch entry.Type {
+			case "cluster":
+				clusterName = entry.Name
+				if entry.Quorate != nil {
+					quorum = "no"
+					if *entry.Quorate {
+						quorum = "yes"
+					}
+				}
+			case "node":
+				nodes++
+				if entry.Online {
+					online++
 				}
 			}
-		case "node":
-			nodes++
-			if entry.Online {
-				online++
-			}
 		}
+		fmt.Fprintf(&b, "Cluster: %s | quorum: %s | nodes: %d/%d online\n", clusterName, quorum, online, nodes)
 	}
-	fmt.Fprintf(&b, "Cluster: %s | quorum: %s | nodes: %d/%d online\n", clusterName, quorum, online, nodes)
-	fmt.Fprintf(&b, "Resources: %d nodes | %d guests | %d storage\n", len(view.Resources.Nodes), len(view.Resources.Guests), len(view.Resources.Storage))
+	if view.CollectorFailed("resources") {
+		fmt.Fprintln(&b, "Resources: unavailable")
+	} else {
+		fmt.Fprintf(&b, "Resources: %d nodes | %d guests | %d storage\n", len(view.Resources.Nodes), len(view.Resources.Guests), len(view.Resources.Storage))
+	}
+	for _, warning := range view.Warnings {
+		fmt.Fprintf(&b, "Warning: %s\n", warning)
+	}
 	_, err := fmt.Fprint(cmd.OutOrStdout(), b.String())
 	return err
 }

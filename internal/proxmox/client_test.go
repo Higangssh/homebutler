@@ -90,6 +90,29 @@ func TestDefaultView(t *testing.T) {
 	}
 }
 
+func TestDefaultViewKeepsSuccessfulResponses(t *testing.T) {
+	fixtures := map[string]string{
+		"/api2/json/version":           "version-pve9.json",
+		"/api2/json/cluster/resources": "cluster-resources.json",
+	}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/api2/json/cluster/status" {
+			http.Error(w, "permission denied", http.StatusForbidden)
+			return
+		}
+		_, _ = w.Write(readFixture(t, fixtures[r.URL.Path]))
+	}))
+	defer server.Close()
+
+	view, err := testClient(t, server.URL).DefaultView(context.Background())
+	if err != nil {
+		t.Fatalf("DefaultView() error: %v", err)
+	}
+	if view.Version.Version != "9.1.4" || len(view.Resources.Guests) != 3 || !view.CollectorFailed("cluster") || len(view.Warnings) != 1 {
+		t.Errorf("DefaultView() = %#v", view)
+	}
+}
+
 func TestResourcesNormalizesFixture(t *testing.T) {
 	server := fixtureServer(t, "cluster-resources.json")
 	defer server.Close()

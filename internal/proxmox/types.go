@@ -255,6 +255,18 @@ type DefaultView struct {
 	Version   Version         `json:"version"`
 	Cluster   []ClusterStatus `json:"cluster"`
 	Resources Resources       `json:"resources"`
+	Warnings  []string        `json:"warnings,omitempty"`
+	Failed    []string        `json:"failed,omitempty"`
+}
+
+// CollectorFailed reports whether a default status collector failed.
+func (v DefaultView) CollectorFailed(name string) bool {
+	for _, failed := range v.Failed {
+		if failed == name {
+			return true
+		}
+	}
+	return false
 }
 
 type flexibleBool bool

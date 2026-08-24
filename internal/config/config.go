@@ -340,6 +340,32 @@ func (c *Config) FindProxmox(name string) *ProxmoxConfig {
 	return nil
 }
 
+// SelectProxmox returns the named endpoint, or the sole configured endpoint.
+func (c *Config) SelectProxmox(name string) (*ProxmoxConfig, error) {
+	if name != "" {
+		endpoint := c.FindProxmox(name)
+		if endpoint == nil {
+			return nil, fmt.Errorf("proxmox endpoint %q not found in config. Available endpoints: %s", name, c.listProxmoxNames())
+		}
+		return endpoint, nil
+	}
+	if len(c.Proxmox) == 0 {
+		return nil, fmt.Errorf("no Proxmox endpoints configured. Add proxmox entries to your config file")
+	}
+	if len(c.Proxmox) > 1 {
+		return nil, fmt.Errorf("multiple Proxmox endpoints configured; specify endpoint. Available endpoints: %s", c.listProxmoxNames())
+	}
+	return &c.Proxmox[0], nil
+}
+
+func (c *Config) listProxmoxNames() string {
+	names := make([]string, len(c.Proxmox))
+	for i, endpoint := range c.Proxmox {
+		names[i] = endpoint.Name
+	}
+	return fmt.Sprintf("%v", names)
+}
+
 // SSHPort returns the configured port or default 22.
 func (s *ServerConfig) SSHPort() int {
 	if s.Port > 0 {

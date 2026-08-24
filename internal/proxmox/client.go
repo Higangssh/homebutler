@@ -210,19 +210,26 @@ func (c *Client) TasksLimit(ctx context.Context, node string, limit int) ([]Task
 
 // DefaultView performs the three requests used by the default status view.
 func (c *Client) DefaultView(ctx context.Context) (DefaultView, error) {
-	version, err := c.Version(ctx)
-	if err != nil {
-		return DefaultView{}, err
+	view := DefaultView{}
+	if version, err := c.Version(ctx); err != nil {
+		view.Warnings = append(view.Warnings, "version: "+err.Error())
+		view.Failed = append(view.Failed, "version")
+	} else {
+		view.Version = version
 	}
-	cluster, err := c.ClusterStatus(ctx)
-	if err != nil {
-		return DefaultView{}, err
+	if cluster, err := c.ClusterStatus(ctx); err != nil {
+		view.Warnings = append(view.Warnings, "cluster: "+err.Error())
+		view.Failed = append(view.Failed, "cluster")
+	} else {
+		view.Cluster = cluster
 	}
-	resources, err := c.Resources(ctx)
-	if err != nil {
-		return DefaultView{}, err
+	if resources, err := c.Resources(ctx); err != nil {
+		view.Warnings = append(view.Warnings, "resources: "+err.Error())
+		view.Failed = append(view.Failed, "resources")
+	} else {
+		view.Resources = resources
 	}
-	return DefaultView{Version: version, Cluster: cluster, Resources: resources}, nil
+	return view, nil
 }
 
 func (c *Client) get(ctx context.Context, path string, query url.Values, out any) error {

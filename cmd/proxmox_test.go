@@ -28,13 +28,13 @@ func TestSelectProxmoxEndpoint(t *testing.T) {
 		{name: "implicit single", endpoints: []config.ProxmoxConfig{{Name: "pve"}}, want: "pve"},
 		{name: "explicit", endpoints: []config.ProxmoxConfig{{Name: "pve1"}, {Name: "pve2"}}, selected: "pve2", want: "pve2"},
 		{name: "none configured", err: "no Proxmox endpoints configured"},
-		{name: "multiple require endpoint", endpoints: []config.ProxmoxConfig{{Name: "pve1"}, {Name: "pve2"}}, err: "multiple proxmox endpoints configured; use --endpoint"},
+		{name: "multiple require endpoint", endpoints: []config.ProxmoxConfig{{Name: "pve1"}, {Name: "pve2"}}, err: "multiple Proxmox endpoints configured; specify endpoint"},
 		{name: "unknown endpoint", endpoints: []config.ProxmoxConfig{{Name: "pve"}}, selected: "other", err: "proxmox endpoint \"other\" not found"},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			endpoint, err := selectProxmoxEndpoint(&config.Config{Proxmox: tt.endpoints}, tt.selected)
+			endpoint, err := (&config.Config{Proxmox: tt.endpoints}).SelectProxmox(tt.selected)
 			if tt.err != "" {
 				if err == nil || !strings.Contains(err.Error(), tt.err) {
 					t.Fatalf("selectProxmoxEndpoint() error = %v, want %q", err, tt.err)
@@ -239,10 +239,8 @@ func TestProxmoxNodeAndTasksFixtures(t *testing.T) {
 	if err := tasksCmd.Execute(); err != nil {
 		t.Fatalf("proxmox tasks: %v", err)
 	}
-	var tasks []struct {
-		UPID string `json:"upid"`
-	}
-	if err := json.Unmarshal(tasksOutput.Bytes(), &tasks); err != nil || len(tasks) != 3 {
+	var tasks proxmoxTasksView
+	if err := json.Unmarshal(tasksOutput.Bytes(), &tasks); err != nil || len(tasks.Tasks) != 3 || len(tasks.Nodes) != 1 || tasks.Nodes[0] != "pve1" {
 		t.Fatalf("tasks JSON = %#v, %v", tasks, err)
 	}
 }
@@ -276,14 +274,75 @@ func TestProxmoxTasksAggregateNodes(t *testing.T) {
 	if err := cmd.Execute(); err != nil {
 		t.Fatalf("proxmox tasks: %v", err)
 	}
-	var tasks []json.RawMessage
-	if err := json.Unmarshal(output.Bytes(), &tasks); err != nil || len(tasks) != 6 {
-		t.Fatalf("tasks JSON count = %d, error = %v", len(tasks), err)
+	var view proxmoxTasksView
+	if err := json.Unmarshal(output.Bytes(), &view); err != nil || len(view.Tasks) != 6 || len(view.Nodes) != 2 {
+		t.Fatalf("tasks JSON = %#v, error = %v", view, err)
 	}
 	for _, path := range []string{"/api2/json/cluster/resources", "/api2/json/nodes/pve1/tasks", "/api2/json/nodes/pve2/tasks"} {
 		if !called[path] {
 			t.Errorf("did not request %s", path)
 		}
+	}
+}
+
+func TestProxmoxTasksReportsUnavailableNodes(t *testing.T) {
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/api2/json/cluster/resources":
+			_, _ = w.Write(readProxmoxFixture(t, "cluster-resources.json"))
+		case "/api2/json/nodes/pve1/tasks":
+			_, _ = w.Write(readProxmoxFixture(t, "tasks-node.json"))
+		case "/api2/json/nodes/pve2/tasks":
+			http.Error(w, "node offline", http.StatusServiceUnavailable)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	configPath := writeProxmoxTestConfig(t, server.URL)
+	oldPath, oldJSON, oldCfg := cfgPath, jsonOutput, cfg
+	defer func() { cfgPath, jsonOutput, cfg = oldPath, oldJSON, oldCfg }()
+	cfgPath, jsonOutput, cfg = configPath, true, nil
+	cmd := newProxmoxTasksCmd()
+	var output bytes.Buffer
+	cmd.SetOut(&output)
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("proxmox tasks: %v", err)
+	}
+
+	var view proxmoxTasksView
+	if err := json.Unmarshal(output.Bytes(), &view); err != nil {
+		t.Fatal(err)
+	}
+	if len(view.Tasks) != 3 || len(view.Failed) != 1 || view.Failed[0] != "pve2" || len(view.Warnings) != 1 {
+		t.Errorf("tasks view = %#v", view)
+	}
+}
+
+func TestProxmoxTasksReportsNoVisibleNodes(t *testing.T) {
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api2/json/cluster/resources" {
+			t.Errorf("unexpected request path %q", r.URL.Path)
+			http.NotFound(w, r)
+			return
+		}
+		_, _ = w.Write(readProxmoxFixture(t, "cluster-resources-empty-acl.json"))
+	}))
+	defer server.Close()
+
+	configPath := writeProxmoxTestConfig(t, server.URL)
+	oldPath, oldJSON, oldCfg := cfgPath, jsonOutput, cfg
+	defer func() { cfgPath, jsonOutput, cfg = oldPath, oldJSON, oldCfg }()
+	cfgPath, jsonOutput, cfg = configPath, false, nil
+	cmd := newProxmoxTasksCmd()
+	var output bytes.Buffer
+	cmd.SetOut(&output)
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("proxmox tasks: %v", err)
+	}
+	if !strings.Contains(output.String(), "No nodes visible; no tasks queried.") {
+		t.Errorf("tasks output = %q", output.String())
 	}
 }
 

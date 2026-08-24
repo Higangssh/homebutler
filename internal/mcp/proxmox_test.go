@@ -84,7 +84,7 @@ func TestProxmoxToolsUseConfiguredEndpoint(t *testing.T) {
 
 func TestProxmoxToolSelectionAndArguments(t *testing.T) {
 	s := NewServer(&config.Config{Proxmox: []config.ProxmoxConfig{{Name: "pve1"}, {Name: "pve2"}}}, "test")
-	if _, err := s.executeTool("proxmox_status", nil); err == nil || !strings.Contains(err.Error(), "multiple Proxmox endpoints") {
+	if _, err := s.executeTool("proxmox_status", nil); err == nil || !strings.Contains(err.Error(), "multiple Proxmox endpoints configured; specify endpoint") {
 		t.Errorf("multiple endpoints error = %v", err)
 	}
 	if _, err := s.executeTool("proxmox_status", map[string]any{"endpoint": "missing"}); err == nil || !strings.Contains(err.Error(), "not found") {
