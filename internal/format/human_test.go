@@ -42,6 +42,64 @@ func TestDockerListAndAction(t *testing.T) {
 	}
 }
 
+func TestDockerTopAndInspect(t *testing.T) {
+	top := DockerTop(&docker.TopResult{
+		Container: "app-api",
+		Processes: []docker.TopProcess{
+			{PID: "1", User: "root", Command: "nginx: master process nginx -g daemon off;"},
+			{PID: "31", User: "nginx", Command: "nginx: worker process"},
+		},
+	})
+	for _, want := range []string{"PID", "USER", "COMMAND", "root", "nginx: worker process"} {
+		if !strings.Contains(top, want) {
+			t.Fatalf("expected %q in top output: %s", want, top)
+		}
+	}
+	if empty := DockerTop(&docker.TopResult{Container: "app-api"}); !strings.Contains(empty, "No processes found in app-api") {
+		t.Fatalf("unexpected empty top output: %q", empty)
+	}
+
+	inspected := DockerInspect(&docker.InspectResult{
+		Name:          "app-api",
+		Image:         "nginx:1.27-alpine",
+		Status:        "running",
+		Uptime:        "up 4d",
+		RestartPolicy: "unless-stopped",
+		RestartCount:  0,
+		Ports:         []docker.PortBinding{{Host: "0.0.0.0:8080", Container: "80/tcp"}, {Container: "9090/tcp"}},
+		Mounts:        []docker.Mount{{Source: "/srv/app/data", Destination: "/data", Mode: "rw"}},
+		Networks:      []docker.Network{{Name: "bridge", IP: "172.17.0.4"}},
+		Health:        "healthy",
+	})
+	for _, want := range []string{
+		"📦 app-api",
+		"nginx:1.27-alpine",
+		"running (up 4d)",
+		"unless-stopped · 0 restarts",
+		"0.0.0.0:8080 → 80/tcp",
+		"/srv/app/data → /data (rw)",
+		"bridge (172.17.0.4)",
+		"healthy",
+	} {
+		if !strings.Contains(inspected, want) {
+			t.Fatalf("expected %q in inspect output:\n%s", want, inspected)
+		}
+	}
+	// An unpublished port shows as its container-side name only.
+	if !strings.Contains(inspected, ", 9090/tcp") {
+		t.Fatalf("expected unpublished port to render bare:\n%s", inspected)
+	}
+
+	bare := DockerInspect(&docker.InspectResult{
+		Name: "backup", Image: "restic:0.16", Status: "exited",
+		RestartPolicy: "no", RestartCount: 2,
+		Ports: []docker.PortBinding{}, Mounts: []docker.Mount{}, Networks: []docker.Network{},
+	})
+	if strings.Contains(bare, "(") || strings.Contains(bare, "Health") {
+		t.Fatalf("a stopped container without health should print no uptime or health line:\n%s", bare)
+	}
+}
+
 func TestAlerts(t *testing.T) {
 	res := &alerts.AlertResult{
 		CPU:    alerts.AlertItem{Current: 10, Threshold: 90, Status: "ok"},

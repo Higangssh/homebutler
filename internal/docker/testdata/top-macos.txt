@@ -1,0 +1,3 @@
+USER               PID  %CPU %MEM      VSZ    RSS   TT  STAT STARTED        TIME COMMAND
+root                 1   0.0  0.0  3364896  10240   ?  Ss   Tue11AM       0:04.82 caddy run --config /etc/caddy/Caddyfile --adapter caddyfile
+_www                31   0.0  0.0  3420128  11264   ?  S    Tue11AM       0:01.13 caddy run --config /etc/caddy/Caddyfile --adapter caddyfile

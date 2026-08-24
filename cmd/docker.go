@@ -18,6 +18,8 @@ func newDockerCmd() *cobra.Command {
 		newDockerStopCmd(),
 		newDockerLogsCmd(),
 		newDockerStatsCmd(),
+		newDockerTopCmd(),
+		newDockerInspectCmd(),
 	)
 
 	return dockerCmd
@@ -128,6 +130,50 @@ func newDockerStatsCmd() *cobra.Command {
 				return err
 			}
 			return output(stats, jsonOutput)
+		},
+	}
+}
+
+func newDockerTopCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "top <container>",
+		Short: "Show the processes running inside a container",
+		Long:  "Show the processes running inside a container, read from the host via docker top. Read-only: no exec, no TTY.",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := loadConfig(); err != nil {
+				return err
+			}
+			if handled, err := maybeRouteRemote(); handled {
+				return err
+			}
+			result, err := docker.Top(args[0])
+			if err != nil {
+				return err
+			}
+			return output(result, jsonOutput)
+		},
+	}
+}
+
+func newDockerInspectCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "inspect <container>",
+		Short: "Show a readable summary of a container's configuration and state",
+		Long:  "Show a readable summary of a container's image, state, restart policy, ports, mounts, networks, and health. Environment variable values are never included.",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := loadConfig(); err != nil {
+				return err
+			}
+			if handled, err := maybeRouteRemote(); handled {
+				return err
+			}
+			result, err := docker.Inspect(args[0])
+			if err != nil {
+				return err
+			}
+			return output(result, jsonOutput)
 		},
 	}
 }

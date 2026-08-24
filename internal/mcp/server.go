@@ -264,6 +264,18 @@ func (s *Server) executeTool(name string, args map[string]any) (any, error) {
 		return docker.Logs(cname, lines)
 	case "docker_stats":
 		return docker.Stats()
+	case "docker_top":
+		cname, ok := requireString(args, "name")
+		if !ok {
+			return nil, fmt.Errorf("missing required parameter: name")
+		}
+		return docker.Top(cname)
+	case "docker_inspect":
+		cname, ok := requireString(args, "name")
+		if !ok {
+			return nil, fmt.Errorf("missing required parameter: name")
+		}
+		return docker.Inspect(cname)
 	case "wake":
 		target, ok := requireString(args, "target")
 		if !ok {
@@ -481,6 +493,10 @@ func (s *Server) executeRemote(srv *config.ServerConfig, tool string, args map[s
 		remoteArgs = []string{"docker", "logs", stringArg(args, "name"), lines, "--json"}
 	case "docker_stats":
 		remoteArgs = []string{"docker", "stats", "--json"}
+	case "docker_top":
+		remoteArgs = []string{"docker", "top", stringArg(args, "name"), "--json"}
+	case "docker_inspect":
+		remoteArgs = []string{"docker", "inspect", stringArg(args, "name"), "--json"}
 	case "open_ports":
 		remoteArgs = []string{"ports", "--json"}
 	case "alerts":

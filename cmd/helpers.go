@@ -56,6 +56,10 @@ func output(data any, jsonOut bool) error {
 		fmt.Print(format.DockerStats(v))
 	case *docker.LogsResult:
 		fmt.Printf("=== %s (last %s lines) ===\n%s\n", v.Container, v.Lines, v.Logs)
+	case *docker.TopResult:
+		fmt.Print(format.DockerTop(v))
+	case *docker.InspectResult:
+		fmt.Print(format.DockerInspect(v))
 	case *alerts.AlertResult:
 		fmt.Print(format.Alerts(v))
 	case []ports.PortInfo:

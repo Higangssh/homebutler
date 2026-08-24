@@ -179,7 +179,7 @@ Current MCP tools:
 - `system_status`
 - `report`
 - `inventory_scan`, `inventory_export`
-- `docker_list`, `docker_restart`, `docker_stop`, `docker_logs`, `docker_stats`
+- `docker_list`, `docker_restart`, `docker_stop`, `docker_logs`, `docker_stats`, `docker_top`, `docker_inspect`
 - `wake`, `open_ports`, `network_scan`, `alerts`
 - `backup_create`, `backup_list`, `backup_drill`, `backup_restore`
 - `install_list`, `install_app`, `install_status`, `install_uninstall`, `install_purge`
