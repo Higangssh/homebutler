@@ -23,8 +23,11 @@ func mustReadFixture(t *testing.T, name string) string {
 // issue depends on rather than trusting whatever ps the test host happens to
 // run — the same reasoning as the inventory port fixtures.
 func TestParseDockerTopLinuxFixture(t *testing.T) {
-	processes := parseDockerTop(mustReadFixture(t, "top-linux.txt"))
+	processes, skipped := parseDockerTop(mustReadFixture(t, "top-linux.txt"))
 
+	if skipped != 0 {
+		t.Errorf("expected no skipped rows in a well-formed capture, got %d", skipped)
+	}
 	if len(processes) != 2 {
 		t.Fatalf("expected 2 processes from top-linux fixture, got %d", len(processes))
 	}
@@ -47,8 +50,11 @@ func TestParseDockerTopLinuxFixture(t *testing.T) {
 // macOS lands on ps aux: USER first, COMMAND last, unprivileged users shown
 // with an underscore prefix. Same parser, different column names and count.
 func TestParseDockerTopMacOSFixture(t *testing.T) {
-	processes := parseDockerTop(mustReadFixture(t, "top-macos.txt"))
+	processes, skipped := parseDockerTop(mustReadFixture(t, "top-macos.txt"))
 
+	if skipped != 0 {
+		t.Errorf("expected no skipped rows in a well-formed capture, got %d", skipped)
+	}
 	if len(processes) != 2 {
 		t.Fatalf("expected 2 processes from top-macos fixture, got %d", len(processes))
 	}
@@ -65,36 +71,44 @@ func TestParseDockerTopMacOSFixture(t *testing.T) {
 
 func TestParseDockerTopDefensive(t *testing.T) {
 	t.Run("empty output", func(t *testing.T) {
-		got := parseDockerTop("")
-		if len(got) != 0 {
-			t.Errorf("expected no processes, got %d", len(got))
+		processes, skipped := parseDockerTop("")
+		if len(processes) != 0 || skipped != 0 {
+			t.Errorf("expected nothing parsed and nothing skipped, got %d/%d", len(processes), skipped)
 		}
 	})
 	t.Run("header only", func(t *testing.T) {
-		got := parseDockerTop("UID PID PPID C STIME TTY TIME CMD\n")
-		if len(got) != 0 {
-			t.Errorf("expected no processes from header alone, got %d", len(got))
+		processes, skipped := parseDockerTop("UID PID PPID C STIME TTY TIME CMD\n")
+		if len(processes) != 0 || skipped != 0 {
+			t.Errorf("header alone parses to nothing; got %d/%d", len(processes), skipped)
 		}
 	})
-	t.Run("no pid column", func(t *testing.T) {
-		got := parseDockerTop("FOO BAR CMD\nx 1 y\n")
-		if len(got) != 0 {
-			t.Errorf("expected nothing parsed without a PID column, got %d", len(got))
+	t.Run("no pid column reports every row skipped", func(t *testing.T) {
+		processes, skipped := parseDockerTop("FOO BAR CMD\nx 1 y\nz 2 w\n")
+		if len(processes) != 0 {
+			t.Errorf("expected nothing parsed without a PID column, got %d", len(processes))
+		}
+		if skipped != 2 {
+			t.Errorf("an unrecognised layout must not read as an empty container; skipped = %d, want 2", skipped)
 		}
 	})
-	t.Run("short rows skipped", func(t *testing.T) {
-		input := "UID PID CMD\n1 /bin/sh\n"
-		got := parseDockerTop(input)
-		// Row has fewer fields than the header: no reliable command tail.
-		if len(got) != 0 {
-			t.Errorf("expected short row to be skipped, got %+v", got)
+	t.Run("short rows counted", func(t *testing.T) {
+		input := "UID PID CMD\nroot 5 nginx\nshortrow\n"
+		processes, skipped := parseDockerTop(input)
+		if len(processes) != 1 {
+			t.Fatalf("expected 1 process, got %d", len(processes))
+		}
+		if skipped != 1 {
+			t.Errorf("a dropped row must be counted; skipped = %d, want 1", skipped)
 		}
 	})
 	t.Run("blank lines ignored", func(t *testing.T) {
 		input := "\nUID PID CMD\nroot 5 nginx\n\n"
-		got := parseDockerTop(input)
-		if len(got) != 1 || got[0].PID != "5" || got[0].User != "root" || got[0].Command != "nginx" {
-			t.Errorf("unexpected parse of blank-padded output: %+v", got)
+		processes, skipped := parseDockerTop(input)
+		if len(processes) != 1 || skipped != 0 {
+			t.Errorf("unexpected parse of blank-padded output: %+v skipped=%d", processes, skipped)
+		}
+		if processes[0].PID != "5" || processes[0].User != "root" || processes[0].Command != "nginx" {
+			t.Errorf("unexpected row: %+v", processes[0])
 		}
 	})
 }
@@ -272,5 +286,25 @@ func TestShortUptime(t *testing.T) {
 		if got := shortUptime(tt.d); got != tt.want {
 			t.Errorf("shortUptime(%v) = %q, want %q", tt.d, got, tt.want)
 		}
+	}
+}
+
+// A clean run must not carry a skipped field at all; a partial one must, so
+// an agent reading the JSON can tell "two processes" from "three, one lost".
+func TestTopResultSkippedJSON(t *testing.T) {
+	clean, err := json.Marshal(TopResult{Container: "c", Processes: []TopProcess{{PID: "1"}}})
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	if strings.Contains(string(clean), "skipped") {
+		t.Errorf("a full parse should omit the skipped field: %s", clean)
+	}
+
+	partial, err := json.Marshal(TopResult{Container: "c", Skipped: 2})
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	if !strings.Contains(string(partial), `"skipped":2`) {
+		t.Errorf("a partial parse should report skipped: %s", partial)
 	}
 }

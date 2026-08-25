@@ -53,13 +53,17 @@ func DockerStats(stats []docker.ContainerStats) string {
 // DockerTop formats docker top output for human reading.
 func DockerTop(r *docker.TopResult) string {
 	var b strings.Builder
-	if len(r.Processes) == 0 {
+	if len(r.Processes) == 0 && r.Skipped == 0 {
 		fmt.Fprintf(&b, "No processes found in %s.\n", r.Container)
 		return b.String()
 	}
 	fmt.Fprintf(&b, "%-8s %-12s %s\n", "PID", "USER", "COMMAND")
 	for _, p := range r.Processes {
 		fmt.Fprintf(&b, "%-8s %-12s %s\n", p.PID, p.User, p.Command)
+	}
+	if r.Skipped > 0 {
+		fmt.Fprintf(&b, "⚠️  %d of %d output rows could not be parsed\n",
+			r.Skipped, len(r.Processes)+r.Skipped)
 	}
 	return b.String()
 }

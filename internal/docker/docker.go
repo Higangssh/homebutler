@@ -94,6 +94,10 @@ func Logs(name string, lines string) (*LogsResult, error) {
 type TopResult struct {
 	Container string       `json:"container"`
 	Processes []TopProcess `json:"processes"`
+	// Skipped counts output rows that could not be parsed. A container whose
+	// ps layout was not recognised must not render identically to one with no
+	// processes, so the drop is carried to the reader rather than made quiet.
+	Skipped int `json:"skipped,omitempty"`
 }
 
 // TopProcess is one row of docker top output.
@@ -111,51 +115,59 @@ func Top(name string) (*TopResult, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to list processes for %s: %s", name, out)
 	}
-	return &TopResult{Container: name, Processes: parseDockerTop(out)}, nil
+	processes, skipped := parseDockerTop(out)
+	return &TopResult{Container: name, Processes: processes, Skipped: skipped}, nil
 }
 
 // parseDockerTop parses raw docker top output: a ps header line followed by
 // one row per process. docker top passes its arguments to ps on the host, so
 // the column layout differs between platforms — Linux lands on ps -ef with a
 // UID first column, macOS on ps aux with USER and a COMMAND column instead of
-// CMD. Both put the user first and the command last, which is what this reads;
-// anything else is skipped rather than misindexed.
-func parseDockerTop(out string) []TopProcess {
-	processes := make([]TopProcess, 0)
-	var cmdCol, pidCol int
+// CMD. Both put the user first and the command last, which is what this reads.
+// Rows that do not fit the recognised layout are counted in the returned skip
+// total rather than silently dropped, so a partial table can be told apart
+// from an empty one.
+func parseDockerTop(out string) ([]TopProcess, int) {
+	var rows [][]string
 	for _, line := range splitLines(out) {
-		fields := strings.Fields(line)
-		if len(fields) == 0 {
-			continue
+		if fields := strings.Fields(line); len(fields) > 0 {
+			rows = append(rows, fields)
 		}
-		if cmdCol == 0 && pidCol == 0 {
-			// First non-empty line is the ps header. The command column is
-			// last on every layout seen so far; the PID column is found by
-			// name, and if it is not there the output is not ps output.
-			cmdCol = len(fields)
-			pidCol = -1
-			for i, f := range fields {
-				if f == "PID" {
-					pidCol = i
-					break
-				}
-			}
-			if pidCol < 0 || cmdCol-1 <= pidCol {
-				return processes
-			}
-			continue
+	}
+	processes := make([]TopProcess, 0)
+	if len(rows) == 0 {
+		return processes, 0
+	}
+
+	header := rows[0]
+	pidCol := -1
+	for i, f := range header {
+		if f == "PID" {
+			pidCol = i
+			break
 		}
-		// A row shorter than the header has no reliable command tail; skip it.
-		if len(fields) < cmdCol {
+	}
+	cmdCol := len(header) - 1
+	if pidCol < 0 || cmdCol <= pidCol {
+		// Not ps output this reads: every row is uninterpretable, so all of
+		// them count as skipped instead of rendering as no processes at all.
+		return processes, len(rows) - 1
+	}
+
+	skipped := 0
+	for _, fields := range rows[1:] {
+		// A row shorter than the header has no reliable command tail.
+		if len(fields) < len(header) {
+			skipped++
 			continue
 		}
 		processes = append(processes, TopProcess{
 			PID:     fields[pidCol],
 			User:    fields[0],
-			Command: strings.Join(fields[cmdCol-1:], " "),
+			Command: strings.Join(fields[cmdCol:], " "),
 		})
 	}
-	return processes
+	return processes, skipped
 }
 
 // InspectResult holds a readable summary of docker inspect for one container.
@@ -421,8 +433,10 @@ func shortenDuration(s string) string {
 
 // isValidName prevents command injection by allowing only safe characters,
 // and blocks a leading dash so a name can never be parsed as a docker CLI
-// flag rather than an argument (CWE-88). The first character rule mirrors
-// docker's own name grammar: [a-zA-Z0-9][a-zA-Z0-9_.-]*.
+// flag rather than an argument (CWE-88). Docker's own name grammar is
+// stricter — it also refuses a leading '_' or '.', which still pass here —
+// but the dash is the only leading character that creates flag ambiguity
+// for the commands this validates.
 func isValidName(name string) bool {
 	for _, c := range name {
 		if !((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || //nolint:staticcheck // readability

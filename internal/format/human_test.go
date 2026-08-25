@@ -58,6 +58,13 @@ func TestDockerTopAndInspect(t *testing.T) {
 	if empty := DockerTop(&docker.TopResult{Container: "app-api"}); !strings.Contains(empty, "No processes found in app-api") {
 		t.Fatalf("unexpected empty top output: %q", empty)
 	}
+	if partial := DockerTop(&docker.TopResult{
+		Container: "app-api",
+		Processes: []docker.TopProcess{{PID: "1", User: "root", Command: "nginx"}},
+		Skipped:   2,
+	}); !strings.Contains(partial, "2 of 3 output rows could not be parsed") {
+		t.Fatalf("dropped rows must be reported, not silent:\n%s", partial)
+	}
 
 	inspected := DockerInspect(&docker.InspectResult{
 		Name:          "app-api",
