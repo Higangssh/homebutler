@@ -143,6 +143,7 @@ var valueFlags = map[string]bool{
 	"--service":        true,
 	"--to":             true,
 	"--backup-max-age": true,
+	"--endpoint":       true,
 }
 
 // isFlag checks if a string looks like a CLI flag.

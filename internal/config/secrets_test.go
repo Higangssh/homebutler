@@ -33,6 +33,7 @@ func TestHasSecretsFindsNotifyCredentials(t *testing.T) {
 		{"generic webhook", &Config{Notify: notify.ProviderConfig{
 			Webhook: &notify.WebhookConfig{URL: "https://example.com/hook?token=x"},
 		}}},
+		{"Proxmox inline token", &Config{Proxmox: []ProxmoxConfig{{Token: "secret"}}}},
 	}
 
 	for _, tt := range tests {
@@ -106,6 +107,7 @@ func TestMarshallingAConfigLeaksNoCredentials(t *testing.T) {
 		slack   = "https://hooks.slack.com/services/T00/B00/leaked"
 		discord = "https://discord.com/api/webhooks/1/leaked"
 		hook    = "https://example.com/hook?token=leaked"
+		pve     = "proxmox-api-token"
 	)
 
 	cfg := &Config{
@@ -116,6 +118,7 @@ func TestMarshallingAConfigLeaksNoCredentials(t *testing.T) {
 			Discord:  &notify.DiscordConfig{WebhookURL: discord},
 			Webhook:  &notify.WebhookConfig{URL: hook},
 		},
+		Proxmox: []ProxmoxConfig{{Name: "pve", Host: "pve.example", TokenID: "monitoring@pve!readonly", Token: pve}},
 	}
 
 	data, err := json.Marshal(cfg)
@@ -123,7 +126,7 @@ func TestMarshallingAConfigLeaksNoCredentials(t *testing.T) {
 		t.Fatalf("marshal: %v", err)
 	}
 
-	for _, secret := range []string{pw, token, slack, discord, hook} {
+	for _, secret := range []string{pw, token, slack, discord, hook, pve} {
 		if strings.Contains(string(data), secret) {
 			t.Errorf("serialized config contains %q\n%s", secret, data)
 		}
@@ -157,5 +160,20 @@ func TestLoadRefusesAnOpenFileHoldingOnlyANotifyCredential(t *testing.T) {
 	}
 	if _, err := Load(path); err != nil {
 		t.Errorf("the same config at 0600 should load: %v", err)
+	}
+}
+
+func TestLoadRefusesAnOpenFileHoldingAnInlineProxmoxToken(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Load only enforces permissions on non-Windows")
+	}
+
+	path := filepath.Join(t.TempDir(), "config.yaml")
+	content := "proxmox:\n  - name: pve\n    host: pve.example\n    token_id: monitoring@pve!readonly\n    token: inline-token\n"
+	if err := os.WriteFile(path, []byte(content), 0644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+	if _, err := Load(path); err == nil {
+		t.Fatal("a world-readable config holding an inline Proxmox token should be refused")
 	}
 }

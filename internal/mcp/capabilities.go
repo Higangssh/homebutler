@@ -16,8 +16,9 @@ const (
 type targetKind string
 
 const (
-	targetLocal  targetKind = "local"  // this machine; no target argument
-	targetServer targetKind = "server" // a named SSH server from servers:
+	targetLocal   targetKind = "local"   // this machine; no target argument
+	targetServer  targetKind = "server"  // a named SSH server from servers:
+	targetProxmox targetKind = "proxmox" // a named endpoint from proxmox:
 )
 
 type capability struct {
@@ -55,6 +56,53 @@ func toolDefinitions() []toolDef {
 }
 
 var capabilityRegistry = []capability{
+	{
+		risk:    riskRead,
+		targets: []targetKind{targetProxmox},
+		tool: toolDef{
+			Name:        "proxmox_status",
+			Description: "Get Proxmox VE version, cluster status, and resources",
+			InputSchema: inputSchema{Type: "object", Properties: proxmoxEndpointProperties()},
+		},
+	},
+	{
+		risk:    riskRead,
+		targets: []targetKind{targetProxmox},
+		tool: toolDef{
+			Name:        "proxmox_guests",
+			Description: "List Proxmox QEMU and LXC guests, optionally filtered by node, status, or type",
+			InputSchema: inputSchema{Type: "object", Properties: map[string]propDef{
+				"endpoint": {Type: "string", Description: "Proxmox endpoint name from config (optional when exactly one is configured)"},
+				"node":     {Type: "string", Description: "Only guests on this Proxmox node (optional)"},
+				"status":   {Type: "string", Description: "Only guests with this status, such as running or stopped (optional)"},
+				"type":     {Type: "string", Description: "Only guests of this type: qemu or lxc (optional)"},
+			}},
+		},
+	},
+	{
+		risk:    riskRead,
+		targets: []targetKind{targetProxmox},
+		tool: toolDef{
+			Name:        "proxmox_node",
+			Description: "Get detailed Proxmox node status",
+			InputSchema: inputSchema{Type: "object", Properties: map[string]propDef{
+				"endpoint": {Type: "string", Description: "Proxmox endpoint name from config (optional when exactly one is configured)"},
+				"node":     {Type: "string", Description: "Proxmox node name"},
+			}, Required: []string{"node"}},
+		},
+	},
+	{
+		risk:    riskRead,
+		targets: []targetKind{targetProxmox},
+		tool: toolDef{
+			Name:        "proxmox_tasks",
+			Description: "Get the 50 most recent Proxmox tasks for a node",
+			InputSchema: inputSchema{Type: "object", Properties: map[string]propDef{
+				"endpoint": {Type: "string", Description: "Proxmox endpoint name from config (optional when exactly one is configured)"},
+				"node":     {Type: "string", Description: "Proxmox node name"},
+			}, Required: []string{"node"}},
+		},
+	},
 	{
 		risk:    riskRead,
 		targets: []targetKind{targetLocal, targetServer},

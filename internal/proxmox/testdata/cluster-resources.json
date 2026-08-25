@@ -1,0 +1,9 @@
+{"data":[
+  {"type":"node","node":"pve1","status":"online","local":1,"cpu":0.0125,"maxcpu":16,"mem":21633966080,"maxmem":30261309440,"uptime":2679250,"level":"","ssl_fingerprint":"AA:BB:CC"},
+  {"type":"node","node":"pve2","status":"unknown","local":0,"level":"c"},
+  {"type":"storage","storage":"fast-lvm","node":"pve1","plugintype":"lvmthin","status":"available","shared":0,"content":"images,rootdir","disk":435223727072,"maxdisk":852878163968},
+  {"type":"qemu","vmid":100,"name":"gateway-vm","node":"pve1","status":"running","cpu":0.0272280555830658,"maxcpu":2,"mem":4343412736,"maxmem":4294967296,"disk":0,"maxdisk":64424509440,"netin":4048,"netout":1036055258639,"uptime":2673956},
+  {"type":"qemu","vmid":101,"name":"stopped-vm","node":"pve1","status":"stopped","template":false,"cpu":0,"maxcpu":4,"mem":0,"maxmem":8589934592,"disk":0,"maxdisk":128849018880,"uptime":0},
+  {"type":"lxc","vmid":104,"name":"monitoring-ct","node":"pve1","status":"running","template":true,"lock":"backup","tags":"community-script;monitoring;network;visualization","pool":"services","cpu":3.44330117252769e-05,"maxcpu":2,"mem":209584128,"maxmem":2147483648,"disk":123456789,"maxdisk":2147483648,"netin":2048,"netout":4096,"uptime":2673000},
+  {"type":"network","network-type":"zone","network":"lab-network","node":"pve1","id":"network/pve1/zone/lab-network","status":"ok"}
+]}
