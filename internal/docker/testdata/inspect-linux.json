@@ -1,0 +1,364 @@
+[
+  {
+    "Id": "b0a5abf4e2c10fd19a7e2f6d3a1c8b45e77aa91234ff6688ccdd99ee0011aabb",
+    "Created": "2026-08-21T16:34:27.900123456Z",
+    "Path": "caddy",
+    "Args": [
+      "run",
+      "--config",
+      "/etc/caddy/Caddyfile",
+      "--adapter",
+      "caddyfile"
+    ],
+    "State": {
+      "Status": "running",
+      "Running": true,
+      "Paused": false,
+      "Restarting": false,
+      "OOMKilled": false,
+      "Dead": false,
+      "Pid": 2551,
+      "ExitCode": 0,
+      "Error": "",
+      "StartedAt": "2026-08-21T16:34:28.132382975Z",
+      "FinishedAt": "0001-01-01T00:00:00Z",
+      "Health": {
+        "Status": "healthy",
+        "FailingStreak": 0,
+        "Log": [
+          {
+            "Start": "2026-08-24T09:00:00.100000000Z",
+            "End": "2026-08-24T09:00:00.400000000Z",
+            "ExitCode": 0,
+            "Output": "wget -q --spider http://localhost:2019/ready"
+          }
+        ]
+      }
+    },
+    "Image": "sha256:b0a5abf4e2c1b0a5abf4e2c1b0a5abf4e2c1b0a5abf4e2c1b0a5abf4e2c1",
+    "ResolvConfPath": "/mnt/docker/containers/b0a5abf4e2c1/ResolvConfPath",
+    "HostnamePath": "/mnt/docker/containers/b0a5abf4e2c1/HostnamePath",
+    "HostsPath": "/mnt/docker/containers/b0a5abf4e2c1/HostsPath",
+    "LogPath": "/mnt/docker/containers/b0a5abf4e2c1/LogPath",
+    "Name": "/caddy",
+    "RestartCount": 0,
+    "Driver": "overlay2",
+    "Platform": "linux",
+    "MountLabel": "",
+    "ProcessLabel": "",
+    "AppArmorProfile": "docker-default",
+    "ExecIDs": null,
+    "HostConfig": {
+      "Binds": null,
+      "ContainerIDFile": "",
+      "LogConfig": {
+        "Type": "json-file",
+        "Config": {}
+      },
+      "NetworkMode": "proxy",
+      "PortBindings": {
+        "443/tcp": [
+          {
+            "HostIp": "",
+            "HostPort": "443"
+          }
+        ],
+        "443/udp": [
+          {
+            "HostIp": "",
+            "HostPort": "443"
+          }
+        ],
+        "80/tcp": [
+          {
+            "HostIp": "",
+            "HostPort": "80"
+          }
+        ]
+      },
+      "RestartPolicy": {
+        "Name": "unless-stopped",
+        "MaximumRetryCount": 0
+      },
+      "AutoRemove": false,
+      "VolumeDriver": "",
+      "VolumesFrom": null,
+      "ConsoleSize": [
+        0,
+        0
+      ],
+      "CapAdd": null,
+      "CapDrop": null,
+      "CgroupnsMode": "private",
+      "Dns": [],
+      "DnsOptions": [],
+      "DnsSearch": [],
+      "ExtraHosts": [],
+      "GroupAdd": null,
+      "IpcMode": "private",
+      "Cgroup": "",
+      "Links": null,
+      "OomScoreAdj": 0,
+      "PidMode": "",
+      "Privileged": false,
+      "PublishAllPorts": false,
+      "ReadonlyRootfs": false,
+      "SecurityOpt": null,
+      "UTSMode": "",
+      "UsernsMode": "",
+      "ShmSize": 67108864,
+      "Runtime": "runc",
+      "Isolation": "",
+      "CpuShares": 0,
+      "Memory": 0,
+      "NanoCpus": 0,
+      "CgroupParent": "",
+      "BlkioWeight": 0,
+      "BlkioWeightDevice": null,
+      "BlkioDeviceReadBps": null,
+      "BlkioDeviceWriteBps": null,
+      "BlkioDeviceReadIOps": null,
+      "BlkioDeviceWriteIOps": null,
+      "CpuPeriod": 0,
+      "CpuQuota": 0,
+      "CpuRealtimePeriod": 0,
+      "CpuRealtimeRuntime": 0,
+      "CpusetCpus": "",
+      "CpusetMems": "",
+      "Devices": null,
+      "DeviceCgroupRules": null,
+      "DeviceRequests": null,
+      "MemoryReservation": 0,
+      "MemorySwap": 0,
+      "MemorySwappiness": null,
+      "OomKillDisable": null,
+      "PidsLimit": null,
+      "Ulimits": null,
+      "CpuCount": 0,
+      "CpuPercent": 0,
+      "IOMaximumIOps": 0,
+      "IOMaximumBandwidth": 0,
+      "Mounts": [
+        {
+          "Type": "bind",
+          "Source": "/home/lenny/docker/caddy/Caddyfile",
+          "Target": "/etc/caddy/Caddyfile",
+          "ReadOnly": true,
+          "BindOptions": {
+            "CreateMountpoint": true
+          }
+        },
+        {
+          "Type": "bind",
+          "Source": "/home/lenny/docker/caddy/data",
+          "Target": "/data",
+          "BindOptions": {
+            "CreateMountpoint": true
+          }
+        },
+        {
+          "Type": "bind",
+          "Source": "/home/lenny/docker/caddy/config",
+          "Target": "/config",
+          "BindOptions": {
+            "CreateMountpoint": true
+          }
+        },
+        {
+          "Type": "bind",
+          "Source": "/home/lenny/docker/caddy/logs",
+          "Target": "/var/log/caddy",
+          "BindOptions": {
+            "CreateMountpoint": true
+          }
+        }
+      ],
+      "MaskedPaths": [
+        "/proc/acpi",
+        "/proc/asound",
+        "/proc/interrupts",
+        "/proc/kcore",
+        "/proc/keys",
+        "/proc/latency_stats",
+        "/proc/sched_debug",
+        "/proc/scsi",
+        "/proc/timer_list",
+        "/proc/timer_stats",
+        "/sys/devices/virtual/powercap",
+        "/sys/firmware",
+        "/sys/devices/system/cpu/cpu0/thermal_throttle",
+        "/sys/devices/system/cpu/cpu1/thermal_throttle",
+        "/sys/devices/system/cpu/cpu2/thermal_throttle",
+        "/sys/devices/system/cpu/cpu3/thermal_throttle"
+      ],
+      "ReadonlyPaths": [
+        "/proc/bus",
+        "/proc/fs",
+        "/proc/irq",
+        "/proc/sys",
+        "/proc/sysrq-trigger"
+      ]
+    },
+    "GraphDriver": {
+      "Data": {
+        "ID": "e7be963e1e3db851d26d554af7e4a2ae8e8b8567aac8ad698b71d23c665cb8a5",
+        "LowerDir": "/var/lib/docker/overlay2/6744bd5ab08cb693302d594276c275d74ce136d1505cc486dc655f7be2ba3627-init/diff:/var/lib/docker/overlay2/3d4a0c1e31c071a29d0cad04853c96827ab184d94a2fac8ab8ed6591df3c9012/diff:/var/lib/docker/overlay2/4b994ee47294702520fd812f8495325d8bba103ebff9d775a267e2f53b586b41/diff:/var/lib/docker/overlay2/fbe244fdfae5335dd6f3e321aa8dc7ad3ff74492d2d64017ec8b9032852c5f6e/diff:/var/lib/docker/overlay2/77329d994eaeb2408bbf1207312ed3dd915a7c4760085af0f915c5a1c320a6d9/diff:/var/lib/docker/overlay2/bd5a70d4f6bd413aca97515498f81d9a3b0f1885b7ede40a16861bb4367cd4d4/diff",
+        "MergedDir": "/var/lib/docker/overlay2/6744bd5ab08cb693302d594276c275d74ce136d1505cc486dc655f7be2ba3627/merged",
+        "UpperDir": "/var/lib/docker/overlay2/6744bd5ab08cb693302d594276c275d74ce136d1505cc486dc655f7be2ba3627/diff",
+        "WorkDir": "/var/lib/docker/overlay2/6744bd5ab08cb693302d594276c275d74ce136d1505cc486dc655f7be2ba3627/work"
+      },
+      "Name": "overlay2"
+    },
+    "Mounts": [
+      {
+        "Type": "bind",
+        "Source": "/srv/caddy/config",
+        "Destination": "/config",
+        "Mode": "",
+        "RW": true,
+        "Propagation": "rprivate"
+      },
+      {
+        "Type": "bind",
+        "Source": "/srv/caddy/data",
+        "Destination": "/data",
+        "Mode": "",
+        "RW": true,
+        "Propagation": "rprivate"
+      },
+      {
+        "Type": "bind",
+        "Source": "/srv/caddy/Caddyfile",
+        "Destination": "/etc/caddy/Caddyfile",
+        "Mode": "",
+        "RW": false,
+        "Propagation": "rprivate"
+      },
+      {
+        "Type": "bind",
+        "Source": "/srv/caddy/logs",
+        "Destination": "/var/log/caddy",
+        "Mode": "",
+        "RW": true,
+        "Propagation": "rprivate"
+      }
+    ],
+    "Config": {
+      "Hostname": "e7be963e1e3d",
+      "Domainname": "",
+      "User": "1000:1000",
+      "AttachStdin": false,
+      "AttachStdout": true,
+      "AttachStderr": true,
+      "ExposedPorts": {
+        "2019/tcp": {},
+        "443/tcp": {},
+        "443/udp": {},
+        "80/tcp": {}
+      },
+      "Tty": false,
+      "OpenStdin": false,
+      "StdinOnce": false,
+      "Env": [
+        "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+        "TZ=Europe/Rome",
+        "CADDY_VERSION=v2.11.3",
+        "POSTGRES_PASSWORD=hunter2-planted-fake-secret"
+      ],
+      "Cmd": [
+        "caddy",
+        "run",
+        "--config",
+        "/etc/caddy/Caddyfile",
+        "--adapter",
+        "caddyfile"
+      ],
+      "Image": "caddy:2-alpine",
+      "Volumes": null,
+      "WorkingDir": "/srv",
+      "Entrypoint": null,
+      "Labels": {
+        "com.docker.compose.config-hash": "48f840511d78d5a538d44aa7206e2497cb5f4d7a88da628f075c1fb80f9b6d39",
+        "com.docker.compose.container-number": "1",
+        "com.docker.compose.depends_on": "",
+        "com.docker.compose.image": "sha256:5190456911cee510988a5fb9996188ef866fbcca3235cad19bf05f5f8f33386f",
+        "com.docker.compose.oneoff": "False",
+        "com.docker.compose.project": "caddy",
+        "com.docker.compose.project.config_files": "/home/lenny/docker/caddy/docker-compose.yml",
+        "com.docker.compose.project.working_dir": "/home/lenny/docker/caddy",
+        "com.docker.compose.service": "caddy",
+        "com.docker.compose.version": "2.35.0",
+        "org.opencontainers.image.description": "a powerful, enterprise-ready, open source web server with automatic HTTPS written in Go",
+        "org.opencontainers.image.documentation": "https://caddyserver.com/docs",
+        "org.opencontainers.image.licenses": "Apache-2.0",
+        "org.opencontainers.image.source": "https://github.com/caddyserver/caddy-docker",
+        "org.opencontainers.image.title": "Caddy",
+        "org.opencontainers.image.url": "https://caddyserver.com",
+        "org.opencontainers.image.vendor": "Light Code Labs",
+        "org.opencontainers.image.version": "v2.11.3"
+      }
+    },
+    "NetworkSettings": {
+      "SandboxID": "93e426f0184a890a4e18c23a0a57d7d568f4b32ec5dcbd46e99123aa9c142b28",
+      "SandboxKey": "/var/run/docker/netns/93e426f0184a",
+      "Ports": {
+        "2019/tcp": null,
+        "443/tcp": [
+          {
+            "HostIp": "0.0.0.0",
+            "HostPort": "443"
+          },
+          {
+            "HostIp": "::",
+            "HostPort": "443"
+          }
+        ],
+        "443/udp": [
+          {
+            "HostIp": "0.0.0.0",
+            "HostPort": "443"
+          },
+          {
+            "HostIp": "::",
+            "HostPort": "443"
+          }
+        ],
+        "80/tcp": [
+          {
+            "HostIp": "0.0.0.0",
+            "HostPort": "80"
+          },
+          {
+            "HostIp": "::",
+            "HostPort": "80"
+          }
+        ]
+      },
+      "Networks": {
+        "proxy": {
+          "IPAMConfig": null,
+          "Links": null,
+          "Aliases": [
+            "caddy",
+            "caddy"
+          ],
+          "DriverOpts": null,
+          "GwPriority": 0,
+          "NetworkID": "6a719c79bda8bf2ddb8c2e227642c9d7b2a40099d9a4c071a121ec1a93684c04",
+          "EndpointID": "1f6c4d8f8cb914ad86bb5d2fb45e01ef9043c76643a92f66ba2c128c8b8fc94c",
+          "Gateway": "172.20.0.1",
+          "IPAddress": "172.20.0.2",
+          "MacAddress": "c6:9a:3c:ba:e5:c2",
+          "IPPrefixLen": 16,
+          "IPv6Gateway": "",
+          "GlobalIPv6Address": "",
+          "GlobalIPv6PrefixLen": 0,
+          "DNSNames": [
+            "caddy",
+            "e7be963e1e3d"
+          ]
+        }
+      }
+    }
+  }
+]

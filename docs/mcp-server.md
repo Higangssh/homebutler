@@ -89,6 +89,8 @@ Restart your AI client — homebutler tools will appear automatically.
 | `docker_stop` | Stop a container |
 | `docker_logs` | Container log output |
 | `docker_stats` | Running container resource usage |
+| `docker_top` | Processes inside a container, read from the host — no exec, no TTY |
+| `docker_inspect` | Image, state, restart policy, ports, mounts, networks, health. Env values are never included |
 | `wake` | Wake-on-LAN magic packet |
 | `open_ports` | Open ports with process info |
 | `network_scan` | Discover LAN devices |

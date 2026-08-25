@@ -50,6 +50,70 @@ func DockerStats(stats []docker.ContainerStats) string {
 	return b.String()
 }
 
+// DockerTop formats docker top output for human reading.
+func DockerTop(r *docker.TopResult) string {
+	var b strings.Builder
+	if len(r.Processes) == 0 && r.Skipped == 0 {
+		fmt.Fprintf(&b, "No processes found in %s.\n", r.Container)
+		return b.String()
+	}
+	fmt.Fprintf(&b, "%-8s %-12s %s\n", "PID", "USER", "COMMAND")
+	for _, p := range r.Processes {
+		fmt.Fprintf(&b, "%-8s %-12s %s\n", p.PID, p.User, p.Command)
+	}
+	if r.Skipped > 0 {
+		fmt.Fprintf(&b, "⚠️  %d of %d output rows could not be parsed\n",
+			r.Skipped, len(r.Processes)+r.Skipped)
+	}
+	return b.String()
+}
+
+// DockerInspect formats the inspect summary for human reading.
+func DockerInspect(r *docker.InspectResult) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "📦 %s\n", r.Name)
+	state := r.Status
+	if r.Uptime != "" {
+		state += " (" + r.Uptime + ")"
+	}
+	fmt.Fprintf(&b, "   %-9s %s\n", "Image", r.Image)
+	fmt.Fprintf(&b, "   %-9s %s\n", "State", state)
+	fmt.Fprintf(&b, "   %-9s %s · %d restarts\n", "Restart", r.RestartPolicy, r.RestartCount)
+	if len(r.Ports) > 0 {
+		parts := make([]string, 0, len(r.Ports))
+		for _, p := range r.Ports {
+			if p.Host == "" {
+				parts = append(parts, p.Container)
+				continue
+			}
+			parts = append(parts, p.Host+" → "+p.Container)
+		}
+		fmt.Fprintf(&b, "   %-9s %s\n", "Ports", strings.Join(parts, ", "))
+	}
+	if len(r.Mounts) > 0 {
+		parts := make([]string, 0, len(r.Mounts))
+		for _, m := range r.Mounts {
+			parts = append(parts, m.Source+" → "+m.Destination+" ("+m.Mode+")")
+		}
+		fmt.Fprintf(&b, "   %-9s %s\n", "Mounts", strings.Join(parts, ", "))
+	}
+	if len(r.Networks) > 0 {
+		parts := make([]string, 0, len(r.Networks))
+		for _, n := range r.Networks {
+			if n.IP == "" {
+				parts = append(parts, n.Name)
+				continue
+			}
+			parts = append(parts, n.Name+" ("+n.IP+")")
+		}
+		fmt.Fprintf(&b, "   %-9s %s\n", "Networks", strings.Join(parts, ", "))
+	}
+	if r.Health != "" {
+		fmt.Fprintf(&b, "   %-9s %s\n", "Health", r.Health)
+	}
+	return b.String()
+}
+
 // DockerAction formats docker restart/stop result.
 func DockerAction(action, container string) string {
 	return fmt.Sprintf("✅ %s: %s\n", action, container)

@@ -288,6 +288,8 @@ func TestToolDefinitionsHaveRequiredFields(t *testing.T) {
 		"docker_restart":    {"name"},
 		"docker_stop":       {"name"},
 		"docker_logs":       {"name"},
+		"docker_top":        {"name"},
+		"docker_inspect":    {"name"},
 		"wake":              {"target"},
 		"install_app":       {"app"},
 		"install_status":    {"app"},

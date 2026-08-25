@@ -575,6 +575,8 @@ Commands:
   docker restart <n>  Restart a container
   docker stop <n>     Stop a container
   docker logs <n>     Show container logs
+  docker top <n>      Show processes running inside a container
+  docker inspect <n>  Show image, state, ports, mounts, networks, health
   wake <name>         Send Wake-on-LAN packet
   ports               List open ports with process info
   ps                  Show top processes (alias: processes)

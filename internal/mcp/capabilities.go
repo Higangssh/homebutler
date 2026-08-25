@@ -195,6 +195,38 @@ var capabilityRegistry = []capability{
 		},
 	},
 	{
+		risk:    riskRead,
+		targets: []targetKind{targetLocal, targetServer},
+		tool: toolDef{
+			Name:        "docker_top",
+			Description: "List the processes running inside a Docker container, read from the host. Read-only: no exec, no TTY",
+			InputSchema: inputSchema{
+				Type: "object",
+				Properties: map[string]propDef{
+					"name":   {Type: "string", Description: "Container name to inspect"},
+					"server": {Type: "string", Description: "Remote server name from config (optional, runs locally if omitted)"},
+				},
+				Required: []string{"name"},
+			},
+		},
+	},
+	{
+		risk:    riskRead,
+		targets: []targetKind{targetLocal, targetServer},
+		tool: toolDef{
+			Name:        "docker_inspect",
+			Description: "Summarize a Docker container's image, state, restart policy, ports, mounts, networks, and health. Environment variable values are never included",
+			InputSchema: inputSchema{
+				Type: "object",
+				Properties: map[string]propDef{
+					"name":   {Type: "string", Description: "Container name to summarize"},
+					"server": {Type: "string", Description: "Remote server name from config (optional, runs locally if omitted)"},
+				},
+				Required: []string{"name"},
+			},
+		},
+	},
+	{
 		risk:    riskWrite,
 		targets: []targetKind{targetLocal},
 		tool: toolDef{

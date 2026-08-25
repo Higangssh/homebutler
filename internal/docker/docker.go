@@ -1,9 +1,13 @@
 package docker
 
 import (
+	"encoding/json"
 	"fmt"
 	"regexp"
+	"sort"
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/Higangssh/homebutler/internal/util"
 )
@@ -85,6 +89,283 @@ func Logs(name string, lines string) (*LogsResult, error) {
 	return &LogsResult{Container: name, Lines: lines, Logs: out}, nil
 }
 
+// TopResult holds the processes running inside a container, read from the
+// host via docker top. No exec, no TTY.
+type TopResult struct {
+	Container string       `json:"container"`
+	Processes []TopProcess `json:"processes"`
+	// Skipped counts output rows that could not be parsed. A container whose
+	// ps layout was not recognised must not render identically to one with no
+	// processes, so the drop is carried to the reader rather than made quiet.
+	Skipped int `json:"skipped,omitempty"`
+}
+
+// TopProcess is one row of docker top output.
+type TopProcess struct {
+	PID     string `json:"pid"`
+	User    string `json:"user"`
+	Command string `json:"command"`
+}
+
+func Top(name string) (*TopResult, error) {
+	if !isValidName(name) {
+		return nil, fmt.Errorf("invalid container name: %s", name)
+	}
+	out, err := util.DockerCmd("top", name)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list processes for %s: %s", name, out)
+	}
+	processes, skipped := parseDockerTop(out)
+	return &TopResult{Container: name, Processes: processes, Skipped: skipped}, nil
+}
+
+// parseDockerTop parses raw docker top output: a ps header line followed by
+// one row per process. docker top passes its arguments to ps on the host, so
+// the column layout differs between platforms — Linux lands on ps -ef with a
+// UID first column, macOS on ps aux with USER and a COMMAND column instead of
+// CMD. Both put the user first and the command last, which is what this reads.
+// Rows that do not fit the recognised layout are counted in the returned skip
+// total rather than silently dropped, so a partial table can be told apart
+// from an empty one.
+func parseDockerTop(out string) ([]TopProcess, int) {
+	var rows [][]string
+	for _, line := range splitLines(out) {
+		if fields := strings.Fields(line); len(fields) > 0 {
+			rows = append(rows, fields)
+		}
+	}
+	processes := make([]TopProcess, 0)
+	if len(rows) == 0 {
+		return processes, 0
+	}
+
+	header := rows[0]
+	pidCol := -1
+	for i, f := range header {
+		if f == "PID" {
+			pidCol = i
+			break
+		}
+	}
+	cmdCol := len(header) - 1
+	if pidCol < 0 || cmdCol <= pidCol {
+		// Not ps output this reads: every row is uninterpretable, so all of
+		// them count as skipped instead of rendering as no processes at all.
+		return processes, len(rows) - 1
+	}
+
+	skipped := 0
+	for _, fields := range rows[1:] {
+		// A row shorter than the header has no reliable command tail.
+		if len(fields) < len(header) {
+			skipped++
+			continue
+		}
+		processes = append(processes, TopProcess{
+			PID:     fields[pidCol],
+			User:    fields[0],
+			Command: strings.Join(fields[cmdCol:], " "),
+		})
+	}
+	return processes, skipped
+}
+
+// InspectResult holds a readable summary of docker inspect for one container.
+//
+// Deliberately minimal: docker inspect exposes Config.Env, and container env
+// routinely holds database passwords and API tokens. The decode target simply
+// has no field for it, so values cannot leak into either output form.
+type InspectResult struct {
+	Name          string        `json:"name"`
+	Image         string        `json:"image"`
+	Status        string        `json:"status"`
+	Uptime        string        `json:"uptime,omitempty"`
+	RestartPolicy string        `json:"restart_policy"`
+	RestartCount  int           `json:"restart_count"`
+	Ports         []PortBinding `json:"ports"`
+	Mounts        []Mount       `json:"mounts"`
+	Networks      []Network     `json:"networks"`
+	Health        string        `json:"health,omitempty"`
+}
+
+// PortBinding is one published or exposed port. Host is empty when the port
+// is exposed but not published.
+type PortBinding struct {
+	Host      string `json:"host,omitempty"`
+	Container string `json:"container"`
+}
+
+// Mount is one volume or bind mount.
+type Mount struct {
+	Source      string `json:"source"`
+	Destination string `json:"destination"`
+	Mode        string `json:"mode,omitempty"`
+}
+
+// Network is one attached network with the container's address in it.
+type Network struct {
+	Name string `json:"name"`
+	IP   string `json:"ip,omitempty"`
+}
+
+func Inspect(name string) (*InspectResult, error) {
+	if !isValidName(name) {
+		return nil, fmt.Errorf("invalid container name: %s", name)
+	}
+	out, err := util.DockerCmd("inspect", name)
+	if err != nil {
+		// CombinedOutput carries the reason ("No such object", "cannot connect
+		// to the Docker daemon"), so surface it rather than the bare exit code.
+		return nil, fmt.Errorf("failed to inspect %s: %s", name, out)
+	}
+	return parseDockerInspect(out, time.Now())
+}
+
+// inspectDoc mirrors only the fields of the docker inspect document this
+// reads. It is an array at the top level because docker accepts several names,
+// though it errors before returning anything unless exactly one object matched.
+type inspectDoc struct {
+	Name         string `json:"Name"`
+	Image        string `json:"Image"`
+	RestartCount int    `json:"RestartCount"`
+	Config       struct {
+		Image string `json:"Image"`
+	} `json:"Config"`
+	State struct {
+		Status    string `json:"Status"`
+		Running   bool   `json:"Running"`
+		StartedAt string `json:"StartedAt"`
+		Health    *struct {
+			Status string `json:"Status"`
+		} `json:"Health"`
+	} `json:"State"`
+	HostConfig struct {
+		RestartPolicy struct {
+			Name string `json:"Name"`
+		} `json:"RestartPolicy"`
+	} `json:"HostConfig"`
+	Mounts []struct {
+		Source      string `json:"Source"`
+		Destination string `json:"Destination"`
+		Mode        string `json:"Mode"`
+		RW          bool   `json:"RW"`
+	} `json:"Mounts"`
+	NetworkSettings struct {
+		Ports map[string][]struct {
+			HostIP   string `json:"HostIp"`
+			HostPort string `json:"HostPort"`
+		} `json:"Ports"`
+		Networks map[string]struct {
+			IPAddress string `json:"IPAddress"`
+		} `json:"Networks"`
+	} `json:"NetworkSettings"`
+}
+
+// parseDockerInspect decodes docker inspect JSON into a summary. now is
+// injected so uptime stays testable.
+func parseDockerInspect(out string, now time.Time) (*InspectResult, error) {
+	var docs []inspectDoc
+	if err := json.Unmarshal([]byte(out), &docs); err != nil {
+		return nil, fmt.Errorf("could not parse docker inspect output: %w", err)
+	}
+	if len(docs) == 0 {
+		return nil, fmt.Errorf("docker inspect returned no data")
+	}
+	d := docs[0]
+
+	res := &InspectResult{
+		Name:          strings.TrimPrefix(d.Name, "/"),
+		Status:        d.State.Status,
+		RestartPolicy: d.HostConfig.RestartPolicy.Name,
+		RestartCount:  d.RestartCount,
+		Ports:         make([]PortBinding, 0),
+		Mounts:        make([]Mount, 0),
+		Networks:      make([]Network, 0),
+	}
+	if res.RestartPolicy == "" {
+		res.RestartPolicy = "no"
+	}
+	res.Image = d.Config.Image
+	if res.Image == "" {
+		res.Image = d.Image
+	}
+	if d.State.Running && d.State.StartedAt != "" {
+		if started, err := time.Parse(time.RFC3339Nano, d.State.StartedAt); err == nil && now.After(started) {
+			res.Uptime = "up " + shortUptime(now.Sub(started))
+		}
+	}
+	if d.State.Health != nil {
+		res.Health = d.State.Health.Status
+	}
+
+	portKeys := make([]string, 0, len(d.NetworkSettings.Ports))
+	for k := range d.NetworkSettings.Ports {
+		portKeys = append(portKeys, k)
+	}
+	sort.Strings(portKeys)
+	for _, k := range portKeys {
+		bindings := d.NetworkSettings.Ports[k]
+		if len(bindings) == 0 {
+			res.Ports = append(res.Ports, PortBinding{Container: k})
+			continue
+		}
+		for _, b := range bindings {
+			host := b.HostPort
+			if b.HostIP != "" && b.HostPort != "" {
+				ip := b.HostIP
+				// ps-style displays bracket bare IPv6 hosts: [::]:443, not :::443.
+				if strings.Contains(ip, ":") {
+					ip = "[" + ip + "]"
+				}
+				host = ip + ":" + b.HostPort
+			}
+			res.Ports = append(res.Ports, PortBinding{Host: host, Container: k})
+		}
+	}
+
+	for _, m := range d.Mounts {
+		mode := m.Mode
+		if mode == "" {
+			if m.RW {
+				mode = "rw"
+			} else {
+				mode = "ro"
+			}
+		}
+		res.Mounts = append(res.Mounts, Mount{
+			Source:      m.Source,
+			Destination: m.Destination,
+			Mode:        mode,
+		})
+	}
+
+	netNames := make([]string, 0, len(d.NetworkSettings.Networks))
+	for n := range d.NetworkSettings.Networks {
+		netNames = append(netNames, n)
+	}
+	sort.Strings(netNames)
+	for _, n := range netNames {
+		res.Networks = append(res.Networks, Network{
+			Name: n,
+			IP:   d.NetworkSettings.Networks[n].IPAddress,
+		})
+	}
+
+	return res, nil
+}
+
+// shortUptime renders a duration compactly: 4d, 6h, 12m.
+func shortUptime(d time.Duration) string {
+	switch {
+	case d >= 24*time.Hour:
+		return strconv.Itoa(int(d.Hours()/24)) + "d"
+	case d >= time.Hour:
+		return strconv.Itoa(int(d.Hours())) + "h"
+	default:
+		return strconv.Itoa(int(d.Minutes())) + "m"
+	}
+}
+
 // parseDockerPS parses the output of docker ps -a --format with tab separators.
 func parseDockerPS(out string) []Container {
 	containers := make([]Container, 0)
@@ -150,7 +431,12 @@ func shortenDuration(s string) string {
 	return s
 }
 
-// isValidName prevents command injection by allowing only safe characters.
+// isValidName prevents command injection by allowing only safe characters,
+// and blocks a leading dash so a name can never be parsed as a docker CLI
+// flag rather than an argument (CWE-88). Docker's own name grammar is
+// stricter — it also refuses a leading '_' or '.', which still pass here —
+// but the dash is the only leading character that creates flag ambiguity
+// for the commands this validates.
 func isValidName(name string) bool {
 	for _, c := range name {
 		if !((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || //nolint:staticcheck // readability
@@ -158,7 +444,7 @@ func isValidName(name string) bool {
 			return false
 		}
 	}
-	return len(name) > 0 && len(name) <= 128
+	return len(name) > 0 && name[0] != '-' && len(name) <= 128
 }
 
 func splitLines(s string) []string {

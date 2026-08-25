@@ -59,6 +59,18 @@ func (s *Server) executeDemoTool(name string, args map[string]any) (any, error) 
 			return nil, fmt.Errorf("missing required parameter: name")
 		}
 		return demoLogs(cname), nil
+	case "docker_top":
+		cname, ok := requireString(args, "name")
+		if !ok {
+			return nil, fmt.Errorf("missing required parameter: name")
+		}
+		return demoDockerTop(cname), nil
+	case "docker_inspect":
+		cname, ok := requireString(args, "name")
+		if !ok {
+			return nil, fmt.Errorf("missing required parameter: name")
+		}
+		return demoDockerInspect(cname), nil
 	case "wake":
 		target, ok := requireString(args, "target")
 		if !ok {
@@ -357,6 +369,107 @@ func demoLogs(container string) map[string]any {
 		text = fmt.Sprintf("No recent logs for container %q", container)
 	}
 	return map[string]any{"container": container, "logs": text}
+}
+
+// demoDockerTop mirrors the demo fleet's containers so top, list and inspect
+// do not describe different machines. Unknown containers get a plausible
+// entrypoint row rather than an error, matching demoLogs' fallback behaviour.
+func demoDockerTop(container string) map[string]any {
+	fleet := map[string][]map[string]any{
+		"nginx": {
+			{"pid": "1", "user": "root", "command": "nginx: master process nginx -g daemon off;"},
+			{"pid": "29", "user": "nginx", "command": "nginx: worker process"},
+			{"pid": "30", "user": "nginx", "command": "nginx: worker process"},
+		},
+		"postgres": {
+			{"pid": "1", "user": "postgres", "command": "postgres"},
+			{"pid": "45", "user": "postgres", "command": "postgres: checkpointer"},
+			{"pid": "46", "user": "postgres", "command": "postgres: walwriter"},
+		},
+		"redis": {
+			{"pid": "1", "user": "redis", "command": "redis-server *:6379"},
+		},
+		"grafana": {
+			{"pid": "1", "user": "grafana", "command": "/run.sh"},
+		},
+		"prometheus": {
+			{"pid": "1", "user": "nobody", "command": "/bin/prometheus --config.file=/etc/prometheus/prometheus.yml --storage.tsdb.path=/prometheus"},
+		},
+	}
+	procs, ok := fleet[container]
+	if !ok {
+		procs = []map[string]any{{"pid": "1", "user": "root", "command": "/entrypoint.sh"}}
+	}
+	return map[string]any{"container": container, "processes": procs}
+}
+
+// demoDockerInspect carries no env block anywhere in its shape — the real
+// decode target has no field for it, so the demo must not teach one in.
+func demoDockerInspect(container string) map[string]any {
+	type demoContainer struct {
+		image    string
+		status   string
+		uptime   string
+		policy   string
+		restarts int
+		ports    []map[string]any
+		mounts   []map[string]any
+		nets     []map[string]any
+		health   string
+	}
+
+	fleet := map[string]demoContainer{
+		"nginx": {
+			image:  "nginx:1.25-alpine",
+			status: "running", uptime: "up 4d", policy: "unless-stopped", restarts: 0,
+			ports: []map[string]any{
+				{"host": "0.0.0.0:80", "container": "80/tcp"},
+				{"host": "0.0.0.0:443", "container": "443/tcp"},
+			},
+			mounts: []map[string]any{
+				{"source": "/srv/nginx/conf.d", "destination": "/etc/nginx/conf.d", "mode": "ro"},
+			},
+			nets:   []map[string]any{{"name": "bridge", "ip": "172.17.0.2"}},
+			health: "healthy",
+		},
+		"postgres": {
+			image:  "postgres:16",
+			status: "running", uptime: "up 4d", policy: "unless-stopped", restarts: 1,
+			ports: []map[string]any{{"container": "5432/tcp"}},
+			mounts: []map[string]any{
+				{"source": "/srv/postgres/data", "destination": "/var/lib/postgresql/data", "mode": "rw"},
+			},
+			nets: []map[string]any{{"name": "bridge", "ip": "172.17.0.3"}},
+		},
+	}
+	c, ok := fleet[container]
+	if !ok {
+		c = demoContainer{image: "app:latest", status: "running", uptime: "up 2h", policy: "no"}
+	}
+
+	res := map[string]any{
+		"name":           container,
+		"image":          c.image,
+		"status":         c.status,
+		"restart_policy": c.policy,
+		"restart_count":  c.restarts,
+	}
+	if c.uptime != "" {
+		res["uptime"] = c.uptime
+	}
+	if len(c.ports) > 0 {
+		res["ports"] = c.ports
+	}
+	if len(c.mounts) > 0 {
+		res["mounts"] = c.mounts
+	}
+	if len(c.nets) > 0 {
+		res["networks"] = c.nets
+	}
+	if c.health != "" {
+		res["health"] = c.health
+	}
+	return res
 }
 
 func demoPorts(server string) []map[string]any {
