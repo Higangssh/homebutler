@@ -57,6 +57,7 @@ func init() {
 		newReportCmd(),
 		newDoctorCmd(),
 		newConfigCmd(),
+		newProxmoxCmd(),
 	)
 }
 

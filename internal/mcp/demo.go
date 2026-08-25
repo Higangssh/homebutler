@@ -6,12 +6,35 @@ import (
 	"strings"
 
 	"github.com/Higangssh/homebutler/internal/install"
+	"github.com/Higangssh/homebutler/internal/proxmox"
 )
 
 func (s *Server) executeDemoTool(name string, args map[string]any) (any, error) {
 	server := stringArg(args, "server")
 
 	switch name {
+	case "proxmox_status":
+		return proxmox.DefaultView{
+			Version:   proxmox.Version{Version: "9.1.4", Release: "9.1"},
+			Cluster:   []proxmox.ClusterStatus{{Type: "cluster", Name: "demo-cluster", Nodes: 1, Quorate: demoBool(true)}},
+			Resources: proxmox.Resources{Nodes: []proxmox.Node{{Name: "pve1", Status: "online", Local: true}}, Guests: []proxmox.Guest{{VMID: 100, Name: "demo-service", Type: "lxc", Node: "pve1", Status: "running"}}},
+		}, nil
+	case "proxmox_guests":
+		guests := []proxmox.Guest{{VMID: 100, Name: "demo-service", Type: "lxc", Node: "pve1", Status: "running"}, {VMID: 101, Name: "demo-vm", Type: "qemu", Node: "pve1", Status: "stopped"}}
+		return filterProxmoxGuests(guests, stringArg(args, "node"), stringArg(args, "status"), stringArg(args, "type")), nil
+	case "proxmox_node":
+		node, ok := requireString(args, "node")
+		if !ok {
+			return nil, fmt.Errorf("missing required parameter: node")
+		}
+		_ = node
+		return proxmox.NodeStatus{PVEVersion: "pve-manager/9.1.4"}, nil
+	case "proxmox_tasks":
+		node, ok := requireString(args, "node")
+		if !ok {
+			return nil, fmt.Errorf("missing required parameter: node")
+		}
+		return []proxmox.Task{{UPID: "UPID:" + node + ":demo", Node: node, Type: "vzdump", Status: "OK"}}, nil
 	case "system_status":
 		return demoStatus(server), nil
 	case "docker_list":
@@ -232,6 +255,8 @@ func (s *Server) executeDemoTool(name string, args map[string]any) (any, error) 
 		return nil, fmt.Errorf("unknown tool: %s", name)
 	}
 }
+
+func demoBool(value bool) *bool { return &value }
 
 // demoDockerStats mirrors demoDocker's containers so the two tools do not
 // describe different machines.

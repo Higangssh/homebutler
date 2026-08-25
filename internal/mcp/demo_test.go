@@ -67,6 +67,7 @@ func TestEveryAdvertisedToolHasADemoImplementation(t *testing.T) {
 
 	sample := map[string]any{
 		"name":    "nginx",
+		"node":    "pve1",
 		"app":     "uptime-kuma",
 		"target":  "aa:bb:cc:dd:ee:ff",
 		"archive": "demo.tar.gz",
