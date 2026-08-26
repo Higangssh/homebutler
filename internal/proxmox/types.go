@@ -250,6 +250,30 @@ type Task struct {
 	Status    string `json:"status"`
 }
 
+// GuestAction is one approved guest power operation.
+type GuestAction string
+
+const (
+	GuestActionStart    GuestAction = "start"
+	GuestActionShutdown GuestAction = "shutdown"
+	GuestActionReboot   GuestAction = "reboot"
+)
+
+// TaskStatus is returned by /nodes/{node}/tasks/{upid}/status.
+type TaskStatus struct {
+	UPID       string `json:"upid"`
+	Node       string `json:"node"`
+	PID        int64  `json:"pid,omitempty"`
+	PStart     int64  `json:"pstart,omitempty"`
+	StartTime  int64  `json:"starttime,omitempty"`
+	Type       string `json:"type"`
+	ID         string `json:"id,omitempty"`
+	User       string `json:"user,omitempty"`
+	Status     string `json:"status"`
+	ExitStatus string `json:"exitstatus,omitempty"`
+	Result     string `json:"result"`
+}
+
 // DefaultView contains the three responses used by the initial status view.
 type DefaultView struct {
 	Version   Version         `json:"version"`
