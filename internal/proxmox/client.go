@@ -23,7 +23,12 @@ import (
 const defaultTimeout = 10 * time.Second
 
 const (
-	minVMID = 100
+	// minVMID matches the Proxmox API's own vmid schema minimum. 100 is only
+	// the default lower bound of /cluster/nextid's auto-assign range
+	// (datacenter.cfg next-id), not a floor the API enforces on an
+	// explicitly supplied vmid, and a cluster or an older pvesh-created
+	// guest can legitimately sit below it.
+	minVMID = 1
 	maxVMID = 999999999
 )
 
@@ -286,16 +291,16 @@ func ValidateTaskStatusRequest(node, upid string) error {
 	return nil
 }
 
-// TaskResult classifies the asynchronous task state for user-facing output.
+// TaskResult classifies the asynchronous task state as a short, stable token.
 func TaskResult(status, exitStatus string) string {
 	if status == "running" {
-		return "in flight"
+		return "running"
 	}
 	if status == "stopped" && exitStatus == "OK" {
-		return "completed successfully"
+		return "ok"
 	}
 	if status == "stopped" {
-		return "completed with failure"
+		return "failed"
 	}
 	return "unknown"
 }

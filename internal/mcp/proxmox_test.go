@@ -166,7 +166,7 @@ func TestProxmoxPhase2Dispatch(t *testing.T) {
 		t.Fatal(err)
 	}
 	task := status.(proxmox.TaskStatus)
-	if task.Status != "stopped" || task.ExitStatus != "OK" || task.Result != "completed successfully" {
+	if task.Status != "stopped" || task.ExitStatus != "OK" || task.Result != "ok" {
 		t.Errorf("task status = %#v", task)
 	}
 }
@@ -215,7 +215,7 @@ func TestProxmoxPhase2ValidationPrecedesCredentials(t *testing.T) {
 		{name: "string VMID", change: func(a map[string]any) { a["vmid"] = "100" }},
 		{name: "fractional VMID", change: func(a map[string]any) { a["vmid"] = 100.5 }},
 		{name: "NaN VMID", change: func(a map[string]any) { a["vmid"] = math.NaN() }},
-		{name: "out of range VMID", change: func(a map[string]any) { a["vmid"] = float64(99) }},
+		{name: "out of range VMID", change: func(a map[string]any) { a["vmid"] = float64(0) }},
 		{name: "missing confirmation", change: func(a map[string]any) { delete(a, "confirm") }},
 		{name: "false confirmation", change: func(a map[string]any) { a["confirm"] = false }},
 		{name: "string confirmation", change: func(a map[string]any) { a["confirm"] = "true" }},
@@ -266,7 +266,7 @@ func TestProxmoxPhase2Demo(t *testing.T) {
 		}
 	}
 	result, err := s.executeDemoTool("proxmox_task_status", map[string]any{"endpoint": "pve", "node": "pve1", "upid": "UPID:opaque"})
-	if err != nil || result.(proxmox.TaskStatus).Result != "completed successfully" {
+	if err != nil || result.(proxmox.TaskStatus).Result != "ok" {
 		t.Errorf("task demo = %#v, %v", result, err)
 	}
 }

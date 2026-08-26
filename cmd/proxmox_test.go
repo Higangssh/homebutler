@@ -476,9 +476,9 @@ func TestProxmoxTaskStatusOutput(t *testing.T) {
 		fixture string
 		result  string
 	}{
-		{fixture: "task-status-running.json", result: "in flight"},
-		{fixture: "task-status-stopped-ok.json", result: "completed successfully"},
-		{fixture: "task-status-stopped-error.json", result: "completed with failure"},
+		{fixture: "task-status-running.json", result: "running"},
+		{fixture: "task-status-stopped-ok.json", result: "ok"},
+		{fixture: "task-status-stopped-error.json", result: "failed"},
 	}
 
 	for _, tt := range tests {
@@ -528,7 +528,7 @@ func TestProxmoxTaskStatusJSON(t *testing.T) {
 	if err := json.Unmarshal(output.Bytes(), &result); err != nil {
 		t.Fatal(err)
 	}
-	if result.Status != "stopped" || result.ExitStatus != "guest is locked" || result.Result != "completed with failure" || result.UPID != "UPID:opaque" {
+	if result.Status != "stopped" || result.ExitStatus != "guest is locked" || result.Result != "failed" || result.UPID != "UPID:opaque" {
 		t.Errorf("task result = %#v", result)
 	}
 }

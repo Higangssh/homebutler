@@ -20,7 +20,7 @@ func proxmoxGuestActionSchema() inputSchema {
 		"endpoint": {Type: "string", Description: "Explicit Proxmox endpoint name from config"},
 		"node":     {Type: "string", Description: "Proxmox node name"},
 		"type":     {Type: "string", Description: "Guest type: qemu or lxc"},
-		"vmid":     {Type: "integer", Description: "Proxmox guest VMID from 100 through 999999999"},
+		"vmid":     {Type: "integer", Description: "Proxmox guest VMID from 1 through 999999999"},
 		"confirm":  {Type: "boolean", Description: "Must be true to confirm the explicit guest action target"},
 	}, Required: []string{"endpoint", "node", "type", "vmid", "confirm"}}
 }

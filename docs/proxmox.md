@@ -139,9 +139,9 @@ it does not prompt interactively.
 An action response means Proxmox accepted the asynchronous request. It does not
 mean the guest transition completed. HomeButler returns the UPID exactly as
 Proxmox supplied it and does not parse or poll it. Inspect it separately with
-`proxmox task`. A running task is still in flight. A stopped task with
-`exitstatus: OK` completed successfully; any other stopped exit status is
-reported as a completed failure.
+`proxmox task`. It reports `result` as one of three short tokens: `running`
+for a task still in progress, `ok` for a stopped task with `exitstatus: OK`,
+and `failed` for any other stopped exit status.
 
 HomeButler never retries an action POST automatically. If a timeout or lost
 connection happens after Proxmox received the request, retrying could submit the
