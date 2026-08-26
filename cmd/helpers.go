@@ -77,6 +77,12 @@ func output(data any, jsonOut bool) error {
 		fmt.Printf("Restore complete from: %s\n", v.Archive)
 		fmt.Printf("  Services: %s\n", strings.Join(v.Services, ", "))
 		fmt.Printf("  Volumes:  %d\n", v.Volumes)
+		if len(v.Refused) > 0 {
+			fmt.Printf("\n⚠️  Refused %d mount(s) the archive asked for:\n", len(v.Refused))
+			for _, r := range v.Refused {
+				fmt.Printf("  %s (%s, service %s)\n    → %s\n", r.Target, r.Type, r.Service, r.Reason)
+			}
+		}
 	case *backup.DrillResult:
 		fmt.Print(v.String())
 	case *backup.DrillReport:

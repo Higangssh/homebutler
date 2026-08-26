@@ -453,7 +453,10 @@ func (s *Server) executeTool(name string, args map[string]any) (any, error) {
 		if !ok {
 			return nil, fmt.Errorf("missing required parameter: archive")
 		}
-		return backup.Restore(archive, stringArg(args, "service"))
+		// No AllowBind: an agent has no way to name a host path it is
+		// permitted to write to, so bind mounts declared by the archive are
+		// always refused here and reported in the result.
+		return backup.Restore(archive, backup.RestoreOptions{Service: stringArg(args, "service")})
 
 	case "install_list":
 		return install.List(), nil

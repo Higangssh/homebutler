@@ -2,6 +2,31 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.22.1](https://github.com/Higangssh/homebutler/compare/v0.22.0...v0.22.1) - 2026-08-26
+
+**`restore` wrote to filesystem paths chosen by the backup archive.** `manifest.json` lives inside the archive being restored, so every path it declares belongs to whoever built that archive. homebutler trusted them. Restoring a backup you did not create yourself could create or overwrite any file the archive named — `~/.ssh/authorized_keys` was demonstrated — and through the volume path it could do so as root. Upgrade if you have ever run `homebutler restore` on an archive from anywhere but your own machine.
+
+```bash
+brew upgrade homebutler
+curl -fsSL https://raw.githubusercontent.com/Higangssh/homebutler/main/install.sh | sh
+```
+
+### 🔐 Security
+
+- refuse filesystem targets that only the archive asked for (GHSA-v8mc-vpp8-jr4p, CWE-22 / CWE-73). `restoreMount` extracted a bind mount to `m.Source` straight from the manifest, with no check that the path had anything to do with the operator. Bind targets are now restored only under a root named with `--allow-bind`, and refusals are reported rather than dropped
+- reject volume names that are really host paths. `sanitizeName` guarded the archive filename lookup while the raw `m.Name` reached `docker run -v <name>:/target`, so a manifest naming `/etc` bind-mounted the host into a container the daemon runs as root — arbitrary write as root for anyone in the `docker` group, with no `sudo` prompt to notice. Volume names must now match Docker's own grammar
+- refuse every bind mount over MCP. An agent has no way to name a host path it is permitted to write to, so `backup_restore` restores named volumes only
+
+Reported by [@0xW41th](https://github.com/0xW41th). `backup drill` was never affected: it extracts into an isolation directory under a sanitized name and never reads `m.Source`.
+
+### ⚠️ Behavior changes
+
+- **Restoring a bind mount now requires `--allow-bind <path>`.** A backup you created yourself restores as before once you name the path it came from; the archive can no longer choose it for you. `restore --json` gains a `refused` array, and the human output lists what was declined and why, so a restore that did less than expected says so rather than reporting fewer volumes
+
+### 🧪 Tests
+
+- cover the reported path, the `..` escape out of an allowed root, and the volume names that reach `docker run -v` as host paths — alongside the cases that must keep working: real volume names, and a bind target the operator named
+
 ## [0.22.0](https://github.com/Higangssh/homebutler/compare/v0.21.2...v0.22.0) - 2026-08-24
 
 **Two guards that were never running now run.** `watch` could detect a systemd or pm2 incident and had no way to act on one, so `action: restart` on a service failed with a docker error about a container that does not exist. And `config.Load` refuses a world-readable config holding plaintext secrets, but only ever looked at `servers[].password` — a config whose only credential was a Telegram bot token or a Slack webhook was never checked at all, which is the common case rather than a rare one.

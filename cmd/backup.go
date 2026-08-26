@@ -130,6 +130,7 @@ Use --archive to drill a specific archive, or --all to verify every supported ap
 
 func newRestoreCmd() *cobra.Command {
 	var service string
+	var allowBind []string
 
 	cmd := &cobra.Command{
 		Use:   "restore <archive>",
@@ -144,7 +145,10 @@ func newRestoreCmd() *cobra.Command {
 				return err
 			}
 
-			result, err := backup.Restore(args[0], service)
+			result, err := backup.Restore(args[0], backup.RestoreOptions{
+				Service:   service,
+				AllowBind: allowBind,
+			})
 			if err != nil {
 				return err
 			}
@@ -153,6 +157,8 @@ func newRestoreCmd() *cobra.Command {
 	}
 
 	cmd.Flags().StringVar(&service, "service", "", "Restore a specific service only")
+	cmd.Flags().StringSliceVar(&allowBind, "allow-bind", nil,
+		"Host path a bind mount may be restored to. Repeatable. Bind targets come from the archive, so they are refused unless named here")
 
 	return cmd
 }
