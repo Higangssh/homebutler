@@ -105,10 +105,31 @@ When you run `homebutler restore ./backup.tar.gz`:
 1. Extracts the archive to a temp directory
 2. Reads `manifest.json` to understand what was backed up
 3. Restores **named volumes** using the reverse pattern (alpine container + `tar xzf`)
-4. Restores **bind mounts** by extracting to the original host path
+4. Restores **bind mounts** to host paths you named with `--allow-bind`
 5. Restores compose files to their original location
 
 Use `--service <name>` to restore only a specific service.
+
+### Bind mounts are refused unless you name the path
+
+`manifest.json` lives inside the archive, so every path it declares is chosen
+by whoever built that archive. For a backup you created yourself that is the
+path you expect; for a backup someone sent you it is whatever they decided.
+
+Restore therefore treats manifest paths as a request, not an instruction. Named
+volumes must look like volume names, and a bind mount is only restored to a
+path you passed on the command line:
+
+```bash
+homebutler restore ./backup.tar.gz                       # bind mounts refused, and listed
+homebutler restore ./backup.tar.gz --allow-bind /srv/app # restores under /srv/app only
+```
+
+Refusals are printed, and appear in `--json` under `refused`, so a restore that
+did less than you expected says why rather than reporting fewer volumes.
+
+Over MCP there is no way for an agent to name an allowed path, so
+`backup_restore` never restores bind mounts.
 
 ## Configuration
 

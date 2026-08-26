@@ -396,7 +396,9 @@ func TestRestoreSuccessWithFilterAndMissingArchive(t *testing.T) {
 		t.Skipf("tar not available: %v", err)
 	}
 
-	result, err := Restore(archive, "uptime-kuma")
+	// The bind target is named by the caller, as an operator would with
+	// --allow-bind; the manifest alone cannot select it (GHSA-v8mc-vpp8-jr4p).
+	result, err := Restore(archive, RestoreOptions{Service: "uptime-kuma", AllowBind: []string{dir}})
 	if err != nil {
 		t.Fatalf("Restore() error = %v", err)
 	}
@@ -411,7 +413,7 @@ func TestRestoreSuccessWithFilterAndMissingArchive(t *testing.T) {
 func TestRestoreFilterNotFound(t *testing.T) {
 	archive := createDrillArchive(t, []ServiceInfo{{Name: "vaultwarden", Image: "vaultwarden/server:latest"}})
 
-	_, err := Restore(archive, "uptime-kuma")
+	_, err := Restore(archive, RestoreOptions{Service: "uptime-kuma"})
 	if err == nil {
 		t.Fatal("expected filter not found error")
 	}
