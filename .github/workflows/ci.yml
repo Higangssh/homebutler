@@ -5,6 +5,12 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  # Lets a run be started by hand when GitHub never created one for a pull
+  # request. That happened on #90: no run and no check suite existed for the
+  # head commit, and the only way to get the required checks was to close and
+  # reopen the pull request, which leaves a closed/reopened pair on a
+  # contributor's timeline that reads like a rejection.
+  workflow_dispatch:
 
 permissions:
   contents: read
