@@ -35,6 +35,30 @@ func (s *Server) executeDemoTool(name string, args map[string]any) (any, error) 
 			return nil, fmt.Errorf("missing required parameter: node")
 		}
 		return []proxmox.Task{{UPID: "UPID:" + node + ":demo", Node: node, Type: "vzdump", Status: "OK"}}, nil
+	case "proxmox_guest_start", "proxmox_guest_reboot", "proxmox_guest_shutdown":
+		request, _, err := proxmoxGuestActionArgs(name, args)
+		if err != nil {
+			return nil, err
+		}
+		return proxmoxGuestActionResult{
+			Endpoint: request.Endpoint, Node: request.Node, Type: request.Type, VMID: request.VMID,
+			Action: request.Action, Status: "accepted", UPID: "UPID:" + request.Node + ":demo",
+		}, nil
+	case "proxmox_task_status":
+		endpoint, err := strictProxmoxStringArg(args, "endpoint")
+		if err != nil {
+			return nil, err
+		}
+		node, err := strictProxmoxStringArg(args, "node")
+		if err != nil {
+			return nil, err
+		}
+		upid, err := strictProxmoxStringArg(args, "upid")
+		if err != nil {
+			return nil, err
+		}
+		_ = endpoint
+		return proxmox.TaskStatus{UPID: upid, Node: node, Type: "qmstart", ID: "100", User: "demo@pve", Status: "stopped", ExitStatus: "OK", Result: proxmox.TaskResult("stopped", "OK")}, nil
 	case "system_status":
 		return demoStatus(server), nil
 	case "docker_list":

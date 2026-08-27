@@ -285,19 +285,23 @@ func TestEmptyLines(t *testing.T) {
 func TestToolDefinitionsHaveRequiredFields(t *testing.T) {
 	tools := toolDefinitions()
 	requireMap := map[string][]string{
-		"docker_restart":    {"name"},
-		"docker_stop":       {"name"},
-		"docker_logs":       {"name"},
-		"docker_top":        {"name"},
-		"docker_inspect":    {"name"},
-		"wake":              {"target"},
-		"install_app":       {"app"},
-		"install_status":    {"app"},
-		"install_uninstall": {"app"},
-		"install_purge":     {"app"},
-		"backup_restore":    {"archive"},
-		"proxmox_node":      {"node"},
-		"proxmox_tasks":     {"node"},
+		"docker_restart":         {"name"},
+		"docker_stop":            {"name"},
+		"docker_logs":            {"name"},
+		"docker_top":             {"name"},
+		"docker_inspect":         {"name"},
+		"wake":                   {"target"},
+		"install_app":            {"app"},
+		"install_status":         {"app"},
+		"install_uninstall":      {"app"},
+		"install_purge":          {"app"},
+		"backup_restore":         {"archive"},
+		"proxmox_node":           {"node"},
+		"proxmox_tasks":          {"node"},
+		"proxmox_guest_start":    {"endpoint", "node", "type", "vmid", "confirm"},
+		"proxmox_guest_reboot":   {"endpoint", "node", "type", "vmid", "confirm"},
+		"proxmox_guest_shutdown": {"endpoint", "node", "type", "vmid", "confirm"},
+		"proxmox_task_status":    {"endpoint", "node", "upid"},
 	}
 
 	for _, tool := range tools {

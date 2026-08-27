@@ -1,20 +1,21 @@
 # Proxmox VE
 
-HomeButler can inspect one or more Proxmox VE API endpoints without installing
-an agent on a Proxmox node. Phase 1 is read-only: it reports cluster resources,
-guests, nodes, and recent tasks.
+HomeButler can inspect and perform a small set of confirmed guest power actions
+against one or more Proxmox VE API endpoints without installing an agent on a
+Proxmox node. Read operations report cluster resources, guests, nodes, recent
+tasks, and the status of one asynchronous task.
 
 ## Setup
 
-### Create a read-only API token
+### Create a least-privilege API token
 
-The built-in `PVEAuditor` role is the recommended minimum role. It is read-only
-and includes the audit privileges needed for the cluster, node, guest, storage,
+For read operations, the built-in `PVEAuditor` role is the recommended baseline.
+It includes the audit privileges needed for the cluster, node, guest, storage,
 and task views.
 
 ```bash
-# Create a token-only user in the PVE realm.
-pveum user add monitoring@pve --comment "read-only API user for homebutler"
+# Create a dedicated API user in the PVE realm.
+pveum user add monitoring@pve --comment "least-privilege API user for homebutler"
 
 # Privilege separation is enabled by default. The token value is displayed once.
 pveum user token add monitoring@pve readonly --privsep 1
@@ -32,6 +33,22 @@ intersection of the user ACLs and the token ACLs. Granting `PVEAuditor` only to
 the user is not enough: the token can authenticate yet return empty resource
 lists. The `/` ACL is recommended because `/cluster/status` needs `Sys.Audit`
 on `/`.
+
+Guest actions need `VM.PowerMgmt` on each selected `/vms/<vmid>` path. Keep
+that permission separate from `PVEAuditor`; do not grant an administrator role
+to HomeButler. Create a narrow role and grant it to both the user and the
+privilege-separated token only for guests HomeButler may control:
+
+```bash
+pveum role add HomeButlerPower -privs VM.PowerMgmt
+pveum acl modify /vms/100 --users 'monitoring@pve' --roles HomeButlerPower
+pveum acl modify /vms/100 --tokens 'monitoring@pve!readonly' --roles HomeButlerPower
+```
+
+Repeat the two ACL commands only for other approved VMIDs. The task owner may
+inspect its own task. Inspecting a task started by another user requires
+`Sys.Audit` on the task's node; the read-only setup above already provides the
+audit privileges used by HomeButler's read views.
 
 Save the token value when it is printed. Proxmox does not reveal it again; if
 it is lost, remove and create the token again. A newly granted token can briefly
@@ -91,6 +108,11 @@ homebutler proxmox guests --status running
 homebutler proxmox guests --endpoint pve --node pve1 --status stopped
 homebutler proxmox node pve1 --endpoint pve
 homebutler proxmox tasks --endpoint pve --node pve1 --limit 50
+homebutler proxmox guest start --endpoint pve --node pve1 --type qemu --vmid 100 --confirm
+homebutler proxmox guest shutdown --endpoint pve --node pve1 --type lxc --vmid 101 --confirm
+homebutler proxmox guest reboot --endpoint pve --node pve1 --type qemu --vmid 100 --confirm
+homebutler proxmox task 'UPID:pve1:...' --endpoint pve --node pve1
+homebutler proxmox task 'UPID:pve1:...' --endpoint pve --node pve1 --json
 ```
 
 Without `--node`, `proxmox tasks` queries recent tasks for each resource node.
@@ -108,20 +130,59 @@ Use `--json` for the full typed API view. CPU values remain Proxmox fractions
 (`0..1`), byte counters remain integers, and QEMU and LXC guests are returned
 in one `guests` list.
 
+Guest actions always require explicit `--endpoint`, `--node`, `--type`,
+`--vmid`, and `--confirm` values, even when only one endpoint is configured.
+HomeButler does not discover or infer the node or guest type before an action.
+Without `--confirm`, the command reports the full target and exact rerun flags;
+it does not prompt interactively.
+
+An action response means Proxmox accepted the asynchronous request. It does not
+mean the guest transition completed. HomeButler returns the UPID exactly as
+Proxmox supplied it and does not parse or poll it. Inspect it separately with
+`proxmox task`. It reports `result` as one of three short tokens: `running`
+for a task still in progress, `ok` for a stopped task with `exitstatus: OK`,
+and `failed` for any other stopped exit status.
+
+HomeButler never retries an action POST automatically. If a timeout or lost
+connection happens after Proxmox received the request, retrying could submit the
+same action twice. Treat that result as ambiguous and inspect Proxmox before
+deciding whether to run the command again.
+
+Phase 2 deliberately exposes graceful `shutdown`, not Proxmox hard `stop`.
+QEMU hard stop is equivalent to pulling the power plug and can damage guest
+data; LXC hard stop abruptly terminates container processes. A future hard-stop
+operation, if needed, must use its own unmistakable name and safety contract.
+
 ## MCP tools
 
-The MCP server exposes read-only Proxmox tools. Each accepts `endpoint` when
-needed to select among configured endpoints:
+The MCP server exposes these read-only Proxmox tools. Each accepts `endpoint`
+when needed to select among configured endpoints:
 
-- `proxmox_status` — version, cluster status, and resources.
-- `proxmox_guests` — unified guest list; optional `node`, `status`, and `type`
+- `proxmox_status` - version, cluster status, and resources.
+- `proxmox_guests` - unified guest list; optional `node`, `status`, and `type`
   (`qemu` or `lxc`) filters.
-- `proxmox_node` — node detail; requires `node`.
-- `proxmox_tasks` — recent tasks for a node; requires `node`.
+- `proxmox_node` - node detail; requires `node`.
+- `proxmox_tasks` - recent tasks for a node; requires `node`.
 
-## Not in Phase 1
+Phase 2 adds four explicit tools:
 
-Phase 1 does not start, stop, reboot, create, or otherwise change guests. The
-web dashboard is a separate follow-up. Community Scripts provisioning is a
-Phase 3 security decision and is not implemented here; HomeButler does not
+- `proxmox_guest_start` - `riskWrite`; requires `endpoint`, `node`, `type`,
+  `vmid`, and literal `confirm: true`.
+- `proxmox_guest_reboot` - `riskWrite`; requires `endpoint`, `node`, `type`,
+  `vmid`, and literal `confirm: true`.
+- `proxmox_guest_shutdown` - `riskDestructive`; requires `endpoint`, `node`,
+  `type`, `vmid`, and literal `confirm: true`.
+- `proxmox_task_status` - `riskRead`; requires `endpoint`, `node`, and the
+  opaque `upid`.
+
+Risk metadata helps MCP clients make policy decisions, but it does not replace
+runtime confirmation. Every action tool rejects a missing, false, or non-boolean
+confirmation before HomeButler resolves the token or contacts Proxmox.
+
+## Excluded scope
+
+HomeButler does not expose Proxmox hard stop, guest creation or deletion,
+migration, reset, suspend or resume, snapshots, task polling, automatic POST
+retries, arbitrary API actions, or root-only action overrides. The web dashboard
+and Community Scripts provisioning remain separate work; HomeButler does not
 fetch or execute external provisioning scripts.
