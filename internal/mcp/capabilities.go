@@ -159,6 +159,26 @@ var capabilityRegistry = []capability{
 	},
 	{
 		risk:    riskRead,
+		targets: []targetKind{targetLocal},
+		tool: toolDef{
+			Name:        "proxmox_script_list",
+			Description: "List the curated Proxmox VE Community Scripts catalog (community-scripts/ProxmoxVE)",
+			InputSchema: inputSchema{Type: "object"},
+		},
+	},
+	{
+		risk:    riskRead,
+		targets: []targetKind{targetLocal},
+		tool: toolDef{
+			Name:        "proxmox_script_command",
+			Description: "Render the pinned install command for one Proxmox VE Community Script. Never fetches or runs it; the caller reviews and runs it themselves on the Proxmox host",
+			InputSchema: inputSchema{Type: "object", Properties: map[string]propDef{
+				"slug": {Type: "string", Description: "Script slug from proxmox_script_list, such as docker"},
+			}, Required: []string{"slug"}},
+		},
+	},
+	{
+		risk:    riskRead,
 		targets: []targetKind{targetLocal, targetServer},
 		tool: toolDef{
 			Name:        "docker_list",

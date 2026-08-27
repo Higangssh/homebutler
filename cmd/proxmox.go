@@ -17,7 +17,7 @@ func newProxmoxCmd() *cobra.Command {
 		Short:        "Inspect Proxmox VE endpoints",
 		SilenceUsage: true,
 	}
-	cmd.AddCommand(newProxmoxStatusCmd(), newProxmoxGuestsCmd(), newProxmoxNodeCmd(), newProxmoxTasksCmd(), newProxmoxGuestCmd(), newProxmoxTaskCmd())
+	cmd.AddCommand(newProxmoxStatusCmd(), newProxmoxGuestsCmd(), newProxmoxNodeCmd(), newProxmoxTasksCmd(), newProxmoxGuestCmd(), newProxmoxTaskCmd(), newProxmoxScriptCmd())
 	return cmd
 }
 
@@ -280,6 +280,53 @@ func newProxmoxTaskCmd() *cobra.Command {
 	cmd.Flags().StringVar(&endpointName, "endpoint", "", "Proxmox endpoint name (required)")
 	cmd.Flags().StringVar(&node, "node", "", "Proxmox node name (required)")
 	return cmd
+}
+
+func newProxmoxScriptCmd() *cobra.Command {
+	cmd := &cobra.Command{Use: "script", Short: "Show Proxmox VE Community Script install commands", Args: cobra.NoArgs}
+	cmd.AddCommand(newProxmoxScriptListCmd(), newProxmoxScriptShowCmd())
+	return cmd
+}
+
+func newProxmoxScriptListCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "list",
+		Short: "List the curated Proxmox VE Community Scripts catalog",
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			scripts := proxmox.Scripts()
+			return writeProxmox(cmd, scripts, jsonOutput, "Community Scripts", func(b *strings.Builder) {
+				for _, script := range scripts {
+					fmt.Fprintf(b, "%s\t%s\t%s\n", script.Slug, script.Name, script.Description)
+				}
+			})
+		},
+	}
+}
+
+func newProxmoxScriptShowCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "show <slug>",
+		Short: "Print the install command for one Community Script (does not run it)",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			command, err := proxmox.ScriptCommand(args[0])
+			if err != nil {
+				return err
+			}
+			result := proxmoxScriptCommandResult{Slug: args[0], Command: command, Warning: proxmox.ScriptWarning}
+			return writeProxmox(cmd, result, jsonOutput, "Community Script command", func(b *strings.Builder) {
+				fmt.Fprintf(b, "Slug: %s\nCommand: %s\n\n⚠️  %s\n\nReview it, then run it yourself on the Proxmox host; homebutler does not run it for you.\n", result.Slug, result.Command, result.Warning)
+			})
+		},
+	}
+	return cmd
+}
+
+type proxmoxScriptCommandResult struct {
+	Slug    string `json:"slug"`
+	Command string `json:"command"`
+	Warning string `json:"warning"`
 }
 
 type proxmoxGuestActionResult struct {

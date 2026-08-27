@@ -18,6 +18,7 @@ import (
 	"github.com/Higangssh/homebutler/internal/inventory"
 	"github.com/Higangssh/homebutler/internal/network"
 	"github.com/Higangssh/homebutler/internal/ports"
+	"github.com/Higangssh/homebutler/internal/proxmox"
 	"github.com/Higangssh/homebutler/internal/remote"
 	"github.com/Higangssh/homebutler/internal/report"
 	"github.com/Higangssh/homebutler/internal/system"
@@ -405,6 +406,20 @@ func (s *Server) executeTool(name string, args map[string]any) (any, error) {
 		// permitted to write to, so bind mounts declared by the archive are
 		// always refused here and reported in the result.
 		return backup.Restore(archive, backup.RestoreOptions{Service: stringArg(args, "service")})
+
+	case "proxmox_script_list":
+		return proxmox.Scripts(), nil
+
+	case "proxmox_script_command":
+		slug, ok := requireString(args, "slug")
+		if !ok {
+			return nil, fmt.Errorf("missing required parameter: slug")
+		}
+		command, err := proxmox.ScriptCommand(slug)
+		if err != nil {
+			return nil, err
+		}
+		return map[string]any{"slug": slug, "command": command, "warning": proxmox.ScriptWarning}, nil
 
 	case "install_list":
 		return install.List(), nil

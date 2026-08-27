@@ -76,6 +76,7 @@ func TestEveryAdvertisedToolHasADemoImplementation(t *testing.T) {
 		"app":      "uptime-kuma",
 		"target":   "aa:bb:cc:dd:ee:ff",
 		"archive":  "demo.tar.gz",
+		"slug":     "docker",
 	}
 
 	for _, c := range capabilityRegistry {

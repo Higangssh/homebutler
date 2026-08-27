@@ -74,38 +74,48 @@ Restart your AI client — homebutler tools will appear automatically.
 
 ## Available Tools
 
-| Tool | Description |
-|---|---|
-| `system_status` | CPU, memory, disk, uptime |
-| `report` | Butler-style health report with snapshot comparison and suggested actions |
-| `doctor` | Read-only diagnosis of resource pressure, stopped containers, public ports, backup hygiene, and notification readiness |
-| `watch_check` | One-shot restart check on watched targets; reports systemd and pm2 targets as skipped rather than healthy |
-| `watch_history` | Recorded restart incidents, newest first. Captured logs are excluded unless `include_logs` is set |
-| `watch_list` | Targets being watched, with their kind and what the last check recorded |
-| `inventory_scan` | Server inventory/topology: system, containers, app ports, system ports |
-| `inventory_export` | Export inventory as Mermaid (local) or JSON |
-| `docker_list` | List containers |
-| `docker_restart` | Restart a container |
-| `docker_stop` | Stop a container |
-| `docker_logs` | Container log output |
-| `docker_stats` | Running container resource usage |
-| `docker_top` | Processes inside a container, read from the host — no exec, no TTY |
-| `docker_inspect` | Image, state, restart policy, ports, mounts, networks, health. Env values are never included |
-| `wake` | Wake-on-LAN magic packet |
-| `open_ports` | Open ports with process info |
-| `network_scan` | Discover LAN devices |
-| `alerts` | Resource threshold alerts |
-| `backup_create` | Create Docker compose backup archive |
-| `backup_list` | List backup archives |
-| `backup_drill` | Boot a backup in isolation and verify app health |
-| `backup_restore` | Restore volumes from a backup archive |
-| `install_list` | List installable self-hosted apps |
-| `install_app` | Install an app via generated docker-compose.yml |
-| `install_status` | Check installed app status |
-| `install_uninstall` | Stop an app while preserving data |
-| `install_purge` | Stop an app and delete all data |
-| `processes` | Top processes by CPU or memory, with zombies broken out separately |
-| `config_validate` | Check the config file this server is running on |
+| Tool                     | Description                                                                                                            |
+|--------------------------|------------------------------------------------------------------------------------------------------------------------|
+| `system_status`          | CPU, memory, disk, uptime                                                                                              |
+| `report`                 | Butler-style health report with snapshot comparison and suggested actions                                              |
+| `doctor`                 | Read-only diagnosis of resource pressure, stopped containers, public ports, backup hygiene, and notification readiness |
+| `watch_check`            | One-shot restart check on watched targets; reports systemd and pm2 targets as skipped rather than healthy              |
+| `watch_history`          | Recorded restart incidents, newest first. Captured logs are excluded unless `include_logs` is set                      |
+| `watch_list`             | Targets being watched, with their kind and what the last check recorded                                                |
+| `inventory_scan`         | Server inventory/topology: system, containers, app ports, system ports                                                 |
+| `inventory_export`       | Export inventory as Mermaid (local) or JSON                                                                            |
+| `docker_list`            | List containers                                                                                                        |
+| `docker_restart`         | Restart a container                                                                                                    |
+| `docker_stop`            | Stop a container                                                                                                       |
+| `docker_logs`            | Container log output                                                                                                   |
+| `docker_stats`           | Running container resource usage                                                                                       |
+| `docker_top`             | Processes inside a container, read from the host — no exec, no TTY                                                     |
+| `docker_inspect`         | Image, state, restart policy, ports, mounts, networks, health. Env values are never included                           |
+| `wake`                   | Wake-on-LAN magic packet                                                                                               |
+| `open_ports`             | Open ports with process info                                                                                           |
+| `network_scan`           | Discover LAN devices                                                                                                   |
+| `alerts`                 | Resource threshold alerts                                                                                              |
+| `backup_create`          | Create Docker compose backup archive                                                                                   |
+| `backup_list`            | List backup archives                                                                                                   |
+| `backup_drill`           | Boot a backup in isolation and verify app health                                                                       |
+| `backup_restore`         | Restore volumes from a backup archive                                                                                  |
+| `install_list`           | List installable self-hosted apps                                                                                      |
+| `install_app`            | Install an app via generated docker-compose.yml                                                                        |
+| `install_status`         | Check installed app status                                                                                             |
+| `install_uninstall`      | Stop an app while preserving data                                                                                      |
+| `install_purge`          | Stop an app and delete all data                                                                                        |
+| `processes`              | Top processes by CPU or memory, with zombies broken out separately                                                     |
+| `config_validate`        | Check the config file this server is running on                                                                        |
+| `proxmox_status`         | Proxmox VE version, cluster status, and resources                                                                      |
+| `proxmox_guests`         | Unified QEMU/LXC guest list; optional `node`, `status`, `type` filters                                                 |
+| `proxmox_node`           | Node detail; requires `node`                                                                                           |
+| `proxmox_tasks`          | Recent tasks for a node; requires `node`                                                                               |
+| `proxmox_guest_start`    | Start a guest; requires `node`, `type`, `vmid`, and literal `confirm: true`                                            |
+| `proxmox_guest_reboot`   | Reboot a guest; requires `node`, `type`, `vmid`, and literal `confirm: true`                                           |
+| `proxmox_guest_shutdown` | Gracefully shut down a guest; requires `node`, `type`, `vmid`, and literal `confirm: true`                             |
+| `proxmox_task_status`    | Status of one task; requires `node` and the opaque `upid`                                                              |
+| `proxmox_script_list`    | List the curated Proxmox VE Community Scripts catalog                                                                  |
+| `proxmox_script_command` | Render the pinned install command for one Community Script; never fetches or runs it                                   |
 
 Most read/check tools support an optional `server` parameter — manage every server from a single prompt. Destructive tools such as `backup_restore`, `install_purge`, and container stop/restart should only be called after the user clearly confirms intent.
 
