@@ -53,7 +53,7 @@ func TestProxmoxScriptShowNeverExecutes(t *testing.T) {
 		t.Fatal(err)
 	}
 	got := output.String()
-	for _, want := range []string{"Slug: docker", "curl -fsSL https://raw.githubusercontent.com/community-scripts/ProxmoxVE/", "does not run it for you"} {
+	for _, want := range []string{"Slug: docker", "curl -fsSL https://raw.githubusercontent.com/community-scripts/ProxmoxVE/", "does not run it for you", "not reviewed by homebutler", "runs as root"} {
 		if !strings.Contains(got, want) {
 			t.Errorf("script show output missing %q:\n%s", want, got)
 		}
@@ -84,7 +84,7 @@ func TestProxmoxScriptShowJSON(t *testing.T) {
 	if err := json.Unmarshal(output.Bytes(), &result); err != nil {
 		t.Fatal(err)
 	}
-	if result.Slug != "pihole" || !strings.Contains(result.Command, "/ct/pihole.sh") {
+	if result.Slug != "pihole" || !strings.Contains(result.Command, "/ct/pihole.sh") || result.Warning == "" {
 		t.Errorf("script show result = %#v", result)
 	}
 }

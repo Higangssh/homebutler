@@ -244,7 +244,7 @@ func (s *Server) executeDemoTool(name string, args map[string]any) (any, error) 
 		if err != nil {
 			return nil, err
 		}
-		return map[string]any{"slug": slug, "command": command}, nil
+		return map[string]any{"slug": slug, "command": command, "warning": proxmox.ScriptWarning}, nil
 
 	case "install_list":
 		// The catalogue is a static map compiled into the binary, so demo mode

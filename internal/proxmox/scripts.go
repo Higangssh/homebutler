@@ -11,6 +11,12 @@ import "fmt"
 // and run themselves. It never fetches or executes the script.
 const scriptCatalogRef = "fadcb0c375547861f991c09ff8dec196c380d428"
 
+// ScriptWarning is carried alongside every rendered command, in the human
+// output, --json, and MCP alike, so a caller relaying the command elsewhere
+// cannot drop the two facts #62 asked it to state: the script is not
+// reviewed by homebutler, and it runs as root on the Proxmox host.
+const ScriptWarning = "This script is not reviewed by homebutler. It is fetched from community-scripts/ProxmoxVE and runs as root on the Proxmox host."
+
 // Script is one curated entry from the Proxmox VE Community Scripts catalog
 // (https://github.com/community-scripts/ProxmoxVE).
 type Script struct {

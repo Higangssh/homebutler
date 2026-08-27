@@ -153,6 +153,24 @@ QEMU hard stop is equivalent to pulling the power plug and can damage guest
 data; LXC hard stop abruptly terminates container processes. A future hard-stop
 operation, if needed, must use its own unmistakable name and safety contract.
 
+## Community Scripts
+
+```bash
+homebutler proxmox script list
+homebutler proxmox script show docker
+```
+
+`proxmox script show <slug>` prints an install command from the curated
+[Proxmox VE Community Scripts](https://github.com/community-scripts/ProxmoxVE)
+catalog. HomeButler only formats that command; it never fetches or runs it.
+The command is pinned to one commit of the upstream repository rather than
+`main`, so the bytes a script fetches today match a week from now — bumping
+the pin is a deliberate, reviewable one-line change.
+
+The output always carries a warning, in human text, `--json`, and over MCP
+alike: the script is not reviewed by HomeButler, and it runs as root on the
+Proxmox host. Read it, review the command yourself, and run it by hand.
+
 ## MCP tools
 
 The MCP server exposes these read-only Proxmox tools. Each accepts `endpoint`
@@ -179,10 +197,17 @@ Risk metadata helps MCP clients make policy decisions, but it does not replace
 runtime confirmation. Every action tool rejects a missing, false, or non-boolean
 confirmation before HomeButler resolves the token or contacts Proxmox.
 
+Two more tools cover Community Scripts and take no `endpoint`, since neither
+contacts Proxmox:
+
+- `proxmox_script_list` - `riskRead`; lists the curated catalog.
+- `proxmox_script_command` - `riskRead`; requires `slug`; renders the pinned
+  install command and a `warning` field with the same text the CLI prints.
+
 ## Excluded scope
 
 HomeButler does not expose Proxmox hard stop, guest creation or deletion,
 migration, reset, suspend or resume, snapshots, task polling, automatic POST
-retries, arbitrary API actions, or root-only action overrides. The web dashboard
-and Community Scripts provisioning remain separate work; HomeButler does not
-fetch or execute external provisioning scripts.
+retries, arbitrary API actions, or root-only action overrides. The web
+dashboard remains separate work. HomeButler prints Community Script install
+commands for a human to review and run; it never fetches or executes them.

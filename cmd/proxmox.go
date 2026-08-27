@@ -314,9 +314,9 @@ func newProxmoxScriptShowCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			result := proxmoxScriptCommandResult{Slug: args[0], Command: command}
+			result := proxmoxScriptCommandResult{Slug: args[0], Command: command, Warning: proxmox.ScriptWarning}
 			return writeProxmox(cmd, result, jsonOutput, "Community Script command", func(b *strings.Builder) {
-				fmt.Fprintf(b, "Slug: %s\nCommand: %s\n\nReview it, then run it yourself on the Proxmox host; homebutler does not run it for you.\n", result.Slug, result.Command)
+				fmt.Fprintf(b, "Slug: %s\nCommand: %s\n\n⚠️  %s\n\nReview it, then run it yourself on the Proxmox host; homebutler does not run it for you.\n", result.Slug, result.Command, result.Warning)
 			})
 		},
 	}
@@ -326,6 +326,7 @@ func newProxmoxScriptShowCmd() *cobra.Command {
 type proxmoxScriptCommandResult struct {
 	Slug    string `json:"slug"`
 	Command string `json:"command"`
+	Warning string `json:"warning"`
 }
 
 type proxmoxGuestActionResult struct {

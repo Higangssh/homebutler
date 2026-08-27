@@ -39,7 +39,7 @@ func TestProxmoxScriptCommandTool(t *testing.T) {
 		t.Fatal(err)
 	}
 	command, ok := result.(map[string]any)
-	if !ok || command["slug"] != "docker" || !strings.Contains(command["command"].(string), "/ct/docker.sh") {
+	if !ok || command["slug"] != "docker" || !strings.Contains(command["command"].(string), "/ct/docker.sh") || command["warning"] != proxmox.ScriptWarning {
 		t.Fatalf("proxmox_script_command = %#v", result)
 	}
 
@@ -65,7 +65,7 @@ func TestProxmoxScriptToolsDemo(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if m, ok := command.(map[string]any); !ok || m["slug"] != "docker" {
+	if m, ok := command.(map[string]any); !ok || m["slug"] != "docker" || m["warning"] != proxmox.ScriptWarning {
 		t.Fatalf("demo proxmox_script_command = %#v", command)
 	}
 }
