@@ -118,6 +118,66 @@ var capabilityRegistry = []capability{
 		},
 	},
 	{
+		risk:    riskWrite,
+		targets: []targetKind{targetProxmox},
+		tool: toolDef{
+			Name:        "proxmox_guest_start",
+			Description: "Start one explicitly targeted Proxmox guest after confirmation and return the accepted task UPID",
+			InputSchema: proxmoxGuestActionSchema(),
+		},
+	},
+	{
+		risk:    riskWrite,
+		targets: []targetKind{targetProxmox},
+		tool: toolDef{
+			Name:        "proxmox_guest_reboot",
+			Description: "Reboot one explicitly targeted Proxmox guest after confirmation and return the accepted task UPID",
+			InputSchema: proxmoxGuestActionSchema(),
+		},
+	},
+	{
+		risk:    riskDestructive,
+		targets: []targetKind{targetProxmox},
+		tool: toolDef{
+			Name:        "proxmox_guest_shutdown",
+			Description: "Gracefully shut down one explicitly targeted Proxmox guest after confirmation and return the accepted task UPID",
+			InputSchema: proxmoxGuestActionSchema(),
+		},
+	},
+	{
+		risk:    riskRead,
+		targets: []targetKind{targetProxmox},
+		tool: toolDef{
+			Name:        "proxmox_task_status",
+			Description: "Inspect one asynchronous Proxmox task by node and opaque UPID",
+			InputSchema: inputSchema{Type: "object", Properties: map[string]propDef{
+				"endpoint": {Type: "string", Description: "Explicit Proxmox endpoint name from config"},
+				"node":     {Type: "string", Description: "Proxmox node name"},
+				"upid":     {Type: "string", Description: "Opaque Proxmox task UPID"},
+			}, Required: []string{"endpoint", "node", "upid"}},
+		},
+	},
+	{
+		risk:    riskRead,
+		targets: []targetKind{targetLocal},
+		tool: toolDef{
+			Name:        "proxmox_script_list",
+			Description: "List the curated Proxmox VE Community Scripts catalog (community-scripts/ProxmoxVE)",
+			InputSchema: inputSchema{Type: "object"},
+		},
+	},
+	{
+		risk:    riskRead,
+		targets: []targetKind{targetLocal},
+		tool: toolDef{
+			Name:        "proxmox_script_command",
+			Description: "Render the pinned install command for one Proxmox VE Community Script. Never fetches or runs it; the caller reviews and runs it themselves on the Proxmox host",
+			InputSchema: inputSchema{Type: "object", Properties: map[string]propDef{
+				"slug": {Type: "string", Description: "Script slug from proxmox_script_list, such as docker"},
+			}, Required: []string{"slug"}},
+		},
+	},
+	{
 		risk:    riskRead,
 		targets: []targetKind{targetLocal, targetServer},
 		tool: toolDef{

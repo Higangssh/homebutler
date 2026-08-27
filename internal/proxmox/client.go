@@ -1,4 +1,4 @@
-// Package proxmox provides the small read-only Proxmox VE API client used by
+// Package proxmox provides the small Proxmox VE API client used by
 // HomeButler's Proxmox commands.
 package proxmox
 
@@ -22,6 +22,22 @@ import (
 
 const defaultTimeout = 10 * time.Second
 
+const (
+	// minVMID matches the Proxmox API's own vmid schema minimum. 100 is only
+	// the default lower bound of /cluster/nextid's auto-assign range
+	// (datacenter.cfg next-id), not a floor the API enforces on an
+	// explicitly supplied vmid, and a cluster or an older pvesh-created
+	// guest can legitimately sit below it.
+	minVMID = 1
+	maxVMID = 999999999
+)
+
+var guestActionPaths = map[GuestAction]string{
+	GuestActionStart:    "start",
+	GuestActionShutdown: "shutdown",
+	GuestActionReboot:   "reboot",
+}
+
 // Options configures a Proxmox API client. Token is the resolved token value;
 // resolving token files belongs to the configuration layer.
 type Options struct {
@@ -35,7 +51,7 @@ type Options struct {
 	Timeout     time.Duration
 }
 
-// Client is a read-only client for the Proxmox VE JSON API.
+// Client is a client for the Proxmox VE JSON API.
 type Client struct {
 	baseURL string
 	tokenID string
@@ -76,6 +92,12 @@ func New(options Options) (*Client, error) {
 		http: &http.Client{
 			Timeout:   options.Timeout,
 			Transport: &http.Transport{TLSClientConfig: tlsConfig},
+			CheckRedirect: func(_ *http.Request, via []*http.Request) error {
+				if len(via) > 0 && via[0].Method == http.MethodPost {
+					return http.ErrUseLastResponse
+				}
+				return nil
+			},
 		},
 	}, nil
 }
@@ -208,6 +230,81 @@ func (c *Client) TasksLimit(ctx context.Context, node string, limit int) ([]Task
 	return tasks, c.get(ctx, "/api2/json/nodes/"+url.PathEscape(node)+"/tasks", query, &tasks)
 }
 
+// ActOnGuest submits one approved guest power action and returns its opaque UPID.
+func (c *Client) ActOnGuest(ctx context.Context, node, guestType string, vmid int, action GuestAction) (string, error) {
+	if err := ValidateGuestAction(node, guestType, vmid, action); err != nil {
+		return "", err
+	}
+	suffix := guestActionPaths[action]
+	path := fmt.Sprintf("/api2/json/nodes/%s/%s/%d/status/%s",
+		url.PathEscape(node), url.PathEscape(guestType), vmid, url.PathEscape(suffix))
+	var upid string
+	if err := c.post(ctx, path, &upid); err != nil {
+		return "", err
+	}
+	if strings.TrimSpace(upid) == "" {
+		return "", fmt.Errorf("proxmox guest action returned an empty UPID")
+	}
+	return upid, nil
+}
+
+// ValidateGuestAction validates an explicit guest action target without making a request.
+func ValidateGuestAction(node, guestType string, vmid int, action GuestAction) error {
+	if strings.TrimSpace(node) == "" {
+		return fmt.Errorf("proxmox node is required")
+	}
+	if guestType != "qemu" && guestType != "lxc" {
+		return fmt.Errorf("proxmox guest type must be qemu or lxc")
+	}
+	if vmid < minVMID || vmid > maxVMID {
+		return fmt.Errorf("proxmox VMID must be between %d and %d", minVMID, maxVMID)
+	}
+	_, ok := guestActionPaths[action]
+	if !ok {
+		return fmt.Errorf("unsupported Proxmox guest action %q", action)
+	}
+	return nil
+}
+
+// TaskStatus returns the current status of one opaque Proxmox task UPID.
+func (c *Client) TaskStatus(ctx context.Context, node, upid string) (TaskStatus, error) {
+	if err := ValidateTaskStatusRequest(node, upid); err != nil {
+		return TaskStatus{}, err
+	}
+	var status TaskStatus
+	path := "/api2/json/nodes/" + url.PathEscape(node) + "/tasks/" + url.PathEscape(upid) + "/status"
+	if err := c.get(ctx, path, nil, &status); err != nil {
+		return TaskStatus{}, err
+	}
+	status.Result = TaskResult(status.Status, status.ExitStatus)
+	return status, nil
+}
+
+// ValidateTaskStatusRequest validates a task lookup without making a request.
+func ValidateTaskStatusRequest(node, upid string) error {
+	if strings.TrimSpace(node) == "" {
+		return fmt.Errorf("proxmox node is required")
+	}
+	if strings.TrimSpace(upid) == "" {
+		return fmt.Errorf("proxmox UPID is required")
+	}
+	return nil
+}
+
+// TaskResult classifies the asynchronous task state as a short, stable token.
+func TaskResult(status, exitStatus string) string {
+	if status == "running" {
+		return "running"
+	}
+	if status == "stopped" && exitStatus == "OK" {
+		return "ok"
+	}
+	if status == "stopped" {
+		return "failed"
+	}
+	return "unknown"
+}
+
 // DefaultView performs the three requests used by the default status view.
 func (c *Client) DefaultView(ctx context.Context) (DefaultView, error) {
 	view := DefaultView{}
@@ -233,12 +330,20 @@ func (c *Client) DefaultView(ctx context.Context) (DefaultView, error) {
 }
 
 func (c *Client) get(ctx context.Context, path string, query url.Values, out any) error {
+	return c.request(ctx, http.MethodGet, path, query, out)
+}
+
+func (c *Client) post(ctx context.Context, path string, out any) error {
+	return c.request(ctx, http.MethodPost, path, nil, out)
+}
+
+func (c *Client) request(ctx context.Context, method, path string, query url.Values, out any) error {
 	u, err := url.Parse(c.baseURL + path)
 	if err != nil {
 		return fmt.Errorf("build Proxmox request URL: %w", err)
 	}
 	u.RawQuery = query.Encode()
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), nil)
+	req, err := http.NewRequestWithContext(ctx, method, u.String(), nil)
 	if err != nil {
 		return fmt.Errorf("build Proxmox request: %w", err)
 	}
@@ -260,6 +365,7 @@ func (c *Client) get(ctx context.Context, path string, query url.Values, out any
 		}
 		_ = json.Unmarshal(body, &apiError)
 		if message := strings.TrimSpace(apiError.Message); message != "" {
+			message = strings.ReplaceAll(message, c.token, "[REDACTED]")
 			return fmt.Errorf("proxmox request %s: %s: %s", path, resp.Status, message)
 		}
 		return fmt.Errorf("proxmox request %s: %s", path, resp.Status)

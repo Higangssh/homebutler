@@ -190,6 +190,215 @@ func TestResourcesEmptyForInsufficientACLs(t *testing.T) {
 	}
 }
 
+func TestPostUsesSharedAuthenticatedTransport(t *testing.T) {
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			t.Errorf("method = %q, want POST", r.Method)
+		}
+		if got, want := r.Header.Get("Authorization"), "PVEAPIToken=monitoring@pve!readonly=fixture-token"; got != want {
+			t.Errorf("Authorization = %q, want %q", got, want)
+		}
+		_, _ = w.Write([]byte(`{"data":"UPID:fixture"}`))
+	}))
+	defer server.Close()
+
+	var upid string
+	if err := newTLSClient(t, server.URL, Options{Insecure: true}).post(context.Background(), "/api2/json/test", &upid); err != nil {
+		t.Fatal(err)
+	}
+	if upid != "UPID:fixture" {
+		t.Errorf("UPID = %q, want UPID:fixture", upid)
+	}
+}
+
+func TestGuestActions(t *testing.T) {
+	tests := []struct {
+		guestType string
+		action    GuestAction
+	}{
+		{guestType: "qemu", action: GuestActionStart},
+		{guestType: "qemu", action: GuestActionShutdown},
+		{guestType: "qemu", action: GuestActionReboot},
+		{guestType: "lxc", action: GuestActionStart},
+		{guestType: "lxc", action: GuestActionShutdown},
+		{guestType: "lxc", action: GuestActionReboot},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.guestType+"/"+string(tt.action), func(t *testing.T) {
+			calls := 0
+			server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				calls++
+				if r.Method != http.MethodPost {
+					t.Errorf("method = %q, want POST", r.Method)
+				}
+				if got, want := r.Header.Get("Authorization"), "PVEAPIToken=monitoring@pve!readonly=fixture-token"; got != want {
+					t.Errorf("Authorization = %q, want %q", got, want)
+				}
+				wantPath := "/api2/json/nodes/pve%2Fedge/" + tt.guestType + "/100/status/" + string(tt.action)
+				if got := r.URL.EscapedPath(); got != wantPath {
+					t.Errorf("path = %q, want %q", got, wantPath)
+				}
+				_, _ = w.Write([]byte(`{"data":"UPID:pve1:opaque"}`))
+			}))
+			defer server.Close()
+
+			upid, err := newTLSClient(t, server.URL, Options{Insecure: true}).ActOnGuest(context.Background(), "pve/edge", tt.guestType, 100, tt.action)
+			if err != nil || upid != "UPID:pve1:opaque" {
+				t.Fatalf("ActOnGuest() = %q, %v", upid, err)
+			}
+			if calls != 1 {
+				t.Errorf("requests = %d, want 1", calls)
+			}
+		})
+	}
+}
+
+func TestGuestActionValidationMakesNoRequest(t *testing.T) {
+	calls := 0
+	server := httptest.NewTLSServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) { calls++ }))
+	defer server.Close()
+	client := newTLSClient(t, server.URL, Options{Insecure: true})
+
+	tests := []struct {
+		name      string
+		node      string
+		guestType string
+		vmid      int
+		action    GuestAction
+	}{
+		{name: "empty node", guestType: "qemu", vmid: 100, action: GuestActionStart},
+		{name: "invalid type", node: "pve1", guestType: "vm", vmid: 100, action: GuestActionStart},
+		{name: "VMID too small", node: "pve1", guestType: "qemu", vmid: minVMID - 1, action: GuestActionStart},
+		{name: "VMID too large", node: "pve1", guestType: "qemu", vmid: maxVMID + 1, action: GuestActionStart},
+		{name: "invalid action", node: "pve1", guestType: "qemu", vmid: 100, action: GuestAction("stop")},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if _, err := client.ActOnGuest(context.Background(), tt.node, tt.guestType, tt.vmid, tt.action); err == nil {
+				t.Fatal("ActOnGuest() error = nil")
+			}
+		})
+	}
+	for _, target := range []struct{ node, upid string }{
+		{node: "", upid: "UPID:opaque"},
+		{node: " ", upid: "UPID:opaque"},
+		{node: "pve1", upid: ""},
+		{node: "pve1", upid: " "},
+	} {
+		if _, err := client.TaskStatus(context.Background(), target.node, target.upid); err == nil {
+			t.Errorf("TaskStatus(%q, %q) error = nil", target.node, target.upid)
+		}
+	}
+	if calls != 0 {
+		t.Errorf("requests = %d, want 0", calls)
+	}
+}
+
+func TestGuestActionRejectsInvalidUPIDResponse(t *testing.T) {
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{"data":""}`))
+	}))
+	defer server.Close()
+
+	if _, err := newTLSClient(t, server.URL, Options{Insecure: true}).ActOnGuest(context.Background(), "pve1", "qemu", 100, GuestActionStart); err == nil || !strings.Contains(err.Error(), "empty UPID") {
+		t.Errorf("ActOnGuest() error = %v", err)
+	}
+}
+
+func TestTaskStatus(t *testing.T) {
+	tests := []struct {
+		fixture    string
+		status     string
+		exitStatus string
+	}{
+		{fixture: "task-status-running.json", status: "running"},
+		{fixture: "task-status-stopped-ok.json", status: "stopped", exitStatus: "OK"},
+		{fixture: "task-status-stopped-error.json", status: "stopped", exitStatus: "guest is locked"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.fixture, func(t *testing.T) {
+			server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.Method != http.MethodGet {
+					t.Errorf("method = %q, want GET", r.Method)
+				}
+				if got, want := r.URL.EscapedPath(), "/api2/json/nodes/pve%2Fedge/tasks/UPID:pve1%2Fopaque%3Fvalue/status"; got != want {
+					t.Errorf("path = %q, want %q", got, want)
+				}
+				_, _ = w.Write(readFixture(t, tt.fixture))
+			}))
+			defer server.Close()
+
+			status, err := newTLSClient(t, server.URL, Options{Insecure: true}).TaskStatus(context.Background(), "pve/edge", "UPID:pve1/opaque?value")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if status.Status != tt.status || status.ExitStatus != tt.exitStatus || status.Result != TaskResult(tt.status, tt.exitStatus) || status.UPID == "" {
+				t.Errorf("TaskStatus() = %#v", status)
+			}
+		})
+	}
+}
+
+func TestGuestActionDoesNotRetryAmbiguousFailure(t *testing.T) {
+	calls := 0
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		calls++
+		connection, _, err := w.(http.Hijacker).Hijack()
+		if err != nil {
+			t.Fatal(err)
+		}
+		_ = connection.Close()
+	}))
+	defer server.Close()
+
+	_, err := newTLSClient(t, server.URL, Options{Insecure: true}).ActOnGuest(context.Background(), "pve1", "qemu", 100, GuestActionStart)
+	if err == nil {
+		t.Fatal("ActOnGuest() error = nil")
+	}
+	if calls != 1 {
+		t.Errorf("requests = %d, want 1", calls)
+	}
+	if strings.Contains(err.Error(), "fixture-token") {
+		t.Errorf("error exposes token: %v", err)
+	}
+}
+
+func TestGuestActionDoesNotFollowRedirect(t *testing.T) {
+	targetCalls := 0
+	target := httptest.NewTLSServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) { targetCalls++ }))
+	defer target.Close()
+
+	sourceCalls := 0
+	source := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		sourceCalls++
+		http.Redirect(w, r, target.URL, http.StatusTemporaryRedirect)
+	}))
+	defer source.Close()
+
+	_, err := newTLSClient(t, source.URL, Options{Insecure: true}).ActOnGuest(context.Background(), "pve1", "qemu", 100, GuestActionStart)
+	if err == nil || !strings.Contains(err.Error(), "307 Temporary Redirect") {
+		t.Fatalf("ActOnGuest() error = %v", err)
+	}
+	if sourceCalls != 1 || targetCalls != 0 {
+		t.Errorf("requests = source:%d target:%d, want source:1 target:0", sourceCalls, targetCalls)
+	}
+}
+
+func TestAPIErrorRedactsReflectedToken(t *testing.T) {
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusForbidden)
+		_, _ = w.Write([]byte(`{"message":"credential fixture-token was denied"}`))
+	}))
+	defer server.Close()
+
+	_, err := newTLSClient(t, server.URL, Options{Insecure: true}).ActOnGuest(context.Background(), "pve1", "qemu", 100, GuestActionStart)
+	if err == nil || strings.Contains(err.Error(), "fixture-token") || !strings.Contains(err.Error(), "[REDACTED]") {
+		t.Errorf("ActOnGuest() error = %v", err)
+	}
+}
+
 func TestAPIErrorIncludesMessage(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusForbidden)

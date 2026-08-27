@@ -183,6 +183,7 @@ Current MCP tools:
 - `wake`, `open_ports`, `network_scan`, `alerts`
 - `backup_create`, `backup_list`, `backup_drill`, `backup_restore`
 - `install_list`, `install_app`, `install_status`, `install_uninstall`, `install_purge`
+- `proxmox_status`, `proxmox_guests`, `proxmox_node`, `proxmox_tasks`, `proxmox_guest_start`, `proxmox_guest_reboot`, `proxmox_guest_shutdown`, `proxmox_task_status`, `proxmox_script_list`, `proxmox_script_command`
 
 ### Version
 ```bash

@@ -66,11 +66,17 @@ func TestEveryAdvertisedToolHasADemoImplementation(t *testing.T) {
 	s := NewServer(&config.Config{}, "dev", true)
 
 	sample := map[string]any{
-		"name":    "nginx",
-		"node":    "pve1",
-		"app":     "uptime-kuma",
-		"target":  "aa:bb:cc:dd:ee:ff",
-		"archive": "demo.tar.gz",
+		"name":     "nginx",
+		"endpoint": "pve",
+		"node":     "pve1",
+		"type":     "qemu",
+		"vmid":     100,
+		"confirm":  true,
+		"upid":     "UPID:pve1:demo",
+		"app":      "uptime-kuma",
+		"target":   "aa:bb:cc:dd:ee:ff",
+		"archive":  "demo.tar.gz",
+		"slug":     "docker",
 	}
 
 	for _, c := range capabilityRegistry {

@@ -17,7 +17,7 @@ func newProxmoxCmd() *cobra.Command {
 		Short:        "Inspect Proxmox VE endpoints",
 		SilenceUsage: true,
 	}
-	cmd.AddCommand(newProxmoxStatusCmd(), newProxmoxGuestsCmd(), newProxmoxNodeCmd(), newProxmoxTasksCmd())
+	cmd.AddCommand(newProxmoxStatusCmd(), newProxmoxGuestsCmd(), newProxmoxNodeCmd(), newProxmoxTasksCmd(), newProxmoxGuestCmd(), newProxmoxTaskCmd(), newProxmoxScriptCmd())
 	return cmd
 }
 
@@ -186,6 +186,166 @@ func newProxmoxTasksCmd() *cobra.Command {
 	cmd.Flags().StringVar(&node, "node", "", "Node name")
 	cmd.Flags().IntVar(&limit, "limit", 50, "Maximum tasks per node")
 	return cmd
+}
+
+func newProxmoxGuestCmd() *cobra.Command {
+	cmd := &cobra.Command{Use: "guest", Short: "Control a Proxmox VE guest", Args: cobra.NoArgs}
+	cmd.AddCommand(
+		newProxmoxGuestActionCmd(proxmox.GuestActionStart),
+		newProxmoxGuestActionCmd(proxmox.GuestActionShutdown),
+		newProxmoxGuestActionCmd(proxmox.GuestActionReboot),
+	)
+	return cmd
+}
+
+func newProxmoxGuestActionCmd(action proxmox.GuestAction) *cobra.Command {
+	var endpointName, node, guestType string
+	var vmid int
+	var confirm bool
+	cmd := &cobra.Command{
+		Use:   string(action),
+		Short: fmt.Sprintf("Submit a Proxmox guest %s action", action),
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if endpointName == "" {
+				return fmt.Errorf("--endpoint is required for Proxmox guest actions")
+			}
+			if err := proxmox.ValidateGuestAction(node, guestType, vmid, action); err != nil {
+				return err
+			}
+			if !confirm {
+				return fmt.Errorf("confirmation required for Proxmox guest action: endpoint=%q node=%q type=%q vmid=%d action=%q; rerun with --endpoint %q --node %q --type %q --vmid %d --confirm",
+					endpointName, node, guestType, vmid, action, endpointName, node, guestType, vmid)
+			}
+			endpoint, client, err := openProxmoxClient(endpointName)
+			if err != nil {
+				return err
+			}
+			upid, err := client.ActOnGuest(context.Background(), node, guestType, vmid, action)
+			if err != nil {
+				return fmt.Errorf("submit Proxmox guest %s for endpoint %q node %q %s VMID %d: %w", action, endpoint.Name, node, guestType, vmid, err)
+			}
+			result := proxmoxGuestActionResult{
+				Endpoint: endpoint.Name, Node: node, Type: guestType, VMID: vmid,
+				Action: action, Status: "accepted", UPID: upid,
+			}
+			return writeProxmox(cmd, result, jsonOutput, "Guest action accepted", func(b *strings.Builder) {
+				fmt.Fprintf(b, "Endpoint: %s\nNode: %s\nType: %s\nVMID: %d\nAction: %s\nUPID: %s\n",
+					result.Endpoint, result.Node, result.Type, result.VMID, result.Action, result.UPID)
+			})
+		},
+	}
+	cmd.Flags().StringVar(&endpointName, "endpoint", "", "Proxmox endpoint name (required)")
+	cmd.Flags().StringVar(&node, "node", "", "Proxmox node name (required)")
+	cmd.Flags().StringVar(&guestType, "type", "", "Guest type: qemu or lxc (required)")
+	cmd.Flags().IntVar(&vmid, "vmid", 0, "Guest VMID (required)")
+	cmd.Flags().BoolVar(&confirm, "confirm", false, "Confirm the explicit guest action target")
+	return cmd
+}
+
+func newProxmoxTaskCmd() *cobra.Command {
+	var endpointName, node string
+	cmd := &cobra.Command{
+		Use:   "task <upid>",
+		Short: "Inspect one Proxmox VE task",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if endpointName == "" {
+				return fmt.Errorf("--endpoint is required for Proxmox task status")
+			}
+			if err := proxmox.ValidateTaskStatusRequest(node, args[0]); err != nil {
+				return err
+			}
+			endpoint, client, err := openProxmoxClient(endpointName)
+			if err != nil {
+				return err
+			}
+			status, err := client.TaskStatus(context.Background(), node, args[0])
+			if err != nil {
+				return fmt.Errorf("get Proxmox task %q from endpoint %q node %q: %w", args[0], endpoint.Name, node, err)
+			}
+			result := proxmoxTaskStatusResult{
+				Endpoint: endpoint.Name, Node: node, UPID: args[0], Status: status.Status,
+				ExitStatus: status.ExitStatus, Result: status.Result,
+			}
+			return writeProxmox(cmd, result, jsonOutput, "Task status", func(b *strings.Builder) {
+				fmt.Fprintf(b, "Endpoint: %s\nNode: %s\nUPID: %s\nStatus: %s\nResult: %s\n",
+					result.Endpoint, result.Node, result.UPID, result.Status, result.Result)
+				if result.ExitStatus != "" {
+					fmt.Fprintf(b, "Exit status: %s\n", result.ExitStatus)
+				}
+			})
+		},
+	}
+	cmd.Flags().StringVar(&endpointName, "endpoint", "", "Proxmox endpoint name (required)")
+	cmd.Flags().StringVar(&node, "node", "", "Proxmox node name (required)")
+	return cmd
+}
+
+func newProxmoxScriptCmd() *cobra.Command {
+	cmd := &cobra.Command{Use: "script", Short: "Show Proxmox VE Community Script install commands", Args: cobra.NoArgs}
+	cmd.AddCommand(newProxmoxScriptListCmd(), newProxmoxScriptShowCmd())
+	return cmd
+}
+
+func newProxmoxScriptListCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "list",
+		Short: "List the curated Proxmox VE Community Scripts catalog",
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			scripts := proxmox.Scripts()
+			return writeProxmox(cmd, scripts, jsonOutput, "Community Scripts", func(b *strings.Builder) {
+				for _, script := range scripts {
+					fmt.Fprintf(b, "%s\t%s\t%s\n", script.Slug, script.Name, script.Description)
+				}
+			})
+		},
+	}
+}
+
+func newProxmoxScriptShowCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "show <slug>",
+		Short: "Print the install command for one Community Script (does not run it)",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			command, err := proxmox.ScriptCommand(args[0])
+			if err != nil {
+				return err
+			}
+			result := proxmoxScriptCommandResult{Slug: args[0], Command: command, Warning: proxmox.ScriptWarning}
+			return writeProxmox(cmd, result, jsonOutput, "Community Script command", func(b *strings.Builder) {
+				fmt.Fprintf(b, "Slug: %s\nCommand: %s\n\n⚠️  %s\n\nReview it, then run it yourself on the Proxmox host; homebutler does not run it for you.\n", result.Slug, result.Command, result.Warning)
+			})
+		},
+	}
+	return cmd
+}
+
+type proxmoxScriptCommandResult struct {
+	Slug    string `json:"slug"`
+	Command string `json:"command"`
+	Warning string `json:"warning"`
+}
+
+type proxmoxGuestActionResult struct {
+	Endpoint string              `json:"endpoint"`
+	Node     string              `json:"node"`
+	Type     string              `json:"type"`
+	VMID     int                 `json:"vmid"`
+	Action   proxmox.GuestAction `json:"action"`
+	Status   string              `json:"status"`
+	UPID     string              `json:"upid"`
+}
+
+type proxmoxTaskStatusResult struct {
+	Endpoint   string `json:"endpoint"`
+	Node       string `json:"node"`
+	UPID       string `json:"upid"`
+	Status     string `json:"status"`
+	ExitStatus string `json:"exitstatus,omitempty"`
+	Result     string `json:"result"`
 }
 
 type proxmoxTasksView struct {

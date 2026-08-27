@@ -35,6 +35,30 @@ func (s *Server) executeDemoTool(name string, args map[string]any) (any, error) 
 			return nil, fmt.Errorf("missing required parameter: node")
 		}
 		return []proxmox.Task{{UPID: "UPID:" + node + ":demo", Node: node, Type: "vzdump", Status: "OK"}}, nil
+	case "proxmox_guest_start", "proxmox_guest_reboot", "proxmox_guest_shutdown":
+		request, _, err := proxmoxGuestActionArgs(name, args)
+		if err != nil {
+			return nil, err
+		}
+		return proxmoxGuestActionResult{
+			Endpoint: request.Endpoint, Node: request.Node, Type: request.Type, VMID: request.VMID,
+			Action: request.Action, Status: "accepted", UPID: "UPID:" + request.Node + ":demo",
+		}, nil
+	case "proxmox_task_status":
+		endpoint, err := strictProxmoxStringArg(args, "endpoint")
+		if err != nil {
+			return nil, err
+		}
+		node, err := strictProxmoxStringArg(args, "node")
+		if err != nil {
+			return nil, err
+		}
+		upid, err := strictProxmoxStringArg(args, "upid")
+		if err != nil {
+			return nil, err
+		}
+		_ = endpoint
+		return proxmox.TaskStatus{UPID: upid, Node: node, Type: "qmstart", ID: "100", User: "demo@pve", Status: "stopped", ExitStatus: "OK", Result: proxmox.TaskResult("stopped", "OK")}, nil
 	case "system_status":
 		return demoStatus(server), nil
 	case "docker_list":
@@ -206,6 +230,22 @@ func (s *Server) executeDemoTool(name string, args map[string]any) (any, error) 
 			return nil, fmt.Errorf("missing required parameter: archive")
 		}
 		return map[string]any{"archive": archive, "services": []string{"demo"}, "volumes": 1}, nil
+	case "proxmox_script_list":
+		// Static catalog compiled into the binary; demo mode answers it
+		// truthfully rather than inventing scripts that would drift from it.
+		return proxmox.Scripts(), nil
+
+	case "proxmox_script_command":
+		slug, ok := requireString(args, "slug")
+		if !ok {
+			return nil, fmt.Errorf("missing required parameter: slug")
+		}
+		command, err := proxmox.ScriptCommand(slug)
+		if err != nil {
+			return nil, err
+		}
+		return map[string]any{"slug": slug, "command": command, "warning": proxmox.ScriptWarning}, nil
+
 	case "install_list":
 		// The catalogue is a static map compiled into the binary, so demo mode
 		// can answer this truthfully instead of inventing apps that would drift
