@@ -230,6 +230,22 @@ func (s *Server) executeDemoTool(name string, args map[string]any) (any, error) 
 			return nil, fmt.Errorf("missing required parameter: archive")
 		}
 		return map[string]any{"archive": archive, "services": []string{"demo"}, "volumes": 1}, nil
+	case "proxmox_script_list":
+		// Static catalog compiled into the binary; demo mode answers it
+		// truthfully rather than inventing scripts that would drift from it.
+		return proxmox.Scripts(), nil
+
+	case "proxmox_script_command":
+		slug, ok := requireString(args, "slug")
+		if !ok {
+			return nil, fmt.Errorf("missing required parameter: slug")
+		}
+		command, err := proxmox.ScriptCommand(slug)
+		if err != nil {
+			return nil, err
+		}
+		return map[string]any{"slug": slug, "command": command}, nil
+
 	case "install_list":
 		// The catalogue is a static map compiled into the binary, so demo mode
 		// can answer this truthfully instead of inventing apps that would drift
