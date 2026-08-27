@@ -254,14 +254,14 @@ func validateContainerArgs(tool string, args map[string]any) error {
 }
 
 func (s *Server) executeTool(name string, args map[string]any) (any, error) {
-	if s.demo {
-		return s.executeDemoTool(name, args)
-	}
-
 	// Before any routing: whichever machine ends up answering, the argument
 	// rules are the same and were already checked.
 	if err := validateContainerArgs(name, args); err != nil {
 		return nil, err
+	}
+
+	if s.demo {
+		return s.executeDemoTool(name, args)
 	}
 
 	if cap, ok := capabilityFor(name); ok && cap.supports(targetProxmox) {
