@@ -25,3 +25,4 @@ ssh -L 8080:localhost:8080 user@your-server
 | **Alerts** | Threshold monitoring with OK / WARNING / CRITICAL |
 | **Network Ports** | Open ports with process names |
 | **Wake-on-LAN** | One-click wake buttons |
+| **Proxmox VE** | Cluster quorum, nodes, QEMU/LXC guests, storage, and collector warnings |
