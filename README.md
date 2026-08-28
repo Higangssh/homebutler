@@ -97,6 +97,7 @@ homebutler report --json
 - **Run a doctor check** — diagnose resource pressure, stopped containers, public ports, backup hygiene, notifications, and report baseline readiness
 - **Catch crashes** — save logs before/after Docker, systemd, or PM2 restarts and detect flapping loops
 - **Verify backups** — boot backups in isolated containers before you trust them
+- **See a Proxmox cluster** — nodes, QEMU and LXC guests, storage, and task status, with power actions that name their target explicitly
 - **Use it anywhere** — CLI, JSON, web dashboard, or MCP for AI agents without giving them SSH
 
 ## Why homebutler?
@@ -420,6 +421,34 @@ homebutler watch remove nginx           # Stop watching
 homebutler watch check                  # One-shot check (no continuous monitoring)
 ```
 
+### 🧊 Proxmox VE
+
+```bash
+homebutler proxmox status
+homebutler proxmox guests --status running
+homebutler proxmox guest shutdown --node pve1 --type lxc --vmid 105 --confirm
+homebutler proxmox task UPID:pve1:... --node pve1
+```
+
+A Proxmox endpoint is its own kind of target, configured under `proxmox:` with an
+API token rather than SSH, so it does not join the `--server` or `--all` fan-out.
+TLS verification stays on: trust comes from a pinned SHA-256 fingerprint, then a
+CA file, and only then an explicit `insecure` fallback.
+
+Reads are plain. Power actions are not: every one of them takes an explicit
+endpoint, node, guest type and VMID, and refuses to run without `--confirm`,
+which is checked before the token is even read. `shutdown` asks the guest to shut
+down cleanly — it is not Proxmox's hard `stop`, which cuts power and can leave a
+filesystem behind it. A successful action reports the task it submitted, not that
+the guest finished; `proxmox task` answers that separately.
+
+`proxmox script` prints the install command for a Community Script pinned to one
+commit, along with a warning that the script is not reviewed by homebutler and
+runs as root. It never fetches or runs it — see [#62](https://github.com/Higangssh/homebutler/issues/62)
+for why that line is where it is.
+
+📖 **[Proxmox setup, tokens, and TLS →](docs/proxmox.md)**
+
 ### 🖥️ TUI Dashboard
 
 <p align="center">
@@ -541,6 +570,7 @@ Commands:
   watch add/list/remove  Manage watched containers
   watch check/start   One-shot or continuous restart detection
   watch history/show  Browse restart history
+  proxmox status      Proxmox VE cluster, nodes, guests, and storage
   serve               Web dashboard (browser-based, go:embed)
 
 Flags:
@@ -577,6 +607,18 @@ Commands:
   docker logs <n>     Show container logs
   docker top <n>      Show processes running inside a container
   docker inspect <n>  Show image, state, ports, mounts, networks, health
+  report              What changed since the last snapshot
+  inventory scan      Map containers, ports, and topology
+  inventory show      Same as scan (--filter exposed narrows it)
+  inventory export    Export the map (--format mermaid)
+  proxmox status      Proxmox VE cluster, nodes, guests, storage
+  proxmox guests      List QEMU and LXC guests
+  proxmox node <n>    Node detail
+  proxmox guest ...   start / shutdown / reboot (needs --confirm)
+  proxmox task <upid> Task status for an action already submitted
+  proxmox tasks       Recent tasks on a node
+  proxmox script      Community Script install commands (prints, never runs)
+  notify test         Send a test notification through configured providers
   wake <name>         Send Wake-on-LAN packet
   ports               List open ports with process info
   ps                  Show top processes (alias: processes)
@@ -613,6 +655,9 @@ Flags:
   --local             Upgrade only the local binary (skip remote servers)
   --local <path>      Use local binary for deploy (air-gapped)
   --service <name>    Target a specific Docker service (backup/restore)
+  --allow-bind <path> Host path a restore may write a bind mount to (repeatable)
+  --endpoint <name>   Proxmox endpoint from config (optional if only one)
+  --confirm           Required for a Proxmox guest power action
   --to <path>         Custom backup destination directory
   --archive <path>    Specific backup archive for drill
   --all               Verify all supported apps (backup drill)
