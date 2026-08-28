@@ -44,7 +44,7 @@ type ActionResult struct {
 }
 
 func Restart(name string) (*ActionResult, error) {
-	if !isValidName(name) {
+	if !ValidName(name) {
 		return nil, fmt.Errorf("invalid container name: %s", name)
 	}
 	out, err := util.DockerCmd("restart", name)
@@ -55,7 +55,7 @@ func Restart(name string) (*ActionResult, error) {
 }
 
 func Stop(name string) (*ActionResult, error) {
-	if !isValidName(name) {
+	if !ValidName(name) {
 		return nil, fmt.Errorf("invalid container name: %s", name)
 	}
 	out, err := util.DockerCmd("stop", name)
@@ -73,14 +73,11 @@ type LogsResult struct {
 }
 
 func Logs(name string, lines string) (*LogsResult, error) {
-	if !isValidName(name) {
+	if !ValidName(name) {
 		return nil, fmt.Errorf("invalid container name: %s", name)
 	}
-	// Validate lines is a positive integer
-	for _, c := range lines {
-		if c < '0' || c > '9' {
-			return nil, fmt.Errorf("invalid line count: %s (must be a positive integer)", lines)
-		}
+	if !ValidLines(lines) {
+		return nil, fmt.Errorf("invalid line count: %s (must be a positive integer)", lines)
 	}
 	out, err := util.DockerCmd("logs", "--tail", lines, name)
 	if err != nil {
@@ -108,7 +105,7 @@ type TopProcess struct {
 }
 
 func Top(name string) (*TopResult, error) {
-	if !isValidName(name) {
+	if !ValidName(name) {
 		return nil, fmt.Errorf("invalid container name: %s", name)
 	}
 	out, err := util.DockerCmd("top", name)
@@ -209,7 +206,7 @@ type Network struct {
 }
 
 func Inspect(name string) (*InspectResult, error) {
-	if !isValidName(name) {
+	if !ValidName(name) {
 		return nil, fmt.Errorf("invalid container name: %s", name)
 	}
 	out, err := util.DockerCmd("inspect", name)
@@ -431,13 +428,22 @@ func shortenDuration(s string) string {
 	return s
 }
 
-// isValidName prevents command injection by allowing only safe characters,
-// and blocks a leading dash so a name can never be parsed as a docker CLI
-// flag rather than an argument (CWE-88). Docker's own name grammar is
-// stricter — it also refuses a leading '_' or '.', which still pass here —
-// but the dash is the only leading character that creates flag ambiguity
-// for the commands this validates.
-func isValidName(name string) bool {
+// ValidName reports whether name is safe to hand to a docker command: only
+// characters a container name can carry, and no leading dash, which a command
+// parser would read as a flag rather than an argument (CWE-88).
+//
+// It is exported because the rule has to hold before the local-or-remote
+// decision in the MCP layer, not only where these functions run: remotely the
+// name becomes one shell-quoted element of a homebutler command line whose
+// own parser sees the dash first, so checking on the far side of the wire is
+// too late to answer with these words. The functions below still validate at
+// the point the name meets a real argv, because callers outside the MCP layer
+// (the CLI, alert remediation) arrive here directly.
+//
+// Docker's own name grammar is stricter — it also refuses a leading '_' or
+// '.', which still pass here — but the dash is the only leading character
+// that creates flag ambiguity for the commands this validates.
+func ValidName(name string) bool {
 	for _, c := range name {
 		if !((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || //nolint:staticcheck // readability
 			(c >= '0' && c <= '9') || c == '-' || c == '_' || c == '.') {
@@ -445,6 +451,22 @@ func isValidName(name string) bool {
 		}
 	}
 	return len(name) > 0 && name[0] != '-' && len(name) <= 128
+}
+
+// ValidLines reports whether lines is a tail count docker logs accepts: digits
+// only. A signed or flag-shaped value must be refused here and by the MCP
+// gate, because remotely it travels as an argument of the homebutler command
+// line and would otherwise come back parsed as a flag rather than a number.
+func ValidLines(lines string) bool {
+	if lines == "" {
+		return false
+	}
+	for _, c := range lines {
+		if c < '0' || c > '9' {
+			return false
+		}
+	}
+	return true
 }
 
 func splitLines(s string) []string {

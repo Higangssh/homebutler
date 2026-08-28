@@ -2,7 +2,7 @@ package docker
 
 import "testing"
 
-func TestIsValidName(t *testing.T) {
+func TestValidName(t *testing.T) {
 	tests := []struct {
 		name  string
 		input string
@@ -32,9 +32,9 @@ func TestIsValidName(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := isValidName(tt.input)
+			got := ValidName(tt.input)
 			if got != tt.want {
-				t.Errorf("isValidName(%q) = %v, want %v", tt.input, got, tt.want)
+				t.Errorf("ValidName(%q) = %v, want %v", tt.input, got, tt.want)
 			}
 		})
 	}
@@ -167,13 +167,13 @@ func TestSplit(t *testing.T) {
 	}
 }
 
-func TestIsValidNameMaxLength(t *testing.T) {
+func TestValidNameMaxLength(t *testing.T) {
 	// Exactly 128 valid characters should be valid
 	name := make([]byte, 128)
 	for i := range name {
 		name[i] = 'a'
 	}
-	if !isValidName(string(name)) {
+	if !ValidName(string(name)) {
 		t.Error("expected 128-char valid name to be valid")
 	}
 
@@ -182,8 +182,34 @@ func TestIsValidNameMaxLength(t *testing.T) {
 	for i := range name {
 		name[i] = 'a'
 	}
-	if isValidName(string(name)) {
+	if ValidName(string(name)) {
 		t.Error("expected 129-char name to be invalid")
+	}
+}
+
+func TestValidLines(t *testing.T) {
+	tests := []struct {
+		input string
+		want  bool
+	}{
+		{"50", true},
+		{"0", true},
+		{"100000", true},
+		{"", false},
+		{"-5", false},
+		{"+5", false},
+		{"--json", false},
+		{"ten", false},
+		{"10x", false},
+		{"1 0", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.input, func(t *testing.T) {
+			if got := ValidLines(tt.input); got != tt.want {
+				t.Errorf("ValidLines(%q) = %v, want %v", tt.input, got, tt.want)
+			}
+		})
 	}
 }
 

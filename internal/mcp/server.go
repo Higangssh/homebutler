@@ -207,7 +207,59 @@ func (s *Server) handleToolCall(req *jsonRPCRequest) {
 	})
 }
 
+// containerArgTools lists the tools whose container name travels into a
+// command line, here or on a remote host, and names the second value they
+// forward alongside it where one exists. executeTool validates each of them
+// before choosing a path, because the paths fail differently otherwise: the
+// local switch lands in the docker package, which rejects a bad name with
+// these exact words, while the remote path builds an argv for another
+// homebutler whose own command parser reads a leading dash as a flag — the
+// help text then comes back through remote.Run as if a restart had happened.
+var containerArgTools = map[string]string{
+	"docker_restart": "",
+	"docker_stop":    "",
+	"docker_logs":    "lines",
+	"docker_top":     "",
+	"docker_inspect": "",
+}
+
+// validateContainerArgs is the one gate for forwarded container arguments,
+// applied before the local-or-remote decision so neither path can grow its
+// own dialect of the rule. The error messages match what the docker package
+// returns on the local path, so a caller cannot tell which machine would have
+// answered from the rejection alone.
+func validateContainerArgs(tool string, args map[string]any) error {
+	numberArg, forwarded := containerArgTools[tool]
+	if !forwarded {
+		return nil
+	}
+	cname, ok := requireString(args, "name")
+	if !ok {
+		return fmt.Errorf("missing required parameter: name")
+	}
+	if !docker.ValidName(cname) {
+		return fmt.Errorf("invalid container name: %s", cname)
+	}
+	if numberArg == "" {
+		return nil
+	}
+	lines := "50"
+	if v := stringArg(args, numberArg); v != "" {
+		lines = v
+	}
+	if !docker.ValidLines(lines) {
+		return fmt.Errorf("invalid line count: %s (must be a positive integer)", lines)
+	}
+	return nil
+}
+
 func (s *Server) executeTool(name string, args map[string]any) (any, error) {
+	// Before any routing: whichever machine ends up answering, the argument
+	// rules are the same and were already checked.
+	if err := validateContainerArgs(name, args); err != nil {
+		return nil, err
+	}
+
 	if s.demo {
 		return s.executeDemoTool(name, args)
 	}
