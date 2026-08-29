@@ -118,6 +118,26 @@ func TestDefaultViewKeepsSuccessfulResponses(t *testing.T) {
 	}
 }
 
+func TestDefaultViewFlagsNoVisibleResources(t *testing.T) {
+	fixtures := map[string]string{
+		"/api2/json/version":           "version-pve9.json",
+		"/api2/json/cluster/status":    "cluster-status-cluster.json",
+		"/api2/json/cluster/resources": "cluster-resources-empty-acl.json",
+	}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write(readFixture(t, fixtures[r.URL.Path]))
+	}))
+	defer server.Close()
+
+	view, err := testClient(t, server.URL).DefaultView(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !view.CollectorFailed(CollectorResources) || len(view.Warnings) != 1 || !strings.Contains(view.Warnings[0], "token permissions") {
+		t.Fatalf("DefaultView() = %#v", view)
+	}
+}
+
 func TestResourcesNormalizesFixture(t *testing.T) {
 	server := fixtureServer(t, "cluster-resources.json")
 	defer server.Close()

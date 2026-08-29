@@ -9,6 +9,7 @@
   import PortsCard from './lib/PortsCard.svelte';
   import WakeCard from './lib/WakeCard.svelte';
   import ConfigCard from './lib/ConfigCard.svelte';
+  import ProxmoxCard from './lib/ProxmoxCard.svelte';
 
   let servers = $state([]);
   let selectedServer = $state('');
@@ -63,6 +64,7 @@
     </div>
 
     <div class="grid">
+      <ProxmoxCard />
       <StatusCard server={selectedServer} />
       <DockerCard server={selectedServer} />
       <ProcessCard server={selectedServer} />

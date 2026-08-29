@@ -323,6 +323,9 @@ func (c *Client) DefaultView(ctx context.Context) (DefaultView, error) {
 	if resources, err := c.Resources(ctx); err != nil {
 		view.Warnings = append(view.Warnings, "resources: "+err.Error())
 		view.Failed = append(view.Failed, CollectorResources)
+	} else if len(resources.Nodes) == 0 && len(resources.Guests) == 0 && len(resources.Storage) == 0 {
+		view.Warnings = append(view.Warnings, "resources: no resources visible; check Proxmox token permissions")
+		view.Failed = append(view.Failed, CollectorResources)
 	} else {
 		view.Resources = resources
 	}

@@ -46,6 +46,15 @@ export function getServers() {
   return fetchJSON('/api/servers');
 }
 
+export function getProxmoxEndpoints() {
+  return fetchJSON('/api/proxmox/endpoints');
+}
+
+export function getProxmoxStatus(endpoint) {
+  const query = endpoint ? `?endpoint=${encodeURIComponent(endpoint)}` : '';
+  return fetchJSON(`/api/proxmox/status${query}`);
+}
+
 export function getServerStatus(name) {
   return fetchJSON(`/api/servers/${encodeURIComponent(name)}/status`);
 }

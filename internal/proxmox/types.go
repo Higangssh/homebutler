@@ -280,7 +280,12 @@ type DefaultView struct {
 	Cluster   []ClusterStatus `json:"cluster"`
 	Resources Resources       `json:"resources"`
 	Warnings  []string        `json:"warnings,omitempty"`
-	Failed    []string        `json:"failed_collectors,omitempty"`
+	// Failed lists collectors that did not answer, and also collectors that
+	// answered but returned a response that cannot be true for a connected
+	// cluster (e.g. resources with no nodes, guests, or storage at all),
+	// which points to an ACL-limited token rather than a genuinely empty
+	// cluster.
+	Failed []string `json:"failed_collectors,omitempty"`
 }
 
 // Collector names recorded in DefaultView.Failed.

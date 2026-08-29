@@ -209,5 +209,6 @@ contacts Proxmox:
 HomeButler does not expose Proxmox hard stop, guest creation or deletion,
 migration, reset, suspend or resume, snapshots, task polling, automatic POST
 retries, arbitrary API actions, or root-only action overrides. The web
-dashboard remains separate work. HomeButler prints Community Script install
-commands for a human to review and run; it never fetches or executes them.
+dashboard remains read-only and does not expose guest actions. HomeButler
+prints Community Script install commands for a human to review and run; it
+never fetches or executes them.

@@ -21,6 +21,7 @@ import (
 	"github.com/Higangssh/homebutler/internal/config"
 	"github.com/Higangssh/homebutler/internal/docker"
 	"github.com/Higangssh/homebutler/internal/ports"
+	"github.com/Higangssh/homebutler/internal/proxmox"
 	"github.com/Higangssh/homebutler/internal/remote"
 	"github.com/Higangssh/homebutler/internal/system"
 	"github.com/Higangssh/homebutler/internal/wake"
@@ -161,6 +162,8 @@ func (s *Server) routes() {
 		s.mux.HandleFunc("GET /api/servers/{name}/status", api(s.handleServerStatus))
 		s.mux.HandleFunc("GET /api/config", api(s.handleConfig))
 	}
+	s.mux.HandleFunc("GET /api/proxmox/endpoints", api(s.handleProxmoxEndpoints))
+	s.mux.HandleFunc("GET /api/proxmox/status", api(s.handleProxmoxStatus))
 	s.mux.HandleFunc("GET /api/version", api(s.handleVersion))
 	s.mux.HandleFunc("OPTIONS /api/", s.handleOptions)
 
@@ -464,6 +467,54 @@ func (s *Server) handleConfig(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleVersion(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, map[string]string{"version": s.version})
+}
+
+type proxmoxEndpointInfo struct {
+	Name string `json:"name"`
+}
+
+func (s *Server) handleProxmoxEndpoints(w http.ResponseWriter, _ *http.Request) {
+	endpoints := make([]proxmoxEndpointInfo, 0, len(s.cfg.Proxmox))
+	if !s.demo {
+		for _, endpoint := range s.cfg.Proxmox {
+			endpoints = append(endpoints, proxmoxEndpointInfo{Name: endpoint.Name})
+		}
+	}
+	writeJSON(w, endpoints)
+}
+
+func (s *Server) handleProxmoxStatus(w http.ResponseWriter, r *http.Request) {
+	if s.demo {
+		writeError(w, http.StatusNotFound, "no Proxmox endpoints configured in demo mode")
+		return
+	}
+
+	endpoint, err := s.cfg.SelectProxmox(r.URL.Query().Get("endpoint"))
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	token, err := endpoint.TokenValue()
+	if err != nil {
+		log.Printf("read token for Proxmox endpoint %q: %v", endpoint.Name, err)
+		writeError(w, http.StatusInternalServerError, fmt.Sprintf("Proxmox endpoint %q credentials are unavailable", endpoint.Name))
+		return
+	}
+	client, err := proxmox.New(proxmox.Options{
+		Host: endpoint.Host, Port: endpoint.APIPort(), TokenID: endpoint.TokenID, Token: token,
+		Fingerprint: endpoint.Fingerprint, CAFile: endpoint.CAFile, Insecure: endpoint.Insecure, Timeout: endpoint.TimeoutDuration(),
+	})
+	if err != nil {
+		log.Printf("configure Proxmox endpoint %q: %v", endpoint.Name, err)
+		writeError(w, http.StatusInternalServerError, fmt.Sprintf("Proxmox endpoint %q is not configured correctly", endpoint.Name))
+		return
+	}
+	view, err := client.DefaultView(r.Context())
+	if err != nil {
+		writeError(w, http.StatusBadGateway, fmt.Sprintf("get Proxmox status from %q: %v", endpoint.Name, err))
+		return
+	}
+	writeJSON(w, view)
 }
 
 // serverInfo is a safe subset of config.ServerConfig for the API response.
