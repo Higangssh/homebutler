@@ -376,17 +376,30 @@ Docker targets use docker events (real-time). Systemd and PM2 targets use pollin
 			}
 			watchCfg.Retention.Normalize()
 
+			// One read serves both the notification providers and the rules
+			// engine. loadAlertsConfig already prefers rules declared in
+			// config.yaml and only falls back to the deprecated
+			// ~/.homebutler/alerts.yaml, so reading it a second time would
+			// print its deprecation and permission warnings twice.
+			//
+			// A configuration that will not load is reported and skipped. The
+			// restart monitors are why this process exists and they should not
+			// fail to start because remediation rules do not parse.
+			alertsCfg, alertsErr := loadAlertsConfig("")
+			if alertsErr != nil {
+				fmt.Fprintf(os.Stderr, "warning: cannot load alerts configuration: %v; continuing without thresholds or rules\n", alertsErr)
+			}
+
+			providers := &alerts.NotifyConfig{}
+			if cfg != nil {
+				providers = &cfg.Notify
+			}
+			if providers.IsEmpty() && alertsCfg != nil {
+				providers = alerts.ResolveNotifyConfig(alertsCfg)
+			}
+
 			var notifier *watch.WatchNotifier
 			if watchCfg.Notify.Enabled {
-				providers := &alerts.NotifyConfig{}
-				if cfg != nil {
-					providers = &cfg.Notify
-				}
-				if providers.IsEmpty() {
-					if alertsCfg, err := loadAlertsConfig(""); err == nil && alertsCfg != nil {
-						providers = alerts.ResolveNotifyConfig(alertsCfg)
-					}
-				}
 				notifier = watch.NewWatchNotifier(watchCfg.Notify, providers)
 			}
 
@@ -412,6 +425,23 @@ Docker targets use docker events (real-time). Systemd and PM2 targets use pollin
 
 			sig := make(chan os.Signal, 1)
 			signal.Notify(sig, syscall.SIGINT, syscall.SIGTERM)
+
+			// Resource thresholds and, when configured, the rules engine run in
+			// this same process. Polling a level is a different detection model
+			// from reacting to a restart, but it is the same job from the
+			// operator's side, and splitting it across two processes is what
+			// #97 is about. The rules engine matters most here: it holds the
+			// only remediation path there is, and it could not previously see a
+			// restart incident because it ran somewhere else.
+			thresholdCh := alerts.Watch(ctx, alerts.WatchConfig{Interval: dur, Alert: cfg.Alerts})
+
+			var ruleCh <-chan string
+			if alertsCfg != nil && len(alertsCfg.Rules) > 0 {
+				warnUnprivilegedSystemdRules(alertsCfg)
+				var flap alerts.FlapChecker = watch.IncidentHistory{Dir: dir, Flapping: watchCfg.Flapping}
+				ruleCh = alerts.WatchRules(ctx, dur, alertsCfg, flap)
+				fmt.Printf("  Rules: %d loaded, remediation active\n", len(alertsCfg.Rules))
+			}
 
 			incCh := make(chan watch.Incident, 64)
 
@@ -505,6 +535,26 @@ Docker targets use docker events (real-time). Systemd and PM2 targets use pollin
 					if flapResult.IsFlapping {
 						fmt.Printf("  ⚠ FLAPPING: %s (%d restarts in %s window)\n", flapResult.Level, flapResult.Count, flapResult.Window)
 					}
+				case e, ok := <-thresholdCh:
+					if !ok {
+						thresholdCh = nil
+						continue
+					}
+					fmt.Println(alerts.FormatEvent(e))
+					if providers != nil && !providers.IsEmpty() {
+						_ = alerts.NotifyAll(providers, alerts.NotifyEvent{
+							RuleName: e.Resource,
+							Status:   e.Severity,
+							Details:  e.Message,
+							Time:     e.Time.Format(time.RFC3339),
+						})
+					}
+				case msg, ok := <-ruleCh:
+					if !ok {
+						ruleCh = nil
+						continue
+					}
+					fmt.Println(msg)
 				case <-sig:
 					fmt.Println("\nStopping all monitors.")
 					cancel()
