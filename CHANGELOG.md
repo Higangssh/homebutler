@@ -2,6 +2,41 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.23.0](https://github.com/Higangssh/homebutler/compare/v0.22.1...v0.23.0) - 2026-08-30
+
+**Two things homebutler could see but not act on, and one it could not see at all.** A Proxmox cluster was readable and nothing else — no way to start a guest, no way to shut one down, and invisible in the dashboard entirely. And monitoring ran as two processes that did not know about each other: the loop that detected a container crash had no way to act on it, while the loop that could act never saw crashes.
+
+```bash
+homebutler proxmox guest shutdown --node pve1 --type lxc --vmid 105 --confirm
+homebutler watch start
+```
+
+### ✨ Features
+
+- start, shut down and reboot QEMU and LXC guests, and look up the status of a task already submitted. `shutdown` is Proxmox's graceful operation, not its `stop`, which cuts power and can leave a filesystem behind it — and `homebutler docker stop` is already graceful, so the same verb had to keep the same meaning across the CLI. Every action takes an explicit endpoint, node, type and VMID and refuses to run without `--confirm`, which is checked before the token is read. A successful action reports the task it submitted, never that the guest finished (#90)
+- show a Proxmox cluster in `homebutler serve`: nodes, unified QEMU and LXC guests, storage, quorum. A section that could not be read renders as unavailable rather than as zero, so an ACL-limited token does not look like an empty rack (#79, #95)
+- print the install command for a Proxmox Community Script, pinned to one commit, with a warning that it is not reviewed by homebutler and runs as root. homebutler never fetches or runs it. The catalogue lookup and the pin are the tedious part; the trigger stays with a person (#62, #94)
+- run restart detection, resource thresholds and remediation rules in one process. `watch start` is now the monitoring process rather than half of one, with a single set of notification providers (#97, #98)
+
+### 🐛 Fixes
+
+- refuse a container name shaped like a flag before deciding whether to run locally or on a remote host. `docker_restart` with `name: "--help"` and a `server` set used to come back with homebutler's help text, exit zero, and read as a restart result — while the same call refused locally. Validation now runs once, ahead of the routing, and `docker_logs` gets the same treatment for `lines` (#83, #88)
+- act on restart incidents with the rules engine. Remediation ran in the alerts process and restart detection ran in the watch process, so #49 fixed which target kinds `restart` understands without connecting the two halves. Same process now, and the rules engine is given the incident history so a target already flapping is not restarted further into it
+
+### ⚠️ Behavior changes
+
+- **`proxmox status --json` and the `proxmox_status` MCP tool report `failed_collectors: ["resources"]`** where a token is ACL-limited enough that `/cluster/resources` returns no nodes, guests or storage at all. A connected cluster always has at least one node, so an entirely empty response is a permission result rather than a real one, and three empty lists were the wrong way to say so. Anything parsing `failed_collectors` should account for the widened meaning
+- **`watch start` now also checks CPU, memory and disk** against the thresholds in `alerts:`, which have had defaults of 90, 85 and 90 all along. An operator who ran `watch start` and `alerts --watch` side by side can stop running the second one; `alerts --watch` is unchanged and still does thresholds on their own
+
+### 📝 Documentation
+
+- add Proxmox to the README, which had never mentioned it across three merged pull requests. The command block had drifted past `report`, `inventory` and `notify` as well, and `restore` gained `--allow-bind` in v0.22.1 without the flag list following (#96)
+- fill in the MCP tool table, which had been missing every Proxmox tool since #78
+
+### 📦 Distribution
+
+- allow a CI run to be started by hand. GitHub created no workflow run at all for one pull request, and the only way to get the checks `main` requires was to close and reopen it, which leaves a pair on a contributor's timeline that reads like a rejection (#93)
+
 ## [0.22.1](https://github.com/Higangssh/homebutler/compare/v0.22.0...v0.22.1) - 2026-08-26
 
 **`restore` wrote to filesystem paths chosen by the backup archive.** `manifest.json` lives inside the archive being restored, so every path it declares belongs to whoever built that archive. homebutler trusted them. Restoring a backup you did not create yourself could create or overwrite any file the archive named — `~/.ssh/authorized_keys` was demonstrated — and through the volume path it could do so as root. Upgrade if you have ever run `homebutler restore` on an archive from anywhere but your own machine.
