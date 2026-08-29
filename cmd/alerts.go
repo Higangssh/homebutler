@@ -31,9 +31,12 @@ func newAlertsCmd() *cobra.Command {
 		Short: "Advanced resource threshold checks (CPU, memory, disk)",
 		Long: `Check system resource thresholds for CPU, memory, and disk usage.
 
-This is an advanced threshold-based workflow. For most users, start with
-'homebutler watch' for restart detection, crash analysis, flapping detection,
-and incident history.
+Without --watch this is a one-shot reading of the current thresholds.
+
+'homebutler watch start' now runs these same checks alongside restart
+detection, through one notifier and one process, so --watch here is the
+narrower option: resources only, nothing about containers or services. Prefer
+'watch start' unless you specifically want thresholds on their own.
 
 Use --watch to continuously monitor resources (Ctrl+C to stop).
 Use --interval to set the monitoring interval (default: 30s).
