@@ -88,8 +88,11 @@ func (h IncidentHistory) IsFlapping(target string) bool {
 	if h.Dir == "" {
 		return false
 	}
-	incidents, err := ListIncidents(h.Dir)
-	if err != nil || len(incidents) == 0 {
+	// Refs, not incidents: the rules engine asks this before every remediation,
+	// and reading captured logs to count restarts is work the filename already
+	// answers.
+	refs, err := ListIncidentRefs(h.Dir)
+	if err != nil || len(refs) == 0 {
 		return false
 	}
 	now := time.Now
@@ -97,5 +100,5 @@ func (h IncidentHistory) IsFlapping(target string) bool {
 		now = h.Now
 	}
 	cfg := h.Flapping
-	return cfg.Check(target, incidents, now()).IsFlapping
+	return cfg.CheckRefs(target, refs, now()).IsFlapping
 }

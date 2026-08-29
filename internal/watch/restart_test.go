@@ -113,7 +113,7 @@ func TestIncidentHistoryDetectsARestartLoop(t *testing.T) {
 	cfg := DefaultWatchConfig().Flapping
 	for i := 0; i < cfg.ShortThreshold+1; i++ {
 		inc := Incident{
-			ID:         "loop-" + string(rune('a'+i)),
+			ID:         GenerateIncidentID("nginx", now.Add(-time.Duration(i)*time.Minute)),
 			Container:  "nginx",
 			DetectedAt: now.Add(-time.Duration(i) * time.Minute),
 		}

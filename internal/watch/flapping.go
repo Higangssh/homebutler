@@ -26,14 +26,29 @@ func DefaultFlappingConfig() FlappingConfig {
 	}
 }
 
+// Check classifies an incident against the history it belongs to.
+//
+// The decision uses two fields, Container and DetectedAt, both of which an
+// incident's filename already carries. Callers on the hot path — every save,
+// and every alert rule evaluation — should use CheckRefs instead so they never
+// read an incident body to answer a question about its name.
 func (fc *FlappingConfig) Check(container string, incidents []Incident, now time.Time) FlappingResult {
+	refs := make([]IncidentRef, len(incidents))
+	for i, inc := range incidents {
+		refs[i] = IncidentRef{ID: inc.ID, Container: inc.Container, DetectedAt: inc.DetectedAt}
+	}
+	return fc.CheckRefs(container, refs, now)
+}
+
+// CheckRefs is Check over incident references.
+func (fc *FlappingConfig) CheckRefs(container string, refs []IncidentRef, now time.Time) FlappingResult {
 	shortCutoff := now.Add(-fc.ShortWindow)
 	longCutoff := now.Add(-fc.LongWindow)
 
 	var shortCount, longCount int
 	var shortOldest, longOldest time.Time
 
-	for _, inc := range incidents {
+	for _, inc := range refs {
 		if inc.Container != container {
 			continue
 		}

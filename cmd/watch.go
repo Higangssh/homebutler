@@ -517,8 +517,11 @@ Docker targets use docker events (real-time). Systemd and PM2 targets use pollin
 					summary := watch.Analyze(crashInfo)
 					inc.CrashAnalysis = &summary
 
-					allIncs, _ := watch.ListIncidents(dir)
-					flapResult := watchCfg.Flapping.Check(inc.Container, allIncs, time.Now())
+					// Refs, not incidents: this runs on every save, and the
+					// decision only needs the container and the time, both of
+					// which the filename already carries.
+					refs, _ := watch.ListIncidentRefs(dir)
+					flapResult := watchCfg.Flapping.CheckRefs(inc.Container, refs, time.Now())
 					if flapResult.IsFlapping {
 						inc.Flapping = &flapResult
 					}

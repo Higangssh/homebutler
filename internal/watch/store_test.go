@@ -498,7 +498,10 @@ func TestPruneIncidents_KeepsNewestAndDeletesOldest(t *testing.T) {
 	var ids []string
 	for i := 0; i < 5; i++ {
 		inc := Incident{
-			ID:         fmt.Sprintf("svc-%02d", i),
+			// Real IDs: pruning reads the container and the time from the
+			// filename now, so a synthetic name would exercise a file
+			// production never writes.
+			ID:         GenerateIncidentID("svc", base.Add(time.Duration(i)*time.Minute)),
 			Container:  "svc",
 			DetectedAt: base.Add(time.Duration(i) * time.Minute),
 		}
@@ -588,15 +591,18 @@ func TestSaveIncident_EnforcesCap(t *testing.T) {
 	// explicitly must still not grow the directory without bound.
 	dir := t.TempDir()
 	base := time.Date(2026, 8, 21, 2, 0, 0, 0, time.UTC)
+	var newest string
 	for i := 0; i < 6; i++ {
+		at := base.Add(time.Duration(i) * time.Minute)
 		inc := Incident{
-			ID:         fmt.Sprintf("svc-%02d", i),
+			ID:         GenerateIncidentID("svc", at),
 			Container:  "svc",
-			DetectedAt: base.Add(time.Duration(i) * time.Minute),
+			DetectedAt: at,
 		}
 		if err := SaveIncident(dir, &inc, 3); err != nil {
 			t.Fatal(err)
 		}
+		newest = inc.ID
 	}
 	left, err := ListIncidents(dir)
 	if err != nil {
@@ -605,7 +611,7 @@ func TestSaveIncident_EnforcesCap(t *testing.T) {
 	if len(left) != 3 {
 		t.Fatalf("expected the directory capped at 3, got %d", len(left))
 	}
-	if left[0].ID != "svc-05" {
+	if left[0].ID != newest {
 		t.Errorf("expected newest incident kept, got %s", left[0].ID)
 	}
 }
