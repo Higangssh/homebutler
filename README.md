@@ -278,6 +278,12 @@ homebutler watch start                  # Foreground, Ctrl+C to stop
 homebutler watch start --interval 10s   # Custom poll interval (default 30s)
 ```
 
+`watch start` is the monitoring process. It watches the containers and services
+on the watch list for restarts, checks CPU, memory and disk against your
+thresholds, and runs any remediation rules you have configured — one process,
+one set of notification providers. `alerts --watch` still exists and does the
+threshold half on its own.
+
 When a crash is detected, you'll see:
 
 ```
@@ -597,7 +603,7 @@ Commands:
   watch list          Show watched containers
   watch remove <name> Remove container from watch list
   watch check         One-shot restart check
-  watch start         Continuous restart monitoring loop
+  watch start         Continuous monitoring: restarts, thresholds, rules
   watch history       List restart history (alias: incidents)
   watch show <id>     Show restart details with logs
   serve               Web dashboard (browser-based, go:embed)
@@ -626,7 +632,7 @@ Commands:
   ps --limit 20       Show top 20 (default: 10, 0 = all)
   network scan        Discover devices on LAN
   alerts              Show current alert status
-  alerts --watch      Continuous monitoring with real-time alerts
+  alerts --watch      Thresholds only (watch start covers these too)
   trust <server>      Register SSH host key (TOFU)
   backup              Backup Docker volumes, compose files, and env
   backup list         List existing backups
