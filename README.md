@@ -402,7 +402,9 @@ Legacy `~/.homebutler/watch/config.json` is still read as a fallback for watch-s
 - `watch.notify_on: off` — disable watch notifications without removing provider config
 - `watch.cooldown: 5m` — suppress duplicate notifications for the same event fingerprint during the cooldown window
 - `watch.flapping` — optional advanced tuning for restart-loop detection
-- `watch.retention.max_incidents: 200` — how many incidents to keep on disk, newest first. Each incident stores up to 100 captured log lines, so the directory grows fastest exactly when a service is restarting in a loop. Set `-1` to keep everything.
+- `watch.retention.max_incidents: 200` — how many incidents to keep on disk, newest first. The directory grows fastest exactly when a service is restarting in a loop. Set `-1` to keep everything.
+
+  Each incident keeps up to 100 captured log lines per side, and at most 64 KB of them. Line counts alone do not bound a file: one stack trace or JSON document on a single line is arbitrarily long, and a container being OOM-killed is exactly the one likely to write one. A log that does not fit keeps its end — the last thing a process said is what explains why it stopped — and says how much was dropped.
 
 These settings can also be written under a `watch.notify:` block, which is the
 canonical form:

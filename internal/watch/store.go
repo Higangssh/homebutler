@@ -174,6 +174,14 @@ func SaveIncident(dir string, inc *Incident, keep int) error {
 	if err := ensureDir(idir); err != nil {
 		return err
 	}
+
+	// Bounded here rather than at each capture site. There are five writers —
+	// the three monitors, CheckTargets, and the enrichment re-save in
+	// cmd/watch.go — and a cap each of them had to remember to apply is a cap
+	// one of them eventually forgets. Same reasoning as the file count below.
+	inc.PreLogs = TruncateLog(inc.PreLogs)
+	inc.PostLogs = TruncateLog(inc.PostLogs)
+
 	data, err := json.MarshalIndent(inc, "", "  ")
 	if err != nil {
 		return err
@@ -194,25 +202,27 @@ func SaveIncident(dir string, inc *Incident, keep int) error {
 // PruneIncidents deletes the oldest incidents until at most keep remain, and
 // reports how many it removed. keep of zero or less keeps everything.
 //
-// Incident files that cannot be read or parsed are left alone: ListIncidents
-// skips them, so they are never selected for deletion. Refusing to delete a
-// file we do not understand is the safer half of that trade.
+// Files whose names do not fit the incident format are left alone:
+// ListIncidentRefs skips them, so they are never selected for deletion.
+// Refusing to delete a file we do not understand is the safer half of that
+// trade, and the criterion moved from "cannot be unmarshalled" to "cannot be
+// named" only because pruning no longer opens anything.
 func PruneIncidents(dir string, keep int) (int, error) {
 	if keep <= 0 {
 		return 0, nil
 	}
-	incidents, err := ListIncidents(dir)
+	refs, err := ListIncidentRefs(dir)
 	if err != nil {
 		return 0, err
 	}
-	if len(incidents) <= keep {
+	if len(refs) <= keep {
 		return 0, nil
 	}
 
 	idir := incidentsDir(dir)
 	removed := 0
-	for _, inc := range incidents[keep:] { // ListIncidents sorts newest first
-		if err := os.Remove(filepath.Join(idir, inc.ID+".json")); err != nil {
+	for _, ref := range refs[keep:] { // ListIncidentRefs sorts newest first
+		if err := os.Remove(filepath.Join(idir, ref.ID+".json")); err != nil {
 			if os.IsNotExist(err) {
 				continue
 			}
@@ -221,6 +231,101 @@ func PruneIncidents(dir string, keep int) (int, error) {
 		removed++
 	}
 	return removed, nil
+}
+
+// MaxLogBytes bounds each captured log on an incident. docker logs --tail and
+// journalctl -n bound the number of *lines*, which says nothing about their
+// length: one stack trace, JSON document or base64 payload on a single line
+// makes an incident file arbitrarily large, and a cap on the number of files
+// does not bound a directory whose files have no size.
+//
+// The failure mode selects for itself. A container being OOM-killed is exactly
+// the one likely to dump something enormous on the way out, which is the moment
+// an incident gets written.
+const MaxLogBytes = 64 << 10
+
+// TruncateLog bounds a captured log, keeping the end. The tail is what explains
+// a crash — the last thing a process said before it stopped — so a log too long
+// to keep loses its beginning, and says so where a reader will see it.
+func TruncateLog(s string) string {
+	if len(s) <= MaxLogBytes {
+		return s
+	}
+	dropped := len(s) - MaxLogBytes
+	kept := s[dropped:]
+	// Start at a line boundary so the first surviving line is not a fragment.
+	if i := strings.IndexByte(kept, '\n'); i >= 0 && i < len(kept)-1 {
+		dropped += i + 1
+		kept = kept[i+1:]
+	}
+	return fmt.Sprintf("… truncated %d bytes …\n%s", dropped, kept)
+}
+
+// IncidentRef is what an incident's filename already tells us: which container
+// it belongs to and when it was detected. GenerateIncidentID builds the name as
+// container-timestamp-suffix, so pruning and flapping — the two things that run
+// on every single save — can be answered without opening a file.
+//
+// This matters because those two used to call ListIncidents, which reads and
+// unmarshals every incident in the directory including its captured logs. One
+// incident cost two full reads of the history, and the moment that happens most
+// often is a service restarting in a loop, which is the case flapping detection
+// exists for.
+type IncidentRef struct {
+	ID         string
+	Container  string
+	DetectedAt time.Time
+}
+
+// parseIncidentRef recovers the container and time from an incident filename.
+// A name that does not fit the format is not ours to interpret, so it is
+// reported as unparseable rather than guessed at; callers skip those, which is
+// also what keeps PruneIncidents from deleting a file it does not understand.
+func parseIncidentRef(name string) (IncidentRef, bool) {
+	id := strings.TrimSuffix(name, ".json")
+	if id == name {
+		return IncidentRef{}, false
+	}
+	// The suffix is 6 hex characters and the timestamp is fixed width, so the
+	// container name is whatever precedes them, dashes and all.
+	const tsLayout = "20060102-150405.000"
+	parts := strings.Split(id, "-")
+	if len(parts) < 4 {
+		return IncidentRef{}, false
+	}
+	tsStr := parts[len(parts)-3] + "-" + parts[len(parts)-2]
+	detected, err := time.Parse(tsLayout, tsStr)
+	if err != nil {
+		return IncidentRef{}, false
+	}
+	container := strings.Join(parts[:len(parts)-3], "-")
+	if container == "" {
+		return IncidentRef{}, false
+	}
+	return IncidentRef{ID: id, Container: container, DetectedAt: detected}, true
+}
+
+// ListIncidentRefs returns one ref per parseable incident file, newest first,
+// without opening any of them.
+func ListIncidentRefs(dir string) ([]IncidentRef, error) {
+	entries, err := os.ReadDir(incidentsDir(dir))
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	refs := make([]IncidentRef, 0, len(entries))
+	for _, e := range entries {
+		if e.IsDir() {
+			continue
+		}
+		if ref, ok := parseIncidentRef(e.Name()); ok {
+			refs = append(refs, ref)
+		}
+	}
+	sort.Slice(refs, func(i, j int) bool { return refs[i].DetectedAt.After(refs[j].DetectedAt) })
+	return refs, nil
 }
 
 func ListIncidents(dir string) ([]Incident, error) {
