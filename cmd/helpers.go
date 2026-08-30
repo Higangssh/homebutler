@@ -73,6 +73,15 @@ func output(data any, jsonOut bool) error {
 		fmt.Printf("  Services: %s\n", strings.Join(v.Services, ", "))
 		fmt.Printf("  Volumes:  %d\n", v.Volumes)
 		fmt.Printf("  Size:     %s\n", v.Size)
+		if p := v.Pruned; p != nil && len(p.Removed) > 0 {
+			// Named individually. Deleting a backup can be deleting the last
+			// copy of something, so which ones went is not a detail.
+			fmt.Printf("\n  Retention removed %d older backup(s), freeing %s:\n", len(p.Removed), backup.FormatSize(p.Freed))
+			for _, name := range p.Removed {
+				fmt.Printf("    %s\n", name)
+			}
+			fmt.Printf("  %d kept, %s total.\n", p.Kept, backup.FormatSize(p.KeptSum))
+		}
 	case *backup.RestoreResult:
 		fmt.Printf("Restore complete from: %s\n", v.Archive)
 		fmt.Printf("  Services: %s\n", strings.Join(v.Services, ", "))

@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Higangssh/homebutler/internal/backup"
 	"gopkg.in/yaml.v3"
 )
 
@@ -79,7 +80,7 @@ func (r *ValidationResult) add(severity, field, message, hint string) {
 }
 
 // topLevelKeys mirrors the yaml tags on Config, in the order they are reported.
-var topLevelKeys = []string{"servers", "proxmox", "wake", "alerts", "notify", "watch", "backup_dir"}
+var topLevelKeys = []string{"servers", "proxmox", "wake", "alerts", "notify", "watch", "backup", "backup_dir"}
 
 // Validate resolves the config the same way every other command does, then
 // reports what it found without applying it. It never contacts a remote
@@ -406,11 +407,11 @@ func sectionSummary(name string, present bool, cfg *Config) string {
 		}
 		return s
 
-	case "backup_dir":
-		if cfg.BackupDir == "" {
+	case "backup", "backup_dir":
+		if cfg.Backup.Dir == "" && cfg.BackupDir == "" {
 			return cfg.ResolveBackupDir() + " (default)"
 		}
-		return cfg.BackupDir
+		return cfg.ResolveBackupDir()
 	}
 	return ""
 }
@@ -650,17 +651,39 @@ func (r *ValidationResult) checkWatch(cfg *Config) {
 }
 
 func (r *ValidationResult) checkBackupDir(cfg *Config) {
-	if cfg.BackupDir == "" {
+	r.checkBackupRetention(cfg)
+
+	configured := cfg.Backup.Dir
+	if configured == "" {
+		configured = cfg.BackupDir
+	}
+	if configured == "" {
 		return
 	}
-	dir := expandHome(cfg.BackupDir)
+	dir := expandHome(configured)
 	if _, err := os.Stat(dir); os.IsNotExist(err) {
 		parent := filepath.Dir(dir)
 		if _, err := os.Stat(parent); os.IsNotExist(err) {
 			r.add(SeverityWarning, "backup_dir",
-				fmt.Sprintf("Neither %s nor its parent exists.", cfg.BackupDir),
+				fmt.Sprintf("Neither %s nor its parent exists.", configured),
 				"Backups will fail until the parent directory is created.")
 		}
+	}
+}
+
+// checkBackupRetention catches a size that will not parse, here rather than at
+// the end of the first backup that tries to apply it.
+func (r *ValidationResult) checkBackupRetention(cfg *Config) {
+	ret := cfg.Backup.Retention
+	if ret.MaxArchives < 0 {
+		r.add(SeverityWarning, "backup",
+			fmt.Sprintf("backup.retention.max_archives is %d.", ret.MaxArchives),
+			"Use 0, or leave it out, to keep every backup. A negative value is not a way to say unlimited here.")
+	}
+	if _, err := backup.ParseByteSize(ret.MaxBytes); err != nil {
+		r.add(SeverityError, "backup",
+			fmt.Sprintf("backup.retention.max_bytes: %v.", err),
+			"Write a number and a unit, like 20GB or 500MB. Retention will not run until this parses.")
 	}
 }
 

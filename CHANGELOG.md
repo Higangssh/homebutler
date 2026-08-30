@@ -4,6 +4,15 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### ✨ Features
+
+- bound the backup directory with `backup.retention` (#102). `backup` wrote an archive on every run and nothing ever deleted one — the largest files homebutler writes, and the only ones with no limit at all, which is fine until somebody puts the command in cron. `max_archives` caps the count and `max_bytes` caps the total, because ten archives can be 200MB or 200GB and a disk guarantee is what the cron case actually wants. Both are off by default: a pruned incident costs some history, while a pruned backup can be the last copy of data that no longer exists, so this is the one store you opt into bounding. Pruning runs only after a backup is written, never after a failed one, and names each archive it removed
+- warn in `doctor` when the backup directory is large and has no retention configured. Keeping everything is only a safe default while something says when the directory has outgrown what was expected, and `doctor` checked that a backup was *recent*, which says nothing about one that has been growing since the day it was created
+
+### 🐛 Fixes
+
+- read `backup.dir`, the setting `docs/backup.md` has documented all along. The schema only ever had the top-level `backup_dir`, so a config copied out of the documentation parsed without complaint and then wrote to the home directory — an operator pointing backups at a NAS got neither the destination they asked for nor any sign they had not. Both spellings are read, and `backup_dir` keeps working
+
 ### 🔐 Security
 
 - check archive member names in homebutler rather than relying on `tar` to decline them (#87). `restore` and `backup drill` extracted with `tar xzf -C <dir>`, which held the destination only because GNU tar and bsdtar strip a leading `/` and skip members containing `..` of their own accord. Nothing here asserted it and no test covered it, so a host with a different tar would have lost the property with no signal. Extraction is now done in homebutler, and a member that is absolute, that climbs out of the root, that is a hard link to a file outside the tree, or that is written through a symlink an earlier member of the same archive planted, fails the restore instead of being skipped

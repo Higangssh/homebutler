@@ -2,6 +2,7 @@ package doctor
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -202,4 +203,65 @@ func findTitle(findings []Finding, title string) *Finding {
 		}
 	}
 	return nil
+}
+
+func seedBackupDir(t *testing.T, sizes []int) string {
+	t.Helper()
+	dir := t.TempDir()
+	for i, size := range sizes {
+		name := filepath.Join(dir, fmt.Sprintf("backup_%d.tar.gz", i))
+		if err := os.WriteFile(name, make([]byte, size), 0o644); err != nil {
+			t.Fatalf("write: %v", err)
+		}
+	}
+	return dir
+}
+
+func hasFinding(r *Result, title string) bool {
+	for _, f := range r.Findings {
+		if f.Title == title {
+			return true
+		}
+	}
+	return false
+}
+
+const unboundedTitle = "Backups have no retention limit and the directory is large"
+
+// The default keeps every backup, so something has to say when the directory
+// has outgrown what the operator expected. Nothing did before this.
+func TestCheckBackupSize_WarnsWhenUnboundedAndLarge(t *testing.T) {
+	dir := seedBackupDir(t, []int{4000, 4000, 4000})
+	r := &Result{}
+	checkBackupSize(r, &config.Config{}, dir, 3, Options{BackupMaxTotal: 10000})
+
+	if !hasFinding(r, unboundedTitle) {
+		t.Fatalf("no warning for an unbounded directory over the threshold: %+v", r.Findings)
+	}
+}
+
+// A directory nobody needs to think about is not a finding.
+func TestCheckBackupSize_SaysNothingWhenSmall(t *testing.T) {
+	dir := seedBackupDir(t, []int{10, 10})
+	r := &Result{}
+	checkBackupSize(r, &config.Config{}, dir, 2, Options{BackupMaxTotal: 10000})
+
+	if len(r.Findings) != 0 {
+		t.Errorf("a small directory produced findings: %+v", r.Findings)
+	}
+}
+
+// Once retention is configured the size is the operator's decision, and doctor
+// repeating it back is noise.
+func TestCheckBackupSize_SilentOnceRetentionIsConfigured(t *testing.T) {
+	dir := seedBackupDir(t, []int{4000, 4000, 4000})
+	cfg := &config.Config{Backup: config.BackupConfig{
+		Retention: backup.RetentionConfig{MaxArchives: 5},
+	}}
+	r := &Result{}
+	checkBackupSize(r, cfg, dir, 3, Options{BackupMaxTotal: 10000})
+
+	if len(r.Findings) != 0 {
+		t.Errorf("warned about a directory the operator has already bounded: %+v", r.Findings)
+	}
 }

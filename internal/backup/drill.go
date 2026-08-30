@@ -77,7 +77,7 @@ func RunDrill(appName string, opts DrillOptions) (result *DrillResult, err error
 	}()
 
 	if info, statErr := os.Stat(archivePath); statErr == nil {
-		result.Size = formatSize(info.Size())
+		result.Size = FormatSize(info.Size())
 	}
 
 	// Stage 1 & 2: Verify archive integrity
