@@ -58,11 +58,55 @@ func (e *dockerEvent) containerName() string {
 }
 
 // Watch starts listening to docker die events and sends Incidents for watched containers.
+// reconnectMin and reconnectMax bound how quickly a dropped event stream is
+// retried. The supervisor that will run this process (#80) restarts it on exit,
+// so a monitor that returned on a dropped stream would turn a docker restart
+// into a tight loop of process starts, each writing a line to the log. Retrying
+// here keeps the supervisor for the case it is for: the process actually died.
+const (
+	reconnectMin = time.Second
+	reconnectMax = 30 * time.Second
+)
+
+// Watch follows docker events for the given targets until ctx is cancelled,
+// reconnecting when the stream drops.
+//
+// `docker events` is a long-lived stream, and it ends for ordinary reasons: the
+// daemon restarting, a Docker Desktop update, the socket being recreated. None
+// of those mean monitoring should stop, so the stream ending is a reason to
+// wait and reconnect rather than a reason to return.
 func (dm *DockerMonitor) Watch(ctx context.Context, targets []Target, incidents chan<- Incident) error {
 	if len(targets) == 0 {
 		<-ctx.Done()
 		return ctx.Err()
 	}
+
+	delay := reconnectMin
+	for {
+		err := dm.watchOnce(ctx, targets, incidents)
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+		fmt.Fprintf(os.Stderr, "[docker-monitor] %v; reconnecting in %s\n", err, delay)
+		select {
+		case <-time.After(delay):
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+		// Back off while it keeps failing; a stream that lasted is not evidence
+		// of a problem, but this cannot tell the two apart without timing the
+		// connection, and erring towards the slower retry costs only latency.
+		if delay < reconnectMax {
+			delay *= 2
+			if delay > reconnectMax {
+				delay = reconnectMax
+			}
+		}
+	}
+}
+
+// watchOnce follows one event stream until it ends or ctx is cancelled.
+func (dm *DockerMonitor) watchOnce(ctx context.Context, targets []Target, incidents chan<- Incident) error {
 
 	run := dm.Run
 	if run == nil {

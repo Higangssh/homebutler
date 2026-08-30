@@ -138,7 +138,7 @@ func TestDockerMonitor_Watch_MalformedJSON(t *testing.T) {
 	targets := []Target{{Container: "nginx", Kind: "docker"}}
 
 	go func() {
-		_ = dm.Watch(ctx, targets, incCh)
+		_ = dm.watchOnce(ctx, targets, incCh)
 	}()
 
 	select {
@@ -173,7 +173,7 @@ func TestDockerMonitor_Watch_UnwatchedContainer(t *testing.T) {
 	targets := []Target{{Container: "nginx", Kind: "docker"}}
 
 	go func() {
-		_ = dm.Watch(ctx, targets, incCh)
+		_ = dm.watchOnce(ctx, targets, incCh)
 	}()
 
 	select {
@@ -210,7 +210,7 @@ func TestDockerMonitor_Watch_ContextCancel(t *testing.T) {
 
 	done := make(chan error, 1)
 	go func() {
-		done <- dm.Watch(ctx, targets, incCh)
+		done <- dm.watchOnce(ctx, targets, incCh)
 	}()
 
 	cancel()
@@ -236,7 +236,7 @@ func TestDockerMonitor_Watch_EventStreamerError(t *testing.T) {
 	incCh := make(chan Incident, 10)
 	targets := []Target{{Container: "nginx", Kind: "docker"}}
 
-	err := dm.Watch(ctx, targets, incCh)
+	err := dm.watchOnce(ctx, targets, incCh)
 	if err == nil {
 		t.Fatal("expected error from event streamer")
 	}
@@ -266,7 +266,7 @@ func TestDockerMonitor_Watch_CommandRunnerError(t *testing.T) {
 	targets := []Target{{Container: "nginx", Kind: "docker"}}
 
 	go func() {
-		_ = dm.Watch(ctx, targets, incCh)
+		_ = dm.watchOnce(ctx, targets, incCh)
 	}()
 
 	select {
@@ -297,7 +297,7 @@ func TestDockerMonitor_Watch_StreamEnded(t *testing.T) {
 	incCh := make(chan Incident, 10)
 	targets := []Target{{Container: "nginx", Kind: "docker"}}
 
-	err := dm.Watch(ctx, targets, incCh)
+	err := dm.watchOnce(ctx, targets, incCh)
 	if err == nil || !strings.Contains(err.Error(), "docker events stream ended") {
 		t.Errorf("expected stream ended error, got: %v", err)
 	}
@@ -325,7 +325,7 @@ func TestDockerMonitor_Watch_SaveIncident(t *testing.T) {
 	targets := []Target{{Container: "nginx", Kind: "docker"}}
 
 	go func() {
-		_ = dm.Watch(ctx, targets, incCh)
+		_ = dm.watchOnce(ctx, targets, incCh)
 	}()
 
 	select {
@@ -369,7 +369,7 @@ func TestDockerMonitor_Watch_BlankLines(t *testing.T) {
 	targets := []Target{{Container: "nginx", Kind: "docker"}}
 
 	go func() {
-		_ = dm.Watch(ctx, targets, incCh)
+		_ = dm.watchOnce(ctx, targets, incCh)
 	}()
 
 	select {
@@ -421,7 +421,7 @@ func TestDockerMonitor_Watch_ScanError(t *testing.T) {
 	incCh := make(chan Incident, 10)
 	targets := []Target{{Container: "nginx", Kind: "docker"}}
 
-	err := dm.Watch(ctx, targets, incCh)
+	err := dm.watchOnce(ctx, targets, incCh)
 	// Should return the stream ended error (scanner reads 0 bytes, no scan error propagated to errCh)
 	if err == nil {
 		t.Fatal("expected error")
@@ -449,7 +449,7 @@ func TestDockerMonitor_Watch_EffectiveUnit(t *testing.T) {
 	targets := []Target{{Container: "alias", Kind: "docker", Unit: "my-real-container"}}
 
 	go func() {
-		_ = dm.Watch(ctx, targets, incCh)
+		_ = dm.watchOnce(ctx, targets, incCh)
 	}()
 
 	select {
