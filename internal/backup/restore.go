@@ -47,26 +47,68 @@ type RestoreOptions struct {
 // container the daemon runs as root.
 var dockerVolumeName = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9_.-]*$`)
 
-// bindTargetAllowed reports whether target sits inside one of the roots the
-// operator permitted. Both sides are made absolute and lexically cleaned
-// first, so `/srv/app/../../etc` cannot pass as `/srv`.
-func bindTargetAllowed(target string, allowed []string) bool {
+// resolveBindTarget returns the real path target refers to, and an error when
+// that path is not inside a root the operator permitted.
+//
+// A lexical prefix check is not enough, and the reason is that one archive can
+// contain two bind mounts. The first extracts normally inside the allowed root
+// and its payload plants a symlink there; the second names that symlink as its
+// source. Lexically the second is inside the allowed root, so it passes —
+// os.MkdirAll follows the symlink, finds a directory and does nothing, and
+// `tar -C` follows it too and writes wherever it points. That defeats the
+// containment entirely, and neither mount looks unusual on its own.
+//
+// So the check is made against the resolved path, and it is made per mount at
+// the point the mount is about to be restored, because the symlink that breaks
+// it does not exist until an earlier mount in the same archive has created it.
+func resolveBindTarget(target string, allowed []string) (string, error) {
 	abs, err := filepath.Abs(target)
 	if err != nil {
-		return false
+		return "", fmt.Errorf("resolve %s: %w", target, err)
 	}
 	abs = filepath.Clean(abs)
+
+	// The deepest part of the path that exists is the most that can be
+	// resolved; the rest is what restore is about to create, and a path that
+	// does not exist yet cannot be a symlink.
+	existing := abs
+	var pending []string
+	for {
+		if _, err := os.Lstat(existing); err == nil {
+			break
+		}
+		parent := filepath.Dir(existing)
+		if parent == existing {
+			break
+		}
+		pending = append([]string{filepath.Base(existing)}, pending...)
+		existing = parent
+	}
+	resolvedBase, err := filepath.EvalSymlinks(existing)
+	if err != nil {
+		return "", fmt.Errorf("resolve %s: %w", target, err)
+	}
+	resolved := filepath.Join(append([]string{resolvedBase}, pending...)...)
+
 	for _, root := range allowed {
 		rootAbs, err := filepath.Abs(root)
 		if err != nil {
 			continue
 		}
-		rootAbs = filepath.Clean(rootAbs)
-		if abs == rootAbs || strings.HasPrefix(abs, rootAbs+string(filepath.Separator)) {
-			return true
+		// The permitted root is resolved too: an operator who names a path that
+		// is itself a symlink meant the place it points to.
+		rootResolved, err := filepath.EvalSymlinks(filepath.Clean(rootAbs))
+		if err != nil {
+			rootResolved = filepath.Clean(rootAbs)
+		}
+		if resolved == rootResolved || strings.HasPrefix(resolved, rootResolved+string(filepath.Separator)) {
+			return resolved, nil
 		}
 	}
-	return false
+	if resolved != abs {
+		return "", fmt.Errorf("bind target %s resolves to %s, which is outside every permitted root", target, resolved)
+	}
+	return "", fmt.Errorf("bind target %s was not permitted; pass --allow-bind %s to restore it", target, target)
 }
 
 // Restore extracts an archive and restores volumes.
@@ -129,7 +171,11 @@ func Restore(archivePath string, opts RestoreOptions) (*RestoreResult, error) {
 			// nothing to write, so restoreMount no-ops on it either way. Let it
 			// fall through so the volume count keeps its existing meaning.
 			if mountHasPayload(m, volDir) {
-				if reason := refuseMount(m, opts); reason != "" {
+				// Cleared per mount, in order, immediately before the mount is
+				// written: an earlier mount in this same archive can have
+				// created the symlink that would let this one escape.
+				cleared, reason := refuseMount(m, opts)
+				if reason != "" {
 					refused = append(refused, RefusedMount{
 						Service: svc.Name,
 						Type:    m.Type,
@@ -138,6 +184,7 @@ func Restore(archivePath string, opts RestoreOptions) (*RestoreResult, error) {
 					})
 					continue
 				}
+				m = cleared
 			}
 			if err := restoreMount(m, volDir); err != nil {
 				return nil, fmt.Errorf("failed to restore mount %s: %w", m.Name, err)
@@ -198,28 +245,32 @@ func mountTarget(m Mount) string {
 // refuseMount returns a human-readable reason to decline a mount, or "" to
 // allow it. This is the only gate between manifest.json and the filesystem,
 // so it runs before restoreMount for every mount, of every type.
-func refuseMount(m Mount, opts RestoreOptions) string {
+func refuseMount(m Mount, opts RestoreOptions) (Mount, string) {
 	switch m.Type {
 	case "volume":
 		// Anything that is not a bare volume name reaches `docker run -v` as a
 		// host path, and the daemon mounts it as root.
 		if !dockerVolumeName.MatchString(m.Name) {
-			return fmt.Sprintf("%q is not a Docker volume name; the archive may be trying to select a host path", m.Name)
+			return m, fmt.Sprintf("%q is not a Docker volume name; the archive may be trying to select a host path", m.Name)
 		}
-		return ""
+		return m, ""
 	case "bind":
 		if m.Source == "" {
-			return "the archive declares a bind mount with no source path"
+			return m, "the archive declares a bind mount with no source path"
 		}
 		if !filepath.IsAbs(m.Source) {
-			return fmt.Sprintf("bind target %q is not an absolute path", m.Source)
+			return m, fmt.Sprintf("bind target %q is not an absolute path", m.Source)
 		}
-		if !bindTargetAllowed(m.Source, opts.AllowBind) {
-			return fmt.Sprintf("bind target %s was not permitted; pass --allow-bind %s to restore it", m.Source, m.Source)
+		resolved, err := resolveBindTarget(m.Source, opts.AllowBind)
+		if err != nil {
+			return m, err.Error()
 		}
-		return ""
+		// The caller writes to the resolved path, not the declared one, so the
+		// path that was checked is the path that gets extracted into.
+		m.Source = resolved
+		return m, ""
 	default:
-		return fmt.Sprintf("unknown mount type %q", m.Type)
+		return m, fmt.Sprintf("unknown mount type %q", m.Type)
 	}
 }
 

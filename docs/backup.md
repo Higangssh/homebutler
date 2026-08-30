@@ -125,6 +125,12 @@ homebutler restore ./backup.tar.gz                       # bind mounts refused, 
 homebutler restore ./backup.tar.gz --allow-bind /srv/app # restores under /srv/app only
 ```
 
+The path is checked after symlinks are resolved, and it is checked again for
+each mount just before that mount is written. Both matter: an archive can
+declare two bind mounts, restore the first one normally inside the permitted
+root so its payload plants a symlink there, and then name that symlink as the
+second one's source. It reads as inside the root, and it is not.
+
 Refusals are printed, and appear in `--json` under `refused`, so a restore that
 did less than you expected says why rather than reporting fewer volumes.
 

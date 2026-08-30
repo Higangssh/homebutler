@@ -2,6 +2,29 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.23.1](https://github.com/Higangssh/homebutler/compare/v0.23.0...v0.23.1) - 2026-08-30
+
+**`--allow-bind` could be walked out of by the archive it was meant to contain.** The check that a bind target sits inside a permitted root compared paths as text, and text does not follow symlinks. One archive with two bind mounts defeats it without needing anything to exist on the host beforehand: the first restores normally inside the permitted root and its payload plants a symlink there, the second names that symlink as its source, and the extraction follows it wherever it points. Upgrade if you have ever run `homebutler restore --allow-bind` on an archive from anywhere but your own machine.
+
+```bash
+brew upgrade homebutler
+curl -fsSL https://raw.githubusercontent.com/Higangssh/homebutler/main/install.sh | sh
+```
+
+### 🔐 Security
+
+- resolve symlinks before deciding a bind target is inside a permitted root (CWE-59 / CWE-22). The containment check now runs per mount, immediately before that mount is written, because the symlink that breaks it does not exist until an earlier mount in the same archive has created it — a check made once up front cannot see it. The path that was checked is the path extracted into, and a target whose real location cannot be resolved is refused rather than assumed safe. A permitted root that is itself a symlink is resolved too, so naming one keeps working
+
+Found by [@gsaraiva2109](https://github.com/gsaraiva2109) (#91). This defeats the containment added in v0.22.1 for GHSA-v8mc-vpp8-jr4p; versions v0.22.1 through v0.23.0 are affected. Named volumes and `backup drill` were never in scope.
+
+### ⚠️ Behavior changes
+
+- **A bind target that resolves outside every `--allow-bind` root is now refused**, where before only its spelling had to be inside one. A restore that used to write through a symlink out of the permitted root will now list that mount under `refused` and say where it resolved to. This is the intended containment, but it is a restore that will do less than it did before
+
+### 🧪 Tests
+
+- cover the two-mount escape end to end through `Restore`, a bind target that is an existing symlink out of the root, and the case that must keep working: a permitted root that is a symlink, with the target inside what it points to
+
 ## [0.23.0](https://github.com/Higangssh/homebutler/compare/v0.22.1...v0.23.0) - 2026-08-30
 
 **Two things homebutler could see but not act on, and one it could not see at all.** A Proxmox cluster was readable and nothing else — no way to start a guest, no way to shut one down, and invisible in the dashboard entirely. And monitoring ran as two processes that did not know about each other: the loop that detected a container crash had no way to act on it, while the loop that could act never saw crashes.
