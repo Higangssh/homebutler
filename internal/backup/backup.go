@@ -61,6 +61,15 @@ type ComposeProject struct {
 	ConfigFile string `json:"ConfigFiles"`
 }
 
+// archiveStampLayout names an archive down to the millisecond.
+//
+// It used to stop at the minute, so two backups started inside the same minute
+// resolved to the same path and the second silently replaced the first, both
+// reporting success. Seconds are not enough either: a small project backs up
+// fast enough that consecutive runs land in the same second. watch already
+// writes incidents at this resolution for the same reason.
+const archiveStampLayout = "2006-01-02_150405.000"
+
 // Run performs a backup of all (or filtered) Docker services.
 //
 // Retention is applied after the archive is written and only if writing it
@@ -76,9 +85,16 @@ func Run(backupDir, service string, retention RetentionConfig) (*BackupResult, e
 		return nil, fmt.Errorf("no docker compose projects found")
 	}
 
-	// Create timestamped backup directory
-	stamp := time.Now().Format("2006-01-02_1504")
+	// Create timestamped backup directory.
+	stamp := time.Now().Format(archiveStampLayout)
 	workDir := filepath.Join(backupDir, fmt.Sprintf("backup_%s", stamp))
+
+	// Checked before any work, so a refusal leaves nothing behind. Overwriting
+	// an existing backup is the one outcome that must not happen quietly, and
+	// the stamp makes it unlikely rather than impossible.
+	if _, err := os.Stat(workDir + ".tar.gz"); err == nil {
+		return nil, fmt.Errorf("a backup already exists at %s; refusing to overwrite it", workDir+".tar.gz")
+	}
 	volDir := filepath.Join(workDir, "volumes")
 	composeDir := filepath.Join(workDir, "compose")
 

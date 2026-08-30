@@ -11,6 +11,7 @@ All notable changes to this project will be documented in this file.
 
 ### 🐛 Fixes
 
+- name a backup down to the millisecond (#115). The name stopped at the minute, so two backups started inside the same minute resolved to the same path and the second silently replaced the first, both reporting success — `backup --service a` followed by `backup --service b` left only `b`, with nothing to show `a` had been taken. Seconds were not enough either: a small project backs up fast enough that consecutive runs land in the same second. An archive that somehow already exists is now refused rather than overwritten, and the check runs before any work so a refusal leaves nothing behind
 - read `backup.dir`, the setting `docs/backup.md` has documented all along. The schema only ever had the top-level `backup_dir`, so a config copied out of the documentation parsed without complaint and then wrote to the home directory — an operator pointing backups at a NAS got neither the destination they asked for nor any sign they had not. Both spellings are read, and `backup_dir` keeps working
 
 ### 🔐 Security
@@ -25,6 +26,7 @@ All notable changes to this project will be documented in this file.
 
 ### ⚠️ Behavior changes
 
+- **Backup archives are named `backup_<date>_<hhmmss.mmm>.tar.gz`**, where they were `backup_<date>_<hhmm>.tar.gz`. Existing archives are untouched and still list and restore; anything matching on the old name shape will need updating
 - **An archive member that would be written outside its destination now fails the restore**, where `tar` skipped it and reported success. A restore that was quietly dropping members will now stop and name the member it refused. Mounts already restored before the failure stay restored — a mount target that was never permitted is still reported under `refused` and skipped, because that is an operator configuration answer; a member that lies about where it belongs is the archive being untrustworthy, and continuing to read from it is not the safe response
 
 ### 🧪 Tests
