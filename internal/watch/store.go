@@ -64,14 +64,19 @@ type ContainerState struct {
 }
 
 type Incident struct {
-	ID            string          `json:"id"`
-	Container     string          `json:"container"`
-	DetectedAt    time.Time       `json:"detected_at"`
-	RestartCount  int             `json:"restart_count"`
-	PrevStarted   string          `json:"prev_started_at"`
-	CurrStarted   string          `json:"curr_started_at"`
-	PreLogs       string          `json:"pre_logs"`
-	PostLogs      string          `json:"post_logs"`
+	ID           string    `json:"id"`
+	Container    string    `json:"container"`
+	DetectedAt   time.Time `json:"detected_at"`
+	RestartCount int       `json:"restart_count"`
+	PrevStarted  string    `json:"prev_started_at"`
+	CurrStarted  string    `json:"curr_started_at"`
+	PreLogs      string    `json:"pre_logs"`
+	PostLogs     string    `json:"post_logs"`
+	// ExitCode is how the process ended, when the backend reported it. Nil
+	// means it was not reported — zero is a real exit code, so the two cannot
+	// share a representation (#108).
+	ExitCode      *int            `json:"exit_code,omitempty"`
+	OOMKilled     bool            `json:"oom_killed,omitempty"`
 	Flapping      *FlappingResult `json:"flapping,omitempty"`
 	CrashAnalysis *CrashSummary   `json:"crash_analysis,omitempty"`
 }
