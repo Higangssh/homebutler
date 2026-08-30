@@ -150,9 +150,35 @@ Set a custom backup directory in your `homebutler.yml`:
 ```yaml
 backup:
   dir: /mnt/nas/backups/homebutler
+  retention:
+    max_archives: 7      # keep the 7 newest
+    max_bytes: 20GB      # and no more than 20GB in total
 ```
 
 Default location: `~/.homebutler/backups/`
+
+`backup_dir:` at the top level is the older spelling and still works. A file
+carrying both gets `backup.dir`.
+
+### Nothing is deleted unless you ask
+
+Both retention limits are off by default, which is the opposite of every other
+store homebutler keeps. Incidents and snapshots are bounded out of the box
+because a pruned incident costs some history. A pruned backup can be the only
+remaining copy of data that no longer exists anywhere else, and that is not a
+default anyone chose.
+
+So retention is opt-in, and two things follow from that:
+
+- Pruning runs after a backup is written, never before and never after a failed
+  one, and it names each archive it removed. Deleting a backup is not a detail.
+- The newest archive is never removed, whatever the limits say — including when
+  it exceeds `max_bytes` on its own. A limit that empties the directory has
+  misunderstood what it was asked to bound.
+
+Because the default never deletes, `homebutler doctor` says when the directory
+has grown large and has no limit on it. That warning is how the safe default
+stays safe.
 
 ## Scheduled Backups
 

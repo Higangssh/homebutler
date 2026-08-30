@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Higangssh/homebutler/internal/backup"
 	"github.com/Higangssh/homebutler/internal/notify"
 	"github.com/Higangssh/homebutler/internal/watch"
 	"gopkg.in/yaml.v3"
@@ -21,6 +22,7 @@ type Config struct {
 	Alerts    AlertConfig           `yaml:"alerts"`
 	Notify    notify.ProviderConfig `yaml:"notify,omitempty"`
 	Watch     WatchRuntimeConfig    `yaml:"watch,omitempty"`
+	Backup    BackupConfig          `yaml:"backup,omitempty"`
 	BackupDir string                `yaml:"backup_dir,omitempty"`
 }
 
@@ -106,8 +108,33 @@ func hasMappingKey(node *yaml.Node, key string) bool {
 	return false
 }
 
+// BackupConfig groups everything about where backups go and how many are kept.
+//
+// `backup: dir:` is the spelling docs/backup.md has documented all along, and
+// the schema only ever had the top-level `backup_dir`. A config copied from the
+// documentation parsed without complaint and then wrote to the home directory,
+// so an operator pointing backups at a NAS got neither the destination they
+// asked for nor any indication they had not. Both spellings are read; the
+// nested one wins.
+type BackupConfig struct {
+	Dir       string                 `yaml:"dir,omitempty"`
+	Retention backup.RetentionConfig `yaml:"retention,omitempty"`
+}
+
+// ResolveBackupRetention returns the configured retention policy, which is
+// unlimited unless the operator asked for something narrower.
+func (c *Config) ResolveBackupRetention() backup.RetentionConfig {
+	if c == nil {
+		return backup.RetentionConfig{}
+	}
+	return c.Backup.Retention
+}
+
 // ResolveBackupDir returns the backup directory from config or the default ~/.homebutler/backups/.
 func (c *Config) ResolveBackupDir() string {
+	if c.Backup.Dir != "" {
+		return c.Backup.Dir
+	}
 	if c.BackupDir != "" {
 		return c.BackupDir
 	}

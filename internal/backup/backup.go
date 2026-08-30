@@ -40,6 +40,10 @@ type BackupResult struct {
 	Services []string `json:"services"`
 	Volumes  int      `json:"volumes"`
 	Size     string   `json:"size"`
+
+	// Pruned is what retention removed after this backup was written, and is
+	// absent when retention is not configured — which is the default.
+	Pruned *PruneResult `json:"pruned,omitempty"`
 }
 
 // ListEntry represents a single backup in the list.
@@ -58,7 +62,11 @@ type ComposeProject struct {
 }
 
 // Run performs a backup of all (or filtered) Docker services.
-func Run(backupDir, service string) (*BackupResult, error) {
+//
+// Retention is applied after the archive is written and only if writing it
+// succeeded. Pruning before, or on the way out of a failure, would delete
+// history to make room for a backup that does not exist.
+func Run(backupDir, service string, retention RetentionConfig) (*BackupResult, error) {
 	projects, err := listComposeProjects()
 	if err != nil {
 		return nil, fmt.Errorf("failed to list compose projects: %w", err)
@@ -152,7 +160,7 @@ func Run(backupDir, service string) (*BackupResult, error) {
 	info, err := os.Stat(archivePath)
 	size := "unknown"
 	if err == nil {
-		size = formatSize(info.Size())
+		size = FormatSize(info.Size())
 	}
 
 	svcNames := make([]string, len(allServices))
@@ -160,12 +168,24 @@ func Run(backupDir, service string) (*BackupResult, error) {
 		svcNames[i] = s.Name
 	}
 
-	return &BackupResult{
+	result := &BackupResult{
 		Archive:  archivePath,
 		Services: svcNames,
 		Volumes:  volumeCount,
 		Size:     size,
-	}, nil
+	}
+
+	if !retention.IsZero() {
+		pruned, err := Prune(backupDir, retention)
+		if err != nil {
+			// The backup itself is on disk and valid. Failing the command now
+			// would report a backup that succeeded as a failure, so the
+			// retention problem is surfaced without discarding the result.
+			return result, fmt.Errorf("backup written to %s, but retention failed: %w", archivePath, err)
+		}
+		result.Pruned = pruned
+	}
+	return result, nil
 }
 
 // List returns all backups in the backup directory.
@@ -190,7 +210,7 @@ func List(backupDir string) ([]ListEntry, error) {
 		backups = append(backups, ListEntry{
 			Name:      e.Name(),
 			Path:      filepath.Join(backupDir, e.Name()),
-			Size:      formatSize(info.Size()),
+			Size:      FormatSize(info.Size()),
 			CreatedAt: info.ModTime().Format(time.RFC3339),
 		})
 	}
@@ -381,8 +401,8 @@ func sanitizeName(name string) string {
 	return s
 }
 
-// formatSize formats bytes into human-readable format.
-func formatSize(bytes int64) string {
+// FormatSize renders a byte count the way homebutler shows sizes.
+func FormatSize(bytes int64) string {
 	const (
 		KB = 1024
 		MB = KB * 1024

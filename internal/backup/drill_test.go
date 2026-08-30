@@ -935,9 +935,9 @@ func TestFormatSizeEdgeCases(t *testing.T) {
 		{1048577, "1.0 MB"},
 	}
 	for _, tt := range tests {
-		got := formatSize(tt.bytes)
+		got := FormatSize(tt.bytes)
 		if got != tt.want {
-			t.Errorf("formatSize(%d) = %q, want %q", tt.bytes, got, tt.want)
+			t.Errorf("FormatSize(%d) = %q, want %q", tt.bytes, got, tt.want)
 		}
 	}
 }

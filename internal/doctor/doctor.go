@@ -51,8 +51,13 @@ type Summary struct {
 // Options controls doctor behavior.
 type Options struct {
 	BackupMaxAge time.Duration
-	Strict       bool
-	Now          time.Time
+
+	// BackupMaxTotal is the size at which an unbounded backup directory is
+	// worth mentioning. Zero takes the default.
+	BackupMaxTotal int64
+
+	Strict bool
+	Now    time.Time
 }
 
 // CollectFuncs allows tests to inject data sources.
@@ -224,6 +229,57 @@ func checkBackups(r *Result, cfg *config.Config, listFn func(string) ([]backup.L
 	if age > opts.BackupMaxAge {
 		r.add(SeverityWarn, "backup", "Latest backup is older than expected", fmt.Sprintf("Latest backup is %s old; expected within %s.", roundDuration(age), roundDuration(opts.BackupMaxAge)), "Run a fresh backup. If this app matters, follow up with a backup drill.", "homebutler backup")
 	}
+
+	checkBackupSize(r, cfg, backupDir, len(entries), opts)
+}
+
+// checkBackupSize warns when the backup directory has no bound and has grown.
+//
+// Retention defaults to keeping everything, because a pruned backup can be the
+// last copy of data that no longer exists. That default is only defensible if
+// something says when the directory has outgrown what the operator expected,
+// and nothing did: doctor checked that a backup was recent, which says nothing
+// about a directory that has been growing since the day it was created.
+//
+// Nothing is reported while retention is configured, or while the directory is
+// small. doctor's findings are things to look at, and a bounded directory is
+// not one.
+func checkBackupSize(r *Result, cfg *config.Config, backupDir string, count int, opts Options) {
+	if cfg != nil && !cfg.ResolveBackupRetention().IsZero() {
+		return
+	}
+	_, total, err := backup.DirUsage(backupDir)
+	if err != nil {
+		return
+	}
+	warnAt := opts.BackupMaxTotal
+	if warnAt <= 0 {
+		warnAt = defaultBackupWarnBytes
+	}
+	if total < warnAt {
+		return
+	}
+	r.add(SeverityWarn, "backup", "Backups have no retention limit and the directory is large",
+		fmt.Sprintf("%d archive(s) in %s, %s in total, and nothing will ever remove one.", count, backupDir, formatBytes(total)),
+		"Set backup.retention.max_bytes or max_archives. homebutler keeps every backup by default, because one of them may be the last copy of something.",
+		"homebutler backup list")
+}
+
+// defaultBackupWarnBytes is where an unbounded backup directory stops being
+// something nobody needs to think about.
+const defaultBackupWarnBytes = 20 << 30 // 20GB
+
+func formatBytes(b int64) string {
+	const unit = 1024
+	if b < unit {
+		return fmt.Sprintf("%d B", b)
+	}
+	div, exp := int64(unit), 0
+	for n := b / unit; n >= unit && exp < 3; n /= unit {
+		div *= unit
+		exp++
+	}
+	return fmt.Sprintf("%.1f %cB", float64(b)/float64(div), "KMGT"[exp])
 }
 
 func checkNotifications(r *Result, cfg *config.Config) {

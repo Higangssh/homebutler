@@ -4,6 +4,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"gopkg.in/yaml.v3"
 )
 
 func TestLoadDefaults(t *testing.T) {
@@ -663,5 +665,50 @@ watch:
 	// PruneIncidents understands.
 	if cfg.Watch.Retention.MaxIncidents != 0 {
 		t.Errorf("max_incidents = %d, want 0 (unlimited)", cfg.Watch.Retention.MaxIncidents)
+	}
+}
+
+// docs/backup.md has documented `backup: dir:` all along while the schema only
+// had the top-level `backup_dir`, so a config copied from the documentation
+// parsed without complaint and then wrote to the home directory. Someone
+// pointing backups at a NAS got neither the destination nor any sign of it.
+func TestResolveBackupDir_ReadsBothSpellings(t *testing.T) {
+	nested := &Config{Backup: BackupConfig{Dir: "/mnt/nas/backups"}}
+	if got := nested.ResolveBackupDir(); got != "/mnt/nas/backups" {
+		t.Errorf("backup.dir = %q, want /mnt/nas/backups — the documented spelling is ignored", got)
+	}
+
+	flat := &Config{BackupDir: "/srv/backups"}
+	if got := flat.ResolveBackupDir(); got != "/srv/backups" {
+		t.Errorf("backup_dir = %q, want /srv/backups", got)
+	}
+
+	// A file carrying both gets the nested one; the flat key is compatibility.
+	both := &Config{Backup: BackupConfig{Dir: "/mnt/nas"}, BackupDir: "/srv/old"}
+	if got := both.ResolveBackupDir(); got != "/mnt/nas" {
+		t.Errorf("with both set, got %q, want the nested /mnt/nas", got)
+	}
+
+	empty := &Config{}
+	if got := empty.ResolveBackupDir(); got == "" {
+		t.Error("an unconfigured backup dir should still resolve to the default")
+	}
+}
+
+func TestParseBackupBlockFromYAML(t *testing.T) {
+	var cfg Config
+	data := []byte("backup:\n  dir: /mnt/nas/backups\n  retention:\n    max_archives: 7\n    max_bytes: 20GB\n")
+	if err := yaml.Unmarshal(data, &cfg); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if cfg.ResolveBackupDir() != "/mnt/nas/backups" {
+		t.Errorf("dir = %q", cfg.ResolveBackupDir())
+	}
+	ret := cfg.ResolveBackupRetention()
+	if ret.MaxArchives != 7 || ret.MaxBytes != "20GB" {
+		t.Errorf("retention = %+v, want 7 / 20GB", ret)
+	}
+	if ret.IsZero() {
+		t.Error("a configured retention should not read as unconfigured")
 	}
 }

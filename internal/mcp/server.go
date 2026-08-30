@@ -433,7 +433,7 @@ func (s *Server) executeTool(name string, args map[string]any) (any, error) {
 		if backupDir == "" {
 			backupDir = s.cfg.ResolveBackupDir()
 		}
-		return backup.Run(backupDir, stringArg(args, "service"))
+		return backup.Run(backupDir, stringArg(args, "service"), s.cfg.ResolveBackupRetention())
 	case "backup_list":
 		return backup.List(s.cfg.ResolveBackupDir())
 	case "backup_drill":

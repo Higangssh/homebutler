@@ -31,7 +31,7 @@ Use --to to specify a custom backup destination.`,
 				backupDir = cfg.ResolveBackupDir()
 			}
 
-			result, err := backup.Run(backupDir, service)
+			result, err := backup.Run(backupDir, service, cfg.ResolveBackupRetention())
 			if err != nil {
 				return err
 			}
