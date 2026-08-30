@@ -2,6 +2,7 @@ package backup
 
 import (
 	"archive/tar"
+	"bytes"
 	"compress/gzip"
 	"fmt"
 	"io"
@@ -93,7 +94,14 @@ func extractTarGz(archivePath, dest string) error {
 			}
 			dirs = append(dirs, deferredDir{target, hdr.FileInfo().Mode().Perm(), hdr.ModTime, hdr.Uid, hdr.Gid})
 		case tar.TypeReg:
-			if err := writeMember(tr, target, hdr.FileInfo().Mode().Perm()); err != nil {
+			body, skip, err := memberBody(tr, filepath.Base(target))
+			if err != nil {
+				return fmt.Errorf("archive %s: read %q: %w", archivePath, hdr.Name, err)
+			}
+			if skip {
+				continue
+			}
+			if err := writeMember(body, target, hdr.FileInfo().Mode().Perm()); err != nil {
 				return err
 			}
 			if err := applyMetadata(target, hdr.ModTime, hdr.Uid, hdr.Gid, restoreOwner); err != nil {
@@ -229,8 +237,38 @@ func memberTarget(name, destReal string) (string, error) {
 	return target, nil
 }
 
+// appleDoubleMagic opens every AppleDouble record.
+var appleDoubleMagic = []byte{0x00, 0x05, 0x16, 0x07}
+
+// memberBody returns the member's contents, and whether to skip it entirely.
+//
+// Archiving on macOS turns a file that carries extended attributes into two
+// members: the file, and a sibling named "._<file>" holding the attributes.
+// bsdtar consumes the second one on the way back out, so it never appears as a
+// file — which is why homebutler never had to know about them while it was
+// shelling out to tar on macOS. Written literally they are junk that was not in
+// the source, and they land in restored volumes.
+//
+// The name alone is not enough to decide: a real file can be called "._notes".
+// The AppleDouble magic is, so only a member that has it is dropped.
+func memberBody(tr *tar.Reader, base string) (io.Reader, bool, error) {
+	if !strings.HasPrefix(base, "._") {
+		return tr, false, nil
+	}
+	head := make([]byte, len(appleDoubleMagic))
+	n, err := io.ReadFull(tr, head)
+	if err != nil && err != io.EOF && err != io.ErrUnexpectedEOF {
+		return nil, false, err
+	}
+	if n == len(appleDoubleMagic) && bytes.Equal(head, appleDoubleMagic) {
+		return nil, true, nil
+	}
+	// Not an AppleDouble record after all, so put back what was read to look.
+	return io.MultiReader(bytes.NewReader(head[:n]), tr), false, nil
+}
+
 // writeMember writes one regular file, creating its parent directories.
-func writeMember(tr *tar.Reader, target string, mode os.FileMode) error {
+func writeMember(tr io.Reader, target string, mode os.FileMode) error {
 	if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
 		return fmt.Errorf("create directory for %s: %w", target, err)
 	}

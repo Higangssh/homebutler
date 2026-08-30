@@ -8,6 +8,8 @@ All notable changes to this project will be documented in this file.
 
 - check archive member names in homebutler rather than relying on `tar` to decline them (#87). `restore` and `backup drill` extracted with `tar xzf -C <dir>`, which held the destination only because GNU tar and bsdtar strip a leading `/` and skip members containing `..` of their own accord. Nothing here asserted it and no test covered it, so a host with a different tar would have lost the property with no signal. Extraction is now done in homebutler, and a member that is absolute, that climbs out of the root, that is a hard link to a file outside the tree, or that is written through a symlink an earlier member of the same archive planted, fails the restore instead of being skipped
 
+- drop AppleDouble sidecars instead of restoring them as files. Archiving on macOS splits a file carrying extended attributes into the file plus a `._<file>` sibling, and `bsdtar` absorbs the sibling on the way back out — so taking extraction off `tar` meant those siblings started landing in restored volumes as files that were never in the source. A member is only dropped when it actually carries the AppleDouble magic, so a real file named `._notes` still restores
+
 ### ♻️ Refactoring
 
 - derive a mount's archive path in one place (#92). `mountHasPayload`, `restoreMount` and `backup drill` each rebuilt `volDir/sanitizeName(name).tar.gz` independently, and the first two agreeing is load-bearing: `mountHasPayload` decides whether the containment check runs at all, and `restoreMount` decides what gets written. They agreed by identical code rather than by construction

@@ -303,3 +303,67 @@ func TestMountArchivePath_IsSanitizedAndShared(t *testing.T) {
 		}
 	}
 }
+
+// Archiving on macOS splits a file that carries extended attributes into the
+// file plus a sibling "._<file>" holding the attributes. bsdtar absorbs the
+// sibling on the way back out, so homebutler never saw one while it was
+// shelling out to tar. Written literally they are files that were never in the
+// source, and they end up inside restored volumes.
+func TestExtractTarGz_DropsAppleDoubleSidecars(t *testing.T) {
+	dir := t.TempDir()
+	archive := filepath.Join(dir, "a.tar.gz")
+	writeTarGz(t, archive, []tarMember{
+		{name: "app.yml", typeflag: tar.TypeReg, body: "key: value"},
+		{name: "._app.yml", typeflag: tar.TypeReg, body: "\x00\x05\x16\x07AppleDouble metadata"},
+		{name: "sub", typeflag: tar.TypeDir, mode: 0o755},
+		{name: "sub/._data", typeflag: tar.TypeReg, body: "\x00\x05\x16\x07more metadata"},
+		{name: "sub/data", typeflag: tar.TypeReg, body: "payload"},
+	})
+
+	dest := filepath.Join(dir, "dest")
+	if err := extractTarGz(archive, dest); err != nil {
+		t.Fatalf("extractTarGz() error = %v", err)
+	}
+
+	for _, gone := range []string{"._app.yml", filepath.Join("sub", "._data")} {
+		if _, err := os.Lstat(filepath.Join(dest, gone)); err == nil {
+			t.Errorf("%s was written; it was never in the source tree", gone)
+		}
+	}
+	for name, want := range map[string]string{
+		"app.yml":                    "key: value",
+		filepath.Join("sub", "data"): "payload",
+	} {
+		got, err := os.ReadFile(filepath.Join(dest, name))
+		if err != nil || string(got) != want {
+			t.Errorf("%s = %q, %v; want %q", name, got, err, want)
+		}
+	}
+}
+
+// The name is not the test — a real file can be called "._notes". Only a member
+// that actually carries the AppleDouble magic is dropped.
+func TestExtractTarGz_KeepsAFileMerelyNamedLikeASidecar(t *testing.T) {
+	dir := t.TempDir()
+	archive := filepath.Join(dir, "a.tar.gz")
+	writeTarGz(t, archive, []tarMember{
+		{name: "._notes", typeflag: tar.TypeReg, body: "these are my actual notes"},
+		{name: "._tiny", typeflag: tar.TypeReg, body: "ab"},
+		{name: "._empty", typeflag: tar.TypeReg, body: ""},
+	})
+
+	dest := filepath.Join(dir, "dest")
+	if err := extractTarGz(archive, dest); err != nil {
+		t.Fatalf("extractTarGz() error = %v", err)
+	}
+	for name, want := range map[string]string{
+		"._notes": "these are my actual notes",
+		"._tiny":  "ab",
+		"._empty": "",
+	} {
+		got, err := os.ReadFile(filepath.Join(dest, name))
+		if err != nil || string(got) != want {
+			t.Errorf("%s = %q, %v; want %q — a real file was dropped", name, got, err, want)
+		}
+	}
+}
