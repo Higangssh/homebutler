@@ -125,8 +125,14 @@ homebutler restore ./backup.tar.gz                       # bind mounts refused, 
 homebutler restore ./backup.tar.gz --allow-bind /srv/app # restores under /srv/app only
 ```
 
-The path is checked after symlinks are resolved, and it is checked again for
-each mount just before that mount is written. Both matter: an archive can
+Member names inside the archive get the same treatment. A member that is an
+absolute path, that climbs out with `..`, or that is written through a symlink
+an earlier member of the same archive planted, fails the restore rather than
+being skipped. `tar` declines most of those on its own; homebutler no longer
+depends on it doing so.
+
+The bind target is checked after symlinks are resolved, and it is checked again
+for each mount just before that mount is written. Both matter: an archive can
 declare two bind mounts, restore the first one normally inside the permitted
 root so its payload plants a symlink there, and then name that symlink as the
 second one's source. It reads as inside the root, and it is not.

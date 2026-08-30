@@ -2,6 +2,24 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### 🔐 Security
+
+- check archive member names in homebutler rather than relying on `tar` to decline them (#87). `restore` and `backup drill` extracted with `tar xzf -C <dir>`, which held the destination only because GNU tar and bsdtar strip a leading `/` and skip members containing `..` of their own accord. Nothing here asserted it and no test covered it, so a host with a different tar would have lost the property with no signal. Extraction is now done in homebutler, and a member that is absolute, that climbs out of the root, that is a hard link to a file outside the tree, or that is written through a symlink an earlier member of the same archive planted, fails the restore instead of being skipped
+
+### ♻️ Refactoring
+
+- derive a mount's archive path in one place (#92). `mountHasPayload`, `restoreMount` and `backup drill` each rebuilt `volDir/sanitizeName(name).tar.gz` independently, and the first two agreeing is load-bearing: `mountHasPayload` decides whether the containment check runs at all, and `restoreMount` decides what gets written. They agreed by identical code rather than by construction
+
+### ⚠️ Behavior changes
+
+- **An archive member that would be written outside its destination now fails the restore**, where `tar` skipped it and reported success. A restore that was quietly dropping members will now stop and name the member it refused. Mounts already restored before the failure stay restored — a mount target that was never permitted is still reported under `refused` and skipped, because that is an operator configuration answer; a member that lies about where it belongs is the archive being untrustworthy, and continuing to read from it is not the safe response
+
+### 🧪 Tests
+
+- cover the four escapes the extractor now refuses, and the behaviour it has to preserve: file modes, modification times, symlinks, ownership when running as root, and a directory stored read-only whose contents must still be written into it
+
 ## [0.23.1](https://github.com/Higangssh/homebutler/compare/v0.23.0...v0.23.1) - 2026-08-30
 
 **`--allow-bind` could be walked out of by the archive it was meant to contain.** The check that a bind target sits inside a permitted root compared paths as text, and text does not follow symlinks. One archive with two bind mounts defeats it without needing anything to exist on the host beforehand: the first restores normally inside the permitted root and its payload plants a symlink there, the second names that symlink as its source, and the extraction follows it wherever it points. Upgrade if you have ever run `homebutler restore --allow-bind` on an archive from anywhere but your own machine.
