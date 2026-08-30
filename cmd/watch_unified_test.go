@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"os"
 	"strings"
 	"testing"
 
@@ -40,4 +41,15 @@ func TestAlertsHelpDescribesTheOverlapWithWatch(t *testing.T) {
 			t.Errorf("alerts help does not mention %q:\n%s", want, long)
 		}
 	}
+}
+
+var osReadFile = os.ReadFile
+
+func readSource(t *testing.T, name string) string {
+	t.Helper()
+	data, err := osReadFile(name)
+	if err != nil {
+		t.Fatalf("reading %s: %v", name, err)
+	}
+	return string(data)
 }

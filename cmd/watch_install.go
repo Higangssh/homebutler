@@ -43,6 +43,13 @@ logged-in session, so a LaunchDaemon would poll a daemon that is not there.`,
 			if service.Installed(path) && !force {
 				return fmt.Errorf("%s already exists; pass --force to overwrite it", path)
 			}
+			// launchctl bootstrap fails on a service that is already loaded, so
+			// overwriting the file is not enough to make launchd read it — the
+			// old configuration stays live. Unload first; the error is ignored
+			// because "was not loaded" is the normal case here.
+			if service.Installed(path) {
+				_ = service.Run(service.StopCommand(kind, path))
+			}
 			if err := service.Write(path, service.Render(kind, exe, home)); err != nil {
 				return err
 			}

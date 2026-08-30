@@ -85,6 +85,15 @@ func Render(kind Kind, exe, home string) string {
 	return ""
 }
 
+// servicePATH is the search path a supervised process gets, which is not the
+// one a login shell has. A launchd agent inherits a minimal PATH and would
+// never find docker — it lives in /opt/homebrew/bin or /usr/local/bin on
+// macOS. systemd user units are barely better.
+//
+// The list matches what remote.Run exports before running homebutler over SSH
+// (internal/remote/ssh.go), which is the same problem in a different place.
+const servicePATH = "/usr/local/bin:/usr/local/sbin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin:/snap/bin"
+
 func systemdUnit(exe string) string {
 	return fmt.Sprintf(`[Unit]
 Description=homebutler monitoring
@@ -95,6 +104,7 @@ After=docker.service
 
 [Service]
 Type=simple
+Environment=PATH=%s
 ExecStart=%s watch start
 # The monitor retries a dropped event stream itself, so a restart here means the
 # process actually died. The delay keeps a crash loop from filling the journal.
@@ -103,7 +113,7 @@ RestartSec=10s
 
 [Install]
 WantedBy=default.target
-`, exe)
+`, servicePATH, exe)
 }
 
 func launchdPlist(exe, home string) string {
@@ -120,6 +130,11 @@ func launchdPlist(exe, home string) string {
     <string>watch</string>
     <string>start</string>
   </array>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key>
+    <string>%s</string>
+  </dict>
   <key>RunAtLoad</key>
   <true/>
   <key>KeepAlive</key>
@@ -135,7 +150,7 @@ func launchdPlist(exe, home string) string {
   <string>%s/watch.log</string>
 </dict>
 </plist>
-`, Label, exe, logDir, logDir)
+`, Label, exe, servicePATH, logDir, logDir)
 }
 
 // StartCommand activates a written unit.
@@ -267,4 +282,35 @@ func indexByte(b []byte, c byte) int {
 		}
 	}
 	return -1
+}
+
+// RestartCommand reloads a running unit, for after the watch list changes.
+// The monitors read their targets once at startup, so adding a target while
+// the service runs has no effect until it is restarted — and a user who is not
+// told that has a container they believe is watched and is not.
+func RestartCommand(kind Kind) []string {
+	switch kind {
+	case Systemd:
+		return []string{"systemctl", "--user", "restart", Label + ".service"}
+	case Launchd:
+		return []string{"launchctl", "kickstart", "-k", "gui/" + fmt.Sprint(os.Getuid()) + "/" + Label}
+	}
+	return nil
+}
+
+// RestartNote returns the command to pick up a changed watch list, or "" when
+// no unit is installed and the next manual start will read it anyway.
+func RestartNote() string {
+	kind, err := Detect()
+	if err != nil {
+		return ""
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return ""
+	}
+	if !Installed(UnitPath(kind, home)) {
+		return ""
+	}
+	return strings.Join(RestartCommand(kind), " ")
 }

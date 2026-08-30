@@ -190,6 +190,9 @@ Examples:
 			}
 
 			fmt.Printf("Added %s %q to watch list.\n", kind, name)
+			if cmdline := service.RestartNote(); cmdline != "" {
+				fmt.Printf("  The running service reads the watch list at startup:\n    %s\n", cmdline)
+			}
 			return nil
 		},
 	}
@@ -268,6 +271,9 @@ func newWatchRemoveCmd() *cobra.Command {
 				return err
 			}
 			fmt.Printf("Removed %q from watch list.\n", name)
+			if cmdline := service.RestartNote(); cmdline != "" {
+				fmt.Printf("  The running service reads the watch list at startup:\n    %s\n", cmdline)
+			}
 			return nil
 		},
 	}
@@ -361,9 +367,14 @@ Docker targets use docker events (real-time). Systemd and PM2 targets use pollin
 			if err != nil {
 				return err
 			}
+			// An empty watch list is not a reason to stop. Since #97 this process
+			// also checks resource thresholds and runs remediation rules, and
+			// neither needs a target. Exiting here made a supervisor restart the
+			// process every ThrottleInterval for as long as the list stayed
+			// empty — a loop found by installing it rather than by any test.
 			if len(targets) == 0 {
-				fmt.Println("No targets being watched. Use 'homebutler watch add <name>' to add one.")
-				return nil
+				fmt.Println("Nothing on the watch list; monitoring thresholds only.")
+				fmt.Println("  Add something with: homebutler watch add <name>")
 			}
 
 			// Load watch config (config.yaml preferred, watch/config.json fallback)
@@ -511,9 +522,15 @@ Docker targets use docker events (real-time). Systemd and PM2 targets use pollin
 				}()
 			}
 
+			// With no restart monitors there is nothing to close incCh, and a
+			// nil channel is never selected — so the loop below waits on the
+			// thresholds and the signal instead of seeing a closed channel and
+			// treating it as "all monitors stopped".
+			var incidents <-chan watch.Incident
 			if monitorCount == 0 {
-				fmt.Println("No monitors to start.")
-				return nil
+				fmt.Println("  No restart monitors to start.")
+			} else {
+				incidents = incCh
 			}
 
 			// Close incCh when all monitors are done
@@ -525,7 +542,7 @@ Docker targets use docker events (real-time). Systemd and PM2 targets use pollin
 			// Print incidents as they arrive
 			for {
 				select {
-				case inc, ok := <-incCh:
+				case inc, ok := <-incidents:
 					if !ok {
 						fmt.Println("\nAll monitors stopped.")
 						return nil

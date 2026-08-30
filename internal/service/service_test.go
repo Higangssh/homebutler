@@ -123,3 +123,31 @@ func TestWriteCreatesTheDirectory(t *testing.T) {
 		t.Error("Installed does not see the file Write just made")
 	}
 }
+
+// A supervised process does not get a login shell's PATH. Without this a
+// launchd agent never finds docker, which lives in /opt/homebrew/bin or
+// /usr/local/bin — the unit installs, runs, and monitors nothing.
+func TestRenderSetsAPathThatCanFindDocker(t *testing.T) {
+	for _, kind := range []Kind{Systemd, Launchd} {
+		got := Render(kind, "/b", "/h")
+		for _, dir := range []string{"/opt/homebrew/bin", "/usr/local/bin"} {
+			if !strings.Contains(got, dir) {
+				t.Errorf("%s unit's PATH does not include %s:\n%s", kind, dir, got)
+			}
+		}
+	}
+}
+
+// Reinstalling has to unload before it loads: launchctl bootstrap fails on an
+// already-loaded service, so overwriting the file alone leaves the old
+// configuration live.
+func TestStopCommandExistsForEveryKind(t *testing.T) {
+	for _, kind := range []Kind{Systemd, Launchd} {
+		if len(StopCommand(kind, "/p")) == 0 {
+			t.Errorf("%s has no way to unload, so --force cannot reload it", kind)
+		}
+		if len(RestartCommand(kind)) == 0 {
+			t.Errorf("%s has no restart command, so a changed watch list cannot be picked up", kind)
+		}
+	}
+}
