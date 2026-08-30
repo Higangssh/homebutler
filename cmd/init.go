@@ -210,6 +210,12 @@ func runInit() error {
 	fmt.Println("    homebutler status")
 	fmt.Println("    homebutler tui")
 	fmt.Println()
+	// The second interaction is the one that sells a change-detection tool, and
+	// it only happens if something is running when nothing is watched by hand.
+	fmt.Println("  Then keep it watching, so it can tell you what changed:")
+	fmt.Println("    homebutler watch add <container>")
+	fmt.Println("    homebutler watch install")
+	fmt.Println()
 	return nil
 }
 

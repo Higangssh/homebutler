@@ -278,6 +278,20 @@ homebutler watch start                  # Foreground, Ctrl+C to stop
 homebutler watch start --interval 10s   # Custom poll interval (default 30s)
 ```
 
+```bash
+homebutler watch install     # register it with systemd or launchd
+homebutler watch installed   # is it registered?
+homebutler watch uninstall
+```
+
+`watch install` hands the loop to whatever supervises the host — a systemd user
+unit on Linux, a launchd agent on macOS — so monitoring survives logout and
+reboot. Both are user-level and neither is a preference: on Linux the watch list
+lives in your home directory, so a root unit would find an empty list; on macOS
+Docker Desktop only runs inside a logged-in session, so a LaunchDaemon would
+poll a daemon that is not there. On Linux a user unit stops at logout unless you
+run `sudo loginctl enable-linger $USER`, which `watch install` tells you.
+
 `watch start` is the monitoring process. It watches the containers and services
 on the watch list for restarts, checks CPU, memory and disk against your
 thresholds, and runs any remediation rules you have configured — one process,
@@ -606,6 +620,9 @@ Commands:
   watch remove <name> Remove container from watch list
   watch check         One-shot restart check
   watch start         Continuous monitoring: restarts, thresholds, rules
+  watch install       Register watch with systemd or launchd
+  watch installed     Report whether it is registered
+  watch uninstall     Remove the service unit
   watch history       List restart history (alias: incidents)
   watch show <id>     Show restart details with logs
   serve               Web dashboard (browser-based, go:embed)

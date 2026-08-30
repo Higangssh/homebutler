@@ -14,6 +14,7 @@ import (
 
 	"github.com/Higangssh/homebutler/internal/alerts"
 	"github.com/Higangssh/homebutler/internal/docker"
+	"github.com/Higangssh/homebutler/internal/service"
 	"github.com/Higangssh/homebutler/internal/tui"
 	"github.com/Higangssh/homebutler/internal/util"
 	"github.com/Higangssh/homebutler/internal/watch"
@@ -47,6 +48,9 @@ Subcommands:
 		newWatchCheckCmd(),
 		newWatchStartCmd(),
 		newWatchHistoryCmd(),
+		newWatchInstallCmd(),
+		newWatchUninstallCmd(),
+		newWatchStatusCmd(),
 		newWatchShowCmd(),
 	)
 
@@ -433,6 +437,23 @@ Docker targets use docker events (real-time). Systemd and PM2 targets use pollin
 			// #97 is about. The rules engine matters most here: it holds the
 			// only remediation path there is, and it could not previously see a
 			// restart incident because it ran somewhere else.
+			// Bound the file this process's own output goes into. Only launchd
+			// needs it: journald rotates what systemd collects, and macOS
+			// rotates nothing without a newsyslog.d entry that needs root.
+			var logTick <-chan time.Time
+			var logPath string
+			if kind, err := service.Detect(); err == nil {
+				if home, err := os.UserHomeDir(); err == nil {
+					if lp := service.LogPath(kind, home); lp != "" {
+						logPath = lp
+						_ = service.TrimLog(logPath, service.MaxLogBytes)
+						ticker := time.NewTicker(time.Hour)
+						defer ticker.Stop()
+						logTick = ticker.C
+					}
+				}
+			}
+
 			thresholdCh := alerts.Watch(ctx, alerts.WatchConfig{Interval: dur, Alert: cfg.Alerts})
 
 			var ruleCh <-chan string
@@ -558,6 +579,10 @@ Docker targets use docker events (real-time). Systemd and PM2 targets use pollin
 						continue
 					}
 					fmt.Println(msg)
+				case <-logTick:
+					if err := service.TrimLog(logPath, service.MaxLogBytes); err != nil {
+						fmt.Fprintf(os.Stderr, "warning: trim %s: %v\n", logPath, err)
+					}
 				case <-sig:
 					fmt.Println("\nStopping all monitors.")
 					cancel()
