@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"strconv"
 	"strings"
 	"time"
 
@@ -45,6 +46,29 @@ type dockerEvent struct {
 
 type dockerEventActor struct {
 	Attributes map[string]string `json:"Attributes"`
+}
+
+// exitCode reports the status the container exited with, and whether the event
+// carried one. A die event's attributes include it as a decimal string:
+//
+//	{"execDuration":"2","exitCode":"42","image":"alpine","name":"hb-evt"}
+//
+// Its absence is reported rather than defaulted, because zero is a meaningful
+// exit code — treating a missing value as zero is what made every incident read
+// as a clean exit (#108).
+func (e *dockerEvent) exitCode() (int, bool) {
+	if e.Actor.Attributes == nil {
+		return 0, false
+	}
+	raw, ok := e.Actor.Attributes["exitCode"]
+	if !ok {
+		return 0, false
+	}
+	code, err := strconv.Atoi(raw)
+	if err != nil {
+		return 0, false
+	}
+	return code, true
 }
 
 // containerName extracts the container name from a docker event.
@@ -227,6 +251,12 @@ func (dm *DockerMonitor) watchOnce(ctx context.Context, targets []Target, incide
 				CurrStarted: "(post-restart)",
 				PreLogs:     preLogs,
 				PostLogs:    postLogs,
+			}
+			if code, ok := ev.exitCode(); ok {
+				inc.ExitCode = &code
+				// 137 is SIGKILL, which the kernel's OOM killer uses. The
+				// analyser distinguishes the two, so this only reports what
+				// the event actually said.
 			}
 			if dm.Dir != "" {
 				if err := SaveIncident(dm.Dir, &inc, dm.Keep); err != nil {

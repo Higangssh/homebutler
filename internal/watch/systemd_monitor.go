@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -24,6 +25,9 @@ type SystemdMonitor struct {
 }
 
 type systemdState struct {
+	// ExitStatus is the unit's last exit status, nil when systemd did not
+	// report one. Zero is a real status, so it cannot be the missing value.
+	ExitStatus  *int
 	ActiveState string
 	SubState    string
 	StartTS     string
@@ -39,6 +43,13 @@ func (sm *SystemdMonitor) parseState(output string) systemdState {
 			s.SubState = strings.TrimPrefix(line, "SubState=")
 		} else if strings.HasPrefix(line, "ExecMainStartTimestamp=") {
 			s.StartTS = strings.TrimPrefix(line, "ExecMainStartTimestamp=")
+		} else if strings.HasPrefix(line, "ExecMainStatus=") {
+			// systemd reports the unit's own exit status here. It is absent
+			// for a unit that has never run, so a parse failure means "not
+			// reported" rather than zero (#108).
+			if code, err := strconv.Atoi(strings.TrimPrefix(line, "ExecMainStatus=")); err == nil {
+				s.ExitStatus = &code
+			}
 		}
 	}
 	return s
@@ -68,7 +79,7 @@ func (sm *SystemdMonitor) Watch(ctx context.Context, targets []Target, incidents
 	for _, t := range targets {
 		unit := t.EffectiveUnit()
 		out, err := run("systemctl", "show", unit,
-			"--property=ActiveState,SubState,ExecMainStartTimestamp")
+			"--property=ActiveState,SubState,ExecMainStartTimestamp,ExecMainStatus")
 		if err != nil {
 			continue
 		}
@@ -86,7 +97,7 @@ func (sm *SystemdMonitor) Watch(ctx context.Context, targets []Target, incidents
 			for _, t := range targets {
 				unit := t.EffectiveUnit()
 				out, err := run("systemctl", "show", unit,
-					"--property=ActiveState,SubState,ExecMainStartTimestamp")
+					"--property=ActiveState,SubState,ExecMainStartTimestamp,ExecMainStatus")
 				if err != nil {
 					continue
 				}
@@ -114,6 +125,7 @@ func (sm *SystemdMonitor) Watch(ctx context.Context, targets []Target, incidents
 						CurrStarted: curr.StartTS,
 						PreLogs:     preLogs,
 						PostLogs:    fmt.Sprintf("ActiveState=%s SubState=%s", curr.ActiveState, curr.SubState),
+						ExitCode:    curr.ExitStatus,
 					}
 					if sm.Dir != "" {
 						if err := SaveIncident(sm.Dir, &inc, sm.Keep); err != nil {
