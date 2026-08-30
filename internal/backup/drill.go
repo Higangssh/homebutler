@@ -260,7 +260,7 @@ func verifyArchive(archivePath string) (int, error) {
 }
 
 func extractAndReadManifest(archivePath, tmpDir string) (*Manifest, string, error) {
-	if _, err := util.RunCmd("tar", "xzf", archivePath, "-C", tmpDir); err != nil {
+	if err := extractTarGz(archivePath, tmpDir); err != nil {
 		return nil, "", fmt.Errorf("failed to extract archive: %w", err)
 	}
 
@@ -350,9 +350,9 @@ func bootContainer(svc *ServiceInfo, hc HealthCheck, iso *drillIsolation, extrac
 			return fmt.Errorf("failed to create mount point: %w", err)
 		}
 
-		archivePath := filepath.Join(volDir, safeName+".tar.gz")
+		archivePath := mountArchivePath(m.Name, volDir)
 		if _, err := os.Stat(archivePath); err == nil {
-			if _, err := util.RunCmd("tar", "xzf", archivePath, "-C", mountPoint); err != nil {
+			if err := extractTarGz(archivePath, mountPoint); err != nil {
 				return fmt.Errorf("failed to extract volume %s: %w", m.Name, err)
 			}
 		}

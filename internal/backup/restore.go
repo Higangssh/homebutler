@@ -131,8 +131,7 @@ func Restore(archivePath string, opts RestoreOptions) (*RestoreResult, error) {
 	defer os.RemoveAll(tmpDir)
 
 	// Extract archive
-	_, err = util.RunCmd("tar", "xzf", archivePath, "-C", tmpDir)
-	if err != nil {
+	if err := extractTarGz(archivePath, tmpDir); err != nil {
 		return nil, fmt.Errorf("failed to extract archive: %w", err)
 	}
 
@@ -229,9 +228,19 @@ func findExtractedDir(tmpDir string) (string, error) {
 // worth refusing: refusing them would report a permission problem where there
 // is only an empty mount.
 func mountHasPayload(m Mount, volDir string) bool {
-	archivePath := filepath.Join(volDir, sanitizeName(m.Name)+".tar.gz")
-	_, err := os.Stat(archivePath)
+	_, err := os.Stat(mountArchivePath(m.Name, volDir))
 	return err == nil
+}
+
+// mountArchivePath is where a mount's payload lives inside an extracted backup.
+//
+// It has one definition because the containment checks are only correct while
+// every caller agrees which archive a mount refers to. mountHasPayload decides
+// whether refuseMount runs at all, and restoreMount decides what to write; if
+// those two ever disagreed about the name, a mount could be cleared as empty
+// and then restored anyway.
+func mountArchivePath(name, volDir string) string {
+	return filepath.Join(volDir, sanitizeName(name)+".tar.gz")
 }
 
 // mountTarget names what a mount would write to, for reporting a refusal.
@@ -280,7 +289,7 @@ func refuseMount(m Mount, opts RestoreOptions) (Mount, string) {
 // assumes m.Name is a volume name and m.Source is an operator-permitted path.
 func restoreMount(m Mount, volDir string) error {
 	safeName := sanitizeName(m.Name)
-	archivePath := filepath.Join(volDir, safeName+".tar.gz")
+	archivePath := mountArchivePath(m.Name, volDir)
 
 	if _, err := os.Stat(archivePath); err != nil {
 		return nil // skip if archive doesn't exist (e.g., empty mount)
@@ -305,8 +314,7 @@ func restoreMount(m Mount, volDir string) error {
 			}
 			return fmt.Errorf("failed to create bind mount dir %s: %w", m.Source, err)
 		}
-		_, err := util.RunCmd("tar", "xzf", archivePath, "-C", m.Source)
-		if err != nil {
+		if err := extractTarGz(archivePath, m.Source); err != nil {
 			return fmt.Errorf("failed to restore bind mount %s: %w", m.Source, err)
 		}
 	}
