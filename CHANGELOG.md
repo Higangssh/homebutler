@@ -2,29 +2,38 @@
 
 All notable changes to this project will be documented in this file.
 
-## [Unreleased]
+## [0.24.0](https://github.com/Higangssh/homebutler/compare/v0.23.1...v0.24.0) - 2026-08-31
+
+**The largest files homebutler writes were the only ones nothing ever deleted, and the safety of restoring them belonged to a program homebutler merely invoked.** `backup` wrote an archive on every run with no retention of any kind — fine while a person types the command, and the first thing to hurt whoever puts it in cron. Restore, meanwhile, held its destination only because GNU tar and bsdtar decline dangerous member names on their own; nothing in this repository asserted it and no test covered it. Separately, the MCP server had been answering every handshake with the first protocol revision ever published.
+
+```yaml
+backup:
+  dir: /mnt/nas/backups/homebutler   # the spelling the docs have always shown, now read
+  retention:
+    max_archives: 7
+    max_bytes: 20GB
+```
 
 ### ✨ Features
 
-- negotiate the MCP protocol version instead of declaring the oldest one that exists (#85). Every `initialize` was answered with `2024-11-05`, the first revision ever published, and the client's requested version was never read at all. homebutler now implements `2025-11-25`, `2025-06-18`, `2025-03-26` and `2024-11-05`, answers with the one the client asked for when it is among them, and with the newest otherwise. Nothing was broken by the old behaviour — a server may answer with any version it supports — but it was the oldest thing it could conformantly say, and clients cap their behaviour to it
 - bound the backup directory with `backup.retention` (#102). `backup` wrote an archive on every run and nothing ever deleted one — the largest files homebutler writes, and the only ones with no limit at all, which is fine until somebody puts the command in cron. `max_archives` caps the count and `max_bytes` caps the total, because ten archives can be 200MB or 200GB and a disk guarantee is what the cron case actually wants. Both are off by default: a pruned incident costs some history, while a pruned backup can be the last copy of data that no longer exists, so this is the one store you opt into bounding. Pruning runs only after a backup is written, never after a failed one, and names each archive it removed
 - warn in `doctor` when the backup directory is large and has no retention configured. Keeping everything is only a safe default while something says when the directory has outgrown what was expected, and `doctor` checked that a backup was *recent*, which says nothing about one that has been growing since the day it was created
-
-- answer `ping` (#85). "The receiver **MUST** respond promptly with an empty response" — initiating a ping is optional, answering one is not, and homebutler came back with `-32601 method not found`, which a client is entitled to read as a dead connection
+- negotiate the MCP protocol version instead of declaring the oldest one that exists (#85). Every `initialize` was answered with `2024-11-05`, the first revision ever published, and the client's requested version was never read at all. homebutler now implements `2025-11-25`, `2025-06-18`, `2025-03-26` and `2024-11-05`, answers with the one the client asked for when it is among them, and with the newest otherwise. Nothing was broken by the old behaviour — a server may answer with any version it supports — but it was the oldest thing it could conformantly say, and clients cap their behaviour to it
 
 ### 🐛 Fixes
 
+- answer `ping` (#85). "The receiver **MUST** respond promptly with an empty response" — initiating a ping is optional, answering one is not, and homebutler came back with `-32601 method not found`, which a client is entitled to read as a dead connection
 - name a backup down to the millisecond (#115). The name stopped at the minute, so two backups started inside the same minute resolved to the same path and the second silently replaced the first, both reporting success — `backup --service a` followed by `backup --service b` left only `b`, with nothing to show `a` had been taken. Seconds were not enough either: a small project backs up fast enough that consecutive runs land in the same second. An archive that somehow already exists is now refused rather than overwritten, and the check runs before any work so a refusal leaves nothing behind
 - read `backup.dir`, the setting `docs/backup.md` has documented all along. The schema only ever had the top-level `backup_dir`, so a config copied out of the documentation parsed without complaint and then wrote to the home directory — an operator pointing backups at a NAS got neither the destination they asked for nor any sign they had not. Both spellings are read, and `backup_dir` keeps working
 
 ### 🔐 Security
 
 - check archive member names in homebutler rather than relying on `tar` to decline them (#87). `restore` and `backup drill` extracted with `tar xzf -C <dir>`, which held the destination only because GNU tar and bsdtar strip a leading `/` and skip members containing `..` of their own accord. Nothing here asserted it and no test covered it, so a host with a different tar would have lost the property with no signal. Extraction is now done in homebutler, and a member that is absolute, that climbs out of the root, that is a hard link to a file outside the tree, or that is written through a symlink an earlier member of the same archive planted, fails the restore instead of being skipped
-
 - drop AppleDouble sidecars instead of restoring them as files. Archiving on macOS splits a file carrying extended attributes into the file plus a `._<file>` sibling, and `bsdtar` absorbs the sibling on the way back out — so taking extraction off `tar` meant those siblings started landing in restored volumes as files that were never in the source. A member is only dropped when it actually carries the AppleDouble magic, so a real file named `._notes` still restores
 
 ### ♻️ Refactoring
 
+- consolidate the `ss` and `lsof` parser tests into `internal/ports` and un-export the parsers (#38). The fixtures lived in `internal/inventory` on the mistaken belief that parsing lived there, which forced `ParseLinuxOutput` and `ParseDarwinOutput` to be exported purely so another package's tests could reach them. The replacement tests also stopped indexing into `ports[0]` and `ports[2]`, which was asserting parser ordering as much as parser output. Thanks to [@lenny-ts](https://github.com/lenny-ts)
 - derive a mount's archive path in one place (#92). `mountHasPayload`, `restoreMount` and `backup drill` each rebuilt `volDir/sanitizeName(name).tar.gz` independently, and the first two agreeing is load-bearing: `mountHasPayload` decides whether the containment check runs at all, and `restoreMount` decides what gets written. They agreed by identical code rather than by construction
 
 ### ⚠️ Behavior changes
@@ -35,6 +44,7 @@ All notable changes to this project will be documented in this file.
 ### 🧪 Tests
 
 - cover the four escapes the extractor now refuses, and the behaviour it has to preserve: file modes, modification times, symlinks, ownership when running as root, and a directory stored read-only whose contents must still be written into it
+- cover retention against the cases that decide whether it is safe — an unconfigured policy that deletes nothing, count and size limits together, a limit smaller than a single archive, and files in the directory that are not backups
 
 ## [0.23.1](https://github.com/Higangssh/homebutler/compare/v0.23.0...v0.23.1) - 2026-08-30
 
