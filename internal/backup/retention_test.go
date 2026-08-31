@@ -218,3 +218,20 @@ func TestDirUsage(t *testing.T) {
 		t.Errorf("a missing directory should read as empty, got %d, %d, %v", missing, sum, err)
 	}
 }
+
+// The archive name used to stop at the minute, so two backups started inside
+// the same minute wrote to the same path and the second replaced the first —
+// both reporting success. Retention counts archives, so several runs collapsing
+// into one also quietly changed what a count limit meant.
+func TestArchiveStampSeparatesRapidBackups(t *testing.T) {
+	base := time.Date(2026, 8, 30, 22, 36, 12, 0, time.UTC)
+	// A small project backs up fast enough that consecutive runs land in the
+	// same second, so seconds were not enough either.
+	for _, gap := range []time.Duration{35 * time.Second, 400 * time.Millisecond} {
+		first := base.Format(archiveStampLayout)
+		second := base.Add(gap).Format(archiveStampLayout)
+		if first == second {
+			t.Errorf("two times %s apart produced the same stamp %q", gap, first)
+		}
+	}
+}
