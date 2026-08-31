@@ -1,6 +1,10 @@
 package ports
 
-import "testing"
+import (
+	"os"
+	"path/filepath"
+	"testing"
+)
 
 func TestSplitAddrPort(t *testing.T) {
 	tests := []struct {
@@ -24,118 +28,37 @@ func TestSplitAddrPort(t *testing.T) {
 	}
 }
 
-func TestParseDarwinOutput(t *testing.T) {
-	output := `COMMAND     PID   USER   FD   TYPE             DEVICE SIZE/OFF NODE NAME
-rapportd    427 sanghee    3u  IPv4 0x123456789      0t0  TCP *:49152 (LISTEN)
-rapportd    427 sanghee    4u  IPv6 0x123456790      0t0  TCP *:49152 (LISTEN)
-ControlCe   488 sanghee    9u  IPv4 0x123456791      0t0  TCP *:7000 (LISTEN)
-ControlCe   488 sanghee   10u  IPv6 0x123456792      0t0  TCP *:7000 (LISTEN)
-node       1234 sanghee   22u  IPv4 0x123456793      0t0  TCP 127.0.0.1:3000 (LISTEN)
-nginx      5678   root     6u  IPv4 0x123456794      0t0  TCP *:80 (LISTEN)
-nginx      5678   root     7u  IPv4 0x123456795      0t0  TCP *:443 (LISTEN)`
-
-	ports := ParseDarwinOutput(output)
-
-	if len(ports) != 5 {
-		t.Fatalf("expected 5 ports (deduped), got %d", len(ports))
-	}
-
-	// Check first entry
-	if ports[0].Process != "rapportd" {
-		t.Errorf("expected process rapportd, got %s", ports[0].Process)
-	}
-	if ports[0].PID != "427" {
-		t.Errorf("expected PID 427, got %s", ports[0].PID)
-	}
-	if ports[0].Port != "49152" {
-		t.Errorf("expected port 49152, got %s", ports[0].Port)
-	}
-	if ports[0].Protocol != "tcp" {
-		t.Errorf("expected protocol tcp, got %s", ports[0].Protocol)
-	}
-
-	// Check node on localhost (index 2: rapportd, ControlCe, node, nginx:80, nginx:443)
-	if ports[2].Address != "127.0.0.1" {
-		t.Errorf("expected address 127.0.0.1, got %s", ports[2].Address)
-	}
-	if ports[2].Port != "3000" {
-		t.Errorf("expected port 3000, got %s", ports[2].Port)
-	}
-}
-
-func TestParseDarwinOutput_Empty(t *testing.T) {
-	ports := ParseDarwinOutput("")
+func TestParseDarwinOutputEmpty(t *testing.T) {
+	ports := parseDarwinOutput("")
 	if len(ports) != 0 {
 		t.Fatalf("expected 0 ports for empty input, got %d", len(ports))
 	}
 }
 
-func TestParseDarwinOutput_HeaderOnly(t *testing.T) {
+func TestParseDarwinOutputHeaderOnly(t *testing.T) {
 	output := "COMMAND     PID   USER   FD   TYPE             DEVICE SIZE/OFF NODE NAME"
-	ports := ParseDarwinOutput(output)
+	ports := parseDarwinOutput(output)
 	if len(ports) != 0 {
 		t.Fatalf("expected 0 ports for header-only input, got %d", len(ports))
 	}
 }
 
-func TestParseDarwinOutput_Deduplication(t *testing.T) {
-	// Same process, same address:port should be deduped
+func TestParseDarwinOutputDeduplication(t *testing.T) {
 	output := `COMMAND     PID   USER   FD   TYPE             DEVICE SIZE/OFF NODE NAME
 nginx      5678   root     6u  IPv4 0x123456794      0t0  TCP *:80 (LISTEN)
 nginx      5678   root     7u  IPv4 0x123456795      0t0  TCP *:80 (LISTEN)`
 
-	ports := ParseDarwinOutput(output)
+	ports := parseDarwinOutput(output)
 	if len(ports) != 1 {
 		t.Fatalf("expected 1 port (deduped), got %d", len(ports))
 	}
 }
 
-func TestParseLinuxOutput(t *testing.T) {
-	output := `State      Recv-Q Send-Q Local Address:Port   Peer Address:Port Process
-LISTEN     0      128          0.0.0.0:22          0.0.0.0:*     users:(("sshd",pid=1234,fd=3))
-LISTEN     0      511          0.0.0.0:80          0.0.0.0:*     users:(("nginx",pid=5678,fd=6))
-LISTEN     0      128        127.0.0.1:3000        0.0.0.0:*     users:(("node",pid=9012,fd=22))
-LISTEN     0      128             [::]:443            [::]:*     users:(("nginx",pid=5678,fd=7))`
-
-	ports := ParseLinuxOutput(output)
-
-	if len(ports) != 4 {
-		t.Fatalf("expected 4 ports, got %d", len(ports))
-	}
-
-	// Check sshd
-	if ports[0].Port != "22" {
-		t.Errorf("expected port 22, got %s", ports[0].Port)
-	}
-	if ports[0].Process != "sshd" {
-		t.Errorf("expected process sshd, got %s", ports[0].Process)
-	}
-	if ports[0].PID != "1234" {
-		t.Errorf("expected pid 1234, got %s", ports[0].PID)
-	}
-	if ports[0].Address != "0.0.0.0" {
-		t.Errorf("expected address 0.0.0.0, got %s", ports[0].Address)
-	}
-
-	// Check node on localhost
-	if ports[2].Address != "127.0.0.1" {
-		t.Errorf("expected address 127.0.0.1, got %s", ports[2].Address)
-	}
-	if ports[2].Process != "node" {
-		t.Errorf("expected process node, got %s", ports[2].Process)
-	}
-	if ports[2].PID != "9012" {
-		t.Errorf("expected pid 9012, got %s", ports[2].PID)
-	}
-}
-
-func TestParseLinuxOutput_MultipleProcesses(t *testing.T) {
-	// ss can list more than one process per socket. PortInfo holds a single
-	// PID, so the first entry must win for both name and PID.
+func TestParseLinuxOutputMultipleProcesses(t *testing.T) {
 	output := `State      Recv-Q Send-Q Local Address:Port   Peer Address:Port Process
 LISTEN     0      128          0.0.0.0:22          0.0.0.0:*     users:(("sshd",pid=1234,fd=3),("sshd",pid=5678,fd=4))`
 
-	ports := ParseLinuxOutput(output)
+	ports := parseLinuxOutput(output)
 	if len(ports) != 1 {
 		t.Fatalf("expected 1 port, got %d", len(ports))
 	}
@@ -147,26 +70,26 @@ LISTEN     0      128          0.0.0.0:22          0.0.0.0:*     users:(("sshd",
 	}
 }
 
-func TestParseLinuxOutput_Empty(t *testing.T) {
-	ports := ParseLinuxOutput("")
+func TestParseLinuxOutputEmpty(t *testing.T) {
+	ports := parseLinuxOutput("")
 	if len(ports) != 0 {
 		t.Fatalf("expected 0 ports for empty input, got %d", len(ports))
 	}
 }
 
-func TestParseLinuxOutput_HeaderOnly(t *testing.T) {
+func TestParseLinuxOutputHeaderOnly(t *testing.T) {
 	output := "State      Recv-Q Send-Q Local Address:Port   Peer Address:Port Process"
-	ports := ParseLinuxOutput(output)
+	ports := parseLinuxOutput(output)
 	if len(ports) != 0 {
 		t.Fatalf("expected 0 ports for header-only input, got %d", len(ports))
 	}
 }
 
-func TestParseLinuxOutput_NoProcessInfo(t *testing.T) {
+func TestParseLinuxOutputNoProcessInfo(t *testing.T) {
 	output := `State      Recv-Q Send-Q Local Address:Port   Peer Address:Port Process
 LISTEN     0      128          0.0.0.0:22          0.0.0.0:*`
 
-	ports := ParseLinuxOutput(output)
+	ports := parseLinuxOutput(output)
 	if len(ports) != 1 {
 		t.Fatalf("expected 1 port, got %d", len(ports))
 	}
@@ -181,11 +104,11 @@ LISTEN     0      128          0.0.0.0:22          0.0.0.0:*`
 	}
 }
 
-func TestParseLinuxOutput_IPv6(t *testing.T) {
+func TestParseLinuxOutputIPv6(t *testing.T) {
 	output := `State      Recv-Q Send-Q Local Address:Port   Peer Address:Port Process
 LISTEN     0      128             [::]:80              [::]:*     users:(("apache2",pid=999,fd=4))`
 
-	ports := ParseLinuxOutput(output)
+	ports := parseLinuxOutput(output)
 	if len(ports) != 1 {
 		t.Fatalf("expected 1 port, got %d", len(ports))
 	}
@@ -197,6 +120,57 @@ LISTEN     0      128             [::]:80              [::]:*     users:(("apach
 	}
 	if ports[0].PID != "999" {
 		t.Errorf("expected pid 999, got %s", ports[0].PID)
+	}
+}
+
+func TestParseLinuxSSFixture(t *testing.T) {
+	out := mustReadFixture(t, "ss-linux.txt")
+	parsed := parseLinuxOutput(string(out))
+
+	if len(parsed) != 5 {
+		t.Fatalf("expected 5 parsed ports from ss fixture, got %d", len(parsed))
+	}
+
+	expects := []portExpect{
+		{port: "8080", process: "app-api", pid: "1001", address: "0.0.0.0", public: true},
+		{port: "443", process: "demo-service", pid: "1002", address: "[::]", public: true},
+		{port: "9090", process: "metrics-agent", pid: "1003", address: "127.0.0.1", public: false},
+		{port: "8443", process: "edge-router", pid: "1004", address: "0.0.0.0", public: true},
+		{port: "22", process: "ssh-relay", pid: "1005", address: "0.0.0.0", public: true},
+	}
+
+	for _, e := range expects {
+		p, ok := findPortByNumber(parsed, e.port)
+		if !ok {
+			t.Errorf("port %s: not found in parsed output", e.port)
+			continue
+		}
+		assertPort(t, e, p)
+	}
+}
+
+func TestParseDarwinLsofFixture(t *testing.T) {
+	out := mustReadFixture(t, "lsof-macos.txt")
+	parsed := parseDarwinOutput(string(out))
+
+	if len(parsed) != 4 {
+		t.Fatalf("expected 4 parsed ports from lsof fixture (after IPv4/IPv6 dedup), got %d", len(parsed))
+	}
+
+	expects := []portExpect{
+		{port: "8080", process: "app-api", pid: "1001", address: "*", public: true},
+		{port: "443", process: "demo-service", pid: "1002", address: "*", public: true},
+		{port: "9090", process: "metrics-agent", pid: "1003", address: "127.0.0.1", public: false},
+		{port: "8443", process: "edge-router", pid: "1004", address: "*", public: true},
+	}
+
+	for _, e := range expects {
+		p, ok := findPortByNumber(parsed, e.port)
+		if !ok {
+			t.Errorf("port %s: not found in parsed output", e.port)
+			continue
+		}
+		assertPort(t, e, p)
 	}
 }
 
@@ -242,24 +216,70 @@ func TestIsPublicBind(t *testing.T) {
 	}
 }
 
-// splitAddrPort is what feeds IsPublicBind in practice, so the two must agree
-// on the forms ss and lsof actually emit.
-func TestIsPublicBind_MatchesSplitAddrPortOutput(t *testing.T) {
+func TestIsPublicBindMatchesSplitAddrPortOutput(t *testing.T) {
 	tests := []struct {
 		local string
 		want  bool
 	}{
-		{"0.0.0.0:22", true}, // ss, ipv4 wildcard
-		{"[::]:22", true},    // ss, ipv6-only wildcard
-		{"*:8080", true},     // ss dual-stack socket, and lsof
+		{"0.0.0.0:22", true},
+		{"[::]:22", true},
+		{"*:8080", true},
 		{"127.0.0.1:8080", false},
 		{"[::1]:3000", false},
-		{":::22", true}, // netstat-style ipv6 wildcard
+		{":::22", true},
 	}
 	for _, tc := range tests {
 		addr, _ := splitAddrPort(tc.local)
 		if got := IsPublicBind(addr); got != tc.want {
 			t.Errorf("%q -> addr %q: IsPublicBind = %v, want %v", tc.local, addr, got, tc.want)
 		}
+	}
+}
+
+type portExpect struct {
+	port    string
+	process string
+	pid     string
+	address string
+	public  bool
+}
+
+func mustReadFixture(t *testing.T, name string) []byte {
+	t.Helper()
+	data, err := os.ReadFile(filepath.Join("testdata", name))
+	if err != nil {
+		t.Fatalf("read fixture %s: %v", name, err)
+	}
+	return data
+}
+
+func findPortByNumber(list []PortInfo, port string) (PortInfo, bool) {
+	for _, p := range list {
+		if p.Port == port {
+			return p, true
+		}
+	}
+	return PortInfo{}, false
+}
+
+func assertPort(t *testing.T, e portExpect, p PortInfo) {
+	t.Helper()
+	if p.Protocol != "tcp" {
+		t.Errorf("port %s: protocol = %q, want tcp", e.port, p.Protocol)
+	}
+	if p.Port != e.port {
+		t.Errorf("port %s: port number = %q, want %q", e.port, p.Port, e.port)
+	}
+	if p.Process != e.process {
+		t.Errorf("port %s: process = %q, want %q", e.port, p.Process, e.process)
+	}
+	if p.PID != e.pid {
+		t.Errorf("port %s: pid = %q, want %q", e.port, p.PID, e.pid)
+	}
+	if p.Address != e.address {
+		t.Errorf("port %s: address = %q, want %q", e.port, p.Address, e.address)
+	}
+	if got := IsPublicBind(p.Address); got != e.public {
+		t.Errorf("port %s: exposure public = %v, want %v (address %q)", e.port, got, e.public, p.Address)
 	}
 }

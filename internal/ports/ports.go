@@ -75,11 +75,11 @@ func listDarwin() ([]PortInfo, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to list ports: %w", err)
 	}
-	return ParseDarwinOutput(out), nil
+	return parseDarwinOutput(out), nil
 }
 
-// ParseDarwinOutput parses lsof -iTCP -sTCP:LISTEN -nP output into PortInfo slices.
-func ParseDarwinOutput(out string) []PortInfo {
+// parseDarwinOutput parses lsof -iTCP -sTCP:LISTEN -nP output into PortInfo slices.
+func parseDarwinOutput(out string) []PortInfo {
 	var ports []PortInfo
 	seen := make(map[string]bool)
 
@@ -116,11 +116,11 @@ func listLinux() ([]PortInfo, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to list ports: %w", err)
 	}
-	return ParseLinuxOutput(out), nil
+	return parseLinuxOutput(out), nil
 }
 
-// ParseLinuxOutput parses ss -tlnp output into PortInfo slices.
-func ParseLinuxOutput(out string) []PortInfo {
+// parseLinuxOutput parses ss -tlnp output into PortInfo slices.
+func parseLinuxOutput(out string) []PortInfo {
 	var ports []PortInfo
 	for _, line := range strings.Split(out, "\n") {
 		fields := strings.Fields(line)
