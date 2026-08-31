@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"encoding/pem"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -427,7 +428,7 @@ func TestAPIErrorIncludesMessage(t *testing.T) {
 	defer server.Close()
 
 	_, err := testClient(t, server.URL).Version(context.Background())
-	if err == nil || !strings.Contains(err.Error(), "403 Forbidden") || !strings.Contains(err.Error(), "Permission check failed (/, Sys.Audit)") {
+	if err == nil || !strings.Contains(err.Error(), "403 Forbidden") || !strings.Contains(err.Error(), "Permission check failed (/, Sys.Audit)") || Classify(err) != FailureAuthorization {
 		t.Errorf("Version() error = %v", err)
 	}
 }
@@ -462,8 +463,8 @@ func TestTLSModes(t *testing.T) {
 	})
 	t.Run("fingerprint mismatch", func(t *testing.T) {
 		client := newTLSClient(t, server.URL, Options{Fingerprint: strings.Repeat("00:", 31) + "00"})
-		if _, err := client.Version(context.Background()); err == nil || !strings.Contains(err.Error(), "fingerprint mismatch") {
-			t.Errorf("Version() error = %v", err)
+		if _, err := client.Version(context.Background()); err == nil || !strings.Contains(err.Error(), "fingerprint mismatch") || Classify(err) != FailureTLS {
+			t.Errorf("Version() error = %#v", err)
 		}
 	})
 	t.Run("CA file", func(t *testing.T) {
@@ -483,6 +484,74 @@ func TestTLSModes(t *testing.T) {
 		}
 	})
 }
+
+func TestFailureClassification(t *testing.T) {
+	t.Run("TLS setup", func(t *testing.T) {
+		_, err := New(Options{Host: "pve.example", TokenID: "id", Token: "secret", CAFile: "missing.pem"})
+		if Classify(err) != FailureTLS {
+			t.Fatalf("Classify(%v) = %q, want %q", err, Classify(err), FailureTLS)
+		}
+	})
+
+	t.Run("TLS handshake", func(t *testing.T) {
+		server := httptest.NewTLSServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
+		defer server.Close()
+		if _, err := newTLSClient(t, server.URL, Options{}).Version(context.Background()); Classify(err) != FailureTLS {
+			t.Fatalf("Classify(%v) = %q, want %q", err, Classify(err), FailureTLS)
+		}
+	})
+
+	for _, tt := range []struct {
+		name   string
+		status int
+		class  FailureClass
+	}{
+		{name: "authentication", status: http.StatusUnauthorized, class: FailureAuthentication},
+		{name: "authorization", status: http.StatusForbidden, class: FailureAuthorization},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				http.Error(w, "fixture-token denied", tt.status)
+			}))
+			defer server.Close()
+			_, err := testClient(t, server.URL).Version(context.Background())
+			if Classify(err) != tt.class || strings.Contains(err.Error(), "fixture-token") {
+				t.Fatalf("Classify(%v) = %q, want %q", err, Classify(err), tt.class)
+			}
+		})
+	}
+
+	t.Run("transport", func(t *testing.T) {
+		client := testClient(t, "https://pve.example")
+		client.http = &http.Client{Transport: roundTripperFunc(func(*http.Request) (*http.Response, error) {
+			return nil, errors.New("dial failed")
+		})}
+		_, err := client.Version(context.Background())
+		if Classify(err) != FailureTransport {
+			t.Fatalf("Classify(%v) = %q, want %q", err, Classify(err), FailureTransport)
+		}
+	})
+
+	t.Run("response read", func(t *testing.T) {
+		client := testClient(t, "https://pve.example")
+		client.http = &http.Client{Transport: roundTripperFunc(func(*http.Request) (*http.Response, error) {
+			return &http.Response{StatusCode: http.StatusOK, Body: errReader{}}, nil
+		})}
+		_, err := client.Version(context.Background())
+		if Classify(err) != FailureTransport {
+			t.Fatalf("Classify(%v) = %q, want %q", err, Classify(err), FailureTransport)
+		}
+	})
+}
+
+type roundTripperFunc func(*http.Request) (*http.Response, error)
+
+func (f roundTripperFunc) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }
+
+type errReader struct{}
+
+func (errReader) Read([]byte) (int, error) { return 0, errors.New("read failed") }
+func (errReader) Close() error             { return nil }
 
 func TestNewValidation(t *testing.T) {
 	for _, options := range []Options{

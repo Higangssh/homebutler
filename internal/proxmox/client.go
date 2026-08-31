@@ -10,6 +10,7 @@ import (
 	"crypto/x509"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -21,6 +22,42 @@ import (
 )
 
 const defaultTimeout = 10 * time.Second
+
+// FailureClass describes an actionable Proxmox endpoint failure.
+// An empty class means the error is not an endpoint failure, or there was none.
+type FailureClass string
+
+const (
+	FailureTLS            FailureClass = "tls"
+	FailureAuthentication FailureClass = "authentication"
+	FailureAuthorization  FailureClass = "authorization"
+	FailureTransport      FailureClass = "transport"
+)
+
+type classifiedError struct {
+	class FailureClass
+	err   error
+}
+
+func (e *classifiedError) Error() string { return e.err.Error() }
+func (e *classifiedError) Unwrap() error { return e.err }
+
+// Classify returns the failure class carried by err, if any.
+func Classify(err error) FailureClass {
+	var classified *classifiedError
+	if errors.As(err, &classified) {
+		return classified.class
+	}
+	return ""
+}
+
+// WithFailureClass carries class outward without changing err's message.
+func WithFailureClass(class FailureClass, err error) error {
+	if err == nil || class == "" || Classify(err) != "" {
+		return err
+	}
+	return &classifiedError{class: class, err: err}
+}
 
 const (
 	// minVMID matches the Proxmox API's own vmid schema minimum. 100 is only
@@ -82,7 +119,7 @@ func New(options Options) (*Client, error) {
 
 	tlsConfig, err := tlsConfig(options)
 	if err != nil {
-		return nil, err
+		return nil, WithFailureClass(FailureTLS, err)
 	}
 
 	return &Client{
@@ -354,13 +391,17 @@ func (c *Client) request(ctx context.Context, method, path string, query url.Val
 
 	resp, err := c.http.Do(req)
 	if err != nil {
-		return fmt.Errorf("proxmox request %s: %w", path, err)
+		class := FailureTransport
+		if Classify(err) == FailureTLS || isTLSFailure(err) || strings.Contains(err.Error(), "proxmox TLS ") {
+			class = FailureTLS
+		}
+		return WithFailureClass(class, fmt.Errorf("proxmox request %s: %w", path, err))
 	}
 	defer resp.Body.Close()
 
 	body, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
 	if err != nil {
-		return fmt.Errorf("read Proxmox response %s: %w", path, err)
+		return WithFailureClass(FailureTransport, fmt.Errorf("read Proxmox response %s: %w", path, err))
 	}
 	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
 		var apiError struct {
@@ -369,9 +410,9 @@ func (c *Client) request(ctx context.Context, method, path string, query url.Val
 		_ = json.Unmarshal(body, &apiError)
 		if message := strings.TrimSpace(apiError.Message); message != "" {
 			message = strings.ReplaceAll(message, c.token, "[REDACTED]")
-			return fmt.Errorf("proxmox request %s: %s: %s", path, resp.Status, message)
+			return WithFailureClass(httpFailureClass(resp.StatusCode), fmt.Errorf("proxmox request %s: %s: %s", path, resp.Status, message))
 		}
-		return fmt.Errorf("proxmox request %s: %s", path, resp.Status)
+		return WithFailureClass(httpFailureClass(resp.StatusCode), fmt.Errorf("proxmox request %s: %s", path, resp.Status))
 	}
 
 	var envelope struct {
@@ -384,4 +425,23 @@ func (c *Client) request(ctx context.Context, method, path string, query url.Val
 		return fmt.Errorf("decode Proxmox data %s: %w", path, err)
 	}
 	return nil
+}
+
+func httpFailureClass(statusCode int) FailureClass {
+	switch statusCode {
+	case http.StatusUnauthorized:
+		return FailureAuthentication
+	case http.StatusForbidden:
+		return FailureAuthorization
+	default:
+		return ""
+	}
+}
+
+func isTLSFailure(err error) bool {
+	var unknownAuthority x509.UnknownAuthorityError
+	var hostname x509.HostnameError
+	var invalidCertificate x509.CertificateInvalidError
+	var verification *tls.CertificateVerificationError
+	return errors.As(err, &unknownAuthority) || errors.As(err, &hostname) || errors.As(err, &invalidCertificate) || errors.As(err, &verification)
 }
