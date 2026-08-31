@@ -55,8 +55,10 @@ func TestInitialize(t *testing.T) {
 		t.Fatalf("unmarshal initializeResult: %v", err)
 	}
 
-	if init.ProtocolVersion != "2024-11-05" {
-		t.Errorf("protocolVersion = %q, want %q", init.ProtocolVersion, "2024-11-05")
+	// params carried no protocolVersion, so there is nothing to echo and the
+	// newest supported revision is the right answer.
+	if init.ProtocolVersion != supportedProtocolVersions[0] {
+		t.Errorf("protocolVersion = %q, want %q", init.ProtocolVersion, supportedProtocolVersions[0])
 	}
 	if init.ServerInfo.Name != "homebutler" {
 		t.Errorf("serverInfo.name = %q, want %q", init.ServerInfo.Name, "homebutler")
@@ -494,5 +496,109 @@ func TestInitializeVersion(t *testing.T) {
 
 	if init.ServerInfo.Version != "1.2.3" {
 		t.Errorf("version = %q, want %q", init.ServerInfo.Version, "1.2.3")
+	}
+}
+
+// homebutler answered every initialize with 2024-11-05 — the first MCP revision
+// ever published — and never read what the client asked for. That was
+// conformant, because a server may answer with any version it supports, but it
+// was the oldest thing it could conformantly say, and clients cap their
+// behaviour to the version they are handed.
+func TestNegotiateProtocolVersion(t *testing.T) {
+	latest := supportedProtocolVersions[0]
+
+	// "If the server supports the requested protocol version, it MUST respond
+	// with the same version."
+	for _, v := range supportedProtocolVersions {
+		if got := negotiateProtocolVersion(v); got != v {
+			t.Errorf("negotiateProtocolVersion(%q) = %q, want the same version back", v, got)
+		}
+	}
+
+	// "Otherwise, the server MUST respond with another protocol version it
+	// supports. This SHOULD be the latest version supported by the server."
+	for _, v := range []string{"1.0.0", "2099-01-01", ""} {
+		if got := negotiateProtocolVersion(v); got != latest {
+			t.Errorf("negotiateProtocolVersion(%q) = %q, want the latest supported %q", v, got, latest)
+		}
+	}
+
+	if latest == "2024-11-05" {
+		t.Error("the newest supported revision is still the first one ever published")
+	}
+}
+
+func TestInitializeEchoesTheRequestedVersion(t *testing.T) {
+	for _, want := range supportedProtocolVersions {
+		s, out := newTestServer()
+		req := `{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"` + want + `"}}`
+		resp := sendAndReceive(t, s, out, req)
+		if resp.Error != nil {
+			t.Fatalf("%s: unexpected error: %v", want, resp.Error)
+		}
+
+		result, _ := json.Marshal(resp.Result)
+		var init initializeResult
+		if err := json.Unmarshal(result, &init); err != nil {
+			t.Fatalf("%s: unmarshal: %v", want, err)
+		}
+		if init.ProtocolVersion != want {
+			t.Errorf("client asked for %q, server answered %q", want, init.ProtocolVersion)
+		}
+	}
+}
+
+func TestInitializeAnswersLatestForAVersionItDoesNotSpeak(t *testing.T) {
+	s, out := newTestServer()
+	req := `{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"1.0.0"}}`
+	resp := sendAndReceive(t, s, out, req)
+	if resp.Error != nil {
+		t.Fatalf("unexpected error: %v", resp.Error)
+	}
+
+	result, _ := json.Marshal(resp.Result)
+	var init initializeResult
+	if err := json.Unmarshal(result, &init); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if init.ProtocolVersion != supportedProtocolVersions[0] {
+		t.Errorf("protocolVersion = %q, want the latest supported %q", init.ProtocolVersion, supportedProtocolVersions[0])
+	}
+}
+
+// A client that opens with no params at all still gets a handshake rather than
+// a parse failure.
+func TestInitializeWithoutParams(t *testing.T) {
+	s, out := newTestServer()
+	resp := sendAndReceive(t, s, out, `{"jsonrpc":"2.0","id":1,"method":"initialize"}`)
+	if resp.Error != nil {
+		t.Fatalf("unexpected error: %v", resp.Error)
+	}
+	result, _ := json.Marshal(resp.Result)
+	var init initializeResult
+	if err := json.Unmarshal(result, &init); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if init.ProtocolVersion != supportedProtocolVersions[0] {
+		t.Errorf("protocolVersion = %q", init.ProtocolVersion)
+	}
+}
+
+// "The receiver MUST respond promptly with an empty response." Sending a ping
+// is optional; answering one is not, and this came back as -32601 method not
+// found, which a client is entitled to read as a dead connection.
+func TestPingIsAnswered(t *testing.T) {
+	s, out := newTestServer()
+	resp := sendAndReceive(t, s, out, `{"jsonrpc":"2.0","id":7,"method":"ping"}`)
+
+	if resp.Error != nil {
+		t.Fatalf("ping returned an error: %v", resp.Error)
+	}
+	result, err := json.Marshal(resp.Result)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	if string(result) != "{}" {
+		t.Errorf("ping result = %s, want an empty object", result)
 	}
 }
