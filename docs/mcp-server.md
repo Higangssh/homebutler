@@ -142,6 +142,18 @@ AI: "homelab-server /mnt/data is at 87% — consider cleaning up. Everything els
 
 No network ports opened. MCP uses stdio (stdin/stdout) — only the parent AI process can communicate with homebutler.
 
+### Protocol versions
+
+homebutler implements the MCP revisions `2025-11-25`, `2025-06-18`, `2025-03-26`
+and `2024-11-05`. A client's `initialize` gets the version it asked for when
+that is one of them, and `2025-11-25` when it is not, so an older client keeps
+working and a current one is not held back.
+
+For a tools-only stdio server these four describe the same surface. What the
+later revisions added is either out of scope here — resources, prompts,
+sampling, roots, elicitation, tasks, and everything about Streamable HTTP — or
+already how homebutler behaves.
+
 ## Agent Skill
 
 homebutler ships with an [Agent Skill](https://agentskills.io) that works across AI tools:

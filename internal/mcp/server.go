@@ -60,6 +60,49 @@ type initializeResult struct {
 	ServerInfo      serverInfo `json:"serverInfo"`
 }
 
+// initializeParams is the part of the client's initialize request that this
+// server acts on. Capabilities and clientInfo are read past deliberately: a
+// tools-only server negotiates nothing that depends on them.
+type initializeParams struct {
+	ProtocolVersion string `json:"protocolVersion"`
+}
+
+// supportedProtocolVersions lists the MCP revisions this server implements,
+// newest first.
+//
+// homebutler answered every initialize with "2024-11-05" — the first revision
+// ever published — and never read what the client asked for. That was
+// conformant, because a server may answer with any version it supports, but it
+// was the oldest thing it could conformantly say, and clients cap their
+// behaviour to the version they are given.
+//
+// All four are listed because for a tools-only stdio server they describe the
+// same surface. Everything the later revisions added is either out of scope
+// here (resources, prompts, sampling, roots, elicitation, tasks, Streamable
+// HTTP and its authorization) or already the behaviour: tool input validation
+// errors come back as tool errors with IsError rather than as JSON-RPC errors
+// (SEP-1303), and the generated inputSchema uses no construct outside JSON
+// Schema 2020-12 (SEP-1613).
+var supportedProtocolVersions = []string{
+	"2025-11-25",
+	"2025-06-18",
+	"2025-03-26",
+	"2024-11-05",
+}
+
+// negotiateProtocolVersion answers with the version the client asked for when
+// this server implements it, and with the newest one it does implement when it
+// does not. That is what the lifecycle spec requires, and it is also the only
+// shape that keeps working if a version is ever added or dropped here.
+func negotiateProtocolVersion(requested string) string {
+	for _, v := range supportedProtocolVersions {
+		if v == requested {
+			return requested
+		}
+	}
+	return supportedProtocolVersions[0]
+}
+
 type capInfo struct {
 	Tools *toolsCap `json:"tools,omitempty"`
 }
@@ -159,13 +202,23 @@ func (s *Server) Run() error {
 func (s *Server) handleRequest(req *jsonRPCRequest) {
 	switch req.Method {
 	case "initialize":
+		var params initializeParams
+		// A request with no or unreadable params is not a reason to fail the
+		// handshake; it just means there is nothing to echo, and the newest
+		// supported version is the right answer.
+		_ = json.Unmarshal(req.Params, &params)
 		s.writeResult(req.ID, initializeResult{
-			ProtocolVersion: "2024-11-05",
+			ProtocolVersion: negotiateProtocolVersion(params.ProtocolVersion),
 			Capabilities:    capInfo{Tools: &toolsCap{}},
 			ServerInfo:      serverInfo{Name: "homebutler", Version: s.version},
 		})
 	case "notifications/initialized":
 		// Notification — no response needed
+	case "ping":
+		// "The receiver MUST respond promptly with an empty response." Initiating
+		// a ping is optional; answering one is not, and this used to come back
+		// as -32601 method not found.
+		s.writeResult(req.ID, struct{}{})
 	case "tools/list":
 		s.writeResult(req.ID, toolsListResult{Tools: toolDefinitions()})
 	case "tools/call":

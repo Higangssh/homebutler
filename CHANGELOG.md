@@ -6,8 +6,11 @@ All notable changes to this project will be documented in this file.
 
 ### ✨ Features
 
+- negotiate the MCP protocol version instead of declaring the oldest one that exists (#85). Every `initialize` was answered with `2024-11-05`, the first revision ever published, and the client's requested version was never read at all. homebutler now implements `2025-11-25`, `2025-06-18`, `2025-03-26` and `2024-11-05`, answers with the one the client asked for when it is among them, and with the newest otherwise. Nothing was broken by the old behaviour — a server may answer with any version it supports — but it was the oldest thing it could conformantly say, and clients cap their behaviour to it
 - bound the backup directory with `backup.retention` (#102). `backup` wrote an archive on every run and nothing ever deleted one — the largest files homebutler writes, and the only ones with no limit at all, which is fine until somebody puts the command in cron. `max_archives` caps the count and `max_bytes` caps the total, because ten archives can be 200MB or 200GB and a disk guarantee is what the cron case actually wants. Both are off by default: a pruned incident costs some history, while a pruned backup can be the last copy of data that no longer exists, so this is the one store you opt into bounding. Pruning runs only after a backup is written, never after a failed one, and names each archive it removed
 - warn in `doctor` when the backup directory is large and has no retention configured. Keeping everything is only a safe default while something says when the directory has outgrown what was expected, and `doctor` checked that a backup was *recent*, which says nothing about one that has been growing since the day it was created
+
+- answer `ping` (#85). "The receiver **MUST** respond promptly with an empty response" — initiating a ping is optional, answering one is not, and homebutler came back with `-32601 method not found`, which a client is entitled to read as a dead connection
 
 ### 🐛 Fixes
 
