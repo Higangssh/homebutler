@@ -28,6 +28,8 @@ proxmox:
   #   port: 8006
   #   token_id: monitoring@pve!readonly
   #   token_file: ~/.config/homebutler/pve.token
+  #   action_token_id: power@pve!action        # optional, enables guest actions
+  #   action_token_file: ~/.config/homebutler/pve-action.token
   #   fingerprint: "AB:CD:EF:..."
   #   timeout: 10s
 

@@ -538,6 +538,26 @@ func (r *ValidationResult) checkProxmox(cfg *Config) {
 				r.add(SeverityError, field+".timeout", fmt.Sprintf("Invalid duration %q.", p.Timeout), `Use a positive Go duration such as "10s".`)
 			}
 		}
+
+		if p.ActionTokenID != "" || p.ActionToken != "" || p.ActionTokenFile != "" {
+			if p.ActionTokenID == "" {
+				r.add(SeverityError, field+".action_token_id", "Proxmox action_token_id is required when an action credential is configured.",
+					"Set the API token ID for the action credential, such as monitoring@pve!action.")
+			}
+			if p.ActionToken == "" && p.ActionTokenFile == "" {
+				r.add(SeverityError, field, "An action_token or action_token_file is required when action_token_id is set.",
+					"action_token_file is preferred so the token is not stored in the config file.")
+			}
+			if p.ActionToken != "" && p.ActionTokenFile != "" {
+				r.add(SeverityError, field, "Both Proxmox action_token and action_token_file are set.",
+					"Keep action_token_file (preferred) or action_token, but not both.")
+			}
+			if p.ActionTokenFile != "" {
+				if _, err := os.Stat(p.ActionTokenFilePath()); os.IsNotExist(err) {
+					r.add(SeverityError, field+".action_token_file", fmt.Sprintf("Action token file %s does not exist.", p.ActionTokenFile), "Create the file or set action_token instead.")
+				}
+			}
+		}
 	}
 }
 

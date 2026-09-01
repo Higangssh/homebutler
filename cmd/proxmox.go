@@ -45,6 +45,18 @@ func newProxmoxStatusCmd() *cobra.Command {
 }
 
 func openProxmoxClient(endpointName string) (*config.ProxmoxConfig, *proxmox.Client, error) {
+	return openProxmoxClientCredential(endpointName, false)
+}
+
+// openProxmoxActionClient is like openProxmoxClient but authenticates with the
+// endpoint's action credential instead of its read credential. Guest power
+// actions must never fall back to the read token: if no action credential is
+// configured, this fails before any network call.
+func openProxmoxActionClient(endpointName string) (*config.ProxmoxConfig, *proxmox.Client, error) {
+	return openProxmoxClientCredential(endpointName, true)
+}
+
+func openProxmoxClientCredential(endpointName string, action bool) (*config.ProxmoxConfig, *proxmox.Client, error) {
 	if serverName != "" || allServers {
 		return nil, nil, fmt.Errorf("proxmox commands do not support --server or --all; use --endpoint")
 	}
@@ -55,12 +67,12 @@ func openProxmoxClient(endpointName string) (*config.ProxmoxConfig, *proxmox.Cli
 	if err != nil {
 		return nil, nil, err
 	}
-	token, err := endpoint.TokenValue()
+	tokenID, token, err := endpoint.ResolveCredential(action)
 	if err != nil {
-		return nil, nil, fmt.Errorf("read token for Proxmox endpoint %q: %w", endpoint.Name, err)
+		return nil, nil, err
 	}
 	client, err := proxmox.New(proxmox.Options{
-		Host: endpoint.Host, Port: endpoint.APIPort(), TokenID: endpoint.TokenID, Token: token,
+		Host: endpoint.Host, Port: endpoint.APIPort(), TokenID: tokenID, Token: token,
 		Fingerprint: endpoint.Fingerprint, CAFile: endpoint.CAFile, Insecure: endpoint.Insecure, Timeout: endpoint.TimeoutDuration(),
 	})
 	if err != nil {
@@ -217,7 +229,7 @@ func newProxmoxGuestActionCmd(action proxmox.GuestAction) *cobra.Command {
 				return fmt.Errorf("confirmation required for Proxmox guest action: endpoint=%q node=%q type=%q vmid=%d action=%q; rerun with --endpoint %q --node %q --type %q --vmid %d --confirm",
 					endpointName, node, guestType, vmid, action, endpointName, node, guestType, vmid)
 			}
-			endpoint, client, err := openProxmoxClient(endpointName)
+			endpoint, client, err := openProxmoxActionClient(endpointName)
 			if err != nil {
 				return err
 			}
