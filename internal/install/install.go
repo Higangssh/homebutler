@@ -40,7 +40,7 @@ func saveInstalled(app installedApp) error {
 	}
 	if err := os.MkdirAll(BaseDir(), 0755); err != nil {
 		if util.IsPermissionError(err) {
-			return util.NewHintError("cannot create registry dir "+BaseDir(), err, fixPermissionsHint(BaseDir()))
+			return util.NewHintError("cannot create registry dir "+BaseDir(), err, fixPermissionsHint(filepath.Dir(BaseDir())))
 		}
 		return err
 	}

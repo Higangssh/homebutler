@@ -10,6 +10,10 @@ All notable changes to this project will be documented in this file.
 
 - add the global `--verbose` / `-v` flag for detailed error output. Human-facing permission errors now include the failed operation and a command that preserves the requested backup options; remote commands receive the flag too
 
+### ⚠️ Behavior changes
+
+- **Human-facing permission errors no longer include the underlying cause by default.** They lead with the failed operation and the command to rerun; use `--verbose` to see the underlying error and hint together
+
 ## [0.24.0](https://github.com/Higangssh/homebutler/compare/v0.23.1...v0.24.0) - 2026-08-31
 
 **The largest files homebutler writes were the only ones nothing ever deleted, and the safety of restoring them belonged to a program homebutler merely invoked.** `backup` wrote an archive on every run with no retention of any kind — fine while a person types the command, and the first thing to hurt whoever puts it in cron. Restore, meanwhile, held its destination only because GNU tar and bsdtar decline dangerous member names on their own; nothing in this repository asserted it and no test covered it. Separately, the MCP server had been answering every handshake with the first protocol revision ever published.
