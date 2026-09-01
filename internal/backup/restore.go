@@ -185,7 +185,7 @@ func Restore(archivePath string, opts RestoreOptions) (*RestoreResult, error) {
 				}
 				m = cleared
 			}
-			if err := restoreMount(m, volDir); err != nil {
+			if err := restoreMount(m, volDir, archivePath); err != nil {
 				return nil, fmt.Errorf("failed to restore mount %s: %w", m.Name, err)
 			}
 			volumeCount++
@@ -287,7 +287,7 @@ func refuseMount(m Mount, opts RestoreOptions) (Mount, string) {
 //
 // Callers must have cleared the mount through refuseMount first; this function
 // assumes m.Name is a volume name and m.Source is an operator-permitted path.
-func restoreMount(m Mount, volDir string) error {
+func restoreMount(m Mount, volDir, sourceArchive string) error {
 	safeName := sanitizeName(m.Name)
 	archivePath := mountArchivePath(m.Name, volDir)
 
@@ -310,7 +310,7 @@ func restoreMount(m Mount, volDir string) error {
 		// Restore bind mount to host path
 		if err := os.MkdirAll(m.Source, 0o755); err != nil {
 			if util.IsPermissionError(err) {
-				return util.NewHintError(fmt.Errorf("failed to create bind mount dir %s: %w", m.Source, err), "sudo homebutler restore "+archivePath)
+				return util.NewHintError("cannot create bind mount dir "+m.Source, err, "sudo homebutler restore "+sourceArchive)
 			}
 			return fmt.Errorf("failed to create bind mount dir %s: %w", m.Source, err)
 		}

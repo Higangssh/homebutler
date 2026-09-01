@@ -597,6 +597,7 @@ Commands:
 
 Flags:
   --json              JSON output (default: human-readable)
+  --verbose, -v       Show detailed error information
   --server <name>     Run on a specific remote server
   --all               Run on all configured servers in parallel
   --port <number>     Port for serve command (default: 8080)
@@ -670,6 +671,7 @@ Commands:
 
 Flags:
   --json              JSON output (default: human-readable)
+  --verbose, -v       Show detailed error information
   --server <name>     Run on a specific remote server
   --all               Run on all configured servers in parallel
   --port <number>     Port for serve command (default: 8080)

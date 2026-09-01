@@ -100,13 +100,13 @@ func Run(backupDir, service string, retention RetentionConfig) (*BackupResult, e
 
 	if err := os.MkdirAll(volDir, 0o755); err != nil {
 		if util.IsPermissionError(err) {
-			return nil, util.NewHintError(fmt.Errorf("failed to create backup dir: %w", err), "sudo homebutler backup")
+			return nil, util.NewHintError("cannot create backup dir "+backupDir, err, backupHint(backupDir, service))
 		}
 		return nil, fmt.Errorf("failed to create backup dir: %w", err)
 	}
 	if err := os.MkdirAll(composeDir, 0o755); err != nil {
 		if util.IsPermissionError(err) {
-			return nil, util.NewHintError(fmt.Errorf("failed to create compose dir: %w", err), "sudo homebutler backup")
+			return nil, util.NewHintError("cannot create compose dir "+composeDir, err, backupHint(backupDir, service))
 		}
 		return nil, fmt.Errorf("failed to create compose dir: %w", err)
 	}
@@ -202,6 +202,14 @@ func Run(backupDir, service string, retention RetentionConfig) (*BackupResult, e
 		result.Pruned = pruned
 	}
 	return result, nil
+}
+
+func backupHint(backupDir, service string) string {
+	hint := "sudo homebutler backup --to " + util.ShellQuote(backupDir)
+	if service != "" {
+		hint += " --service " + util.ShellQuote(service)
+	}
+	return hint
 }
 
 // List returns all backups in the backup directory.

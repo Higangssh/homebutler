@@ -7,12 +7,13 @@ import (
 
 // HintError keeps an actionable suggestion separate from the underlying cause.
 type HintError struct {
+	Op    string
 	Cause error
 	Hint  string
 }
 
 func (e *HintError) Error() string {
-	return fmt.Sprintf("%s\n\n  ⚠️  Try: %s", e.Cause, e.Hint)
+	return fmt.Sprintf("%s: %v\n\n  ⚠️  Try: %s", e.Op, e.Cause, e.Hint)
 }
 
 func (e *HintError) Unwrap() error {
@@ -20,8 +21,8 @@ func (e *HintError) Unwrap() error {
 }
 
 // NewHintError associates an actionable suggestion with an error.
-func NewHintError(cause error, hint string) error {
-	return &HintError{Cause: cause, Hint: hint}
+func NewHintError(op string, cause error, hint string) error {
+	return &HintError{Op: op, Cause: cause, Hint: hint}
 }
 
 // FormatError returns the actionable message by default and the complete
@@ -32,7 +33,7 @@ func FormatError(err error, verbose bool) string {
 		if verbose {
 			return hintErr.Error()
 		}
-		return "permission denied — rerun with: " + hintErr.Hint
+		return hintErr.Op + " — rerun with: " + hintErr.Hint
 	}
 	return err.Error()
 }

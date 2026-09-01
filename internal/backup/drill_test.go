@@ -443,7 +443,7 @@ func TestRestoreMountBindExtractsArchive(t *testing.T) {
 	}
 
 	target := filepath.Join(dir, "target")
-	err := restoreMount(Mount{Type: "bind", Name: "data", Source: target}, volDir)
+	err := restoreMount(Mount{Type: "bind", Name: "data", Source: target}, volDir, "backup.tar.gz")
 	if err != nil {
 		t.Fatalf("restoreMount() error = %v", err)
 	}

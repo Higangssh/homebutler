@@ -9,10 +9,10 @@ import (
 
 func TestFormatError(t *testing.T) {
 	cause := errors.New("rename /usr/local/bin/homebutler: permission denied")
-	err := NewHintError(cause, "sudo homebutler upgrade")
+	err := NewHintError("cannot backup current binary /usr/local/bin/homebutler.bak", cause, "sudo homebutler upgrade")
 
 	short := FormatError(err, false)
-	if short != "permission denied — rerun with: sudo homebutler upgrade" {
+	if short != "cannot backup current binary /usr/local/bin/homebutler.bak — rerun with: sudo homebutler upgrade" {
 		t.Fatalf("short error = %q", short)
 	}
 	verbose := FormatError(err, true)
@@ -25,9 +25,9 @@ func TestFormatError(t *testing.T) {
 }
 
 func TestFormatErrorWrapped(t *testing.T) {
-	err := NewHintError(errors.New("permission denied"), "sudo homebutler backup")
+	err := NewHintError("cannot create backup dir /mnt/nas/backups", errors.New("permission denied"), "sudo homebutler backup")
 	wrapped := fmt.Errorf("operation failed: %w", err)
-	if got := FormatError(wrapped, false); got != "permission denied — rerun with: sudo homebutler backup" {
+	if got := FormatError(wrapped, false); got != "cannot create backup dir /mnt/nas/backups — rerun with: sudo homebutler backup" {
 		t.Fatalf("wrapped short error = %q", got)
 	}
 }
