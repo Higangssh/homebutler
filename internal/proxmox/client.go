@@ -153,14 +153,14 @@ func tlsConfig(options Options) (*tls.Config, error) {
 		config.InsecureSkipVerify = true // #nosec G402 -- verified by the callback below.
 		config.VerifyPeerCertificate = func(rawCerts [][]byte, _ [][]*x509.Certificate) error {
 			if len(rawCerts) == 0 {
-				return fmt.Errorf("proxmox TLS peer sent no certificate")
+				return WithFailureClass(FailureTLS, fmt.Errorf("proxmox TLS peer sent no certificate"))
 			}
 			if _, err := x509.ParseCertificate(rawCerts[0]); err != nil {
 				return fmt.Errorf("parse Proxmox TLS certificate: %w", err)
 			}
 			actual := sha256.Sum256(rawCerts[0])
 			if subtle.ConstantTimeCompare(actual[:], expected) != 1 {
-				return fmt.Errorf("proxmox TLS certificate fingerprint mismatch")
+				return WithFailureClass(FailureTLS, fmt.Errorf("proxmox TLS certificate fingerprint mismatch"))
 			}
 			return nil
 		}
@@ -392,7 +392,7 @@ func (c *Client) request(ctx context.Context, method, path string, query url.Val
 	resp, err := c.http.Do(req)
 	if err != nil {
 		class := FailureTransport
-		if Classify(err) == FailureTLS || isTLSFailure(err) || strings.Contains(err.Error(), "proxmox TLS ") {
+		if Classify(err) == FailureTLS || isTLSFailure(err) {
 			class = FailureTLS
 		}
 		return WithFailureClass(class, fmt.Errorf("proxmox request %s: %w", path, err))
