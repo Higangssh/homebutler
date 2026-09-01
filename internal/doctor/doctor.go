@@ -1,6 +1,7 @@
 package doctor
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -12,6 +13,7 @@ import (
 	"github.com/Higangssh/homebutler/internal/config"
 	"github.com/Higangssh/homebutler/internal/inventory"
 	"github.com/Higangssh/homebutler/internal/ports"
+	"github.com/Higangssh/homebutler/internal/proxmox"
 	"github.com/Higangssh/homebutler/internal/style"
 	"github.com/charmbracelet/lipgloss"
 )
@@ -62,18 +64,34 @@ type Options struct {
 
 // CollectFuncs allows tests to inject data sources.
 type CollectFuncs struct {
-	InventoryFns inventory.CollectFuncs
-	BackupListFn func(string) ([]backup.ListEntry, error)
-	SnapshotDir  string
+	InventoryFns  inventory.CollectFuncs
+	BackupListFn  func(string) ([]backup.ListEntry, error)
+	SnapshotDir   string
+	ProxmoxOpenFn func(config.ProxmoxConfig) (*proxmox.Client, error)
 }
 
 // DefaultCollectFuncs returns real doctor data sources.
 func DefaultCollectFuncs() CollectFuncs {
 	return CollectFuncs{
-		InventoryFns: inventory.DefaultCollectFuncs(),
-		BackupListFn: backup.List,
-		SnapshotDir:  defaultSnapshotDir(),
+		InventoryFns:  inventory.DefaultCollectFuncs(),
+		BackupListFn:  backup.List,
+		SnapshotDir:   defaultSnapshotDir(),
+		ProxmoxOpenFn: openProxmoxEndpoint,
 	}
+}
+
+// openProxmoxEndpoint resolves the token and builds a client the same way the
+// proxmox commands do, so doctor and proxmox status never disagree about what
+// a configured endpoint accepts.
+func openProxmoxEndpoint(endpoint config.ProxmoxConfig) (*proxmox.Client, error) {
+	token, err := endpoint.TokenValue()
+	if err != nil {
+		return nil, err
+	}
+	return proxmox.New(proxmox.Options{
+		Host: endpoint.Host, Port: endpoint.APIPort(), TokenID: endpoint.TokenID, Token: token,
+		Fingerprint: endpoint.Fingerprint, CAFile: endpoint.CAFile, Insecure: endpoint.Insecure, Timeout: endpoint.TimeoutDuration(),
+	})
 }
 
 // Run performs a read-only health and readiness diagnosis.
@@ -89,6 +107,9 @@ func Run(cfg *config.Config, fns CollectFuncs, opts Options) (*Result, error) {
 	}
 	if fns.SnapshotDir == "" {
 		fns.SnapshotDir = defaultSnapshotDir()
+	}
+	if fns.ProxmoxOpenFn == nil {
+		fns.ProxmoxOpenFn = openProxmoxEndpoint
 	}
 
 	inv, err := inventory.Collect(cfg, fns.InventoryFns)
@@ -109,6 +130,7 @@ func Run(cfg *config.Config, fns CollectFuncs, opts Options) (*Result, error) {
 	checkBackups(r, cfg, fns.BackupListFn, opts)
 	checkNotifications(r, cfg)
 	checkReportBaseline(r, fns.SnapshotDir)
+	checkProxmox(r, cfg, fns.ProxmoxOpenFn)
 
 	if len(r.Findings) == 0 {
 		r.Findings = append(r.Findings, Finding{
@@ -302,6 +324,87 @@ func checkReportBaseline(r *Result, snapshotDir string) {
 		}
 	}
 	r.add(SeverityWarn, "report", "No report baseline yet", "Snapshot directory exists, but no report snapshots were found.", "Run report once so homebutler can notice what changes later.", "homebutler report")
+}
+
+// checkProxmox diagnoses each configured Proxmox endpoint with read-only
+// requests. It reports one finding per endpoint and keeps TLS, authentication,
+// authorization, and transport failures distinguishable rather than
+// collapsing them into a single "unavailable" result, per #105 and #111.
+func checkProxmox(r *Result, cfg *config.Config, openFn func(config.ProxmoxConfig) (*proxmox.Client, error)) {
+	if cfg == nil || len(cfg.Proxmox) == 0 {
+		return
+	}
+	for _, endpoint := range cfg.Proxmox {
+		command := "homebutler proxmox status --endpoint " + endpoint.Name
+		client, err := openFn(endpoint)
+		if err != nil {
+			r.add(SeverityFail, "proxmox", fmt.Sprintf("Proxmox endpoint %q could not be configured", endpoint.Name), err.Error(), proxmoxFailureAction(err), command)
+			continue
+		}
+		checkProxmoxEndpoint(r, endpoint.Name, client, command)
+	}
+}
+
+type proxmoxCollector struct {
+	name  string
+	err   error
+	empty bool
+}
+
+func checkProxmoxEndpoint(r *Result, name string, client *proxmox.Client, command string) {
+	ctx := context.Background()
+
+	var collectors []proxmoxCollector
+	_, err := client.Version(ctx)
+	collectors = append(collectors, proxmoxCollector{name: "version", err: err})
+	_, err = client.ClusterStatus(ctx)
+	collectors = append(collectors, proxmoxCollector{name: "cluster status", err: err})
+	resources, err := client.Resources(ctx)
+	empty := err == nil && len(resources.Nodes) == 0 && len(resources.Guests) == 0 && len(resources.Storage) == 0
+	collectors = append(collectors, proxmoxCollector{name: "resources", err: err, empty: empty})
+
+	var failed, empties []string
+	var firstErr error
+	for _, c := range collectors {
+		switch {
+		case c.err != nil:
+			failed = append(failed, fmt.Sprintf("%s: %s", c.name, c.err.Error()))
+			if firstErr == nil {
+				firstErr = c.err
+			}
+		case c.empty:
+			empties = append(empties, c.name)
+		}
+	}
+
+	switch {
+	case len(failed) == len(collectors):
+		r.add(SeverityFail, "proxmox", fmt.Sprintf("Proxmox endpoint %q has no readable collectors", name), strings.Join(failed, "; "), proxmoxFailureAction(firstErr), command)
+	case len(failed) > 0:
+		r.add(SeverityWarn, "proxmox", fmt.Sprintf("Proxmox endpoint %q is only partially readable", name), strings.Join(failed, "; "), proxmoxFailureAction(firstErr), command)
+	case len(empties) > 0:
+		r.add(SeverityPass, "proxmox", fmt.Sprintf("Proxmox endpoint %q is reachable", name), fmt.Sprintf("%s returned no data; that may be correct, or the token's ACL may only grant access to specific resources.", strings.Join(empties, ", ")), "", "")
+	default:
+		r.add(SeverityPass, "proxmox", fmt.Sprintf("Proxmox endpoint %q is fully readable", name), "Version, cluster status, and resources all responded.", "", "")
+	}
+}
+
+// proxmoxFailureAction turns a classified Proxmox error into what the
+// operator can safely inspect or correct. It must never suggest widening a
+// token to Administrator just to make a check pass (#105).
+func proxmoxFailureAction(err error) string {
+	switch proxmox.Classify(err) {
+	case proxmox.FailureTLS:
+		return "Check the configured certificate trust: the fingerprint or CA file against the endpoint's actual certificate."
+	case proxmox.FailureAuthentication:
+		return "Check the token ID, the token value, and the token file's ownership and permissions; the token may be missing, unreadable, or revoked."
+	case proxmox.FailureAuthorization:
+		return "Check that the read-only PVEAuditor role is applied to both the API user and the privilege-separated token. Do not grant Administrator to make this pass."
+	case proxmox.FailureTransport:
+		return "Check network reachability to the configured host and port, and any firewall rules in between."
+	default:
+		return "Run homebutler proxmox status for the full error."
+	}
 }
 
 func (r *Result) add(severity, category, title, detail, action, command string) {
