@@ -105,6 +105,44 @@ follow the same rules as their read-token counterparts: configure exactly one
 credential source (`action_token_file` or the inline `action_token`) alongside
 `action_token_id`. They enable guest start, reboot, and shutdown actions on
 this endpoint; without them, guest actions are unavailable.
+## Watch integration
+
+`homebutler watch start` polls every configured endpoint alongside its
+docker/systemd/pm2 targets — no separate scheduler or long-running command.
+It reports three kinds of state transition, each with a recovery incident
+when the problem clears:
+
+- the endpoint became unreachable (TLS, authentication/token expiry, or
+  transport/timeout failures)
+- the endpoint authenticated but returned nothing at all, or a 403 — recorded
+  as ACL-filtered, because `proxmox status` treats an empty resource list as a
+  permissions problem rather than a genuinely empty cluster
+- a guest named under `guests:` stopped running
+
+```yaml
+proxmox:
+  - name: pve
+    host: 192.168.1.10
+    token_id: monitoring@pve!readonly
+    token_file: ~/.config/homebutler/pve.token
+    guests:
+      - node: pve1
+        type: qemu   # or lxc
+        vmid: 100
+      - node: pve1
+        type: lxc
+        vmid: 101
+```
+
+A guest not listed under `guests:` is observational only: `watch start` never
+alerts on it, whether it was deliberately stopped or never running. Each entry
+names a guest by the exact triple Proxmox needs to address it — `node`,
+`type`, and `vmid` — matching `proxmox guest start/shutdown/reboot`.
+
+These checks are read-only, same as every other Proxmox command: `watch
+start` performs `GET`s only and never starts, stops, or otherwise acts on a
+guest. Alerts go through the same notifier and incident store as every other
+`watch start` incident (`homebutler watch history`, `watch show`).
 
 ## TLS
 

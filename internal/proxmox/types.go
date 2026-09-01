@@ -322,6 +322,28 @@ func (b *flexibleBool) UnmarshalJSON(data []byte) error {
 	return fmt.Errorf("expected boolean or 0/1, got %s", data)
 }
 
+// ExpectedGuest names one guest `watch start` expects to be running, by the
+// exact triple Proxmox needs to address it.
+type ExpectedGuest struct {
+	Node string `yaml:"node"`
+	Type string `yaml:"type"` // "qemu" or "lxc"
+	VMID int    `yaml:"vmid"`
+}
+
+// Validate reports a malformed expected-guest entry without contacting Proxmox.
+func (g ExpectedGuest) Validate() error {
+	if strings.TrimSpace(g.Node) == "" {
+		return fmt.Errorf("proxmox guest entry is missing node")
+	}
+	if g.Type != "qemu" && g.Type != "lxc" {
+		return fmt.Errorf("proxmox guest entry for node %q has invalid type %q: must be qemu or lxc", g.Node, g.Type)
+	}
+	if g.VMID < 1 {
+		return fmt.Errorf("proxmox guest entry for node %q has invalid vmid %d", g.Node, g.VMID)
+	}
+	return nil
+}
+
 func splitTags(tags string) []string {
 	if tags == "" {
 		return nil

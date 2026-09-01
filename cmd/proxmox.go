@@ -4,12 +4,50 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
 	"strings"
 
 	"github.com/Higangssh/homebutler/internal/config"
 	"github.com/Higangssh/homebutler/internal/proxmox"
+	"github.com/Higangssh/homebutler/internal/watch"
 	"github.com/spf13/cobra"
 )
+
+// buildProxmoxTargets turns the global config's Proxmox endpoints into
+// ProxmoxMonitor targets for `watch start`. An endpoint whose client cannot
+// be built (bad token file, invalid TLS setting) is skipped with a warning
+// rather than aborting the whole monitoring run over one misconfigured
+// endpoint — the same tolerance `watch start` already gives an empty target
+// list.
+func buildProxmoxTargets() []watch.ProxmoxTarget {
+	if cfg == nil {
+		return nil
+	}
+	targets := make([]watch.ProxmoxTarget, 0, len(cfg.Proxmox))
+	for _, endpoint := range cfg.Proxmox {
+		for _, guest := range endpoint.Guests {
+			if err := guest.Validate(); err != nil {
+				fmt.Fprintf(os.Stderr, "warning: proxmox endpoint %q: %v\n", endpoint.Name, err)
+			}
+		}
+
+		token, err := endpoint.TokenValue()
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "warning: proxmox endpoint %q: %v\n", endpoint.Name, err)
+			continue
+		}
+		client, err := proxmox.New(proxmox.Options{
+			Host: endpoint.Host, Port: endpoint.APIPort(), TokenID: endpoint.TokenID, Token: token,
+			Fingerprint: endpoint.Fingerprint, CAFile: endpoint.CAFile, Insecure: endpoint.Insecure, Timeout: endpoint.TimeoutDuration(),
+		})
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "warning: proxmox endpoint %q: %v\n", endpoint.Name, err)
+			continue
+		}
+		targets = append(targets, watch.ProxmoxTarget{Endpoint: endpoint.Name, Client: client, Guests: endpoint.Guests})
+	}
+	return targets
+}
 
 func newProxmoxCmd() *cobra.Command {
 	cmd := &cobra.Command{

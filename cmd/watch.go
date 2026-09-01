@@ -522,6 +522,20 @@ Docker targets use docker events (real-time). Systemd and PM2 targets use pollin
 				}()
 			}
 
+			proxmoxTargets := buildProxmoxTargets()
+			if len(proxmoxTargets) > 0 {
+				monitorCount++
+				wg.Add(1)
+				proxmoxMon := &watch.ProxmoxMonitor{Targets: proxmoxTargets, Dir: dir, Interval: dur, Keep: watchCfg.Retention.MaxIncidents}
+				go func() {
+					defer wg.Done()
+					if err := proxmoxMon.Watch(ctx, incCh); err != nil && ctx.Err() == nil {
+						fmt.Fprintf(os.Stderr, "[proxmox-monitor] error: %v\n", err)
+					}
+				}()
+				fmt.Printf("  Proxmox endpoints: %d\n", len(proxmoxTargets))
+			}
+
 			// With no restart monitors there is nothing to close incCh, and a
 			// nil channel is never selected — so the loop below waits on the
 			// thresholds and the signal instead of seeing a closed channel and
@@ -546,6 +560,24 @@ Docker targets use docker events (real-time). Systemd and PM2 targets use pollin
 					if !ok {
 						fmt.Println("\nAll monitors stopped.")
 						return nil
+					}
+
+					// Proxmox incidents are state transitions on an endpoint or a
+					// configured guest, not a process restart: they carry no exit
+					// code or logs to analyze, and "flapping" would only measure
+					// how often a poll caught a different answer. The monitor has
+					// already saved the incident itself.
+					if inc.Source == "proxmox" {
+						if notifier != nil {
+							_ = notifier.NotifyIncident(inc, watch.FlappingResult{}, nil, time.Now())
+						}
+						ts := time.Now().Format("15:04:05")
+						verb := "INCIDENT"
+						if inc.Recovered {
+							verb = "RECOVERED"
+						}
+						fmt.Printf("[%s] PROXMOX %s: %s\n", ts, verb, inc.PostLogs)
+						continue
 					}
 
 					// The exit code is the analyser's highest-confidence signal —
