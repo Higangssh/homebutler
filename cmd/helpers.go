@@ -248,7 +248,7 @@ func runAllServers(c *config.Config, args []string, jsonOut bool) error {
 			} else {
 				out, err := remote.Run(&server, remoteArgs...)
 				if err != nil {
-					result.Error = err.Error()
+					result.Error = util.FormatError(err, verboseOutput || jsonOut)
 				} else {
 					result.Data = json.RawMessage(out)
 				}
