@@ -170,11 +170,11 @@ func tlsConfig(options Options) (*tls.Config, error) {
 	if options.CAFile != "" {
 		pem, err := os.ReadFile(options.CAFile)
 		if err != nil {
-			return nil, fmt.Errorf("read Proxmox CA file: %w", err)
+			return nil, WithFailureClass(FailureAuthentication, fmt.Errorf("read Proxmox CA file: %w", err))
 		}
 		pool := x509.NewCertPool()
 		if !pool.AppendCertsFromPEM(pem) {
-			return nil, fmt.Errorf("proxmox CA file contains no certificates")
+			return nil, WithFailureClass(FailureAuthentication, fmt.Errorf("proxmox CA file contains no certificates"))
 		}
 		config.RootCAs = pool
 		return config, nil
@@ -190,7 +190,7 @@ func parseFingerprint(value string) ([]byte, error) {
 	value = strings.ReplaceAll(strings.TrimSpace(value), ":", "")
 	fingerprint, err := hex.DecodeString(value)
 	if err != nil || len(fingerprint) != sha256.Size {
-		return nil, fmt.Errorf("proxmox fingerprint must be a SHA-256 certificate fingerprint")
+		return nil, WithFailureClass(FailureAuthentication, fmt.Errorf("proxmox fingerprint must be a SHA-256 certificate fingerprint"))
 	}
 	return fingerprint, nil
 }

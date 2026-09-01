@@ -486,10 +486,17 @@ func TestTLSModes(t *testing.T) {
 }
 
 func TestFailureClassification(t *testing.T) {
-	t.Run("TLS setup", func(t *testing.T) {
+	t.Run("CA file unreadable", func(t *testing.T) {
 		_, err := New(Options{Host: "pve.example", TokenID: "id", Token: "secret", CAFile: "missing.pem"})
-		if Classify(err) != FailureTLS {
-			t.Fatalf("Classify(%v) = %q, want %q", err, Classify(err), FailureTLS)
+		if Classify(err) != FailureAuthentication {
+			t.Fatalf("Classify(%v) = %q, want %q", err, Classify(err), FailureAuthentication)
+		}
+	})
+
+	t.Run("fingerprint format", func(t *testing.T) {
+		_, err := New(Options{Host: "pve.example", TokenID: "id", Token: "secret", Fingerprint: "not-hex"})
+		if Classify(err) != FailureAuthentication {
+			t.Fatalf("Classify(%v) = %q, want %q", err, Classify(err), FailureAuthentication)
 		}
 	})
 
