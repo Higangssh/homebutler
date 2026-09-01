@@ -3,8 +3,10 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
+	"github.com/Higangssh/homebutler/internal/proxmox"
 	"gopkg.in/yaml.v3"
 )
 
@@ -251,14 +253,18 @@ func TestProxmoxConfigTokenValue(t *testing.T) {
 		t.Error("TokenValue() should fail without a token source")
 	}
 
-	if _, err := (ProxmoxConfig{TokenFile: filepath.Join(dir, "missing")}).TokenValue(); err == nil {
+	if _, err := (ProxmoxConfig{TokenFile: filepath.Join(dir, "missing"), Token: "inline-secret"}).TokenValue(); err == nil {
 		t.Error("TokenValue() should fail for a missing token file")
+	} else if proxmox.Classify(err) != proxmox.FailureAuthentication || strings.Contains(err.Error(), "inline-secret") {
+		t.Errorf("TokenValue() error = %v, want authentication error without inline token", err)
 	}
 	if err := os.WriteFile(filepath.Join(dir, "empty"), []byte(" \n"), 0600); err != nil {
 		t.Fatalf("write empty token: %v", err)
 	}
-	if _, err := (ProxmoxConfig{TokenFile: filepath.Join(dir, "empty")}).TokenValue(); err == nil {
+	if _, err := (ProxmoxConfig{TokenFile: filepath.Join(dir, "empty"), Token: "inline-secret"}).TokenValue(); err == nil {
 		t.Error("TokenValue() should fail for an empty token file")
+	} else if proxmox.Classify(err) != proxmox.FailureAuthentication || strings.Contains(err.Error(), "inline-secret") {
+		t.Errorf("TokenValue() error = %v, want authentication error without inline token", err)
 	}
 }
 
