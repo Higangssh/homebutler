@@ -100,13 +100,13 @@ func Run(backupDir, service string, retention RetentionConfig) (*BackupResult, e
 
 	if err := os.MkdirAll(volDir, 0o755); err != nil {
 		if util.IsPermissionError(err) {
-			return nil, fmt.Errorf("failed to create backup dir: %w\n\n  ⚠️  Try: sudo homebutler backup", err)
+			return nil, util.NewHintError(fmt.Errorf("failed to create backup dir: %w", err), "sudo homebutler backup")
 		}
 		return nil, fmt.Errorf("failed to create backup dir: %w", err)
 	}
 	if err := os.MkdirAll(composeDir, 0o755); err != nil {
 		if util.IsPermissionError(err) {
-			return nil, fmt.Errorf("failed to create compose dir: %w\n\n  ⚠️  Try: sudo homebutler backup", err)
+			return nil, util.NewHintError(fmt.Errorf("failed to create compose dir: %w", err), "sudo homebutler backup")
 		}
 		return nil, fmt.Errorf("failed to create compose dir: %w", err)
 	}
