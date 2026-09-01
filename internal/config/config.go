@@ -10,6 +10,7 @@ import (
 
 	"github.com/Higangssh/homebutler/internal/backup"
 	"github.com/Higangssh/homebutler/internal/notify"
+	"github.com/Higangssh/homebutler/internal/proxmox"
 	"github.com/Higangssh/homebutler/internal/watch"
 	"gopkg.in/yaml.v3"
 )
@@ -209,12 +210,12 @@ func (p ProxmoxConfig) TokenValue() (string, error) {
 
 	data, err := os.ReadFile(p.TokenFilePath())
 	if err != nil {
-		return "", fmt.Errorf("read Proxmox token file %s: %w", p.TokenFile, err)
+		return "", proxmox.WithFailureClass(proxmox.FailureAuthentication, fmt.Errorf("read Proxmox token file %s: %w", p.TokenFile, err))
 	}
 	if token := strings.TrimSpace(string(data)); token != "" {
 		return token, nil
 	}
-	return "", fmt.Errorf("proxmox token file %s is empty", p.TokenFile)
+	return "", proxmox.WithFailureClass(proxmox.FailureAuthentication, fmt.Errorf("proxmox token file %s is empty", p.TokenFile))
 }
 
 type WakeTarget struct {
