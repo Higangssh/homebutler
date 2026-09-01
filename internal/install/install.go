@@ -25,6 +25,10 @@ func registryFile() string {
 	return filepath.Join(BaseDir(), "installed.json")
 }
 
+func fixPermissionsHint(path string) string {
+	return "sudo chown -R $(id -u):$(id -g) " + util.ShellQuote(path)
+}
+
 // saveInstalled records an app's install location.
 func saveInstalled(app installedApp) error {
 	all := loadInstalled()
@@ -36,13 +40,13 @@ func saveInstalled(app installedApp) error {
 	}
 	if err := os.MkdirAll(BaseDir(), 0755); err != nil {
 		if util.IsPermissionError(err) {
-			return fmt.Errorf("failed to create registry dir: %w\n\n  ⚠️  Try: sudo homebutler install %s", err, app.Name)
+			return util.NewHintError("cannot create registry dir "+BaseDir(), err, fixPermissionsHint(filepath.Dir(BaseDir())))
 		}
 		return err
 	}
 	if err := os.WriteFile(registryFile(), data, 0644); err != nil {
 		if util.IsPermissionError(err) {
-			return fmt.Errorf("failed to write install registry: %w\n\n  ⚠️  Try: sudo homebutler install %s", err, app.Name)
+			return util.NewHintError("cannot write install registry "+registryFile(), err, fixPermissionsHint(registryFile()))
 		}
 		return err
 	}
@@ -60,7 +64,7 @@ func removeInstalled(appName string) error {
 	}
 	if err := os.WriteFile(registryFile(), data, 0644); err != nil {
 		if util.IsPermissionError(err) {
-			return fmt.Errorf("failed to update install registry: %w\n\n  ⚠️  Try: sudo homebutler uninstall %s", err, appName)
+			return util.NewHintError("cannot update install registry "+registryFile(), err, fixPermissionsHint(registryFile()))
 		}
 		return err
 	}
@@ -680,7 +684,7 @@ func Install(app App, opts InstallOptions) error {
 	// Create directories (only for real installs)
 	if err := os.MkdirAll(dataDir, 0755); err != nil {
 		if util.IsPermissionError(err) {
-			return fmt.Errorf("failed to create directory %s: %w\n\n  ⚠️  Try: sudo homebutler install %s", dataDir, err, app.Name)
+			return util.NewHintError("cannot create directory "+dataDir, err, "sudo homebutler install "+app.Name)
 		}
 		return fmt.Errorf("failed to create directory %s: %w", dataDir, err)
 	}
@@ -689,7 +693,7 @@ func Install(app App, opts InstallOptions) error {
 	f, err := os.Create(composeFile)
 	if err != nil {
 		if util.IsPermissionError(err) {
-			return fmt.Errorf("failed to create %s: %w\n\n  ⚠️  Try: sudo homebutler install %s", composeFile, err, app.Name)
+			return util.NewHintError("cannot create "+composeFile, err, "sudo homebutler install "+app.Name)
 		}
 		return fmt.Errorf("failed to create %s: %w", composeFile, err)
 	}

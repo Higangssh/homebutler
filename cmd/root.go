@@ -29,6 +29,7 @@ Configuration file is resolved in order:
 
 func init() {
 	rootCmd.PersistentFlags().BoolVar(&jsonOutput, "json", false, "Force JSON output")
+	rootCmd.PersistentFlags().BoolVarP(&verboseOutput, "verbose", "v", false, "Show detailed error information")
 	rootCmd.PersistentFlags().StringVar(&serverName, "server", "", "Run on a specific remote server")
 	rootCmd.PersistentFlags().BoolVar(&allServers, "all", false, "Run on all configured servers in parallel")
 	rootCmd.PersistentFlags().StringVar(&cfgPath, "config", "", "Config file path")
@@ -102,5 +103,5 @@ func maybeRouteRemote() (bool, error) {
 func Execute(version, buildDate string) error {
 	Version = version
 	BuildDate = buildDate
-	return rootCmd.Execute()
+	return formatCommandError(rootCmd.Execute())
 }

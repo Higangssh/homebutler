@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -17,6 +18,7 @@ import (
 	"github.com/Higangssh/homebutler/internal/ports"
 	"github.com/Higangssh/homebutler/internal/remote"
 	"github.com/Higangssh/homebutler/internal/system"
+	"github.com/Higangssh/homebutler/internal/util"
 	"github.com/Higangssh/homebutler/internal/wake"
 )
 
@@ -28,10 +30,11 @@ var (
 
 // Global flags
 var (
-	jsonOutput bool
-	serverName string
-	allServers bool
-	cfgPath    string
+	jsonOutput    bool
+	verboseOutput bool
+	serverName    string
+	allServers    bool
+	cfgPath       string
 )
 
 // cfg holds the loaded config (set in root PersistentPreRun)
@@ -111,6 +114,13 @@ func output(data any, jsonOut bool) error {
 		return enc.Encode(data)
 	}
 	return nil
+}
+
+func formatCommandError(err error) error {
+	if err == nil || jsonOutput {
+		return err
+	}
+	return errors.New(util.FormatError(err, verboseOutput))
 }
 
 // listServerNames returns a formatted list of server names from config.
@@ -231,14 +241,14 @@ func runAllServers(c *config.Config, args []string, jsonOut bool) error {
 			if server.Local {
 				out, err := runLocalCommand(remoteArgs)
 				if err != nil {
-					result.Error = err.Error()
+					result.Error = util.FormatError(err, verboseOutput || jsonOut)
 				} else {
 					result.Data = json.RawMessage(out)
 				}
 			} else {
 				out, err := remote.Run(&server, remoteArgs...)
 				if err != nil {
-					result.Error = err.Error()
+					result.Error = util.FormatError(err, verboseOutput || jsonOut)
 				} else {
 					result.Data = json.RawMessage(out)
 				}

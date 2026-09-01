@@ -21,6 +21,7 @@ type UpgradeResult struct {
 	NewVersion  string `json:"new_version"`
 	Status      string `json:"status"` // "upgraded", "up-to-date", "error"
 	Message     string `json:"message,omitempty"`
+	Error       error  `json:"-"`
 }
 
 // UpgradeReport is the overall upgrade result.
@@ -104,7 +105,8 @@ func SelfUpgrade(currentVersion, latestVersion string) *UpgradeResult {
 	if err := os.Rename(execPath, backupPath); err != nil {
 		result.Status = "error"
 		if util.IsPermissionError(err) {
-			result.Message = fmt.Sprintf("cannot backup current binary: %v\n\n  ⚠️  Try: sudo homebutler upgrade", err)
+			result.Error = util.NewHintError("cannot backup current binary "+backupPath, err, "sudo homebutler upgrade")
+			result.Message = util.FormatError(result.Error, true)
 		} else {
 			result.Message = fmt.Sprintf("cannot backup current binary: %v", err)
 		}
@@ -116,7 +118,8 @@ func SelfUpgrade(currentVersion, latestVersion string) *UpgradeResult {
 		os.Rename(backupPath, execPath)
 		result.Status = "error"
 		if util.IsPermissionError(err) {
-			result.Message = fmt.Sprintf("cannot write new binary: %v\n\n  ⚠️  Try: sudo homebutler upgrade", err)
+			result.Error = util.NewHintError("cannot write new binary "+execPath, err, "sudo homebutler upgrade")
+			result.Message = util.FormatError(result.Error, true)
 		} else {
 			result.Message = fmt.Sprintf("cannot write new binary: %v", err)
 		}

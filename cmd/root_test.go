@@ -49,6 +49,12 @@ func TestFilterFlags(t *testing.T) {
 			expected: []string{"status", "--json"},
 		},
 		{
+			name:     "keep verbose flag for remote",
+			args:     []string{"status", "--server", "rpi5", "--verbose"},
+			flags:    []string{"--server", "--all", "--config"},
+			expected: []string{"status", "--verbose"},
+		},
+		{
 			name:     "empty args",
 			args:     []string{},
 			flags:    []string{"--server"},

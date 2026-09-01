@@ -6,6 +6,7 @@ import (
 	"os"
 
 	"github.com/Higangssh/homebutler/internal/remote"
+	"github.com/Higangssh/homebutler/internal/util"
 	"github.com/spf13/cobra"
 )
 
@@ -104,6 +105,10 @@ func printUpgradeStatus(r *remote.UpgradeResult) {
 	case "up-to-date":
 		fmt.Fprintf(os.Stderr, "─ %s\n", r.Message)
 	case "error":
-		fmt.Fprintf(os.Stderr, "✗ %s\n", r.Message)
+		message := r.Message
+		if r.Error != nil {
+			message = util.FormatError(r.Error, verboseOutput || jsonOutput)
+		}
+		fmt.Fprintf(os.Stderr, "✗ %s\n", message)
 	}
 }
