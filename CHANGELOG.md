@@ -2,17 +2,32 @@
 
 All notable changes to this project will be documented in this file.
 
-## [Unreleased]
+## [0.25.0](https://github.com/Higangssh/homebutler/compare/v0.24.0...v0.25.0) - 2026-09-02
 
-**Permission failures now lead with the fix while keeping the underlying error available with `--verbose`.**
+**Every permission failure homebutler can hit printed the operator's next command last.** `backup`, `restore`, `install` and `upgrade` all led with the raw syscall error and put the one line that mattered underneath it — and the detail could not simply be dropped, because there was no way to ask for it back. This release inverts the order and adds the flag that makes dropping it safe.
+
+```bash
+$ homebutler backup --to /mnt/nas --service jellyfin
+error: cannot create backup dir /mnt/nas — rerun with: sudo homebutler backup --to /mnt/nas --service jellyfin
+
+$ homebutler backup --to /mnt/nas --service jellyfin --verbose
+error: cannot create backup dir /mnt/nas: mkdir /mnt/nas/backup_20260902_143012.812/volumes: permission denied
+
+  ⚠️  Try: sudo homebutler backup --to /mnt/nas --service jellyfin
+```
 
 ### ✨ Features
 
-- add the global `--verbose` / `-v` flag for detailed error output. Human-facing permission errors now include the failed operation and a command that preserves the requested backup options; remote commands receive the flag too
+- lead a permission failure with the command that fixes it, and add the global `--verbose` / `-v` flag (#45). The raw Go error came first and the hint trailed it, so the only actionable line arrived behind a syscall message nobody can act on. `HintError` carries what failed, the cause and the hint in separate fields and the display layer chooses between them, which meant every hint had to become a command that works when it is typed: `restore` names the archive the operator passed rather than a path inside the temporary directory it had already deleted, `backup` keeps `--to` and `--service` so obeying the hint does not quietly back up every service to the default location, and a registry write that fails after `docker compose up` has already gone through points at ownership instead of proposing a reinstall of something that is running. Thanks to [@lenny-ts](https://github.com/lenny-ts)
+
+### ♻️ Refactoring
+
+- give Proxmox failures a class the caller can branch on (#111). API errors were flat strings, so anything wanting to tell a TLS failure from an expired token had to match on message text. Nothing user-facing moves — every message is byte-identical and the token masking is untouched — but #104, #105 and #106 each independently need that distinction and would each have invented their own. The class is applied where the failure is made rather than where it is caught, which is what keeps certificate pinning typed: Go does not wrap a `VerifyPeerCertificate` callback's error, so a fingerprint mismatch is invisible to a check made downstream. Thanks to [@gsaraiva2109](https://github.com/gsaraiva2109)
 
 ### ⚠️ Behavior changes
 
-- **Human-facing permission errors no longer include the underlying cause by default.** They lead with the failed operation and the command to rerun; use `--verbose` to see the underlying error and hint together
+- **Permission errors no longer print the underlying cause by default.** They lead with what failed and the command to rerun, and `--verbose` brings back the cause and the hint together. Anything parsing homebutler's stderr for the old shape needs updating
+- **`--verbose` is forwarded to remote servers rather than stripped**, on the grounds that detail asked for locally should come back from the far side too. A remote host still on 0.24.0 or older answers `unknown flag: --verbose`, which surfaces as a failed remote command — upgrade the fleet together, or leave the flag off when the target is older
 
 ## [0.24.0](https://github.com/Higangssh/homebutler/compare/v0.23.1...v0.24.0) - 2026-08-31
 
