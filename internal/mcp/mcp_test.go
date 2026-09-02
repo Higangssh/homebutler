@@ -57,8 +57,8 @@ func TestInitialize(t *testing.T) {
 
 	// params carried no protocolVersion, so there is nothing to echo and the
 	// newest supported revision is the right answer.
-	if init.ProtocolVersion != supportedProtocolVersions[0] {
-		t.Errorf("protocolVersion = %q, want %q", init.ProtocolVersion, supportedProtocolVersions[0])
+	if init.ProtocolVersion != legacyProtocolVersions[0] {
+		t.Errorf("protocolVersion = %q, want %q", init.ProtocolVersion, legacyProtocolVersions[0])
 	}
 	if init.ServerInfo.Name != "homebutler" {
 		t.Errorf("serverInfo.name = %q, want %q", init.ServerInfo.Name, "homebutler")
@@ -505,11 +505,11 @@ func TestInitializeVersion(t *testing.T) {
 // was the oldest thing it could conformantly say, and clients cap their
 // behaviour to the version they are handed.
 func TestNegotiateProtocolVersion(t *testing.T) {
-	latest := supportedProtocolVersions[0]
+	latest := legacyProtocolVersions[0]
 
 	// "If the server supports the requested protocol version, it MUST respond
 	// with the same version."
-	for _, v := range supportedProtocolVersions {
+	for _, v := range legacyProtocolVersions {
 		if got := negotiateProtocolVersion(v); got != v {
 			t.Errorf("negotiateProtocolVersion(%q) = %q, want the same version back", v, got)
 		}
@@ -529,7 +529,7 @@ func TestNegotiateProtocolVersion(t *testing.T) {
 }
 
 func TestInitializeEchoesTheRequestedVersion(t *testing.T) {
-	for _, want := range supportedProtocolVersions {
+	for _, want := range legacyProtocolVersions {
 		s, out := newTestServer()
 		req := `{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"` + want + `"}}`
 		resp := sendAndReceive(t, s, out, req)
@@ -561,8 +561,8 @@ func TestInitializeAnswersLatestForAVersionItDoesNotSpeak(t *testing.T) {
 	if err := json.Unmarshal(result, &init); err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}
-	if init.ProtocolVersion != supportedProtocolVersions[0] {
-		t.Errorf("protocolVersion = %q, want the latest supported %q", init.ProtocolVersion, supportedProtocolVersions[0])
+	if init.ProtocolVersion != legacyProtocolVersions[0] {
+		t.Errorf("protocolVersion = %q, want the latest legacy version %q", init.ProtocolVersion, legacyProtocolVersions[0])
 	}
 }
 
@@ -579,7 +579,7 @@ func TestInitializeWithoutParams(t *testing.T) {
 	if err := json.Unmarshal(result, &init); err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}
-	if init.ProtocolVersion != supportedProtocolVersions[0] {
+	if init.ProtocolVersion != legacyProtocolVersions[0] {
 		t.Errorf("protocolVersion = %q", init.ProtocolVersion)
 	}
 }
@@ -599,6 +599,91 @@ func TestPingIsAnswered(t *testing.T) {
 		t.Fatalf("marshal: %v", err)
 	}
 	if string(result) != "{}" {
-		t.Errorf("ping result = %s, want an empty object", result)
+		t.Errorf("legacy ping result = %s, want an empty object", result)
+	}
+}
+
+func modernMeta(version string) string {
+	return `"_meta":{"io.modelcontextprotocol/protocolVersion":"` + version + `","io.modelcontextprotocol/clientCapabilities":{}}`
+}
+
+func TestModernDiscover(t *testing.T) {
+	s, out := newTestServer()
+	req := `{"jsonrpc":"2.0","id":1,"method":"server/discover","params":{` + modernMeta(supportedProtocolVersions[0]) + `}}`
+	resp := sendAndReceive(t, s, out, req)
+	if resp.Error != nil {
+		t.Fatalf("unexpected error: %v", resp.Error)
+	}
+	result, _ := json.Marshal(resp.Result)
+	var discover discoverResult
+	if err := json.Unmarshal(result, &discover); err != nil {
+		t.Fatalf("unmarshal discover result: %v", err)
+	}
+	if discover.ResultType != "complete" {
+		t.Errorf("resultType = %q, want complete", discover.ResultType)
+	}
+	if len(discover.SupportedVersions) == 0 || discover.SupportedVersions[0] != "2026-07-28" {
+		t.Errorf("supportedVersions = %v", discover.SupportedVersions)
+	}
+	if discover.Meta.ServerInfo.Name != "homebutler" || discover.Meta.ServerInfo.Version != "test" {
+		t.Errorf("serverInfo = %+v", discover.Meta.ServerInfo)
+	}
+}
+
+func TestModernUnsupportedVersion(t *testing.T) {
+	s, out := newTestServer()
+	req := `{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{` + modernMeta("1900-01-01") + `}}`
+	resp := sendAndReceive(t, s, out, req)
+	if resp.Error == nil || resp.Error.Code != -32022 {
+		t.Fatalf("error = %+v, want -32022", resp.Error)
+	}
+	data, ok := resp.Error.Data.(map[string]any)
+	if !ok {
+		t.Fatalf("error data = %#v, want object", resp.Error.Data)
+	}
+	if data["requested"] != "1900-01-01" {
+		t.Errorf("requested = %#v", data["requested"])
+	}
+}
+
+func TestRemovedPingIsRejectedByModernProtocol(t *testing.T) {
+	s, out := newTestServer()
+	req := `{"jsonrpc":"2.0","id":1,"method":"ping","params":{` + modernMeta(supportedProtocolVersions[0]) + `}}`
+	resp := sendAndReceive(t, s, out, req)
+	if resp.Error == nil || resp.Error.Code != -32601 {
+		t.Fatalf("error = %+v, want method not found", resp.Error)
+	}
+}
+
+func TestModernInitializeIsRejected(t *testing.T) {
+	s, out := newTestServer()
+	req := `{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25",` + modernMeta(supportedProtocolVersions[0]) + `}}`
+	resp := sendAndReceive(t, s, out, req)
+	if resp.Error == nil || resp.Error.Code != -32601 {
+		t.Fatalf("error = %+v, want method not found", resp.Error)
+	}
+}
+
+func TestToolsListIsCacheableAndDeterministic(t *testing.T) {
+	s, out := newTestServer()
+	modern := `{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{` + modernMeta(supportedProtocolVersions[0]) + `}}`
+	first := sendAndReceive(t, s, out, modern)
+	firstJSON, _ := json.Marshal(first.Result)
+	second := sendAndReceive(t, s, out, modern)
+	secondJSON, _ := json.Marshal(second.Result)
+	if string(firstJSON) != string(secondJSON) {
+		t.Fatal("tools/list order or result changed between identical requests")
+	}
+	var list toolsListResult
+	if err := json.Unmarshal(firstJSON, &list); err != nil {
+		t.Fatalf("unmarshal tools list: %v", err)
+	}
+	if list.ResultType != "complete" || list.TTLMS <= 0 || list.CacheScope != "public" {
+		t.Errorf("cacheable result = %+v", list)
+	}
+	for i := 1; i < len(list.Tools); i++ {
+		if list.Tools[i-1].Name >= list.Tools[i].Name {
+			t.Fatalf("tools are not sorted: %q before %q", list.Tools[i-1].Name, list.Tools[i].Name)
+		}
 	}
 }

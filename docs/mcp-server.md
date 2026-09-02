@@ -144,15 +144,18 @@ No network ports opened. MCP uses stdio (stdin/stdout) — only the parent AI pr
 
 ### Protocol versions
 
-homebutler implements the MCP revisions `2025-11-25`, `2025-06-18`, `2025-03-26`
-and `2024-11-05`. A client's `initialize` gets the version it asked for when
-that is one of them, and `2025-11-25` when it is not, so an older client keeps
-working and a current one is not held back.
+homebutler implements the MCP revisions `2026-07-28`, `2025-11-25`,
+`2025-06-18`, `2025-03-26` and `2024-11-05`. Modern clients send the protocol
+version and client capabilities in each request's `_meta`; they can start with
+`server/discover` without an `initialize` handshake. Legacy clients continue to
+use `initialize` unchanged.
 
-For a tools-only stdio server these four describe the same surface. What the
-later revisions added is either out of scope here — resources, prompts,
-sampling, roots, elicitation, tasks, and everything about Streamable HTTP — or
-already how homebutler behaves.
+For a tools-only stdio server these revisions describe the same tool surface.
+Modern `tools/list` responses include `resultType`, a five-minute `ttlMs` hint,
+`cacheScope: "public"`, and a deterministic tool order. What the later
+revisions added is either out of scope here — resources, prompts, sampling,
+roots, elicitation, tasks, and everything about Streamable HTTP — or already
+how homebutler behaves.
 
 ## Agent Skill
 

@@ -1,5 +1,7 @@
 package mcp
 
+import "sort"
+
 type capabilityRisk string
 
 const (
@@ -52,6 +54,7 @@ func toolDefinitions() []toolDef {
 	for _, c := range capabilityRegistry {
 		defs = append(defs, c.tool)
 	}
+	sort.Slice(defs, func(i, j int) bool { return defs[i].Name < defs[j].Name })
 	return defs
 }
 
