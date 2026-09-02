@@ -52,7 +52,11 @@ type CollectFuncs struct {
 	StatusFn     func() (*system.StatusInfo, error)
 	DockerListFn func() ([]docker.Container, error)
 	PortsListFn  func() (*ports.Result, error)
-	ProcessesFn  func() ([]system.ProcessInfo, error)
+	// ProcessesFn is optional and left unset by DefaultCollectFuncs. Only
+	// report compares runs, and every other caller of Collect — inventory
+	// scan, the MCP tools, doctor — would otherwise pay for a full ps sweep
+	// whose result it never renders, and inherit a warning about it.
+	ProcessesFn func() ([]system.ProcessInfo, error)
 }
 
 // DefaultCollectFuncs returns the real system/docker/ports functions.
@@ -61,7 +65,6 @@ func DefaultCollectFuncs() CollectFuncs {
 		StatusFn:     system.Status,
 		DockerListFn: docker.List,
 		PortsListFn:  ports.List,
-		ProcessesFn:  system.AllProcesses,
 	}
 }
 

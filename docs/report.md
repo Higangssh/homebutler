@@ -29,6 +29,11 @@ Processes are compared the same way. A process is identified by its executable
 name and a hash of its full invocation, so `python3 /opt/old.py` becoming
 `python3 /opt/new.py` is a `replaced`, not silence.
 
+`replaced` is reserved for the case where it is true: one invocation under a
+name before, one after, and they differ. Names like `python3`, `bash` and `ssh`
+routinely run several at once, and one of them exiting is reported as a
+departure under a name that is still running — nothing was replaced.
+
 `replaced` is the one worth knowing about. A container recreated under the same
 name leaves every count identical, so a report that compares counts says
 nothing at all — which is what this one did before 0.26.0.

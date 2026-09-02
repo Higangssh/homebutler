@@ -13,7 +13,13 @@ import (
 )
 
 func snapshotWith(containers []docker.Container, listeners []ports.PortInfo) *Snapshot {
-	s := &Snapshot{Containers: containers, Ports: listeners}
+	s := &Snapshot{
+		Containers: containers,
+		Ports:      listeners,
+		// One stable process on both sides, so the process comparison is a
+		// no-op for the tests that are not about processes.
+		Processes: []ProcessIdentity{{Name: "init", Hash: "000000000000"}},
+	}
 	for _, c := range containers {
 		if c.State == "running" {
 			s.RunningCount++
@@ -318,6 +324,59 @@ func snapshotWithProcesses(list []system.ProcessInfo) *Snapshot {
 	return s
 }
 
+// A name running several invocations is not "replaced" when one of them
+// exits — nothing was replaced, and the departure has to be reported as one.
+func TestOneOfSeveralInvocationsLeaving(t *testing.T) {
+	prev := snapshotWithProcesses(procs(
+		system.ProcessInfo{PID: 1, Name: "python3", Command: "python3 /opt/a.py"},
+		system.ProcessInfo{PID: 2, Name: "python3", Command: "python3 /opt/b.py"},
+	))
+	curr := snapshotWithProcesses(procs(
+		system.ProcessInfo{PID: 1, Name: "python3", Command: "python3 /opt/a.py"},
+	))
+
+	r := buildReport(curr, prev)
+	got := strings.Join(r.NotableChanges, " | ")
+	if strings.Contains(got, "replaced: python3") {
+		t.Errorf("one of two invocations exiting was called a replacement: %s", got)
+	}
+	if !strings.Contains(got, "gone: python3 — 1 invocation, others still running") {
+		t.Errorf("the departed invocation was not reported: %s", got)
+	}
+}
+
+// A snapshot written before process tracking existed has no processes. The
+// first run after upgrading must not report the whole machine as new.
+func TestPreviousSnapshotWithoutProcessesIsNotAnEmptyMachine(t *testing.T) {
+	prev := snapshotWith(nil, nil)
+	prev.Processes = nil
+	curr := snapshotWithProcesses(procs(
+		system.ProcessInfo{PID: 1, Name: "nginx", Command: "nginx -g daemon off"},
+		system.ProcessInfo{PID: 2, Name: "postgres", Command: "postgres -D /data"},
+	))
+
+	r := buildReport(curr, prev)
+	got := strings.Join(r.NotableChanges, " | ")
+	if strings.Contains(got, "new: nginx") || strings.Contains(got, "new: postgres") {
+		t.Errorf("the first run after upgrading reported every process as new: %s", got)
+	}
+	if !strings.Contains(got, "not compared — the previous snapshot has none") {
+		t.Errorf("the skipped comparison was not explained: %s", got)
+	}
+}
+
+// A process the invocation lookup missed has an unknown age, not a young one.
+// Dropping it would make a running daemon disappear and come back.
+func TestUnknownAgeIsKept(t *testing.T) {
+	ids := processIdentities([]system.ProcessInfo{
+		{PID: 1, Name: "sshd", Command: "", Elapsed: system.ElapsedUnknown},
+		{PID: 2, Name: "sed", Command: "sed -n", Elapsed: 2 * time.Second},
+	})
+	if len(ids) != 1 || ids[0].Name != "sshd" {
+		t.Errorf("expected the unknown-age process kept and the young one dropped, got %+v", ids)
+	}
+}
+
 func TestProcessAppearedAndDisappeared(t *testing.T) {
 	prev := snapshotWithProcesses(procs(
 		system.ProcessInfo{PID: 1, Name: "nginx", Command: "nginx -g daemon off"},
@@ -396,5 +455,27 @@ func TestIdenticalProcessesCollapse(t *testing.T) {
 	}
 	if got := len(processIdentities(list)); got != 1 {
 		t.Errorf("eight identical workers became %d identities", got)
+	}
+}
+
+// If ps fails, AllProcesses returns an error and inventory records the
+// collector as failed. Without that, every process on the machine reads as
+// having disappeared — the same shape as the Docker case, reachable through
+// a different door.
+func TestFailedProcessCollectorDoesNotEmptyTheMachine(t *testing.T) {
+	prev := snapshotWithProcesses(procs(
+		system.ProcessInfo{PID: 1, Name: "nginx", Command: "nginx -g daemon off"},
+		system.ProcessInfo{PID: 2, Name: "postgres", Command: "postgres -D /data"},
+	))
+	curr := snapshotWithProcesses(nil)
+	curr.Failed = []string{inventory.CollectorProcesses}
+
+	r := buildReport(curr, prev)
+	got := strings.Join(r.NotableChanges, " | ")
+	if strings.Contains(got, "gone: nginx") || strings.Contains(got, "gone: postgres") {
+		t.Errorf("a failed collector reported every process as gone: %s", got)
+	}
+	if !strings.Contains(got, "skipped: processes — not compared") {
+		t.Errorf("the skipped comparison is not in notable_changes: %s", got)
 	}
 }

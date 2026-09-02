@@ -22,9 +22,10 @@ type ProcessInfo struct {
 	State  string  `json:"state,omitempty"`
 	Zombie bool    `json:"zombie,omitempty"`
 
-	// Elapsed is how long the process has been running. Excluded from JSON
-	// for the same reason as Command: this is here for callers comparing
-	// runs, not for the processes command's output.
+	// Elapsed is how long the process has been running, or ElapsedUnknown
+	// when the invocation lookup did not find it. Excluded from JSON for the
+	// same reason as Command: this is here for callers comparing runs, not
+	// for the processes command's output.
 	Elapsed time.Duration `json:"-"`
 
 	// Command is the full invocation, used to tell two processes sharing an
@@ -131,7 +132,6 @@ func allProcesses() ([]ProcessInfo, error) {
 	}
 
 	all := parseProcesses(out, 0)
-	fillCommands(all)
 
 	// Filter out kernel threads (PID <= 2 or bracketed names like [kthreadd])
 	var filtered []ProcessInfo
@@ -148,12 +148,32 @@ func allProcesses() ([]ProcessInfo, error) {
 	return filtered, nil
 }
 
+// ElapsedUnknown marks a process the invocation lookup did not match — it
+// exited between the two ps calls, or ps printed it in a shape this does not
+// parse. It is distinct from a young process: dropping an unknown-age daemon
+// from a snapshot makes it disappear and come back, a pair of changes for
+// something that never stopped.
+const ElapsedUnknown = time.Duration(-1)
+
 // AllProcesses returns every running process except kernel threads, with the
-// command line filled in. Unlike ListProcesses it does not sort or truncate:
-// a caller comparing two runs needs the whole set, since a process dropping
-// out of a top-N sample is not the same event as a process exiting.
+// command line and elapsed time filled in. Unlike ListProcesses it does not
+// sort or truncate: a caller comparing two runs needs the whole set, since a
+// process dropping out of a top-N sample is not the same event as a process
+// exiting.
+//
+// It fails when the invocation join fails, where ListProcesses tolerates it.
+// A caller comparing runs cannot use a list with no elapsed times — it would
+// read as every process on the machine having disappeared — so this has to be
+// a collector failure rather than an empty answer.
 func AllProcesses() ([]ProcessInfo, error) {
-	return allProcesses()
+	procs, err := allProcesses()
+	if err != nil {
+		return nil, err
+	}
+	if err := fillCommands(procs); err != nil {
+		return nil, err
+	}
+	return procs, nil
 }
 
 // fillCommands joins invocations onto processes by PID.
@@ -163,12 +183,12 @@ func AllProcesses() ([]ProcessInfo, error) {
 // line to recover it — so appending args to the same output leaves no
 // unambiguous split. A process that exits between the two calls simply has
 // no command, and identity falls back to its name.
-func fillCommands(procs []ProcessInfo) {
+func fillCommands(procs []ProcessInfo) error {
 	// etime rather than etimes: etimes is Linux-only, and this has to parse
 	// on macOS too.
 	out, err := util.RunCmd("ps", "-eo", "pid=,etime=,args=")
 	if err != nil {
-		return
+		return fmt.Errorf("reading process invocations: %w", err)
 	}
 	type detail struct {
 		command string
@@ -189,11 +209,25 @@ func fillCommands(procs []ProcessInfo) {
 			elapsed: parseElapsed(fields[1]),
 		}
 	}
+	var matched int
 	for i := range procs {
-		d := details[procs[i].PID]
+		d, ok := details[procs[i].PID]
+		if !ok {
+			procs[i].Elapsed = ElapsedUnknown
+			continue
+		}
+		matched++
 		procs[i].Command = d.command
 		procs[i].Elapsed = d.elapsed
 	}
+
+	// A join that matched nothing means the output was not in the shape this
+	// parses, not that the machine is idle. Reporting it as an empty result
+	// would tell a caller comparing runs that every process disappeared.
+	if len(procs) > 0 && matched == 0 {
+		return fmt.Errorf("no process invocations matched by pid")
+	}
+	return nil
 }
 
 // parseElapsed reads ps's etime format: [[dd-]hh:]mm:ss. An unparseable

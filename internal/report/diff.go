@@ -401,7 +401,10 @@ func processIdentities(procs []system.ProcessInfo) []ProcessIdentity {
 	seen := map[ProcessIdentity]bool{}
 	var out []ProcessIdentity
 	for _, p := range procs {
-		if p.Elapsed < minProcessAge {
+		// An unknown age is kept. Dropping it would make a running daemon
+		// vanish from this snapshot and return in the next one, a pair of
+		// changes for something that never stopped.
+		if p.Elapsed >= 0 && p.Elapsed < minProcessAge {
 			continue
 		}
 		id := ProcessIdentity{Name: p.Name}
@@ -426,10 +429,13 @@ func processIdentities(procs []system.ProcessInfo) []ProcessIdentity {
 
 // diffProcesses compares two runs by executable name, then by invocation.
 //
-// A name present in both runs with a different set of invocations is
-// "replaced" rather than a disappearance and an arrival, for the same reason
-// a container recreated under one name is: the interesting fact is that what
-// is running under that name changed, not that a line moved.
+// "replaced" is reserved for the case where it is true: one invocation under a
+// name before, one after, and they differ. The container analogy stops there —
+// a container name maps to one container, while python3, bash, node and ssh
+// routinely map to several, and calling it a replacement when one of four
+// python3 invocations exits would describe something that did not happen.
+// Those are reported as what they are, an arrival and a departure under a
+// name that is still running.
 func diffProcesses(prev, curr []ProcessIdentity) []Change {
 	prevByName := groupProcessesByName(prev)
 	currByName := groupProcessesByName(curr)
@@ -441,11 +447,31 @@ func diffProcesses(prev, curr []ProcessIdentity) []Change {
 			changes = append(changes, Change{Kind: kindGone, Subject: name, noun: nounProcesses})
 			continue
 		}
-		if !sameHashes(prevHashes, currHashes) {
+		if sameHashes(prevHashes, currHashes) {
+			continue
+		}
+		if len(prevHashes) == 1 && len(currHashes) == 1 {
 			changes = append(changes, Change{
 				Kind:    kindReplaced,
 				Subject: name,
 				Detail:  "same name, different invocation",
+				noun:    nounProcesses,
+			})
+			continue
+		}
+		if departed := countMissing(prevHashes, currHashes); departed > 0 {
+			changes = append(changes, Change{
+				Kind:    kindGone,
+				Subject: name,
+				Detail:  invocationCount(departed) + ", others still running",
+				noun:    nounProcesses,
+			})
+		}
+		if arrived := countMissing(currHashes, prevHashes); arrived > 0 {
+			changes = append(changes, Change{
+				Kind:    kindNew,
+				Subject: name,
+				Detail:  invocationCount(arrived) + " under a name already running",
 				noun:    nounProcesses,
 			})
 		}
@@ -456,6 +482,24 @@ func diffProcesses(prev, curr []ProcessIdentity) []Change {
 		}
 	}
 	return changes
+}
+
+// countMissing counts entries of a that b does not have.
+func countMissing(a, b map[string]bool) int {
+	var n int
+	for k := range a {
+		if !b[k] {
+			n++
+		}
+	}
+	return n
+}
+
+func invocationCount(n int) string {
+	if n == 1 {
+		return "1 invocation"
+	}
+	return strconv.Itoa(n) + " invocations"
 }
 
 func groupProcessesByName(list []ProcessIdentity) map[string]map[string]bool {

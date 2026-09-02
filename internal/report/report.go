@@ -63,9 +63,13 @@ type Options struct {
 // CollectFuncs allows injecting data sources for testing.
 type CollectFuncs = inventory.CollectFuncs
 
-// DefaultCollectFuncs returns real system/docker/ports functions.
+// DefaultCollectFuncs returns real system/docker/ports functions, plus the
+// process collector: report is the only caller that compares runs, so it is
+// the only one that asks for it.
 func DefaultCollectFuncs() CollectFuncs {
-	return inventory.DefaultCollectFuncs()
+	fns := inventory.DefaultCollectFuncs()
+	fns.ProcessesFn = system.AllProcesses
+	return fns
 }
 
 // Run collects current state, compares against previous snapshot, and produces a report.
@@ -226,15 +230,26 @@ func buildReport(snap *Snapshot, prev *Snapshot) *Report {
 			noun:    nounContainers,
 		})
 	}
-	if collectorAnswered(prev, snap, inventory.CollectorProcesses) {
-		changes = append(changes, diffProcesses(prev.Processes, snap.Processes)...)
-	} else {
+	switch {
+	case !collectorAnswered(prev, snap, inventory.CollectorProcesses):
 		changes = append(changes, Change{
 			Kind:    kindSkipped,
 			Subject: nounProcesses,
 			Detail:  "not compared — the process collector did not answer",
 			noun:    nounProcesses,
 		})
+	case len(prev.Processes) == 0:
+		// A snapshot written before process tracking existed has no
+		// processes at all. Diffing against it would report every process on
+		// the machine as new on the first run after upgrading.
+		changes = append(changes, Change{
+			Kind:    kindSkipped,
+			Subject: nounProcesses,
+			Detail:  "not compared — the previous snapshot has none",
+			noun:    nounProcesses,
+		})
+	default:
+		changes = append(changes, diffProcesses(prev.Processes, snap.Processes)...)
 	}
 	if collectorAnswered(prev, snap, inventory.CollectorPorts) {
 		changes = append(changes, diffPorts(prev.Ports, snap.Ports)...)
