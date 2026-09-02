@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+**Guest power actions now need their own Proxmox credential, separate from the one that reads status.** The same token drove both, so anything with read access to the config also held `VM.PowerMgmt` on every guest, even though status polling never needed it.
+
+### ✨ Features
+
+- require a separate credential for Proxmox guest actions (#107). `action_token_id` plus `action_token` or `action_token_file` configures a second, optional token used only for start, reboot, and shutdown; reads, the dashboard, and the read-only MCP tools keep using the existing token. `config validate` warns when the action credential is the same token as the read one, since that defeats the separation. See [Proxmox setup →](docs/proxmox.md) for creating the second token with a least-privilege ACL
+
+### ⚠️ Behavior changes
+
+- **Guest start, reboot, and shutdown fail with `no action credential configured for Proxmox endpoint "..."` until `action_token_id` and `action_token` (or `action_token_file`) are added to the endpoint.** There is no fallback to the read token and no compatibility flag — reusing it defeated the reason this credential is separate in the first place
+
 ## [0.25.0](https://github.com/Higangssh/homebutler/compare/v0.24.0...v0.25.0) - 2026-09-02
 
 **Every permission failure homebutler can hit printed the operator's next command last.** `backup`, `restore`, `install` and `upgrade` all led with the raw syscall error and put the one line that mattered underneath it — and the detail could not simply be dropped, because there was no way to ask for it back. This release inverts the order and adds the flag that makes dropping it safe.

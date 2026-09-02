@@ -326,6 +326,8 @@ func TestProxmoxConfigResolveCredential(t *testing.T) {
 	}
 	if _, _, err := readOnly.ResolveCredential(true); err == nil || !strings.Contains(err.Error(), "no action credential configured") {
 		t.Errorf("ResolveCredential(true) without an action credential = %v, want a 'no action credential configured' error", err)
+	} else if class := proxmox.Classify(err); class != proxmox.FailureAuthentication {
+		t.Errorf("Classify(ResolveCredential(true) error) = %q, want %q", class, proxmox.FailureAuthentication)
 	}
 
 	withAction := readOnly

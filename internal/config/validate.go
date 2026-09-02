@@ -493,6 +493,21 @@ func (r *ValidationResult) checkServers(cfg *Config) {
 	}
 }
 
+// sameProxmoxCredential reports whether the action credential's token source
+// is textually identical to the read credential's — either the same inline
+// value or the same file path. It does not read file contents: two different
+// paths could still hold the same secret, but that is outside what config
+// alone can tell.
+func sameProxmoxCredential(p ProxmoxConfig) bool {
+	if p.Token != "" && p.ActionToken != "" {
+		return p.Token == p.ActionToken
+	}
+	if p.TokenFile != "" && p.ActionTokenFile != "" {
+		return p.TokenFile == p.ActionTokenFile
+	}
+	return false
+}
+
 func (r *ValidationResult) checkProxmox(cfg *Config) {
 	seen := map[string]int{}
 	for i, p := range cfg.Proxmox {
@@ -542,7 +557,7 @@ func (r *ValidationResult) checkProxmox(cfg *Config) {
 		if p.ActionTokenID != "" || p.ActionToken != "" || p.ActionTokenFile != "" {
 			if p.ActionTokenID == "" {
 				r.add(SeverityError, field+".action_token_id", "Proxmox action_token_id is required when an action credential is configured.",
-					"Set the API token ID for the action credential, such as monitoring@pve!action.")
+					"Set the API token ID for a dedicated action user, such as power@pve!action — not the read-only user, which would widen its access.")
 			}
 			if p.ActionToken == "" && p.ActionTokenFile == "" {
 				r.add(SeverityError, field, "An action_token or action_token_file is required when action_token_id is set.",
@@ -553,9 +568,24 @@ func (r *ValidationResult) checkProxmox(cfg *Config) {
 					"Keep action_token_file (preferred) or action_token, but not both.")
 			}
 			if p.ActionTokenFile != "" {
-				if _, err := os.Stat(p.ActionTokenFilePath()); os.IsNotExist(err) {
+				if info, err := os.Stat(p.ActionTokenFilePath()); os.IsNotExist(err) {
 					r.add(SeverityError, field+".action_token_file", fmt.Sprintf("Action token file %s does not exist.", p.ActionTokenFile), "Create the file or set action_token instead.")
+				} else if err == nil && runtime.GOOS != "windows" {
+					if perm := info.Mode().Perm(); perm&0o077 != 0 {
+						r.add(SeverityWarning, field+".action_token_file",
+							fmt.Sprintf("Action token file %s is readable by group or others (%04o).", p.ActionTokenFile, perm),
+							fmt.Sprintf("This credential grants VM.PowerMgmt. Run: chmod 600 %s", p.ActionTokenFilePath()))
+					}
 				}
+			}
+			if p.HasActionCredential() && p.ActionTokenID == p.TokenID {
+				r.add(SeverityWarning, field+".action_token_id",
+					"action_token_id is the same as token_id, so the action credential is not separate from the read credential.",
+					"Use a dedicated user for the action token, such as power@pve!action; see docs/proxmox.md for the ACL split.")
+			} else if p.HasActionCredential() && sameProxmoxCredential(p) {
+				r.add(SeverityWarning, field+".action_token",
+					"The action token value is the same as the read token, so the two credentials carry identical access.",
+					"Issue a separate token for guest actions; see docs/proxmox.md for the ACL split.")
 			}
 		}
 	}

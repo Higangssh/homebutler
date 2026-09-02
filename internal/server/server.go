@@ -494,14 +494,14 @@ func (s *Server) handleProxmoxStatus(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	token, err := endpoint.TokenValue()
+	tokenID, token, err := endpoint.ResolveCredential(false)
 	if err != nil {
-		log.Printf("read token for Proxmox endpoint %q: %v", endpoint.Name, err)
+		log.Print(err)
 		writeError(w, http.StatusInternalServerError, fmt.Sprintf("Proxmox endpoint %q credentials are unavailable", endpoint.Name))
 		return
 	}
 	client, err := proxmox.New(proxmox.Options{
-		Host: endpoint.Host, Port: endpoint.APIPort(), TokenID: endpoint.TokenID, Token: token,
+		Host: endpoint.Host, Port: endpoint.APIPort(), TokenID: tokenID, Token: token,
 		Fingerprint: endpoint.Fingerprint, CAFile: endpoint.CAFile, Insecure: endpoint.Insecure, Timeout: endpoint.TimeoutDuration(),
 	})
 	if err != nil {

@@ -459,10 +459,14 @@ CA file, and only then an explicit `insecure` fallback.
 
 Reads are plain. Power actions are not: every one of them takes an explicit
 endpoint, node, guest type and VMID, and refuses to run without `--confirm`,
-which is checked before the token is even read. `shutdown` asks the guest to shut
-down cleanly — it is not Proxmox's hard `stop`, which cuts power and can leave a
-filesystem behind it. A successful action reports the task it submitted, not that
-the guest finished; `proxmox task` answers that separately.
+which is checked before any credential is read. They also need their own
+`action_token_id` (plus `action_token` or `action_token_file`) configured on
+the endpoint — the read token alone will not start, reboot, or shut down a
+guest; see [Proxmox setup →](docs/proxmox.md) for creating that second token.
+`shutdown` asks the guest to shut down cleanly — it is not Proxmox's hard
+`stop`, which cuts power and can leave a filesystem behind it. A successful
+action reports the task it submitted, not that the guest finished; `proxmox
+task` answers that separately.
 
 `proxmox script` prints the install command for a Community Script pinned to one
 commit, along with a warning that the script is not reviewed by homebutler and

@@ -274,7 +274,8 @@ func (p ProxmoxConfig) ResolveCredential(action bool) (tokenID, token string, er
 		return p.TokenID, token, nil
 	}
 	if !p.HasActionCredential() {
-		return "", "", fmt.Errorf("no action credential configured for Proxmox endpoint %q; guest actions require action_token_id and action_token or action_token_file — see docs/proxmox.md", p.Name)
+		return "", "", proxmox.WithFailureClass(proxmox.FailureAuthentication,
+			fmt.Errorf("no action credential configured for Proxmox endpoint %q; guest actions require action_token_id and action_token or action_token_file — see docs/proxmox.md", p.Name))
 	}
 	token, err = p.ActionTokenValue()
 	if err != nil {
