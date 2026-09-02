@@ -6,6 +6,8 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/charmbracelet/lipgloss"
+
 	"github.com/Higangssh/homebutler/internal/docker"
 	"github.com/Higangssh/homebutler/internal/ports"
 	"github.com/Higangssh/homebutler/internal/style"
@@ -40,6 +42,7 @@ const (
 	kindState    = "state"
 	kindPort     = "port"
 	kindDisk     = "disk"
+	kindSkipped  = "skipped"
 )
 
 // Nouns a collapsed line counts, one per collector.
@@ -50,6 +53,8 @@ const (
 )
 
 var kindRank = map[string]int{
+	// A skipped collector qualifies everything under it, so it goes first.
+	kindSkipped:  -1,
 	kindGone:     0,
 	kindNew:      1,
 	kindReplaced: 2,
@@ -97,9 +102,9 @@ func diffContainers(prev, curr []docker.Container) []Change {
 			if p.Image != c.Image {
 				detail += ", " + p.Image + " → " + c.Image
 			}
-			changes = append(changes, Change{Kind: kindReplaced, Subject: name, Detail: detail, noun: nounContainers})
+			changes = append(changes, Change{Kind: kindReplaced, Subject: name, Detail: detail + stateSuffix(p, c), noun: nounContainers})
 		case p.Image != c.Image:
-			changes = append(changes, Change{Kind: kindImage, Subject: name, Detail: p.Image + " → " + c.Image, noun: nounContainers})
+			changes = append(changes, Change{Kind: kindImage, Subject: name, Detail: p.Image + " → " + c.Image + stateSuffix(p, c), noun: nounContainers})
 		case p.State != c.State:
 			changes = append(changes, Change{Kind: kindState, Subject: name, Detail: p.State + " → " + c.State, noun: nounContainers})
 		}
@@ -124,16 +129,16 @@ func diffPorts(prev, curr []ports.PortInfo) []Change {
 	for key, p := range prevByPort {
 		c, ok := currByPort[key]
 		if !ok {
-			changes = append(changes, Change{Kind: kindGone, Subject: key, Detail: describeOwner("was ", p), noun: nounPorts})
+			changes = append(changes, Change{Kind: kindGone, Subject: portSubject(p), Detail: describeOwner("was ", p), noun: nounPorts})
 			continue
 		}
 		if owner(p) != owner(c) && owner(p) != "" && owner(c) != "" {
-			changes = append(changes, Change{Kind: kindPort, Subject: key, Detail: owner(p) + " → " + owner(c), noun: nounPorts})
+			changes = append(changes, Change{Kind: kindPort, Subject: portSubject(p), Detail: owner(p) + " → " + owner(c), noun: nounPorts})
 		}
 	}
 	for key, c := range currByPort {
 		if _, ok := prevByPort[key]; !ok {
-			changes = append(changes, Change{Kind: kindNew, Subject: key, Detail: describeOwner("now ", c), noun: nounPorts})
+			changes = append(changes, Change{Kind: kindNew, Subject: portSubject(c), Detail: describeOwner("now ", c), noun: nounPorts})
 		}
 	}
 	return changes
@@ -191,11 +196,11 @@ func groupChanges(changes []Change) []Change {
 func changeBlock(changes []Change, indent string) string {
 	kindWidth, subjectWidth := 0, 0
 	for _, c := range changes {
-		if len(c.Kind) > kindWidth {
-			kindWidth = len(c.Kind)
+		if w := lipgloss.Width(c.Kind); w > kindWidth {
+			kindWidth = w
 		}
-		if len(c.Subject) > subjectWidth {
-			subjectWidth = len(c.Subject)
+		if w := lipgloss.Width(c.Subject); w > subjectWidth {
+			subjectWidth = w
 		}
 	}
 
@@ -223,6 +228,8 @@ func renderKind(kind, text string) string {
 		return style.Fail.Render(text)
 	case kindNew:
 		return style.OK.Render(text)
+	case kindSkipped:
+		return style.Dim.Render(text)
 	default:
 		return style.Warn.Render(text)
 	}
@@ -236,20 +243,33 @@ func indexContainers(list []docker.Container) map[string]docker.Container {
 	return out
 }
 
-// indexPorts keys a listener by protocol and port number, which is the pair
-// that identifies it. The protocol is omitted from the key's display form
-// when the platform tool did not report one, rather than printing a trailing
-// slash with nothing after it.
+// indexPorts keys a listener by the three things that identify it: bind
+// address, port number and protocol.
+//
+// The address is load-bearing. Dropping it collapses 127.0.0.53:53 and
+// 0.0.0.0:53 into one entry, so a reordering of ss output invents an owner
+// change on a host where nothing moved — and it hides the change that matters
+// most, a service that was on loopback and is now on every interface.
 func indexPorts(list []ports.PortInfo) map[string]ports.PortInfo {
 	out := make(map[string]ports.PortInfo, len(list))
 	for _, p := range list {
-		key := ":" + p.Port
-		if p.Protocol != "" {
-			key += "/" + p.Protocol
-		}
-		out[key] = p
+		out[p.Address+"|"+p.Port+"|"+p.Protocol] = p
 	}
 	return out
+}
+
+// portSubject is the display form. A wildcard bind is written ":8080/tcp",
+// since the address carries nothing a reader needs; anything else names the
+// address, because that is the difference being reported.
+func portSubject(p ports.PortInfo) string {
+	subject := ":" + p.Port
+	if p.Address != "" && !ports.IsPublicBind(p.Address) {
+		subject = p.Address + ":" + p.Port
+	}
+	if p.Protocol != "" {
+		subject += "/" + p.Protocol
+	}
+	return subject
 }
 
 // owner names the process behind a listener. An empty result means the
@@ -258,6 +278,17 @@ func indexPorts(list []ports.PortInfo) map[string]ports.PortInfo {
 // claiming the owner changed to "unknown".
 func owner(p ports.PortInfo) string {
 	return p.Process
+}
+
+// stateSuffix names a state transition that happened alongside a replacement
+// or an image change. The switch above is exclusive, so without this a
+// redeploy whose new container crashed reports only that it was replaced —
+// which is the half of the story an operator does not need.
+func stateSuffix(prev, curr docker.Container) string {
+	if prev.State == curr.State {
+		return ""
+	}
+	return ", " + prev.State + " → " + curr.State
 }
 
 // describeOwner prefixes a listener's owner, or returns nothing when the
@@ -277,11 +308,15 @@ func shortID(id string) string {
 	return id
 }
 
+// pad measures display width rather than bytes, so a subject containing
+// non-ASCII — a mount path, most often — does not push the detail column out
+// of line. style.LabelledBlock measures the same way.
 func pad(s string, width int) string {
-	if len(s) >= width {
+	w := lipgloss.Width(s)
+	if w >= width {
 		return s
 	}
-	return s + strings.Repeat(" ", width-len(s))
+	return s + strings.Repeat(" ", width-w)
 }
 
 // diffDisks reports a mount whose usage moved by more than half a gigabyte.
@@ -304,6 +339,9 @@ func diffDisks(prev, curr []system.DiskInfo) []Change {
 					noun:    nounMounts,
 				})
 			}
+			// One row per mount. Without this the loop is a cross product,
+			// and a mount that appears twice in df output reports four times.
+			break
 		}
 	}
 	return changes

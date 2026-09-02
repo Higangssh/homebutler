@@ -210,17 +210,29 @@ func buildReport(snap *Snapshot, prev *Snapshot) *Report {
 	if prev.System != nil && snap.System != nil {
 		changes = append(changes, diffDisks(prev.System.Disks, snap.System.Disks)...)
 	}
+	// A skipped comparison is reported in the section itself, not only as a
+	// trailing warning. "No significant changes since last report" handed to
+	// an agent while the caveat sits in another field is an all-clear the
+	// report cannot stand behind.
 	if collectorAnswered(prev, snap, inventory.CollectorDocker) {
 		changes = append(changes, diffContainers(prev.Containers, snap.Containers)...)
 	} else {
-		r.Warnings = append(r.Warnings,
-			"Docker did not answer for one of the two snapshots, so container changes were not compared.")
+		changes = append(changes, Change{
+			Kind:    kindSkipped,
+			Subject: nounContainers,
+			Detail:  "not compared — Docker did not answer",
+			noun:    nounContainers,
+		})
 	}
 	if collectorAnswered(prev, snap, inventory.CollectorPorts) {
 		changes = append(changes, diffPorts(prev.Ports, snap.Ports)...)
 	} else {
-		r.Warnings = append(r.Warnings,
-			"Ports did not answer for one of the two snapshots, so port changes were not compared.")
+		changes = append(changes, Change{
+			Kind:    kindSkipped,
+			Subject: nounPorts,
+			Detail:  "not compared — the port collector did not answer",
+			noun:    nounPorts,
+		})
 	}
 
 	sortChanges(changes)

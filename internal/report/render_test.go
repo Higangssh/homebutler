@@ -37,7 +37,7 @@ func TestRenderedChangeBlock(t *testing.T) {
 	r := buildReport(curr, prev)
 	human := FormatHuman(r)
 
-	// The block README.md ships as assets/change-card.svg. If this changes,
+	// The block README.md ships as assets/report-card.svg. If this changes,
 	// the card is out of date — assets/README.md says to keep them in sync.
 	want := []string{
 		"gone      vaultwarden   was running",

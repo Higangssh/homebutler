@@ -7,6 +7,7 @@ import (
 	"github.com/Higangssh/homebutler/internal/docker"
 	"github.com/Higangssh/homebutler/internal/inventory"
 	"github.com/Higangssh/homebutler/internal/ports"
+	"github.com/Higangssh/homebutler/internal/system"
 )
 
 func snapshotWith(containers []docker.Container, listeners []ports.PortInfo) *Snapshot {
@@ -127,8 +128,14 @@ func TestFailedCollectorSkipsTheDiff(t *testing.T) {
 	if strings.Contains(got, "gone: vaultwarden") {
 		t.Errorf("a container was reported gone because docker was down: %s", got)
 	}
-	if len(r.Warnings) == 0 {
-		t.Error("skipping the container diff was not reported to the operator")
+	// The caveat has to be in the section itself. An agent reading
+	// notable_changes must not be handed an all-clear the report cannot
+	// stand behind.
+	if !strings.Contains(got, "skipped: containers — not compared") {
+		t.Errorf("the skipped comparison is not in notable_changes: %s", got)
+	}
+	if strings.Contains(got, "No significant changes") {
+		t.Errorf("a skipped comparison was reported as no change: %s", got)
 	}
 }
 
@@ -209,5 +216,85 @@ func TestCollapsedLinesCountWhatTheyCollapsed(t *testing.T) {
 	}
 	if !sawContainers || !sawPorts {
 		t.Errorf("expected one line per collector, got %+v", grouped)
+	}
+}
+
+// A listener is identified by its bind address as well as its port. Without
+// the address, a service moving from loopback to every interface — the change
+// with the largest consequence in this whole section — reads as no change at
+// all, while Suggested Actions simultaneously announces a new public port.
+func TestLoopbackToWildcardIsReported(t *testing.T) {
+	prev := snapshotWith(nil, []ports.PortInfo{
+		{Protocol: "tcp", Address: "127.0.0.1", Port: "8080", Process: "nginx"},
+	})
+	curr := snapshotWith(nil, []ports.PortInfo{
+		{Protocol: "tcp", Address: "0.0.0.0", Port: "8080", Process: "nginx"},
+	})
+
+	r := buildReport(curr, prev)
+	got := strings.Join(r.NotableChanges, " | ")
+	if strings.Contains(got, "No significant changes") {
+		t.Fatalf("a port that became public was reported as no change: %s", got)
+	}
+	if !strings.Contains(got, "gone: 127.0.0.1:8080/tcp") || !strings.Contains(got, "new: :8080/tcp") {
+		t.Errorf("the bind that moved was not named on both sides: %s", got)
+	}
+}
+
+// Two listeners on the same port and different addresses are two listeners.
+// Collapsing them means whichever the platform tool printed last wins, and a
+// reordering of that output invents an owner change.
+func TestSamePortDifferentAddressesDoNotCollide(t *testing.T) {
+	listeners := []ports.PortInfo{
+		{Protocol: "tcp", Address: "127.0.0.53", Port: "53", Process: "systemd-resolve"},
+		{Protocol: "tcp", Address: "0.0.0.0", Port: "53", Process: "dnsmasq"},
+	}
+	reordered := []ports.PortInfo{listeners[1], listeners[0]}
+
+	r := buildReport(snapshotWith(nil, reordered), snapshotWith(nil, listeners))
+	got := strings.Join(r.NotableChanges, " | ")
+	if !strings.Contains(got, "No significant changes") {
+		t.Errorf("reordering the collector's output invented a change: %s", got)
+	}
+}
+
+// The kind switch is exclusive, so a redeploy whose new container crashed
+// would otherwise report only that it was replaced.
+func TestReplacedContainerAlsoNamesItsState(t *testing.T) {
+	prev := snapshotWith([]docker.Container{
+		{ID: "aaa111", Name: "gitea", Image: "gitea:1.23", State: "running"},
+	}, nil)
+	curr := snapshotWith([]docker.Container{
+		{ID: "bbb222", Name: "gitea", Image: "gitea:1.24", State: "exited"},
+	}, nil)
+
+	r := buildReport(curr, prev)
+	got := strings.Join(r.NotableChanges, " | ")
+	if !strings.Contains(got, "running → exited") {
+		t.Errorf("a redeploy that came back down did not say so: %s", got)
+	}
+}
+
+// df can print the same mountpoint twice. Without a break the join is a cross
+// product and one mount reports four times.
+func TestDuplicateMountDoesNotCrossProduct(t *testing.T) {
+	prev := snapshotWith(nil, nil)
+	curr := snapshotWith(nil, nil)
+	prev.System = &system.StatusInfo{Disks: []system.DiskInfo{
+		{Mount: "/", UsedGB: 10}, {Mount: "/", UsedGB: 10},
+	}}
+	curr.System = &system.StatusInfo{Disks: []system.DiskInfo{
+		{Mount: "/", UsedGB: 20}, {Mount: "/", UsedGB: 20},
+	}}
+
+	r := buildReport(curr, prev)
+	var diskLines int
+	for _, c := range r.NotableChanges {
+		if strings.HasPrefix(c, "disk: /") {
+			diskLines++
+		}
+	}
+	if diskLines != 2 {
+		t.Errorf("two df rows for one mount should report twice, not %d times: %v", diskLines, r.NotableChanges)
 	}
 }

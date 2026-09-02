@@ -781,6 +781,8 @@ Supports health checks for: `nginx-proxy-manager`, `vaultwarden`, `uptime-kuma`,
 homebutler init    # interactive setup wizard
 ```
 
+📖 **[What `report` compares →](docs/report.md)** — what earns a line, what is deliberately suppressed, and why.
+
 📖 **[Configuration details →](docs/configuration.md)** — config file locations, watch/notify options, and advanced alert thresholds.
 
 ## Multi-server
