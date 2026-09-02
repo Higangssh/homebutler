@@ -148,7 +148,8 @@ homebutler implements the MCP revisions `2026-07-28`, `2025-11-25`,
 `2025-06-18`, `2025-03-26` and `2024-11-05`. Modern clients send the protocol
 version and client capabilities in each request's `_meta`; they can start with
 `server/discover` without an `initialize` handshake. Legacy clients continue to
-use `initialize` unchanged.
+use `initialize` unchanged. An `initialize` request that carries modern `_meta`
+is rejected because the two opening modes contradict each other.
 
 For a tools-only stdio server these revisions describe the same tool surface.
 Modern `tools/list` responses include `resultType`, a five-minute `ttlMs` hint,

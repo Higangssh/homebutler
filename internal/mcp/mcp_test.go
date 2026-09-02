@@ -630,6 +630,31 @@ func TestModernDiscover(t *testing.T) {
 	}
 }
 
+func TestDiscoverProbeWorksWithoutMetadata(t *testing.T) {
+	s, out := newTestServer()
+	resp := sendAndReceive(t, s, out, `{"jsonrpc":"2.0","id":1,"method":"server/discover"}`)
+	if resp.Error != nil {
+		t.Fatalf("unexpected error: %v", resp.Error)
+	}
+	result, _ := json.Marshal(resp.Result)
+	var discover discoverResult
+	if err := json.Unmarshal(result, &discover); err != nil {
+		t.Fatalf("unmarshal discover result: %v", err)
+	}
+	if discover.ResultType != "complete" || len(discover.SupportedVersions) == 0 {
+		t.Errorf("discover result = %+v", discover)
+	}
+}
+
+func TestLegacyVersionInModernMetadataIsRejected(t *testing.T) {
+	s, out := newTestServer()
+	req := `{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{` + modernMeta(legacyProtocolVersions[0]) + `}}`
+	resp := sendAndReceive(t, s, out, req)
+	if resp.Error == nil || resp.Error.Code != -32022 {
+		t.Fatalf("error = %+v, want -32022", resp.Error)
+	}
+}
+
 func TestModernUnsupportedVersion(t *testing.T) {
 	s, out := newTestServer()
 	req := `{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{` + modernMeta("1900-01-01") + `}}`

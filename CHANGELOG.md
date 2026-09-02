@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file.
 
+## Unreleased
+
+**Modern MCP clients can now use homebutler without a lifecycle handshake while legacy clients keep working.**
+
+### Features
+
+- add the MCP 2026-07-28 `server/discover` RPC, per-request metadata validation, version mismatch errors, result typing, cache hints, and deterministic tool ordering
+
+### Behavior changes
+
+- modern requests use stateless per-request metadata; legacy `initialize` requests continue to negotiate legacy protocol versions
+
 ## [0.25.0](https://github.com/Higangssh/homebutler/compare/v0.24.0...v0.25.0) - 2026-09-02
 
 **Every permission failure homebutler can hit printed the operator's next command last.** `backup`, `restore`, `install` and `upgrade` all led with the raw syscall error and put the one line that mattered underneath it — and the detail could not simply be dropped, because there was no way to ask for it back. This release inverts the order and adds the flag that makes dropping it safe.
