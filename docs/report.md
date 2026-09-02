@@ -25,6 +25,10 @@ after is not "no change" when one of them is a different container.
 | `port` | the same port, a different process answering on it |
 | `disk` | a mount whose usage moved by more than half a gigabyte |
 
+Processes are compared the same way. A process is identified by its executable
+name and a hash of its full invocation, so `python3 /opt/old.py` becoming
+`python3 /opt/new.py` is a `replaced`, not silence.
+
 `replaced` is the one worth knowing about. A container recreated under the same
 name leaves every count identical, so a report that compares counts says
 nothing at all — which is what this one did before 0.26.0.
@@ -40,6 +44,15 @@ A report nobody reads is worse than no report. These are excluded on purpose:
   it, which is a separate feature rather than a diff.
 - **Restart counters that moved without a state change.** A container that
   restarted and came back is in the same state it was in.
+- **Processes that have not been running for a minute.** Measured rather than
+  guessed: two runs thirty seconds apart on an idle machine reported `new head`
+  and `new sed` — the shell pipeline that was reading the report. Cron jobs and
+  package managers arrive the same way. A process held back is not lost; it is
+  reported on the next run, by which time it has earned the word "new".
+- **The command line itself.** A snapshot keeps the executable name and a
+  twelve-character hash of the invocation, never the arguments. Command lines
+  carry secrets in flags, and `~/.homebutler/reports/snapshots/` has never had
+  to be handled as a credential store.
 - **Anything from a collector that did not answer.** If Docker was down when
   either snapshot was taken, container changes are not compared at all and the
   report says so. Reporting every container as gone because the daemon was
@@ -57,6 +70,14 @@ state     7 containers  postgres, redis, grafana, +4
 `--json` never groups and never truncates. A person needs the section to stay
 readable; anything reading the output needs all of it, and quietly handing a
 shortened list to an agent is how an agent becomes confidently wrong.
+
+## Snapshot size
+
+Tracking processes made snapshots larger, and the number is worth knowing
+before turning `--keep` up: on a desktop macOS with 639 distinct process
+identities a snapshot is about 50 KB, against 2 KB before. A Linux server
+running a handful of services is well under that. At the default `--keep 30`
+that is roughly 1.5 MB of history in the worst case measured.
 
 ## Order
 

@@ -24,6 +24,7 @@ type Snapshot struct {
 	System     *system.StatusInfo `json:"system"`
 	Containers []docker.Container `json:"containers"`
 	Ports      []ports.PortInfo   `json:"ports"`
+	Processes  []ProcessIdentity  `json:"processes,omitempty"`
 	Warnings   []string           `json:"warnings,omitempty"`
 	// Failed records which collectors did not answer when this snapshot was
 	// taken. A diff that does not know this would report every container as
@@ -122,6 +123,7 @@ func buildSnapshot(inv *inventory.Inventory) *Snapshot {
 		System:     inv.System,
 		Containers: inv.Containers,
 		Ports:      inv.Ports,
+		Processes:  processIdentities(inv.Processes),
 		Warnings:   inv.Warnings,
 		Failed:     inv.Failed,
 	}
@@ -222,6 +224,16 @@ func buildReport(snap *Snapshot, prev *Snapshot) *Report {
 			Subject: nounContainers,
 			Detail:  "not compared — Docker did not answer",
 			noun:    nounContainers,
+		})
+	}
+	if collectorAnswered(prev, snap, inventory.CollectorProcesses) {
+		changes = append(changes, diffProcesses(prev.Processes, snap.Processes)...)
+	} else {
+		changes = append(changes, Change{
+			Kind:    kindSkipped,
+			Subject: nounProcesses,
+			Detail:  "not compared — the process collector did not answer",
+			noun:    nounProcesses,
 		})
 	}
 	if collectorAnswered(prev, snap, inventory.CollectorPorts) {
