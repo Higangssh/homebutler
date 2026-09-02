@@ -45,6 +45,11 @@ type Report struct {
 	NotableChanges   []string `json:"notable_changes"`
 	SuggestedActions []string `json:"suggested_actions"`
 	Warnings         []string `json:"warnings,omitempty"`
+
+	// changes is the same set as NotableChanges, kept structured so the human
+	// renderer can group and align it. Unexported: NotableChanges is the JSON
+	// contract and stays complete and ungrouped.
+	changes []Change
 }
 
 // Options controls report behavior.
@@ -198,31 +203,42 @@ func buildReport(snap *Snapshot, prev *Snapshot) *Report {
 	}
 
 	// Notable changes (diff against previous)
+	// Compare identities rather than counts. A container replaced by a
+	// different container leaves every count identical, and that is the case
+	// this section used to answer with "no significant changes".
+	var changes []Change
 	if prev.System != nil && snap.System != nil {
-		for _, d := range snap.System.Disks {
-			for _, pd := range prev.System.Disks {
-				if d.Mount == pd.Mount {
-					delta := d.UsedGB - pd.UsedGB
-					if delta > 0.5 || delta < -0.5 {
-						r.NotableChanges = append(r.NotableChanges,
-							fmt.Sprintf("Disk %s: %+.1f GB since last report", d.Mount, delta))
-					}
-				}
-			}
-		}
+		changes = append(changes, diffDisks(prev.System.Disks, snap.System.Disks)...)
+	}
+	// A skipped comparison is reported in the section itself, not only as a
+	// trailing warning. "No significant changes since last report" handed to
+	// an agent while the caveat sits in another field is an all-clear the
+	// report cannot stand behind.
+	if collectorAnswered(prev, snap, inventory.CollectorDocker) {
+		changes = append(changes, diffContainers(prev.Containers, snap.Containers)...)
+	} else {
+		changes = append(changes, Change{
+			Kind:    kindSkipped,
+			Subject: nounContainers,
+			Detail:  "not compared — Docker did not answer",
+			noun:    nounContainers,
+		})
+	}
+	if collectorAnswered(prev, snap, inventory.CollectorPorts) {
+		changes = append(changes, diffPorts(prev.Ports, snap.Ports)...)
+	} else {
+		changes = append(changes, Change{
+			Kind:    kindSkipped,
+			Subject: nounPorts,
+			Detail:  "not compared — the port collector did not answer",
+			noun:    nounPorts,
+		})
 	}
 
-	if snap.RunningCount != prev.RunningCount {
-		r.NotableChanges = append(r.NotableChanges,
-			fmt.Sprintf("Running containers: %d → %d", prev.RunningCount, snap.RunningCount))
-	}
-	if snap.StoppedCount != prev.StoppedCount {
-		r.NotableChanges = append(r.NotableChanges,
-			fmt.Sprintf("Stopped containers: %d → %d", prev.StoppedCount, snap.StoppedCount))
-	}
-	if snap.PublicPortCount != prev.PublicPortCount {
-		r.NotableChanges = append(r.NotableChanges,
-			fmt.Sprintf("Public ports: %d → %d", prev.PublicPortCount, snap.PublicPortCount))
+	sortChanges(changes)
+	r.changes = changes
+	for _, c := range changes {
+		r.NotableChanges = append(r.NotableChanges, c.String())
 	}
 
 	if len(r.NotableChanges) == 0 {
@@ -261,10 +277,9 @@ func FormatHuman(r *Report) string {
 		}
 	}
 
-	fmt.Fprintf(&b, "%s\n", style.Section("Current Status"))
-	b.WriteString(style.LabelledBlock(r.Status, "   "))
-	fmt.Fprintln(&b)
-
+	// What needs doing, then what moved, then the state that explains it.
+	// Current Status used to lead, which put the reading every other tool
+	// already shows ahead of the one only this one prints.
 	if len(r.NeedsAttention) > 0 {
 		fmt.Fprintf(&b, "%s\n", style.Section("Needs Attention"))
 		for _, s := range r.NeedsAttention {
@@ -274,7 +289,15 @@ func FormatHuman(r *Report) string {
 	}
 
 	fmt.Fprintf(&b, "%s\n", style.Section("Notable Changes"))
-	b.WriteString(style.LabelledBlock(r.NotableChanges, "   "))
+	if len(r.changes) > 0 {
+		b.WriteString(changeBlock(groupChanges(r.changes), "   "))
+	} else {
+		b.WriteString(style.LabelledBlock(r.NotableChanges, "   "))
+	}
+	fmt.Fprintln(&b)
+
+	fmt.Fprintf(&b, "%s\n", style.Section("Current Status"))
+	b.WriteString(style.LabelledBlock(r.Status, "   "))
 	fmt.Fprintln(&b)
 
 	if len(r.SuggestedActions) > 0 {

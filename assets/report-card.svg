@@ -1,4 +1,4 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="600" height="584" viewBox="0 0 600 584" role="img" aria-label="Terminal showing homebutler report output: current status, needs attention, notable changes, and suggested actions">
+<svg xmlns="http://www.w3.org/2000/svg" width="600" height="604" viewBox="0 0 600 604" role="img" aria-label="Terminal showing homebutler report output: notable changes since the last report — a container gone, one new, one replaced behind the same name, an image bump, seven state changes collapsed into a line, a port that changed owner, and disk growth — followed by current status and a suggested action">
   <!--
     Terminal card used at the top of README.md. See assets/README.md.
 
@@ -7,8 +7,12 @@
     than runs of spaces: SVG renderers collapse whitespace unless xml:space is
     honoured, which Chromium does not do reliably, so spacing alone would not
     survive.
+
+    The kind column is coloured by severity rather than by category — red is
+    gone, green is new, amber is changed in place — which is what lets the
+    section sort itself before it is read. Keep it to those three.
   -->
-  <rect x="0" y="0" width="600" height="584" rx="10" fill="#11151c"/>
+  <rect x="0" y="0" width="600" height="604" rx="10" fill="#11151c"/>
   <path d="M0 10a10 10 0 0 1 10-10h580a10 10 0 0 1 10 10v30H0z" fill="#1b212a"/>
   <line x1="0" y1="40" x2="600" y2="40" stroke="#2a323d" stroke-width="1"/>
   <circle cx="22" cy="20" r="6" fill="#ff5f56"/>
@@ -20,36 +24,54 @@
     <text x="22" y="74" fill="#7ee787">$</text>
     <text x="39" y="74" fill="#c9d1d9">homebutler report</text>
 
-    <text x="22" y="120" fill="#c9d1d9">🏠</text>
-    <text x="47" y="120" fill="#e6edf3" font-weight="bold">Homebutler Report — homelab</text>
-    <text x="47" y="143" fill="#6e7681">2026-08-20T09:14:03Z</text>
+    <text x="22" y="112" fill="#c9d1d9">🏠</text>
+    <text x="47" y="112" fill="#e6edf3" font-weight="bold">Homebutler Report — homelab</text>
+    <text x="47" y="135" fill="#6e7681">2026-09-02T09:14:03Z</text>
 
-    <text x="22" y="189" fill="#00add8">── Current Status ────────────────────────────────────────────</text>
-    <text x="47" y="212" fill="#8b949e">Host</text>
-    <text x="170" y="212" fill="#c9d1d9">homelab (linux/arm64), uptime 42d 7h</text>
-    <text x="47" y="235" fill="#8b949e">CPU</text>
-    <text x="170" y="235" fill="#c9d1d9">23.5% (4 cores), Memory: 3.2/8.0 GB (40%)</text>
-    <text x="47" y="258" fill="#8b949e">Disk /</text>
-    <text x="170" y="258" fill="#c9d1d9">47.0/128.0 GB (37%)</text>
-    <text x="47" y="281" fill="#8b949e">Containers</text>
-    <text x="170" y="281" fill="#c9d1d9">6 running, 1 stopped</text>
-    <text x="47" y="304" fill="#8b949e">Public ports</text>
-    <text x="170" y="304" fill="#c9d1d9">2</text>
+    <text x="22" y="181" fill="#00add8">── Notable Changes ───────────────────────────────────────────</text>
 
-    <text x="22" y="350" fill="#00add8">── Needs Attention ───────────────────────────────────────────</text>
-    <text x="47" y="373" fill="#e3b341">⚠</text>
-    <text x="72" y="373" fill="#e3b341">1 container(s) stopped</text>
+    <text x="47" y="204" fill="#ff7b72">gone</text>
+    <text x="131" y="204" fill="#e6edf3">vaultwarden</text>
+    <text x="249" y="204" fill="#8b949e">was running</text>
 
-    <text x="22" y="419" fill="#00add8">── Notable Changes ───────────────────────────────────────────</text>
-    <text x="47" y="442" fill="#8b949e">Disk /</text>
-    <text x="222" y="442" fill="#c9d1d9">+2.4 GB since last report</text>
-    <text x="47" y="465" fill="#8b949e">Running containers</text>
-    <text x="222" y="465" fill="#c9d1d9">7 → 6</text>
-    <text x="47" y="488" fill="#8b949e">Public ports</text>
-    <text x="222" y="488" fill="#c9d1d9">1 → 2</text>
+    <text x="47" y="227" fill="#7ee787">new</text>
+    <text x="131" y="227" fill="#e6edf3">gitea</text>
+    <text x="249" y="227" fill="#8b949e">now running</text>
 
-    <text x="22" y="534" fill="#00add8">── Suggested Actions ─────────────────────────────────────────</text>
-    <text x="47" y="557" fill="#00add8">→</text>
-    <text x="72" y="557" fill="#c9d1d9">New public port(s) detected — verify these are intentional.</text>
+    <text x="47" y="250" fill="#e3b341">replaced</text>
+    <text x="131" y="250" fill="#e6edf3">nginx</text>
+    <text x="249" y="250" fill="#8b949e">7d4a91f0aa11 → 91be0322bb22</text>
+
+    <text x="47" y="273" fill="#e3b341">image</text>
+    <text x="131" y="273" fill="#e6edf3">jellyfin</text>
+    <text x="249" y="273" fill="#8b949e">jellyfin:10.9.11 → jellyfin:10.10.0</text>
+
+    <text x="47" y="296" fill="#e3b341">state</text>
+    <text x="131" y="296" fill="#e6edf3">7 containers</text>
+    <text x="249" y="296" fill="#8b949e">postgres, redis, grafana, +4</text>
+
+    <text x="47" y="319" fill="#e3b341">port</text>
+    <text x="131" y="319" fill="#e6edf3">:8080/tcp</text>
+    <text x="249" y="319" fill="#8b949e">vaultwarden → gitea</text>
+
+    <text x="47" y="342" fill="#e3b341">disk</text>
+    <text x="131" y="342" fill="#e6edf3">/</text>
+    <text x="249" y="342" fill="#8b949e">+2.4 GB since last report</text>
+
+    <text x="22" y="388" fill="#00add8">── Current Status ────────────────────────────────────────────</text>
+    <text x="47" y="411" fill="#8b949e">Host</text>
+    <text x="180" y="411" fill="#c9d1d9">homelab (linux/arm64), uptime 42d 7h</text>
+    <text x="47" y="434" fill="#8b949e">CPU</text>
+    <text x="180" y="434" fill="#c9d1d9">23.5% (4 cores), Memory: 3.2/8.0 GB (40%)</text>
+    <text x="47" y="457" fill="#8b949e">Disk /</text>
+    <text x="180" y="457" fill="#c9d1d9">47.4/128.0 GB (37%)</text>
+    <text x="47" y="480" fill="#8b949e">Containers</text>
+    <text x="180" y="480" fill="#c9d1d9">10 running, 0 stopped</text>
+    <text x="47" y="503" fill="#8b949e">Public ports</text>
+    <text x="180" y="503" fill="#c9d1d9">2</text>
+
+    <text x="22" y="549" fill="#00add8">── Suggested Actions ─────────────────────────────────────────</text>
+    <text x="47" y="572" fill="#00add8">→</text>
+    <text x="72" y="572" fill="#c9d1d9">New public port(s) detected — verify these are intentional.</text>
   </g>
 </svg>

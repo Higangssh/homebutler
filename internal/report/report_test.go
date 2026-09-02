@@ -127,14 +127,17 @@ func TestDiffReport(t *testing.T) {
 	}
 
 	changes := join(r.NotableChanges)
-	if !containsStr(changes, "Running containers: 1 → 2") {
-		t.Errorf("expected running container change, got: %s", changes)
+	if !containsStr(changes, "new: db — now running") {
+		t.Errorf("expected the new container named, got: %s", changes)
 	}
-	if !containsStr(changes, "Public ports: 1 → 2") {
-		t.Errorf("expected public port change, got: %s", changes)
+	if !containsStr(changes, "new: :443") {
+		t.Errorf("expected the new listener named, got: %s", changes)
 	}
-	if !containsStr(changes, "Disk /: +5.0 GB") {
+	if !containsStr(changes, "disk: / — +5.0 GB since last report") {
 		t.Errorf("expected disk delta, got: %s", changes)
+	}
+	if containsStr(changes, "Running containers:") || containsStr(changes, "Public ports:") {
+		t.Errorf("counts should have been replaced by identities, got: %s", changes)
 	}
 }
 
