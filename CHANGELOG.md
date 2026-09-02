@@ -2,6 +2,32 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+**`report` compared counts, so a container replaced by a different container read as no change.** The snapshot on disk held the full container and port lists all along; the diff read four integers off it and threw the lists away. Six running before and six running after was reported as "No significant changes since last report", whether or not the six were the same six.
+
+```
+── Notable Changes ───────────────────────────────────────────
+   gone      vaultwarden   was running
+   new       gitea         now running
+   replaced  nginx         7d4a91f0aa11 → 91be0322bb22
+   image     jellyfin      jellyfin:10.9.11 → jellyfin:10.10.0
+   state     7 containers  postgres, redis, grafana, +4
+   port      :8080/tcp     vaultwarden → gitea
+   disk      /             +2.4 GB since last report
+```
+
+### ✨ Features
+
+- compare containers and listeners by identity rather than by cardinality (#58). Containers are matched by name and then by container ID, image and state; listeners by protocol and port number, then by the process answering on them. The case this exists for is `replaced` — a container recreated under the same name, which leaves every count identical and was therefore invisible. `docs/report.md` is new and states what earns a line and what is deliberately suppressed: uptime strings, CPU and memory, and restart counters that moved without a state change, because a report nobody reads is worse than no report
+- collapse more than five changes of one kind into a line that names three and counts the rest. Grouping and truncation happen only in the human renderer — `--json` carries every change, ungrouped, because a person needs the section readable and anything parsing the output needs all of it
+- skip the comparison, and say so, when a collector did not answer for either snapshot. Diffing against a snapshot taken while Docker was down would otherwise report every container as gone
+
+### ⚠️ Behavior changes
+
+- **`notable_changes` no longer contains the count lines** `Running containers: N → M`, `Stopped containers: N → M` or `Public ports: N → M`. They are replaced by one entry per change, shaped `kind: subject — detail`. Anything matching on the old strings needs updating; the field is still `[]string` and the JSON schema is unchanged
+- **The human report leads with `Notable Changes` rather than `Current Status`.** Current status is context for what moved above it, not the headline. `--json` is unaffected — field order in the document has not changed
+
 ## [0.25.0](https://github.com/Higangssh/homebutler/compare/v0.24.0...v0.25.0) - 2026-09-02
 
 **Every permission failure homebutler can hit printed the operator's next command last.** `backup`, `restore`, `install` and `upgrade` all led with the raw syscall error and put the one line that mattered underneath it — and the detail could not simply be dropped, because there was no way to ask for it back. This release inverts the order and adds the flag that makes dropping it safe.

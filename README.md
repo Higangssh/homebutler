@@ -27,7 +27,7 @@
 </p>
 
 <p align="center">
-  <img src="assets/report-card.svg" alt="homebutler report output: current status, needs attention, notable changes, and suggested actions" width="620">
+  <img src="assets/report-card.svg" alt="homebutler report output: what changed since the last report — a container gone, one new, one replaced behind the same name, an image bump, a port that changed owner — then current status" width="620">
 </p>
 
 Section rules, labels, and severities are colour-coded in a terminal. Colour is
