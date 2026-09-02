@@ -2,7 +2,7 @@
 
 All notable changes to this project will be documented in this file.
 
-## Unreleased
+## [Unreleased]
 
 **Modern MCP clients can now use homebutler without a lifecycle handshake, while reports now identify what changed between snapshots.**
 
@@ -16,7 +16,6 @@ All notable changes to this project will be documented in this file.
    port      :8080/tcp     vaultwarden → gitea
    disk      /             +2.4 GB since last report
 ```
-
 ### ✨ Features
 
 - add the MCP 2026-07-28 `server/discover` RPC, per-request metadata validation, version mismatch errors, result typing, cache hints, and deterministic tool ordering

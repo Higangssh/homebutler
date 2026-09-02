@@ -16,7 +16,10 @@ type Inventory struct {
 	System     *system.StatusInfo `json:"system"`
 	Containers []docker.Container `json:"containers"`
 	Ports      []ports.PortInfo   `json:"ports"`
-	Warnings   []string           `json:"warnings,omitempty"`
+	// Processes is collected so report can compare runs. It is not rendered
+	// by inventory scan, which has its own process command.
+	Processes []system.ProcessInfo `json:"-"`
+	Warnings  []string             `json:"warnings,omitempty"`
 	// Failed names the collectors that did not answer, so a reader can ask
 	// which part of the snapshot is missing rather than matching on the
 	// prefix of a warning string. Warnings stays the human-readable list;
@@ -27,8 +30,9 @@ type Inventory struct {
 
 // Collector names recorded in Failed.
 const (
-	CollectorDocker = "docker"
-	CollectorPorts  = "ports"
+	CollectorDocker    = "docker"
+	CollectorPorts     = "ports"
+	CollectorProcesses = "processes"
 )
 
 // CollectorFailed reports whether the named collector failed during Collect.
@@ -48,6 +52,11 @@ type CollectFuncs struct {
 	StatusFn     func() (*system.StatusInfo, error)
 	DockerListFn func() ([]docker.Container, error)
 	PortsListFn  func() (*ports.Result, error)
+	// ProcessesFn is optional and left unset by DefaultCollectFuncs. Only
+	// report compares runs, and every other caller of Collect — inventory
+	// scan, the MCP tools, doctor — would otherwise pay for a full ps sweep
+	// whose result it never renders, and inherit a warning about it.
+	ProcessesFn func() ([]system.ProcessInfo, error)
 }
 
 // DefaultCollectFuncs returns the real system/docker/ports functions.
@@ -93,6 +102,18 @@ func Collect(cfg *config.Config, fns CollectFuncs) (*Inventory, error) {
 		inv.Failed = append(inv.Failed, CollectorPorts)
 	} else {
 		inv.Ports = result.Ports
+	}
+
+	// Processes: best-effort, and optional so existing callers that build
+	// CollectFuncs by hand keep working.
+	if fns.ProcessesFn != nil {
+		procs, err := fns.ProcessesFn()
+		if err != nil {
+			inv.Warnings = append(inv.Warnings, CollectorProcesses+": "+err.Error())
+			inv.Failed = append(inv.Failed, CollectorProcesses)
+		} else {
+			inv.Processes = procs
+		}
 	}
 
 	return inv, nil

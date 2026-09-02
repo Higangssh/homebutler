@@ -29,7 +29,9 @@ npx playwright screenshot --viewport-size=640,610 \
 ```
 
 Keep the content in sync with `FormatHuman` in `internal/report` and
-`internal/doctor`.
+`internal/doctor`. `TestRenderedChangeBlock` pins the change block the report
+card shows, so a format change fails a test rather than quietly dating the
+image.
 
 ## social-preview.html / social-preview.png
 

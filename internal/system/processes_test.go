@@ -1,6 +1,9 @@
 package system
 
-import "testing"
+import (
+	"testing"
+	"time"
+)
 
 func TestParseProcesses(t *testing.T) {
 	output := `  PID  %CPU %MEM   RSS STAT COMMAND
@@ -189,6 +192,23 @@ func TestTopProcesses(t *testing.T) {
 		}
 		if p.Name == "" {
 			t.Error("expected non-empty process name")
+		}
+	}
+}
+
+func TestParseElapsed(t *testing.T) {
+	cases := map[string]time.Duration{
+		"00:07":       7 * time.Second,
+		"01:30":       90 * time.Second,
+		"02:01:30":    2*time.Hour + time.Minute + 30*time.Second,
+		"01-01:53:03": 25*time.Hour + 53*time.Minute + 3*time.Second,
+		"garbage":     0,
+		"":            0,
+		"1:2:3:4":     0,
+	}
+	for in, want := range cases {
+		if got := parseElapsed(in); got != want {
+			t.Errorf("parseElapsed(%q) = %v, want %v", in, got, want)
 		}
 	}
 }
