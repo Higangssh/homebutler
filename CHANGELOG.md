@@ -4,7 +4,7 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
-**`report` compared counts, so a container replaced by a different container read as no change.** The snapshot on disk held the full container and port lists all along; the diff read four integers off it and threw the lists away. Six running before and six running after was reported as "No significant changes since last report", whether or not the six were the same six.
+**`report` compared counts and remembered no processes, so a container replaced by a different container read as no change and "what started running since yesterday" had no path to an answer.** The snapshot on disk held the full container and port lists all along; the diff read four integers off it and threw the lists away. `processes` was collected, rendered, and discarded entirely.
 
 ```
 ── Notable Changes ───────────────────────────────────────────
@@ -22,11 +22,18 @@ All notable changes to this project will be documented in this file.
 - compare containers and listeners by identity rather than by cardinality (#58). Containers are matched by name and then by container ID, image and state; listeners by bind address, port number and protocol, then by the process answering on them. The address is part of a listener's identity: without it a service moving from `127.0.0.1` to `0.0.0.0` — the change in this section with the largest consequence — reads as no change at all. The case this exists for is `replaced` — a container recreated under the same name, which leaves every count identical and was therefore invisible. `docs/report.md` is new and states what earns a line and what is deliberately suppressed: uptime strings, CPU and memory, and restart counters that moved without a state change, because a report nobody reads is worse than no report
 - collapse more than five changes of one kind into a line that names three and counts the rest. Grouping and truncation happen only in the human renderer — `--json` carries every change, ungrouped, because a person needs the section readable and anything parsing the output needs all of it
 - skip the comparison, and say so *in the section*, when a collector did not answer for either snapshot. Diffing against a snapshot taken while Docker was down would otherwise report every container as gone — and putting the caveat only in a trailing warning would hand anything reading `notable_changes` an all-clear the report cannot stand behind
+- track processes across runs (#59). A process is identified by its executable name and a hash of its full invocation, so a name that appears, disappears, or comes back running something else is reported — `python3 /opt/old.py` becoming `python3 /opt/new.py` is a `replaced` rather than silence. Identical invocations collapse to one identity, because eight workers sharing a command line are one thing running and a pool resizing is a resource signal rather than an arrival
+- ignore processes that have not been running for a minute. This threshold was measured rather than chosen: two runs thirty seconds apart on an idle machine reported `new head` and `new sed`, which was the shell pipeline reading the report. A process held back is reported on the next run, by which time it has earned the word "new"
+
+### 🔐 Security
+
+- keep the executable name and a twelve-character hash of the invocation, never the command line itself. Command lines carry secrets in flags and `~/.homebutler/reports/snapshots/` has never had to be handled as a credential store. `ProcessInfo.Command` is excluded from JSON, so neither the `processes` command nor its MCP tool gains the field
 
 ### ⚠️ Behavior changes
 
 - **`notable_changes` no longer contains the count lines** `Running containers: N → M`, `Stopped containers: N → M` or `Public ports: N → M`. They are replaced by one entry per change, shaped `kind: subject — detail`. Anything matching on the old strings needs updating; the field is still `[]string` and the JSON schema is unchanged
 - **The human report leads with `Notable Changes` rather than `Current Status`.** Current status is context for what moved above it, not the headline. `--json` is unaffected — field order in the document has not changed
+- **Snapshots are larger.** On a desktop macOS with 639 distinct process identities a snapshot is about 50 KB, against 2 KB before; a Linux server running a few services is well under that. At the default `--keep 30` that is roughly 1.5 MB of history in the worst case measured. No cap is imposed — the measurement did not call for one — but it is worth knowing before turning `--keep` up
 
 ## [0.25.0](https://github.com/Higangssh/homebutler/compare/v0.24.0...v0.25.0) - 2026-09-02
 

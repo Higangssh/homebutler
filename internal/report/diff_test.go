@@ -1,8 +1,10 @@
 package report
 
 import (
+	"encoding/json"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/Higangssh/homebutler/internal/docker"
 	"github.com/Higangssh/homebutler/internal/inventory"
@@ -11,7 +13,13 @@ import (
 )
 
 func snapshotWith(containers []docker.Container, listeners []ports.PortInfo) *Snapshot {
-	s := &Snapshot{Containers: containers, Ports: listeners}
+	s := &Snapshot{
+		Containers: containers,
+		Ports:      listeners,
+		// One stable process on both sides, so the process comparison is a
+		// no-op for the tests that are not about processes.
+		Processes: []ProcessIdentity{{Name: "init", Hash: "000000000000"}},
+	}
 	for _, c := range containers {
 		if c.State == "running" {
 			s.RunningCount++
@@ -296,5 +304,178 @@ func TestDuplicateMountDoesNotCrossProduct(t *testing.T) {
 	}
 	if diskLines != 2 {
 		t.Errorf("two df rows for one mount should report twice, not %d times: %v", diskLines, r.NotableChanges)
+	}
+}
+
+func procs(entries ...system.ProcessInfo) []system.ProcessInfo {
+	out := make([]system.ProcessInfo, 0, len(entries))
+	for _, e := range entries {
+		if e.Elapsed == 0 {
+			e.Elapsed = time.Hour
+		}
+		out = append(out, e)
+	}
+	return out
+}
+
+func snapshotWithProcesses(list []system.ProcessInfo) *Snapshot {
+	s := snapshotWith(nil, nil)
+	s.Processes = processIdentities(list)
+	return s
+}
+
+// A name running several invocations is not "replaced" when one of them
+// exits — nothing was replaced, and the departure has to be reported as one.
+func TestOneOfSeveralInvocationsLeaving(t *testing.T) {
+	prev := snapshotWithProcesses(procs(
+		system.ProcessInfo{PID: 1, Name: "python3", Command: "python3 /opt/a.py"},
+		system.ProcessInfo{PID: 2, Name: "python3", Command: "python3 /opt/b.py"},
+	))
+	curr := snapshotWithProcesses(procs(
+		system.ProcessInfo{PID: 1, Name: "python3", Command: "python3 /opt/a.py"},
+	))
+
+	r := buildReport(curr, prev)
+	got := strings.Join(r.NotableChanges, " | ")
+	if strings.Contains(got, "replaced: python3") {
+		t.Errorf("one of two invocations exiting was called a replacement: %s", got)
+	}
+	if !strings.Contains(got, "gone: python3 — 1 invocation, others still running") {
+		t.Errorf("the departed invocation was not reported: %s", got)
+	}
+}
+
+// A snapshot written before process tracking existed has no processes. The
+// first run after upgrading must not report the whole machine as new.
+func TestPreviousSnapshotWithoutProcessesIsNotAnEmptyMachine(t *testing.T) {
+	prev := snapshotWith(nil, nil)
+	prev.Processes = nil
+	curr := snapshotWithProcesses(procs(
+		system.ProcessInfo{PID: 1, Name: "nginx", Command: "nginx -g daemon off"},
+		system.ProcessInfo{PID: 2, Name: "postgres", Command: "postgres -D /data"},
+	))
+
+	r := buildReport(curr, prev)
+	got := strings.Join(r.NotableChanges, " | ")
+	if strings.Contains(got, "new: nginx") || strings.Contains(got, "new: postgres") {
+		t.Errorf("the first run after upgrading reported every process as new: %s", got)
+	}
+	if !strings.Contains(got, "not compared — the previous snapshot has none") {
+		t.Errorf("the skipped comparison was not explained: %s", got)
+	}
+}
+
+// A process the invocation lookup missed has an unknown age, not a young one.
+// Dropping it would make a running daemon disappear and come back.
+func TestUnknownAgeIsKept(t *testing.T) {
+	ids := processIdentities([]system.ProcessInfo{
+		{PID: 1, Name: "sshd", Command: "", Elapsed: system.ElapsedUnknown},
+		{PID: 2, Name: "sed", Command: "sed -n", Elapsed: 2 * time.Second},
+	})
+	if len(ids) != 1 || ids[0].Name != "sshd" {
+		t.Errorf("expected the unknown-age process kept and the young one dropped, got %+v", ids)
+	}
+}
+
+func TestProcessAppearedAndDisappeared(t *testing.T) {
+	prev := snapshotWithProcesses(procs(
+		system.ProcessInfo{PID: 1, Name: "nginx", Command: "nginx -g daemon off"},
+	))
+	curr := snapshotWithProcesses(procs(
+		system.ProcessInfo{PID: 2, Name: "borgbackup", Command: "borg create ::daily /data"},
+	))
+
+	r := buildReport(curr, prev)
+	got := strings.Join(r.NotableChanges, " | ")
+	if !strings.Contains(got, "gone: nginx") {
+		t.Errorf("a process that exited was not named: %s", got)
+	}
+	if !strings.Contains(got, "new: borgbackup") {
+		t.Errorf("a process that started was not named: %s", got)
+	}
+}
+
+// Same executable, different invocation. The interesting fact is that what is
+// running under that name changed, not that a line moved.
+func TestProcessInvocationChangeIsReplaced(t *testing.T) {
+	prev := snapshotWithProcesses(procs(
+		system.ProcessInfo{PID: 1, Name: "python3", Command: "python3 /opt/old.py"},
+	))
+	curr := snapshotWithProcesses(procs(
+		system.ProcessInfo{PID: 2, Name: "python3", Command: "python3 /opt/new.py"},
+	))
+
+	r := buildReport(curr, prev)
+	got := strings.Join(r.NotableChanges, " | ")
+	if !strings.Contains(got, "replaced: python3 — same name, different invocation") {
+		t.Errorf("an invocation change was not reported: %s", got)
+	}
+}
+
+// Measured, not guessed: two runs thirty seconds apart on an idle machine
+// reported the shell pipeline that was reading the report.
+func TestShortLivedProcessesAreNotReported(t *testing.T) {
+	prev := snapshotWithProcesses(nil)
+	curr := snapshotWithProcesses([]system.ProcessInfo{
+		{PID: 9, Name: "sed", Command: "sed -n 1,10p", Elapsed: 2 * time.Second},
+		{PID: 10, Name: "head", Command: "head -20", Elapsed: time.Second},
+	})
+
+	r := buildReport(curr, prev)
+	got := strings.Join(r.NotableChanges, " | ")
+	if strings.Contains(got, "sed") || strings.Contains(got, "head") {
+		t.Errorf("a process that lived for a moment earned a line: %s", got)
+	}
+}
+
+// The command line carries secrets in flags and a snapshot is a file on disk.
+func TestSnapshotNeverHoldsACommandLine(t *testing.T) {
+	secret := "--api-token=hunter2-should-never-be-persisted"
+	snap := snapshotWithProcesses(procs(
+		system.ProcessInfo{PID: 1, Name: "agent", Command: "agent " + secret},
+	))
+
+	data, err := json.Marshal(snap)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	if strings.Contains(string(data), "hunter2") {
+		t.Fatalf("the snapshot persisted a command line: %s", data)
+	}
+	if len(snap.Processes) != 1 || snap.Processes[0].Hash == "" {
+		t.Errorf("the invocation was not reduced to a hash: %+v", snap.Processes)
+	}
+}
+
+// Eight workers sharing one invocation are one thing running.
+func TestIdenticalProcessesCollapse(t *testing.T) {
+	var list []system.ProcessInfo
+	for i := 0; i < 8; i++ {
+		list = append(list, system.ProcessInfo{PID: i + 1, Name: "worker", Command: "worker --pool", Elapsed: time.Hour})
+	}
+	if got := len(processIdentities(list)); got != 1 {
+		t.Errorf("eight identical workers became %d identities", got)
+	}
+}
+
+// If ps fails, AllProcesses returns an error and inventory records the
+// collector as failed. Without that, every process on the machine reads as
+// having disappeared — the same shape as the Docker case, reachable through
+// a different door.
+func TestFailedProcessCollectorDoesNotEmptyTheMachine(t *testing.T) {
+	prev := snapshotWithProcesses(procs(
+		system.ProcessInfo{PID: 1, Name: "nginx", Command: "nginx -g daemon off"},
+		system.ProcessInfo{PID: 2, Name: "postgres", Command: "postgres -D /data"},
+	))
+	curr := snapshotWithProcesses(nil)
+	curr.Failed = []string{inventory.CollectorProcesses}
+
+	r := buildReport(curr, prev)
+	got := strings.Join(r.NotableChanges, " | ")
+	if strings.Contains(got, "gone: nginx") || strings.Contains(got, "gone: postgres") {
+		t.Errorf("a failed collector reported every process as gone: %s", got)
+	}
+	if !strings.Contains(got, "skipped: processes — not compared") {
+		t.Errorf("the skipped comparison is not in notable_changes: %s", got)
 	}
 }

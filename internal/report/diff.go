@@ -1,10 +1,13 @@
 package report
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/charmbracelet/lipgloss"
 
@@ -50,6 +53,7 @@ const (
 	nounContainers = "containers"
 	nounPorts      = "ports"
 	nounMounts     = "mounts"
+	nounProcesses  = "processes"
 )
 
 var kindRank = map[string]int{
@@ -362,4 +366,161 @@ func collectorFailed(s *Snapshot, collector string) bool {
 		}
 	}
 	return false
+}
+
+// ProcessIdentity is what a snapshot keeps about a process: enough to tell
+// two runs apart, and nothing that moves on every sample.
+//
+// CPU, memory and PID are absent by construction rather than by a rule in the
+// differ. They change between any two runs, and a pid is recycled, so
+// persisting them would invite a diff that reports noise. Hash is the first
+// twelve hex characters of sha256 over the full command line: it separates
+// two processes sharing an executable name without writing their arguments,
+// which carry secrets in flags, into a file on disk.
+type ProcessIdentity struct {
+	Name string `json:"name"`
+	Hash string `json:"hash,omitempty"`
+}
+
+// minProcessAge is how long a process has to have been running before it is
+// worth recording. Measured rather than guessed: two runs thirty seconds
+// apart on an idle machine reported "new head" and "new sed" — the shell
+// pipeline that was reading the report. Cron jobs, package managers and
+// anything else that lives for a moment would arrive the same way.
+//
+// A process held back here is not lost. It is simply reported on the next
+// run, by which time it has earned the word "new".
+const minProcessAge = time.Minute
+
+// processIdentities reduces a process list to the set of distinct identities.
+//
+// Duplicates are collapsed on purpose: eight workers sharing one invocation
+// are one thing running, and a pool growing or shrinking is a resource
+// signal rather than something appearing or disappearing.
+func processIdentities(procs []system.ProcessInfo) []ProcessIdentity {
+	seen := map[ProcessIdentity]bool{}
+	var out []ProcessIdentity
+	for _, p := range procs {
+		// An unknown age is kept. Dropping it would make a running daemon
+		// vanish from this snapshot and return in the next one, a pair of
+		// changes for something that never stopped.
+		if p.Elapsed >= 0 && p.Elapsed < minProcessAge {
+			continue
+		}
+		id := ProcessIdentity{Name: p.Name}
+		if p.Command != "" {
+			sum := sha256.Sum256([]byte(p.Command))
+			id.Hash = hex.EncodeToString(sum[:])[:12]
+		}
+		if seen[id] {
+			continue
+		}
+		seen[id] = true
+		out = append(out, id)
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].Name != out[j].Name {
+			return out[i].Name < out[j].Name
+		}
+		return out[i].Hash < out[j].Hash
+	})
+	return out
+}
+
+// diffProcesses compares two runs by executable name, then by invocation.
+//
+// "replaced" is reserved for the case where it is true: one invocation under a
+// name before, one after, and they differ. The container analogy stops there —
+// a container name maps to one container, while python3, bash, node and ssh
+// routinely map to several, and calling it a replacement when one of four
+// python3 invocations exits would describe something that did not happen.
+// Those are reported as what they are, an arrival and a departure under a
+// name that is still running.
+func diffProcesses(prev, curr []ProcessIdentity) []Change {
+	prevByName := groupProcessesByName(prev)
+	currByName := groupProcessesByName(curr)
+
+	var changes []Change
+	for name, prevHashes := range prevByName {
+		currHashes, ok := currByName[name]
+		if !ok {
+			changes = append(changes, Change{Kind: kindGone, Subject: name, noun: nounProcesses})
+			continue
+		}
+		if sameHashes(prevHashes, currHashes) {
+			continue
+		}
+		if len(prevHashes) == 1 && len(currHashes) == 1 {
+			changes = append(changes, Change{
+				Kind:    kindReplaced,
+				Subject: name,
+				Detail:  "same name, different invocation",
+				noun:    nounProcesses,
+			})
+			continue
+		}
+		if departed := countMissing(prevHashes, currHashes); departed > 0 {
+			changes = append(changes, Change{
+				Kind:    kindGone,
+				Subject: name,
+				Detail:  invocationCount(departed) + ", others still running",
+				noun:    nounProcesses,
+			})
+		}
+		if arrived := countMissing(currHashes, prevHashes); arrived > 0 {
+			changes = append(changes, Change{
+				Kind:    kindNew,
+				Subject: name,
+				Detail:  invocationCount(arrived) + " under a name already running",
+				noun:    nounProcesses,
+			})
+		}
+	}
+	for name := range currByName {
+		if _, ok := prevByName[name]; !ok {
+			changes = append(changes, Change{Kind: kindNew, Subject: name, noun: nounProcesses})
+		}
+	}
+	return changes
+}
+
+// countMissing counts entries of a that b does not have.
+func countMissing(a, b map[string]bool) int {
+	var n int
+	for k := range a {
+		if !b[k] {
+			n++
+		}
+	}
+	return n
+}
+
+func invocationCount(n int) string {
+	if n == 1 {
+		return "1 invocation"
+	}
+	return strconv.Itoa(n) + " invocations"
+}
+
+func groupProcessesByName(list []ProcessIdentity) map[string]map[string]bool {
+	out := map[string]map[string]bool{}
+	for _, p := range list {
+		if out[p.Name] == nil {
+			out[p.Name] = map[string]bool{}
+		}
+		out[p.Name][p.Hash] = true
+	}
+	return out
+}
+
+func sameHashes(a, b map[string]bool) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for k := range a {
+		if !b[k] {
+			return false
+		}
+	}
+	return true
 }

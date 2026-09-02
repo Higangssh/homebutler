@@ -24,6 +24,7 @@ type Snapshot struct {
 	System     *system.StatusInfo `json:"system"`
 	Containers []docker.Container `json:"containers"`
 	Ports      []ports.PortInfo   `json:"ports"`
+	Processes  []ProcessIdentity  `json:"processes,omitempty"`
 	Warnings   []string           `json:"warnings,omitempty"`
 	// Failed records which collectors did not answer when this snapshot was
 	// taken. A diff that does not know this would report every container as
@@ -62,9 +63,13 @@ type Options struct {
 // CollectFuncs allows injecting data sources for testing.
 type CollectFuncs = inventory.CollectFuncs
 
-// DefaultCollectFuncs returns real system/docker/ports functions.
+// DefaultCollectFuncs returns real system/docker/ports functions, plus the
+// process collector: report is the only caller that compares runs, so it is
+// the only one that asks for it.
 func DefaultCollectFuncs() CollectFuncs {
-	return inventory.DefaultCollectFuncs()
+	fns := inventory.DefaultCollectFuncs()
+	fns.ProcessesFn = system.AllProcesses
+	return fns
 }
 
 // Run collects current state, compares against previous snapshot, and produces a report.
@@ -122,6 +127,7 @@ func buildSnapshot(inv *inventory.Inventory) *Snapshot {
 		System:     inv.System,
 		Containers: inv.Containers,
 		Ports:      inv.Ports,
+		Processes:  processIdentities(inv.Processes),
 		Warnings:   inv.Warnings,
 		Failed:     inv.Failed,
 	}
@@ -223,6 +229,27 @@ func buildReport(snap *Snapshot, prev *Snapshot) *Report {
 			Detail:  "not compared — Docker did not answer",
 			noun:    nounContainers,
 		})
+	}
+	switch {
+	case !collectorAnswered(prev, snap, inventory.CollectorProcesses):
+		changes = append(changes, Change{
+			Kind:    kindSkipped,
+			Subject: nounProcesses,
+			Detail:  "not compared — the process collector did not answer",
+			noun:    nounProcesses,
+		})
+	case len(prev.Processes) == 0:
+		// A snapshot written before process tracking existed has no
+		// processes at all. Diffing against it would report every process on
+		// the machine as new on the first run after upgrading.
+		changes = append(changes, Change{
+			Kind:    kindSkipped,
+			Subject: nounProcesses,
+			Detail:  "not compared — the previous snapshot has none",
+			noun:    nounProcesses,
+		})
+	default:
+		changes = append(changes, diffProcesses(prev.Processes, snap.Processes)...)
 	}
 	if collectorAnswered(prev, snap, inventory.CollectorPorts) {
 		changes = append(changes, diffPorts(prev.Ports, snap.Ports)...)
