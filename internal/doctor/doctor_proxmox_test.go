@@ -6,6 +6,9 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"os"
+	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"testing"
@@ -71,7 +74,12 @@ func TestCheckProxmox_FullyReadable(t *testing.T) {
 	}
 }
 
-func TestCheckProxmox_EmptyResourcesIsNotAFailure(t *testing.T) {
+// An empty resources response is a warning, not a pass: proxmox status and
+// the resources collector it shares with doctor both treat "no nodes, no
+// guests, no storage" as a collector that failed to prove anything, usually
+// an ACL-limited token rather than a genuinely empty cluster. doctor must
+// agree, or the two commands disagree about the same endpoint.
+func TestCheckProxmox_EmptyResourcesIsWarn(t *testing.T) {
 	host, port := startProxmoxServer(t, func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/api2/json/version":
@@ -89,12 +97,12 @@ func TestCheckProxmox_EmptyResourcesIsNotAFailure(t *testing.T) {
 	r := &Result{}
 	checkProxmox(r, cfg, openFnFor(host, port))
 
-	f := findTitle(r.Findings, `Proxmox endpoint "home" is reachable`)
-	if f == nil || f.Severity != SeverityPass {
-		t.Fatalf("expected pass finding for valid empty result, got: %#v", r.Findings)
+	f := findTitle(r.Findings, `Proxmox endpoint "home" is only partially readable`)
+	if f == nil || f.Severity != SeverityWarn {
+		t.Fatalf("expected warn finding for a token that sees no resources, got: %#v", r.Findings)
 	}
-	if !strings.Contains(f.Detail, "resources") {
-		t.Fatalf("expected detail to name the empty collector, got: %q", f.Detail)
+	if !strings.Contains(f.Detail, "resources") || !strings.Contains(f.Detail, "token permissions") {
+		t.Fatalf("expected detail to name the empty collector and point at token permissions, got: %q", f.Detail)
 	}
 }
 
@@ -144,7 +152,22 @@ func TestCheckProxmox_NoReadableCollectorsIsFail(t *testing.T) {
 }
 
 func TestCheckProxmox_TokenFileUnreadableIsFail(t *testing.T) {
-	cfg := &config.Config{Proxmox: []config.ProxmoxConfig{{Name: "home", TokenFile: "/does/not/exist"}}}
+	if runtime.GOOS == "windows" {
+		t.Skip("permission bits are not enforced the same way on Windows")
+	}
+
+	dir := t.TempDir()
+	tokenFile := filepath.Join(dir, "token")
+	const secret = "should-never-appear-in-a-finding"
+	if err := os.WriteFile(tokenFile, []byte(secret), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(tokenFile, 0o000); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(tokenFile, 0o600) })
+
+	cfg := &config.Config{Proxmox: []config.ProxmoxConfig{{Name: "home", TokenFile: tokenFile}}}
 	r := &Result{}
 	checkProxmox(r, cfg, openProxmoxEndpoint)
 
@@ -152,7 +175,7 @@ func TestCheckProxmox_TokenFileUnreadableIsFail(t *testing.T) {
 	if f == nil || f.Severity != SeverityFail {
 		t.Fatalf("expected fail finding for unreadable token file, got: %#v", r.Findings)
 	}
-	if strings.Contains(f.Detail, "fixture-token") {
+	if strings.Contains(f.Detail, secret) {
 		t.Fatalf("finding must not contain a token value: %q", f.Detail)
 	}
 }

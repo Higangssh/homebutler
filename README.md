@@ -94,7 +94,7 @@ homebutler report --json
 
 - **Install apps** — deploy Uptime Kuma, Jellyfin, Pi-hole, Gitea, Portainer, and more with one command
 - **Map your server** — see containers, exposed ports, system ports, and service topology
-- **Run a doctor check** — diagnose resource pressure, stopped containers, public ports, backup hygiene, notifications, and report baseline readiness
+- **Run a doctor check** — diagnose resource pressure, stopped containers, public ports, backup hygiene, notifications, report baseline readiness, and configured Proxmox endpoint reachability
 - **Catch crashes** — save logs before/after Docker, systemd, or PM2 restarts and detect flapping loops
 - **Verify backups** — boot backups in isolated containers before you trust them
 - **See a Proxmox cluster** — nodes, QEMU and LXC guests, storage, and task status, with power actions that name their target explicitly
@@ -134,7 +134,7 @@ homebutler doctor --json            # automation / MCP friendly
   <img src="assets/doctor-card.svg" alt="homebutler doctor reporting a full disk, a stopped container, and a missing report baseline, each with the command to run next" width="700">
 </p>
 
-`doctor` is a read-only preflight for the problems homelab users usually discover too late: high disk or memory usage, stopped containers, public bind ports, stale or missing backups, missing notifications, and whether `report` has a baseline for change detection. Every finding names the next command to run, so `--strict` makes it usable from cron or CI.
+`doctor` is a read-only preflight for the problems homelab users usually discover too late: high disk or memory usage, stopped containers, public bind ports, stale or missing backups, missing notifications, whether `report` has a baseline for change detection, and whether each configured Proxmox endpoint is reachable with the token it has. Every finding names the next command to run, so `--strict` makes it usable from cron or CI — including a Proxmox host that is unreachable or rebooting.
 
 ### 🗂 Config Validation
 

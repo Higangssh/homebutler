@@ -335,7 +335,7 @@ func checkProxmox(r *Result, cfg *config.Config, openFn func(config.ProxmoxConfi
 		return
 	}
 	for _, endpoint := range cfg.Proxmox {
-		command := "homebutler proxmox status --endpoint " + endpoint.Name
+		command := fmt.Sprintf("homebutler proxmox status --endpoint %q", endpoint.Name)
 		client, err := openFn(endpoint)
 		if err != nil {
 			r.add(SeverityFail, "proxmox", fmt.Sprintf("Proxmox endpoint %q could not be configured", endpoint.Name), err.Error(), proxmoxFailureAction(err), command)
@@ -345,45 +345,22 @@ func checkProxmox(r *Result, cfg *config.Config, openFn func(config.ProxmoxConfi
 	}
 }
 
-type proxmoxCollector struct {
-	name  string
-	err   error
-	empty bool
-}
-
+// checkProxmoxEndpoint calls the same DefaultView the proxmox status command
+// renders, so the two never disagree about what a token can reach: an empty
+// resources collector is a failed collector here exactly as it is there,
+// not a doctor-only pass.
 func checkProxmoxEndpoint(r *Result, name string, client *proxmox.Client, command string) {
-	ctx := context.Background()
+	view, _ := client.DefaultView(context.Background())
 
-	var collectors []proxmoxCollector
-	_, err := client.Version(ctx)
-	collectors = append(collectors, proxmoxCollector{name: "version", err: err})
-	_, err = client.ClusterStatus(ctx)
-	collectors = append(collectors, proxmoxCollector{name: "cluster status", err: err})
-	resources, err := client.Resources(ctx)
-	empty := err == nil && len(resources.Nodes) == 0 && len(resources.Guests) == 0 && len(resources.Storage) == 0
-	collectors = append(collectors, proxmoxCollector{name: "resources", err: err, empty: empty})
-
-	var failed, empties []string
-	var firstErr error
-	for _, c := range collectors {
-		switch {
-		case c.err != nil:
-			failed = append(failed, fmt.Sprintf("%s: %s", c.name, c.err.Error()))
-			if firstErr == nil {
-				firstErr = c.err
-			}
-		case c.empty:
-			empties = append(empties, c.name)
-		}
-	}
+	allFailed := view.CollectorFailed(proxmox.CollectorVersion) &&
+		view.CollectorFailed(proxmox.CollectorCluster) &&
+		view.CollectorFailed(proxmox.CollectorResources)
 
 	switch {
-	case len(failed) == len(collectors):
-		r.add(SeverityFail, "proxmox", fmt.Sprintf("Proxmox endpoint %q has no readable collectors", name), strings.Join(failed, "; "), proxmoxFailureAction(firstErr), command)
-	case len(failed) > 0:
-		r.add(SeverityWarn, "proxmox", fmt.Sprintf("Proxmox endpoint %q is only partially readable", name), strings.Join(failed, "; "), proxmoxFailureAction(firstErr), command)
-	case len(empties) > 0:
-		r.add(SeverityPass, "proxmox", fmt.Sprintf("Proxmox endpoint %q is reachable", name), fmt.Sprintf("%s returned no data; that may be correct, or the token's ACL may only grant access to specific resources.", strings.Join(empties, ", ")), "", "")
+	case allFailed:
+		r.add(SeverityFail, "proxmox", fmt.Sprintf("Proxmox endpoint %q has no readable collectors", name), strings.Join(view.Warnings, "; "), proxmoxFailureAction(view.FirstErr), command)
+	case len(view.Failed) > 0:
+		r.add(SeverityWarn, "proxmox", fmt.Sprintf("Proxmox endpoint %q is only partially readable", name), strings.Join(view.Warnings, "; "), proxmoxFailureAction(view.FirstErr), command)
 	default:
 		r.add(SeverityPass, "proxmox", fmt.Sprintf("Proxmox endpoint %q is fully readable", name), "Version, cluster status, and resources all responded.", "", "")
 	}

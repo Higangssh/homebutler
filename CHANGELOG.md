@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### ✨ Features
+
+- diagnose each configured Proxmox endpoint in `doctor` with read-only requests (#105). `doctor` said nothing about Proxmox before this; now every endpoint gets one finding, using the same `DefaultView` call `proxmox status` makes, so the two never disagree about what a token can reach. TLS, authentication, authorization, and transport failures stay distinguishable, and the action `doctor` prints never suggests widening a token to Administrator to make a check pass — it names the read-only PVEAuditor role instead
+
+### ⚠️ Behavior changes
+
+- **`doctor` now makes outbound network calls, one per configured Proxmox endpoint.** A host that is slow to answer or unreachable makes `doctor` take noticeably longer, and `--strict` cron jobs now exit non-zero for a Proxmox host that is merely rebooting or firewalled, not only for problems on the local machine
+
 ## [0.25.0](https://github.com/Higangssh/homebutler/compare/v0.24.0...v0.25.0) - 2026-09-02
 
 **Every permission failure homebutler can hit printed the operator's next command last.** `backup`, `restore`, `install` and `upgrade` all led with the raw syscall error and put the one line that mattered underneath it — and the detail could not simply be dropped, because there was no way to ask for it back. This release inverts the order and adds the flag that makes dropping it safe.
