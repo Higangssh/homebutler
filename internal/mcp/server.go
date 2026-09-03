@@ -45,6 +45,7 @@ type jsonRPCResponse struct {
 type rpcError struct {
 	Code    int    `json:"code"`
 	Message string `json:"message"`
+	Data    any    `json:"data,omitempty"`
 }
 
 // MCP protocol types
@@ -58,6 +59,22 @@ type initializeResult struct {
 	ProtocolVersion string     `json:"protocolVersion"`
 	Capabilities    capInfo    `json:"capabilities"`
 	ServerInfo      serverInfo `json:"serverInfo"`
+}
+
+type discoverResult struct {
+	ResultType        string       `json:"resultType"`
+	SupportedVersions []string     `json:"supportedVersions"`
+	Capabilities      capInfo      `json:"capabilities"`
+	Meta              responseMeta `json:"_meta"`
+}
+
+type responseMeta struct {
+	ServerInfo serverInfo `json:"io.modelcontextprotocol/serverInfo"`
+}
+
+type requestMeta struct {
+	ProtocolVersion    string          `json:"io.modelcontextprotocol/protocolVersion"`
+	ClientCapabilities json.RawMessage `json:"io.modelcontextprotocol/clientCapabilities"`
 }
 
 // initializeParams is the part of the client's initialize request that this
@@ -76,7 +93,7 @@ type initializeParams struct {
 // was the oldest thing it could conformantly say, and clients cap their
 // behaviour to the version they are given.
 //
-// All four are listed because for a tools-only stdio server they describe the
+// All five are listed because for a tools-only stdio server they describe the
 // same surface. Everything the later revisions added is either out of scope
 // here (resources, prompts, sampling, roots, elicitation, tasks, Streamable
 // HTTP and its authorization) or already the behaviour: tool input validation
@@ -84,23 +101,31 @@ type initializeParams struct {
 // (SEP-1303), and the generated inputSchema uses no construct outside JSON
 // Schema 2020-12 (SEP-1613).
 var supportedProtocolVersions = []string{
+	"2026-07-28",
 	"2025-11-25",
 	"2025-06-18",
 	"2025-03-26",
 	"2024-11-05",
 }
 
+var legacyProtocolVersions = supportedProtocolVersions[1:]
+
+// toolsListTTLMS is a freshness hint, not a promise that the tool registry is
+// immutable. Change it if the registry becomes dynamic or a shorter polling
+// interval is needed.
+const toolsListTTLMS = 5 * 60 * 1000
+
 // negotiateProtocolVersion answers with the version the client asked for when
 // this server implements it, and with the newest one it does implement when it
 // does not. That is what the lifecycle spec requires, and it is also the only
 // shape that keeps working if a version is ever added or dropped here.
 func negotiateProtocolVersion(requested string) string {
-	for _, v := range supportedProtocolVersions {
+	for _, v := range legacyProtocolVersions {
 		if v == requested {
 			return requested
 		}
 	}
-	return supportedProtocolVersions[0]
+	return legacyProtocolVersions[0]
 }
 
 type capInfo struct {
@@ -127,7 +152,11 @@ type propDef struct {
 }
 
 type toolsListResult struct {
-	Tools []toolDef `json:"tools"`
+	ResultType string       `json:"resultType"`
+	Tools      []toolDef    `json:"tools"`
+	TTLMS      int          `json:"ttlMs"`
+	CacheScope string       `json:"cacheScope"`
+	Meta       responseMeta `json:"_meta"`
 }
 
 type toolsCallParams struct {
@@ -141,8 +170,10 @@ type contentItem struct {
 }
 
 type toolsCallResult struct {
-	Content []contentItem `json:"content"`
-	IsError bool          `json:"isError,omitempty"`
+	ResultType string        `json:"resultType"`
+	Content    []contentItem `json:"content"`
+	IsError    bool          `json:"isError,omitempty"`
+	Meta       responseMeta  `json:"_meta"`
 }
 
 // Server is the MCP server.
@@ -200,6 +231,24 @@ func (s *Server) Run() error {
 }
 
 func (s *Server) handleRequest(req *jsonRPCRequest) {
+	modern, err := validateRequestMeta(req)
+	if err != nil {
+		if req.ID != nil {
+			if unsupported, ok := err.(*unsupportedProtocolError); ok {
+				s.writeUnsupportedProtocolError(req.ID, unsupported.requested)
+			} else {
+				s.writeError(req.ID, -32602, err.Error())
+			}
+		}
+		return
+	}
+	if modern && req.Method == "initialize" {
+		if req.ID != nil {
+			s.writeError(req.ID, -32601, "method not found: initialize")
+		}
+		return
+	}
+
 	switch req.Method {
 	case "initialize":
 		var params initializeParams
@@ -215,12 +264,30 @@ func (s *Server) handleRequest(req *jsonRPCRequest) {
 	case "notifications/initialized":
 		// Notification — no response needed
 	case "ping":
-		// "The receiver MUST respond promptly with an empty response." Initiating
-		// a ping is optional; answering one is not, and this used to come back
-		// as -32601 method not found.
+		if modern {
+			// ping was removed in 2026-07-28.
+			if req.ID != nil {
+				s.writeError(req.ID, -32601, "method not found: ping")
+			}
+			break
+		}
+		// Legacy clients expect the empty ping result.
 		s.writeResult(req.ID, struct{}{})
+	case "server/discover":
+		s.writeResult(req.ID, discoverResult{
+			ResultType:        "complete",
+			SupportedVersions: supportedProtocolVersions,
+			Capabilities:      capInfo{Tools: &toolsCap{}},
+			Meta:              responseMeta{ServerInfo: serverInfo{Name: "homebutler", Version: s.version}},
+		})
 	case "tools/list":
-		s.writeResult(req.ID, toolsListResult{Tools: toolDefinitions()})
+		s.writeResult(req.ID, toolsListResult{
+			ResultType: "complete",
+			Tools:      toolDefinitions(),
+			TTLMS:      toolsListTTLMS,
+			CacheScope: "public",
+			Meta:       responseMeta{ServerInfo: serverInfo{Name: "homebutler", Version: s.version}},
+		})
 	case "tools/call":
 		s.handleToolCall(req)
 	default:
@@ -240,8 +307,10 @@ func (s *Server) handleToolCall(req *jsonRPCRequest) {
 	result, toolErr := s.executeTool(params.Name, params.Arguments)
 	if toolErr != nil {
 		s.writeResult(req.ID, toolsCallResult{
-			Content: []contentItem{{Type: "text", Text: toolErr.Error()}},
-			IsError: true,
+			ResultType: "complete",
+			Content:    []contentItem{{Type: "text", Text: toolErr.Error()}},
+			IsError:    true,
+			Meta:       responseMeta{ServerInfo: serverInfo{Name: "homebutler", Version: s.version}},
 		})
 		return
 	}
@@ -249,14 +318,18 @@ func (s *Server) handleToolCall(req *jsonRPCRequest) {
 	data, err := json.Marshal(result)
 	if err != nil {
 		s.writeResult(req.ID, toolsCallResult{
-			Content: []contentItem{{Type: "text", Text: fmt.Sprintf("marshal error: %v", err)}},
-			IsError: true,
+			ResultType: "complete",
+			Content:    []contentItem{{Type: "text", Text: fmt.Sprintf("marshal error: %v", err)}},
+			IsError:    true,
+			Meta:       responseMeta{ServerInfo: serverInfo{Name: "homebutler", Version: s.version}},
 		})
 		return
 	}
 
 	s.writeResult(req.ID, toolsCallResult{
-		Content: []contentItem{{Type: "text", Text: string(data)}},
+		ResultType: "complete",
+		Content:    []contentItem{{Type: "text", Text: string(data)}},
+		Meta:       responseMeta{ServerInfo: serverInfo{Name: "homebutler", Version: s.version}},
 	})
 }
 
@@ -743,6 +816,70 @@ func (s *Server) writeError(id json.RawMessage, code int, message string) {
 	}
 	data, _ := json.Marshal(resp)
 	fmt.Fprintf(s.out, "%s\n", data)
+}
+
+func (s *Server) writeUnsupportedProtocolError(id json.RawMessage, requested string) {
+	resp := jsonRPCResponse{JSONRPC: "2.0", ID: id, Error: &rpcError{
+		Code:    -32022,
+		Message: "Unsupported protocol version",
+		Data:    map[string]any{"supported": supportedProtocolVersions, "requested": requested},
+	}}
+	data, _ := json.Marshal(resp)
+	fmt.Fprintf(s.out, "%s\n", data)
+}
+
+// validateRequestMeta identifies and validates the stateless modern request
+// envelope. An absent envelope is deliberately accepted for legacy clients.
+func validateRequestMeta(req *jsonRPCRequest) (bool, error) {
+	if len(req.Params) == 0 {
+		return false, nil
+	}
+	var params map[string]json.RawMessage
+	if err := json.Unmarshal(req.Params, &params); err != nil || params == nil {
+		return false, fmt.Errorf("invalid params")
+	}
+	rawMeta, present := params["_meta"]
+	if !present {
+		return false, nil
+	}
+	var meta requestMeta
+	if err := json.Unmarshal(rawMeta, &meta); err != nil || meta.ProtocolVersion == "" || len(meta.ClientCapabilities) == 0 {
+		return true, fmt.Errorf("invalid request metadata")
+	}
+	var capabilities map[string]any
+	if err := json.Unmarshal(meta.ClientCapabilities, &capabilities); err != nil || capabilities == nil {
+		return true, fmt.Errorf("invalid client capabilities")
+	}
+	if !isModernProtocolVersion(meta.ProtocolVersion) {
+		return true, &unsupportedProtocolError{requested: meta.ProtocolVersion}
+	}
+	return true, nil
+}
+
+type unsupportedProtocolError struct{ requested string }
+
+func (e *unsupportedProtocolError) Error() string { return "Unsupported protocol version" }
+
+func isSupportedProtocolVersion(version string) bool {
+	for _, supported := range supportedProtocolVersions {
+		if version == supported {
+			return true
+		}
+	}
+	return false
+}
+
+func isModernProtocolVersion(version string) bool {
+	return isSupportedProtocolVersion(version) && !isLegacyProtocolVersion(version)
+}
+
+func isLegacyProtocolVersion(version string) bool {
+	for _, legacy := range legacyProtocolVersions {
+		if version == legacy {
+			return true
+		}
+	}
+	return false
 }
 
 // Helper functions

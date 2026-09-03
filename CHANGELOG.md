@@ -10,6 +10,7 @@ All notable changes to this project will be documented in this file.
 
 - diagnose each configured Proxmox endpoint in `doctor` with read-only requests (#105). `doctor` said nothing about Proxmox before this; now every endpoint gets one finding, using the same `DefaultView` call `proxmox status` makes, so the two never disagree about what a token can reach. TLS, authentication, authorization, and transport failures stay distinguishable, and the action `doctor` prints never suggests widening a token to Administrator to make a check pass — it names the read-only PVEAuditor role instead
 - require a separate credential for Proxmox guest actions (#107). `action_token_id` plus `action_token` or `action_token_file` configures a second, optional token used only for start, reboot, and shutdown; reads, the dashboard, and the read-only MCP tools keep using the existing token. `config validate` warns when the action credential is the same token as the read one, since that defeats the separation. See [Proxmox setup →](docs/proxmox.md) for creating the second token with a least-privilege ACL
+- add the MCP 2026-07-28 `server/discover` RPC, per-request metadata validation, version mismatch errors, result typing, cache hints, and deterministic tool ordering
 
 ### 🐛 Fixes
 
@@ -20,6 +21,7 @@ All notable changes to this project will be documented in this file.
 
 - **Guest start, reboot, and shutdown fail with `no action credential configured for Proxmox endpoint "..."` until `action_token_id` and `action_token` (or `action_token_file`) are added to the endpoint.** There is no fallback to the read token and no compatibility flag — reusing it defeated the reason this credential is separate in the first place
 - **`doctor` now makes outbound network calls, one per configured Proxmox endpoint.** A host that is slow to answer or unreachable makes `doctor` take noticeably longer, and `--strict` cron jobs now exit non-zero for a Proxmox host that is merely rebooting or firewalled, not only for problems on the local machine
+- modern requests use stateless per-request metadata; legacy `initialize` requests continue to negotiate legacy protocol versions
 
 
 ## [0.26.0](https://github.com/Higangssh/homebutler/compare/v0.25.0...v0.26.0) - 2026-09-03
