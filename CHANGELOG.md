@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+**Every Linux report filled with kernel threads appearing and disappearing.** `isKernelThread` looks for the `kworker/` prefix, and `parseProcesses` had already stripped it: the slash in `kworker/0:4-events` is not a directory separator, but it was treated as one, leaving `0:4-events` for the filter to not recognise. Two runs seconds apart on an idle Raspberry Pi reported twelve kernel threads gone and twelve new. macOS has no kernel threads by that name, which is why it took running it on Linux to see.
+
+### 🐛 Fixes
+
+- keep a kernel thread's name intact so the filter can recognise it (#59). Only an absolute path is reduced to its base name now — `/usr/bin/node` still becomes `node`, and `kworker/R-rcu_g` stays whole
+- report one line when one port opens. Docker publishes on both address families, so a single container starting printed `new :8099/tcp` twice with nothing to tell the two lines apart. Changes that render identically are now dropped from both the human output and `--json`; this is not the grouping rule, which collapses different changes and stays human-only
+
 ## [0.26.0](https://github.com/Higangssh/homebutler/compare/v0.25.0...v0.26.0) - 2026-09-03
 
 **`report` compared counts and remembered no processes, so a container replaced by a different container read as no change and "what started running since yesterday" had no path to an answer.** The snapshot on disk held the full container and port lists all along; the diff read four integers off it and threw the lists away. `processes` was collected, rendered, and discarded entirely.

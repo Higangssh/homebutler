@@ -1,6 +1,7 @@
 package system
 
 import (
+	"strings"
 	"testing"
 	"time"
 )
@@ -209,6 +210,34 @@ func TestParseElapsed(t *testing.T) {
 	for in, want := range cases {
 		if got := parseElapsed(in); got != want {
 			t.Errorf("parseElapsed(%q) = %v, want %v", in, got, want)
+		}
+	}
+}
+
+// Found by running report twice on a Raspberry Pi: twelve kernel threads
+// appeared and twelve disappeared between two runs seconds apart. The slash
+// in kworker/0:4-events is not a directory separator, and stripping it left
+// a name isKernelThread could not recognise.
+func TestKernelThreadsSurviveToTheFilter(t *testing.T) {
+	output := `  PID  %CPU %MEM   RSS STAT COMMAND
+    4   0.0  0.0     0 I    kworker/R-rcu_g
+   17   0.0  0.0     0 I    kworker/0:4-events
+ 1234  25.0  3.2 51200 S    /usr/bin/node
+`
+	procs := parseProcesses(output, 0)
+	byName := map[string]bool{}
+	for _, p := range procs {
+		byName[p.Name] = true
+	}
+	if !byName["kworker/R-rcu_g"] || !byName["kworker/0:4-events"] {
+		t.Fatalf("a kernel thread lost its prefix and will never be filtered: %+v", procs)
+	}
+	if !byName["node"] {
+		t.Errorf("an executable path was not reduced to its base name: %+v", procs)
+	}
+	for _, p := range procs {
+		if strings.HasPrefix(p.Name, "kworker/") && !isKernelThread(p.Name) {
+			t.Errorf("isKernelThread does not recognise %q", p.Name)
 		}
 	}
 }

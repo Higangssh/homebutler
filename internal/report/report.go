@@ -263,6 +263,7 @@ func buildReport(snap *Snapshot, prev *Snapshot) *Report {
 	}
 
 	sortChanges(changes)
+	changes = dedupeChanges(changes)
 	r.changes = changes
 	for _, c := range changes {
 		r.NotableChanges = append(r.NotableChanges, c.String())
