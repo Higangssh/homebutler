@@ -382,7 +382,7 @@ func TestProxmoxGuestActions(t *testing.T) {
 				if r.Method != http.MethodPost {
 					t.Errorf("method = %q, want POST", r.Method)
 				}
-				if got, want := r.Header.Get("Authorization"), "PVEAPIToken=monitoring@pve!readonly=test-token"; got != want {
+				if got, want := r.Header.Get("Authorization"), "PVEAPIToken=action@pve!action=action-token"; got != want {
 					t.Errorf("Authorization = %q, want %q", got, want)
 				}
 				wantPath := "/api2/json/nodes/pve1/" + tt.guestType + "/100/status/" + string(tt.action)
@@ -395,7 +395,7 @@ func TestProxmoxGuestActions(t *testing.T) {
 
 			oldPath, oldJSON, oldCfg := cfgPath, jsonOutput, cfg
 			defer func() { cfgPath, jsonOutput, cfg = oldPath, oldJSON, oldCfg }()
-			cfgPath, jsonOutput, cfg = writeProxmoxTestConfig(t, server.URL), true, nil
+			cfgPath, jsonOutput, cfg = writeProxmoxActionTestConfig(t, server.URL), true, nil
 			cmd := newProxmoxGuestActionCmd(tt.action)
 			cmd.SetArgs([]string{"--endpoint", "pve", "--node", "pve1", "--type", tt.guestType, "--vmid", "100", "--confirm"})
 			var output bytes.Buffer
@@ -426,7 +426,7 @@ func TestProxmoxGuestActionHumanOutput(t *testing.T) {
 
 	oldPath, oldJSON, oldCfg := cfgPath, jsonOutput, cfg
 	defer func() { cfgPath, jsonOutput, cfg = oldPath, oldJSON, oldCfg }()
-	cfgPath, jsonOutput, cfg = writeProxmoxTestConfig(t, server.URL), false, nil
+	cfgPath, jsonOutput, cfg = writeProxmoxActionTestConfig(t, server.URL), false, nil
 	cmd := newProxmoxGuestActionCmd(proxmox.GuestActionStart)
 	cmd.SetArgs([]string{"--endpoint", "pve", "--node", "pve1", "--type", "qemu", "--vmid", "100", "--confirm"})
 	var output bytes.Buffer
@@ -450,6 +450,28 @@ func TestProxmoxGuestActionConfirmationPrecedesConfig(t *testing.T) {
 		if err == nil || !strings.Contains(err.Error(), want) {
 			t.Fatalf("confirmation error = %v, want %q", err, want)
 		}
+	}
+}
+
+func TestProxmoxGuestActionRequiresActionCredential(t *testing.T) {
+	requests := 0
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests++
+		_, _ = w.Write([]byte(`{"data":"UPID:pve1:opaque"}`))
+	}))
+	defer server.Close()
+
+	oldPath, oldJSON, oldCfg := cfgPath, jsonOutput, cfg
+	defer func() { cfgPath, jsonOutput, cfg = oldPath, oldJSON, oldCfg }()
+	cfgPath, jsonOutput, cfg = writeProxmoxTestConfig(t, server.URL), true, nil
+	cmd := newProxmoxGuestActionCmd(proxmox.GuestActionStart)
+	cmd.SetArgs([]string{"--endpoint", "pve", "--node", "pve1", "--type", "qemu", "--vmid", "100", "--confirm"})
+	err := cmd.Execute()
+	if err == nil || !strings.Contains(err.Error(), "no action credential configured") {
+		t.Fatalf("action without action credential error = %v", err)
+	}
+	if requests != 0 {
+		t.Errorf("action without action credential made %d requests, want 0", requests)
 	}
 }
 
@@ -549,6 +571,28 @@ func writeProxmoxTestConfig(t *testing.T, serverURL string) string {
 	}
 	path := filepath.Join(t.TempDir(), "homebutler.yaml")
 	data := fmt.Sprintf("proxmox:\n  - name: pve\n    host: %s\n    port: %d\n    token_id: monitoring@pve!readonly\n    token: test-token\n    insecure: true\n", host, port)
+	if err := os.WriteFile(path, []byte(data), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	return path
+}
+
+func writeProxmoxActionTestConfig(t *testing.T, serverURL string) string {
+	t.Helper()
+	parsed, err := url.Parse(serverURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	host, portText, err := net.SplitHostPort(parsed.Host)
+	if err != nil {
+		t.Fatal(err)
+	}
+	port, err := strconv.Atoi(portText)
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(t.TempDir(), "homebutler.yaml")
+	data := fmt.Sprintf("proxmox:\n  - name: pve\n    host: %s\n    port: %d\n    token_id: monitoring@pve!readonly\n    token: test-token\n    action_token_id: action@pve!action\n    action_token: action-token\n    insecure: true\n", host, port)
 	if err := os.WriteFile(path, []byte(data), 0o600); err != nil {
 		t.Fatal(err)
 	}

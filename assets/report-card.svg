@@ -1,4 +1,4 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="600" height="604" viewBox="0 0 600 604" role="img" aria-label="Terminal showing homebutler report output: notable changes since the last report — a container gone, one new, one replaced behind the same name, an image bump, seven state changes collapsed into a line, a port that changed owner, and disk growth — followed by current status and a suggested action">
+<svg xmlns="http://www.w3.org/2000/svg" width="600" height="604" viewBox="0 0 600 604" role="img" aria-label="Terminal showing homebutler report output: notable changes since the last report — a container gone, one new, one replaced behind the same name, a process running a different invocation, seven state changes collapsed into a line, a port that changed owner, and disk growth — followed by current status and a suggested action">
   <!--
     Terminal card used at the top of README.md. See assets/README.md.
 
@@ -42,9 +42,9 @@
     <text x="131" y="250" fill="#e6edf3">nginx</text>
     <text x="249" y="250" fill="#8b949e">7d4a91f0aa11 → 91be0322bb22</text>
 
-    <text x="47" y="273" fill="#e3b341">image</text>
-    <text x="131" y="273" fill="#e6edf3">jellyfin</text>
-    <text x="249" y="273" fill="#8b949e">jellyfin:10.9.11 → jellyfin:10.10.0</text>
+    <text x="47" y="273" fill="#e3b341">replaced</text>
+    <text x="131" y="273" fill="#e6edf3">python3</text>
+    <text x="249" y="273" fill="#8b949e">same name, different invocation</text>
 
     <text x="47" y="296" fill="#e3b341">state</text>
     <text x="131" y="296" fill="#e6edf3">7 containers</text>

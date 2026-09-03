@@ -1,6 +1,7 @@
 package config
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -214,6 +215,146 @@ proxmox:
 	} {
 		requireFinding(t, r, field, SeverityError)
 	}
+}
+
+func TestValidateProxmoxActionCredentialErrors(t *testing.T) {
+	path := writeConfig(t, `
+proxmox:
+  - name: pve
+    host: pve.example
+    token_id: monitoring@pve!readonly
+    token: read-token
+    action_token_id: monitoring@pve!action
+    action_token: inline-action
+    action_token_file: /does/not/exist
+  - name: pve2
+    host: pve2.example
+    token_id: monitoring@pve!readonly
+    token: read-token
+    action_token_id: monitoring@pve!action
+    action_token: inline-action
+`)
+
+	r := Validate(path)
+	if r.Valid {
+		t.Fatal("expected invalid config")
+	}
+	for _, field := range []string{
+		"proxmox[0]", "proxmox[0].action_token_file",
+	} {
+		requireFinding(t, r, field, SeverityError)
+	}
+	if _, found := findingFor(r, "proxmox[1]"); found {
+		t.Errorf("action_token_id with action_token alone should be valid: %+v", r.Findings)
+	}
+}
+
+func TestValidateProxmoxActionTokenIDRequired(t *testing.T) {
+	path := writeConfig(t, `
+proxmox:
+  - name: pve
+    host: pve.example
+    token_id: monitoring@pve!readonly
+    token: read-token
+    action_token: inline-action-without-id
+`)
+
+	r := Validate(path)
+	requireFinding(t, r, "proxmox[0].action_token_id", SeverityError)
+}
+
+func TestValidateProxmoxNoActionCredentialIsValid(t *testing.T) {
+	path := writeConfig(t, `
+proxmox:
+  - name: pve
+    host: pve.example
+    token_id: monitoring@pve!readonly
+    token: read-token
+`)
+
+	r := Validate(path)
+	if !r.Valid {
+		t.Errorf("expected valid config without an action credential, got findings: %+v", r.Findings)
+	}
+}
+
+func TestValidateProxmoxActionCredentialSameIDWarns(t *testing.T) {
+	path := writeConfig(t, `
+proxmox:
+  - name: pve
+    host: pve.example
+    token_id: monitoring@pve!readonly
+    token: read-token
+    action_token_id: monitoring@pve!readonly
+    action_token: different-token
+`)
+
+	r := Validate(path)
+	if !r.Valid {
+		t.Fatalf("a warning should not invalidate the config: %+v", r.Findings)
+	}
+	requireFinding(t, r, "proxmox[0].action_token_id", SeverityWarning)
+}
+
+func TestValidateProxmoxActionCredentialSameTokenWarns(t *testing.T) {
+	path := writeConfig(t, `
+proxmox:
+  - name: pve
+    host: pve.example
+    token_id: monitoring@pve!readonly
+    token: shared-token
+    action_token_id: monitoring@pve!action
+    action_token: shared-token
+`)
+
+	r := Validate(path)
+	requireFinding(t, r, "proxmox[0].action_token", SeverityWarning)
+}
+
+func TestValidateProxmoxActionCredentialSameFileWarns(t *testing.T) {
+	dir := t.TempDir()
+	tokenPath := filepath.Join(dir, "pve.token")
+	if err := os.WriteFile(tokenPath, []byte("token"), 0600); err != nil {
+		t.Fatalf("write token: %v", err)
+	}
+
+	path := writeConfig(t, fmt.Sprintf(`
+proxmox:
+  - name: pve
+    host: pve.example
+    token_id: monitoring@pve!readonly
+    token_file: %s
+    action_token_id: monitoring@pve!action
+    action_token_file: %s
+`, tokenPath, tokenPath))
+
+	r := Validate(path)
+	requireFinding(t, r, "proxmox[0].action_token", SeverityWarning)
+}
+
+func TestValidateProxmoxActionTokenFilePermissionsWarns(t *testing.T) {
+	dir := t.TempDir()
+	tokenPath := filepath.Join(dir, "pve.token")
+	if err := os.WriteFile(tokenPath, []byte("token"), 0600); err != nil {
+		t.Fatalf("write token: %v", err)
+	}
+	actionTokenPath := filepath.Join(dir, "pve.action.token")
+	if err := os.WriteFile(actionTokenPath, []byte("token"), 0644); err != nil {
+		t.Fatalf("write action token: %v", err)
+	}
+
+	path := writeConfig(t, fmt.Sprintf(`
+proxmox:
+  - name: pve
+    host: pve.example
+    token_id: monitoring@pve!readonly
+    token_file: %s
+    action_token_id: monitoring@pve!action
+    action_token_file: %s
+`, tokenPath, actionTokenPath))
+
+	r := Validate(path)
+	requireFinding(t, r, "proxmox[0].action_token_file", SeverityWarning)
 }
 
 func TestValidateProxmoxTokenFile(t *testing.T) {

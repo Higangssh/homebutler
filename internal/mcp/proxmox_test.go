@@ -115,10 +115,15 @@ func TestProxmoxPhase2Dispatch(t *testing.T) {
 	var requests []string
 	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		requests = append(requests, r.URL.EscapedPath())
-		if got, want := r.Header.Get("Authorization"), "PVEAPIToken=monitoring@pve!readonly=fixture-token"; got != want {
+		isTaskStatus := strings.HasSuffix(r.URL.Path, "/status") && strings.Contains(r.URL.Path, "/tasks/")
+		want := "PVEAPIToken=power@pve!actions=fixture-action-token"
+		if isTaskStatus {
+			want = "PVEAPIToken=monitoring@pve!readonly=fixture-token"
+		}
+		if got := r.Header.Get("Authorization"); got != want {
 			t.Errorf("Authorization = %q, want %q", got, want)
 		}
-		if strings.HasSuffix(r.URL.Path, "/status") && strings.Contains(r.URL.Path, "/tasks/") {
+		if isTaskStatus {
 			if r.Method != http.MethodGet {
 				t.Errorf("task method = %q, want GET", r.Method)
 			}
@@ -131,7 +136,7 @@ func TestProxmoxPhase2Dispatch(t *testing.T) {
 		_, _ = w.Write([]byte(`{"data":"UPID:pve1:opaque"}`))
 	}))
 	defer server.Close()
-	s := testProxmoxMCPServer(t, server.URL)
+	s := testProxmoxMCPServerWithAction(t, server.URL)
 
 	tests := []struct {
 		name       string
@@ -168,6 +173,26 @@ func TestProxmoxPhase2Dispatch(t *testing.T) {
 	task := status.(proxmox.TaskStatus)
 	if task.Status != "stopped" || task.ExitStatus != "OK" || task.Result != "ok" {
 		t.Errorf("task status = %#v", task)
+	}
+}
+
+func TestProxmoxGuestActionRequiresActionCredential(t *testing.T) {
+	var requests int
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests++
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer server.Close()
+	s := testProxmoxMCPServer(t, server.URL)
+
+	_, err := s.executeTool("proxmox_guest_start", map[string]any{
+		"endpoint": "pve", "node": "pve1", "type": "qemu", "vmid": float64(100), "confirm": true,
+	})
+	if err == nil || !strings.Contains(err.Error(), "no action credential configured for Proxmox endpoint \"pve\"") {
+		t.Fatalf("error = %v, want no action credential message", err)
+	}
+	if requests != 0 {
+		t.Errorf("requests = %d, want 0 (no network call before the credential check)", requests)
 	}
 }
 
@@ -283,6 +308,23 @@ func testProxmoxMCPServer(t *testing.T, rawURL string) *Server {
 	}
 	return NewServer(&config.Config{Proxmox: []config.ProxmoxConfig{{
 		Name: "pve", Host: u.Hostname(), Port: port, TokenID: "monitoring@pve!readonly", Token: "fixture-token", Insecure: true,
+	}}}, "test")
+}
+
+func testProxmoxMCPServerWithAction(t *testing.T, rawURL string) *Server {
+	t.Helper()
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	port, err := strconv.Atoi(u.Port())
+	if err != nil {
+		t.Fatal(err)
+	}
+	return NewServer(&config.Config{Proxmox: []config.ProxmoxConfig{{
+		Name: "pve", Host: u.Hostname(), Port: port, Insecure: true,
+		TokenID: "monitoring@pve!readonly", Token: "fixture-token",
+		ActionTokenID: "power@pve!actions", ActionToken: "fixture-action-token",
 	}}}, "test")
 }
 

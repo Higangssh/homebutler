@@ -171,6 +171,15 @@ type ProxmoxConfig struct {
 	CAFile      string `yaml:"ca_file,omitempty"`
 	Insecure    bool   `yaml:"insecure,omitempty"`
 	Timeout     string `yaml:"timeout,omitempty"`
+
+	// ActionTokenID/ActionToken/ActionTokenFile configure an optional second
+	// credential used only for guest power actions (start/reboot/shutdown).
+	// The credential above stays read-only; if no action credential is
+	// configured, guest actions are unavailable rather than falling back to
+	// the read credential.
+	ActionTokenID   string `yaml:"action_token_id,omitempty"`
+	ActionToken     string `yaml:"action_token,omitempty" json:"-" secret:"true"`
+	ActionTokenFile string `yaml:"action_token_file,omitempty"`
 }
 
 // APIPort returns the configured API port or Proxmox's default HTTPS port.
@@ -216,6 +225,63 @@ func (p ProxmoxConfig) TokenValue() (string, error) {
 		return token, nil
 	}
 	return "", proxmox.WithFailureClass(proxmox.FailureAuthentication, fmt.Errorf("proxmox token file %s is empty", p.TokenFile))
+}
+
+// HasActionCredential reports whether an action credential is configured for
+// guest power actions. Guest actions are unavailable when this is false;
+// there is no fallback to the read credential.
+func (p ProxmoxConfig) HasActionCredential() bool {
+	return p.ActionTokenID != "" && (p.ActionToken != "" || p.ActionTokenFile != "")
+}
+
+// ActionTokenFilePath expands a leading ~/ in the configured action token
+// file path.
+func (p ProxmoxConfig) ActionTokenFilePath() string {
+	return expandHome(p.ActionTokenFile)
+}
+
+// ActionTokenValue returns the action API token from the configured file or
+// inline value, mirroring TokenValue's file-wins precedence.
+func (p ProxmoxConfig) ActionTokenValue() (string, error) {
+	if p.ActionTokenFile == "" {
+		if p.ActionToken == "" {
+			return "", fmt.Errorf("proxmox action token is not configured")
+		}
+		return p.ActionToken, nil
+	}
+
+	data, err := os.ReadFile(p.ActionTokenFilePath())
+	if err != nil {
+		return "", proxmox.WithFailureClass(proxmox.FailureAuthentication, fmt.Errorf("read Proxmox action token file %s: %w", p.ActionTokenFile, err))
+	}
+	if token := strings.TrimSpace(string(data)); token != "" {
+		return token, nil
+	}
+	return "", proxmox.WithFailureClass(proxmox.FailureAuthentication, fmt.Errorf("proxmox action token file %s is empty", p.ActionTokenFile))
+}
+
+// ResolveCredential returns the token ID and token value for either the read
+// or action credential, wrapping resolution failures the same way across
+// every caller. Guest actions never fall back to the read credential: when
+// action is true and no action credential is configured, this fails before
+// any token is read.
+func (p ProxmoxConfig) ResolveCredential(action bool) (tokenID, token string, err error) {
+	if !action {
+		token, err = p.TokenValue()
+		if err != nil {
+			return "", "", fmt.Errorf("read token for Proxmox endpoint %q: %w", p.Name, err)
+		}
+		return p.TokenID, token, nil
+	}
+	if !p.HasActionCredential() {
+		return "", "", proxmox.WithFailureClass(proxmox.FailureAuthentication,
+			fmt.Errorf("no action credential configured for Proxmox endpoint %q; guest actions require action_token_id and action_token or action_token_file — see docs/proxmox.md", p.Name))
+	}
+	token, err = p.ActionTokenValue()
+	if err != nil {
+		return "", "", fmt.Errorf("read action token for Proxmox endpoint %q: %w", p.Name, err)
+	}
+	return p.ActionTokenID, token, nil
 }
 
 type WakeTarget struct {

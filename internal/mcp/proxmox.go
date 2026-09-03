@@ -76,12 +76,12 @@ func (s *Server) executeProxmox(name string, args map[string]any) (any, error) {
 	if err != nil {
 		return nil, err
 	}
-	token, err := endpoint.TokenValue()
+	tokenID, token, err := endpoint.ResolveCredential(isAction)
 	if err != nil {
-		return nil, fmt.Errorf("read token for Proxmox endpoint %q: %w", endpoint.Name, err)
+		return nil, err
 	}
 	client, err := proxmox.New(proxmox.Options{
-		Host: endpoint.Host, Port: endpoint.APIPort(), TokenID: endpoint.TokenID, Token: token,
+		Host: endpoint.Host, Port: endpoint.APIPort(), TokenID: tokenID, Token: token,
 		Fingerprint: endpoint.Fingerprint, CAFile: endpoint.CAFile, Insecure: endpoint.Insecure, Timeout: endpoint.TimeoutDuration(),
 	})
 	if err != nil {

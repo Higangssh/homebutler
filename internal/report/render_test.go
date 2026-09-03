@@ -30,6 +30,13 @@ func TestRenderedChangeBlock(t *testing.T) {
 
 	prev := snapshotWith(prevC, []ports.PortInfo{{Protocol: "tcp", Address: "0.0.0.0", Port: "8080", Process: "vaultwarden"}})
 	curr := snapshotWith(currC, []ports.PortInfo{{Protocol: "tcp", Address: "0.0.0.0", Port: "8080", Process: "gitea"}})
+	prev.Processes = processIdentities(procs(
+		system.ProcessInfo{PID: 1, Name: "python3", Command: "python3 /opt/old.py"},
+	))
+	curr.Processes = processIdentities(procs(
+		system.ProcessInfo{PID: 1, Name: "python3", Command: "python3 /opt/new.py"},
+		system.ProcessInfo{PID: 2, Name: "borgbackup", Command: "borg create ::daily /data"},
+	))
 	prev.System = &system.StatusInfo{Disks: []system.DiskInfo{{Mount: "/", UsedGB: 45, TotalGB: 128}}}
 	curr.System = &system.StatusInfo{Disks: []system.DiskInfo{{Mount: "/", UsedGB: 47.4, TotalGB: 128}}}
 	curr.ServerName = "homelab"
@@ -47,6 +54,8 @@ func TestRenderedChangeBlock(t *testing.T) {
 		"state     7 containers  svc-0, svc-1, svc-2, +4",
 		"port      :8080/tcp     vaultwarden → gitea",
 		"disk      /             +2.4 GB since last report",
+		"new       borgbackup",
+		"replaced  python3       same name, different invocation",
 	}
 	for _, line := range want {
 		if !strings.Contains(human, line) {

@@ -5,8 +5,9 @@
 <h1 align="center">HomeButler</h1>
 
 <p align="center">
-  <strong>Know what changed before you fix it.</strong><br>
-  A single Go binary for running a small home server without babysitting it.
+  <strong>Only the changes worth mentioning.</strong><br>
+  A single Go binary that remembers what your server looked like last time,
+  and tells you — or an agent — what moved.
 </p>
 
 <p align="center">
@@ -27,14 +28,16 @@
 </p>
 
 <p align="center">
-  <img src="assets/report-card.svg" alt="homebutler report output: what changed since the last report — a container gone, one new, one replaced behind the same name, an image bump, a port that changed owner — then current status" width="620">
+  <img src="assets/report-card.svg" alt="homebutler report output: what changed since the last report — a container gone, one new, one replaced behind the same name, a process running a different invocation, a port that changed owner — then current status" width="620">
 </p>
 
 Section rules, labels, and severities are colour-coded in a terminal. Colour is
 dropped automatically when output is piped, redirected, or run from cron.
 
-That is the whole idea. Most homelab tools show you a graph of right now. HomeButler
-remembers what your server looked like last time and tells you what moved.
+That is the whole idea. Most homelab tools show you a graph of right now, and leave
+"does this matter?" to you. HomeButler remembers what your server looked like last
+time, decides what is worth saying, and says it — six containers before and six after
+is not "no change" when one of them is a different container.
 
 HomeButler helps you answer the boring but painful questions every homelab eventually creates:
 
@@ -94,7 +97,7 @@ homebutler report --json
 
 - **Install apps** — deploy Uptime Kuma, Jellyfin, Pi-hole, Gitea, Portainer, and more with one command
 - **Map your server** — see containers, exposed ports, system ports, and service topology
-- **Run a doctor check** — diagnose resource pressure, stopped containers, public ports, backup hygiene, notifications, and report baseline readiness
+- **Run a doctor check** — diagnose resource pressure, stopped containers, public ports, backup hygiene, notifications, report baseline readiness, and configured Proxmox endpoint reachability
 - **Catch crashes** — save logs before/after Docker, systemd, or PM2 restarts and detect flapping loops
 - **Verify backups** — boot backups in isolated containers before you trust them
 - **See a Proxmox cluster** — nodes, QEMU and LXC guests, storage, and task status, with power actions that name their target explicitly
@@ -134,7 +137,7 @@ homebutler doctor --json            # automation / MCP friendly
   <img src="assets/doctor-card.svg" alt="homebutler doctor reporting a full disk, a stopped container, and a missing report baseline, each with the command to run next" width="700">
 </p>
 
-`doctor` is a read-only preflight for the problems homelab users usually discover too late: high disk or memory usage, stopped containers, public bind ports, stale or missing backups, missing notifications, and whether `report` has a baseline for change detection. Every finding names the next command to run, so `--strict` makes it usable from cron or CI.
+`doctor` is a read-only preflight for the problems homelab users usually discover too late: high disk or memory usage, stopped containers, public bind ports, stale or missing backups, missing notifications, whether `report` has a baseline for change detection, and whether each configured Proxmox endpoint is reachable with the token it has. Every finding names the next command to run, so `--strict` makes it usable from cron or CI — including a Proxmox host that is unreachable or rebooting.
 
 ### 🗂 Config Validation
 
@@ -459,10 +462,14 @@ CA file, and only then an explicit `insecure` fallback.
 
 Reads are plain. Power actions are not: every one of them takes an explicit
 endpoint, node, guest type and VMID, and refuses to run without `--confirm`,
-which is checked before the token is even read. `shutdown` asks the guest to shut
-down cleanly — it is not Proxmox's hard `stop`, which cuts power and can leave a
-filesystem behind it. A successful action reports the task it submitted, not that
-the guest finished; `proxmox task` answers that separately.
+which is checked before any credential is read. They also need their own
+`action_token_id` (plus `action_token` or `action_token_file`) configured on
+the endpoint — the read token alone will not start, reboot, or shut down a
+guest; see [Proxmox setup →](docs/proxmox.md) for creating that second token.
+`shutdown` asks the guest to shut down cleanly — it is not Proxmox's hard
+`stop`, which cuts power and can leave a filesystem behind it. A successful
+action reports the task it submitted, not that the guest finished; `proxmox
+task` answers that separately.
 
 `proxmox script` prints the install command for a Community Script pinned to one
 commit, along with a warning that the script is not reviewed by homebutler and
