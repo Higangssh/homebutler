@@ -5,8 +5,9 @@
 <h1 align="center">HomeButler</h1>
 
 <p align="center">
-  <strong>Know what changed before you fix it.</strong><br>
-  A single Go binary for running a small home server without babysitting it.
+  <strong>Only the changes worth mentioning.</strong><br>
+  A single Go binary that remembers what your server looked like last time,
+  and tells you — or an agent — what moved.
 </p>
 
 <p align="center">
@@ -27,14 +28,16 @@
 </p>
 
 <p align="center">
-  <img src="assets/report-card.svg" alt="homebutler report output: what changed since the last report — a container gone, one new, one replaced behind the same name, an image bump, a port that changed owner — then current status" width="620">
+  <img src="assets/report-card.svg" alt="homebutler report output: what changed since the last report — a container gone, one new, one replaced behind the same name, a process running a different invocation, a port that changed owner — then current status" width="620">
 </p>
 
 Section rules, labels, and severities are colour-coded in a terminal. Colour is
 dropped automatically when output is piped, redirected, or run from cron.
 
-That is the whole idea. Most homelab tools show you a graph of right now. HomeButler
-remembers what your server looked like last time and tells you what moved.
+That is the whole idea. Most homelab tools show you a graph of right now, and leave
+"does this matter?" to you. HomeButler remembers what your server looked like last
+time, decides what is worth saying, and says it — six containers before and six after
+is not "no change" when one of them is a different container.
 
 HomeButler helps you answer the boring but painful questions every homelab eventually creates:
 
