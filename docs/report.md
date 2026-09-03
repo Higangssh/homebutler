@@ -10,6 +10,22 @@ homebutler report --json     # complete, ungrouped
 homebutler report --no-save  # look without writing a snapshot
 ```
 
+## The three columns
+
+A change is a kind, a subject and a detail, and they have different jobs.
+
+- **Kind** names what sort of change it is. It is one of eight fixed words and it
+  reaches `--json` unchanged, so anything reading the output branches on it. Adding
+  or renaming one is a breaking change after 1.0.
+- **Subject** names what the change happened to — a container name, a listener, a
+  mount, an executable.
+- **Detail** says what exactly happened, in prose meant for a person. It is free to
+  change between releases, and nothing should ever have to parse it.
+
+That split is why `replaced` reads `recreated, 7d4a91f0aa11 → 91be0322bb22` rather
+than the two identifiers alone: the identifiers are the evidence, the sentence is
+what a reader needs.
+
 ## What earns a line
 
 Changes are compared by identity, not by count. Six containers before and six
@@ -90,6 +106,19 @@ before turning `--keep` up: on a desktop macOS with 639 distinct process
 identities a snapshot is about 50 KB, against 2 KB before. A Linux server
 running a handful of services is well under that. At the default `--keep 30`
 that is roughly 1.5 MB of history in the worst case measured.
+
+## The window
+
+The header names the snapshot being compared against:
+
+```
+🏠 Homebutler Report — homelab
+   2026-09-03T11:52:20Z  ·  compared with 2026-09-02T09:14:03Z
+```
+
+"What changed" means since that snapshot, not since any fixed interval. Running
+`report` hourly and running it once a month produce the same kinds of line about
+very different spans, and the header is what tells them apart.
 
 ## Order
 

@@ -37,13 +37,17 @@ type Snapshot struct {
 
 // Report is the structured output of a report run.
 type Report struct {
-	Timestamp        string   `json:"timestamp"`
-	ServerName       string   `json:"server_name"`
-	IsBaseline       bool     `json:"is_baseline"`
-	SnapshotSaved    bool     `json:"snapshot_saved"`
-	Status           []string `json:"status"`
-	NeedsAttention   []string `json:"needs_attention"`
-	NotableChanges   []string `json:"notable_changes"`
+	Timestamp      string   `json:"timestamp"`
+	ServerName     string   `json:"server_name"`
+	IsBaseline     bool     `json:"is_baseline"`
+	SnapshotSaved  bool     `json:"snapshot_saved"`
+	Status         []string `json:"status"`
+	NeedsAttention []string `json:"needs_attention"`
+	NotableChanges []string `json:"notable_changes"`
+	// ComparedTo is the timestamp of the snapshot this run was compared
+	// against. Without it a reader cannot tell whether "what changed" covers
+	// the last hour or the last three weeks.
+	ComparedTo       string   `json:"compared_to,omitempty"`
 	SuggestedActions []string `json:"suggested_actions"`
 	Warnings         []string `json:"warnings,omitempty"`
 
@@ -158,6 +162,9 @@ func buildReport(snap *Snapshot, prev *Snapshot) *Report {
 		Timestamp:  snap.Timestamp,
 		ServerName: snap.ServerName,
 		Warnings:   snap.Warnings,
+	}
+	if prev != nil {
+		r.ComparedTo = prev.Timestamp
 	}
 
 	// Status section
@@ -295,7 +302,11 @@ func FormatHuman(r *Report) string {
 	var b strings.Builder
 
 	fmt.Fprintf(&b, "🏠 %s\n", style.Title.Render("Homebutler Report — "+r.ServerName))
-	fmt.Fprintf(&b, "   %s\n\n", style.Dim.Render(r.Timestamp))
+	stamp := r.Timestamp
+	if r.ComparedTo != "" {
+		stamp += "  ·  compared with " + r.ComparedTo
+	}
+	fmt.Fprintf(&b, "   %s\n\n", style.Dim.Render(stamp))
 
 	if r.IsBaseline {
 		if r.SnapshotSaved {

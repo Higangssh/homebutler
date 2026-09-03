@@ -70,7 +70,7 @@ func TestSameNameDifferentContainerIsReplaced(t *testing.T) {
 
 	r := buildReport(curr, prev)
 	got := strings.Join(r.NotableChanges, " | ")
-	if !strings.Contains(got, "replaced: nginx — 7d4a91f0aa11 → 91be0322bb22") {
+	if !strings.Contains(got, "replaced: nginx — recreated, 7d4a91f0aa11 → 91be0322bb22") {
 		t.Errorf("a replaced container was not reported: %s", got)
 	}
 }
