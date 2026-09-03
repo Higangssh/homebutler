@@ -19,6 +19,8 @@ All notable changes to this project will be documented in this file.
 
 ### 🐛 Fixes
 
+- stop offering back the protocol version that was just refused (#133). `UnsupportedProtocolVersionError` listed every revision homebutler implements, including the legacy one the client had put in `_meta` — and the spec asks a client to pick from that list and retry, so an obedient one loops. The error now lists only what may appear in `_meta`; `server/discover` still advertises both eras, because a dual-era server genuinely can be reached either way
+
 - keep a kernel thread's name intact so the filter can recognise it (#59). Only an absolute path is reduced to its base name now — `/usr/bin/node` still becomes `node`, and `kworker/R-rcu_g` stays whole
 - report one line when one port opens. Docker publishes on both address families, so a single container starting printed `new :8099/tcp` twice with nothing to tell the two lines apart. Changes that render identically are now dropped from both the human output and `--json`; this is not the grouping rule, which collapses different changes and stays human-only
 

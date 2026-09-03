@@ -108,7 +108,23 @@ var supportedProtocolVersions = []string{
 	"2024-11-05",
 }
 
-var legacyProtocolVersions = supportedProtocolVersions[1:]
+// The two slices answer different questions and must not be used for each
+// other's.
+//
+//   - supportedProtocolVersions is what this server can be reached by, both
+//     eras, and is what server/discover advertises.
+//   - modernProtocolVersions is what may appear in a request's _meta. By the
+//     revision's own terminology a modern version is one that carries the
+//     version as per-request metadata, so a legacy revision arriving there is
+//     a contradiction rather than a version this server declined.
+//
+// Answering UnsupportedProtocolVersionError with the combined list told a
+// client its version was unsupported and handed it a list containing that
+// version, and the spec tells the client to pick from that list and retry.
+var (
+	modernProtocolVersions = supportedProtocolVersions[:1]
+	legacyProtocolVersions = supportedProtocolVersions[1:]
+)
 
 // toolsListTTLMS is a freshness hint, not a promise that the tool registry is
 // immutable. Change it if the registry becomes dynamic or a shorter polling
@@ -822,7 +838,7 @@ func (s *Server) writeUnsupportedProtocolError(id json.RawMessage, requested str
 	resp := jsonRPCResponse{JSONRPC: "2.0", ID: id, Error: &rpcError{
 		Code:    -32022,
 		Message: "Unsupported protocol version",
-		Data:    map[string]any{"supported": supportedProtocolVersions, "requested": requested},
+		Data:    map[string]any{"supported": modernProtocolVersions, "requested": requested},
 	}}
 	data, _ := json.Marshal(resp)
 	fmt.Fprintf(s.out, "%s\n", data)
@@ -860,22 +876,9 @@ type unsupportedProtocolError struct{ requested string }
 
 func (e *unsupportedProtocolError) Error() string { return "Unsupported protocol version" }
 
-func isSupportedProtocolVersion(version string) bool {
-	for _, supported := range supportedProtocolVersions {
-		if version == supported {
-			return true
-		}
-	}
-	return false
-}
-
 func isModernProtocolVersion(version string) bool {
-	return isSupportedProtocolVersion(version) && !isLegacyProtocolVersion(version)
-}
-
-func isLegacyProtocolVersion(version string) bool {
-	for _, legacy := range legacyProtocolVersions {
-		if version == legacy {
+	for _, modern := range modernProtocolVersions {
+		if version == modern {
 			return true
 		}
 	}

@@ -712,3 +712,49 @@ func TestToolsListIsCacheableAndDeterministic(t *testing.T) {
 		}
 	}
 }
+
+// The error told a client its version was unsupported and handed back a list
+// containing that version. The spec tells the client to pick from the list and
+// retry, so an obedient client loops.
+func TestUnsupportedVersionErrorListsOnlyWhatMetaAccepts(t *testing.T) {
+	s, out := newTestServer()
+	resp := sendAndReceive(t, s, out, `{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{"_meta":{`+
+		`"io.modelcontextprotocol/protocolVersion":"2024-11-05",`+
+		`"io.modelcontextprotocol/clientCapabilities":{}}}}`)
+
+	if resp.Error == nil || resp.Error.Code != -32022 {
+		t.Fatalf("expected -32022, got %+v", resp.Error)
+	}
+	data, _ := json.Marshal(resp.Error.Data)
+	var payload struct {
+		Supported []string `json:"supported"`
+		Requested string   `json:"requested"`
+	}
+	if err := json.Unmarshal(data, &payload); err != nil {
+		t.Fatalf("unmarshal error data: %v", err)
+	}
+	if len(payload.Supported) == 0 {
+		t.Fatal("the supported list is empty")
+	}
+	for _, v := range payload.Supported {
+		if v == payload.Requested {
+			t.Errorf("the refused version %q is offered back in %v", v, payload.Supported)
+		}
+		for _, legacy := range legacyProtocolVersions {
+			if v == legacy {
+				t.Errorf("legacy version %q is offered as usable in _meta", v)
+			}
+		}
+	}
+}
+
+// server/discover still advertises both eras: a dual-era server genuinely can
+// be reached by an initialize handshake, and the spec's own example mixes them.
+func TestDiscoverStillAdvertisesBothEras(t *testing.T) {
+	s, out := newTestServer()
+	sendAndReceive(t, s, out, `{"jsonrpc":"2.0","id":1,"method":"server/discover"}`)
+	body := out.String()
+	if !strings.Contains(body, "2026-07-28") || !strings.Contains(body, "2024-11-05") {
+		t.Errorf("discover no longer advertises both eras: %s", body)
+	}
+}
