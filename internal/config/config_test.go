@@ -268,6 +268,80 @@ func TestProxmoxConfigTokenValue(t *testing.T) {
 	}
 }
 
+func TestProxmoxConfigActionTokenValue(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("HOME", dir)
+	t.Setenv("USERPROFILE", dir)
+	path := filepath.Join(dir, "pve-action.token")
+	if err := os.WriteFile(path, []byte("  from-file\n"), 0600); err != nil {
+		t.Fatalf("write action token: %v", err)
+	}
+
+	fromFile := ProxmoxConfig{ActionTokenFile: "~/pve-action.token"}
+	if got := fromFile.ActionTokenFilePath(); got != path {
+		t.Errorf("ActionTokenFilePath() = %q, want %q", got, path)
+	}
+	if got, err := fromFile.ActionTokenValue(); err != nil || got != "from-file" {
+		t.Errorf("ActionTokenValue() = (%q, %v), want (from-file, nil)", got, err)
+	}
+
+	inline := ProxmoxConfig{ActionToken: "inline-action-token"}
+	if got, err := inline.ActionTokenValue(); err != nil || got != "inline-action-token" {
+		t.Errorf("ActionTokenValue() = (%q, %v), want (inline-action-token, nil)", got, err)
+	}
+	if _, err := (ProxmoxConfig{}).ActionTokenValue(); err == nil {
+		t.Error("ActionTokenValue() should fail without an action token source")
+	}
+
+	if _, err := (ProxmoxConfig{ActionTokenFile: filepath.Join(dir, "missing"), ActionToken: "inline-secret"}).ActionTokenValue(); err == nil {
+		t.Error("ActionTokenValue() should fail for a missing token file")
+	} else if proxmox.Classify(err) != proxmox.FailureAuthentication || strings.Contains(err.Error(), "inline-secret") {
+		t.Errorf("ActionTokenValue() error = %v, want authentication error without inline token", err)
+	}
+}
+
+func TestProxmoxConfigHasActionCredential(t *testing.T) {
+	cases := []struct {
+		name string
+		cfg  ProxmoxConfig
+		want bool
+	}{
+		{"none configured", ProxmoxConfig{}, false},
+		{"read token only", ProxmoxConfig{Token: "read"}, false},
+		{"action id without token", ProxmoxConfig{ActionTokenID: "monitoring@pve!action"}, false},
+		{"action id with inline token", ProxmoxConfig{ActionTokenID: "monitoring@pve!action", ActionToken: "secret"}, true},
+		{"action id with token file", ProxmoxConfig{ActionTokenID: "monitoring@pve!action", ActionTokenFile: "/etc/pve-action.token"}, true},
+	}
+	for _, tc := range cases {
+		if got := tc.cfg.HasActionCredential(); got != tc.want {
+			t.Errorf("%s: HasActionCredential() = %v, want %v", tc.name, got, tc.want)
+		}
+	}
+}
+
+func TestProxmoxConfigResolveCredential(t *testing.T) {
+	readOnly := ProxmoxConfig{Name: "pve", TokenID: "monitoring@pve!readonly", Token: "read-token"}
+	if tokenID, token, err := readOnly.ResolveCredential(false); err != nil || tokenID != "monitoring@pve!readonly" || token != "read-token" {
+		t.Errorf("ResolveCredential(false) = (%q, %q, %v), want (monitoring@pve!readonly, read-token, nil)", tokenID, token, err)
+	}
+	if _, _, err := readOnly.ResolveCredential(true); err == nil || !strings.Contains(err.Error(), "no action credential configured") {
+		t.Errorf("ResolveCredential(true) without an action credential = %v, want a 'no action credential configured' error", err)
+	} else if class := proxmox.Classify(err); class != proxmox.FailureAuthentication {
+		t.Errorf("Classify(ResolveCredential(true) error) = %q, want %q", class, proxmox.FailureAuthentication)
+	}
+
+	withAction := readOnly
+	withAction.ActionTokenID = "monitoring@pve!action"
+	withAction.ActionToken = "action-token"
+	if tokenID, token, err := withAction.ResolveCredential(true); err != nil || tokenID != "monitoring@pve!action" || token != "action-token" {
+		t.Errorf("ResolveCredential(true) = (%q, %q, %v), want (monitoring@pve!action, action-token, nil)", tokenID, token, err)
+	}
+
+	if _, _, err := (ProxmoxConfig{Name: "pve"}).ResolveCredential(false); err == nil {
+		t.Error("ResolveCredential(false) should fail without a read token source")
+	}
+}
+
 func TestProxmoxConfigDefaults(t *testing.T) {
 	p := ProxmoxConfig{}
 	if got := p.APIPort(); got != 8006 {

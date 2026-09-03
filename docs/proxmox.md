@@ -7,7 +7,7 @@ tasks, and the status of one asynchronous task.
 
 ## Setup
 
-### Create a least-privilege API token
+### Create least-privilege API tokens
 
 For read operations, the built-in `PVEAuditor` role is the recommended baseline.
 It includes the audit privileges needed for the cluster, node, guest, storage,
@@ -34,25 +34,48 @@ the user is not enough: the token can authenticate yet return empty resource
 lists. The `/` ACL is recommended because `/cluster/status` needs `Sys.Audit`
 on `/`.
 
-Guest actions need `VM.PowerMgmt` on each selected `/vms/<vmid>` path. Keep
-that permission separate from `PVEAuditor`; do not grant an administrator role
-to HomeButler. Create a narrow role and grant it to both the user and the
-privilege-separated token only for guests HomeButler may control:
+Guest actions use a second, separate token scoped only to `VM.PowerMgmt` on
+approved guests. Never grant `HomeButlerPower` to the read token or its user;
+keep the read credential audit-only, and never grant `PVEAuditor` to the
+action token or its user. The recommended setup is a dedicated second user,
+since a token's effective permissions are the intersection of its own ACLs
+and its owning user's ACLs — the action token could technically live on
+`monitoring@pve`, but only if that user is granted nothing beyond
+`HomeButlerPower` on the guest paths it controls.
 
 ```bash
+# Create a dedicated user for the action token (recommended).
+pveum user add power@pve --comment "least-privilege guest-action API user for homebutler"
+
+# Privilege separation is enabled by default. The token value is displayed once.
+pveum user token add power@pve action --privsep 1
+
+# Create the narrow role, then grant it to both the user and the token, only
+# for guests HomeButler may control.
 pveum role add HomeButlerPower -privs VM.PowerMgmt
-pveum acl modify /vms/100 --users 'monitoring@pve' --roles HomeButlerPower
-pveum acl modify /vms/100 --tokens 'monitoring@pve!readonly' --roles HomeButlerPower
+pveum acl modify /vms/100 --users 'power@pve' --roles HomeButlerPower
+pveum acl modify /vms/100 --tokens 'power@pve!action' --roles HomeButlerPower
 ```
 
-Repeat the two ACL commands only for other approved VMIDs. The task owner may
-inspect its own task. Inspecting a task started by another user requires
-`Sys.Audit` on the task's node; the read-only setup above already provides the
-audit privileges used by HomeButler's read views.
+> **Note:** A token's effective permissions are the intersection of the
+> token's own ACLs and its owning user's ACLs. Reusing the read token's user
+> (which already holds `PVEAuditor`) as the action token's owning user, or
+> disabling privilege separation (`--privsep 0`) on the action token, can
+> silently widen the action credential's effective access beyond
+> `VM.PowerMgmt` — anything else granted to that user elsewhere leaks through.
+> Restrict both the token and its owning user, and prefer a dedicated user for
+> the action credential if this boundary matters to the deployment.
 
-Save the token value when it is printed. Proxmox does not reveal it again; if
-it is lost, remove and create the token again. A newly granted token can briefly
-return `403 Permission check failed (/, Sys.Audit)` while ACL changes propagate.
+Repeat the two `HomeButlerPower` ACL commands only for other approved VMIDs.
+
+The task owner may inspect its own task. Inspecting a task started by another
+user requires `Sys.Audit` on the task's node; the read-only setup above
+already provides the audit privileges used by HomeButler's read views.
+
+Save each token value when it is printed. Proxmox does not reveal it again; if
+one is lost, remove and create that token again. A newly granted token can
+briefly return `403 Permission check failed (/, Sys.Audit)` while ACL changes
+propagate.
 
 ### Configure endpoints
 
@@ -67,6 +90,8 @@ proxmox:
     port: 8006                 # optional; 8006 is the default
     token_id: monitoring@pve!readonly
     token_file: ~/.config/homebutler/pve.token
+    action_token_id: power@pve!action        # optional; enables guest actions
+    action_token_file: ~/.config/homebutler/pve-action.token
     fingerprint: "AB:CD:EF:..." # recommended for self-signed node certificates
     timeout: 10s               # optional; 10s is the default
 ```
@@ -74,6 +99,12 @@ proxmox:
 `name`, `host`, and `token_id` are required. Configure exactly one credential
 source: `token_file` or the inline `token`. Inline tokens are supported, but
 HomeButler treats them as secrets and excludes them from JSON serialization.
+
+`action_token_id`, `action_token_file`, and `action_token` are optional and
+follow the same rules as their read-token counterparts: configure exactly one
+credential source (`action_token_file` or the inline `action_token`) alongside
+`action_token_id`. They enable guest start, reboot, and shutdown actions on
+this endpoint; without them, guest actions are unavailable.
 
 ## TLS
 
@@ -134,7 +165,10 @@ Guest actions always require explicit `--endpoint`, `--node`, `--type`,
 `--vmid`, and `--confirm` values, even when only one endpoint is configured.
 HomeButler does not discover or infer the node or guest type before an action.
 Without `--confirm`, the command reports the full target and exact rerun flags;
-it does not prompt interactively.
+it does not prompt interactively. If no `action_token_id`/`action_token`/
+`action_token_file` is configured for the endpoint, guest actions fail
+immediately with an explicit configuration error — this is intentional, and
+HomeButler never falls back to the read credential for an action.
 
 An action response means Proxmox accepted the asynchronous request. It does not
 mean the guest transition completed. HomeButler returns the UPID exactly as
