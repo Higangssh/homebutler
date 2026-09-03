@@ -30,7 +30,7 @@ func (wn *WatchNotifier) NotifyIncident(inc Incident, flap FlappingResult, crash
 		return nil
 	}
 
-	shouldNotify := (flap.IsFlapping && wn.Settings.OnFlapping) ||
+	shouldNotify := inc.Source == "proxmox" || (flap.IsFlapping && wn.Settings.OnFlapping) ||
 		(!flap.IsFlapping && wn.Settings.OnIncident)
 	if !shouldNotify {
 		return nil
@@ -42,10 +42,17 @@ func (wn *WatchNotifier) NotifyIncident(inc Incident, flap FlappingResult, crash
 		status = "flapping"
 		kind = "watch.flapping"
 	}
+	if inc.Recovered {
+		status = "recovered"
+		kind = "watch.recovery"
+	}
 
 	var details []string
 	if crash != nil {
 		details = append(details, fmt.Sprintf("category=%s reason=%s", crash.Category, crash.Reason))
+	}
+	if inc.Source == "proxmox" && inc.PostLogs != "" {
+		details = append(details, inc.PostLogs)
 	}
 
 	event := notify.Event{

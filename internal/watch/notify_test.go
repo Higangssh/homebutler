@@ -184,3 +184,21 @@ func TestNotifyIncident_IndependentCooldown(t *testing.T) {
 		t.Errorf("expected 2 calls for different containers, got %d", called)
 	}
 }
+
+func TestNotifyIncident_ProxmoxRecoveryBypassesDefaultGateAndCooldown(t *testing.T) {
+	called := 0
+	wn := makeTestNotifier(NotifySettings{Enabled: true, OnFlapping: true, Cooldown: "5m"}, &called)
+	now := time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
+	inc := baseIncident("proxmox-pve", now)
+	inc.Source = "proxmox"
+	inc.ProxmoxState = ProxmoxStateUnavailable
+	inc.PostLogs = "proxmox pve is unavailable"
+
+	_ = wn.NotifyIncident(inc, FlappingResult{}, nil, now)
+	inc.Recovered = true
+	inc.PostLogs = "proxmox pve recovered from unavailable"
+	_ = wn.NotifyIncident(inc, FlappingResult{}, nil, now.Add(time.Minute))
+	if called != 2 {
+		t.Fatalf("notifications = %d, want failure and recovery", called)
+	}
+}

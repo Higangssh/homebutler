@@ -217,6 +217,29 @@ proxmox:
 	}
 }
 
+func TestValidateProxmoxGuestErrors(t *testing.T) {
+	path := writeConfig(t, `proxmox:
+  - name: pve
+    host: pve.example
+    token: token
+    token_id: monitor@pve!readonly
+    guests:
+      - node: pve1
+        type: docker
+        vmid: 0
+`)
+	r := Validate(path)
+	if r.Valid {
+		t.Fatal("invalid guest was accepted")
+	}
+	for _, finding := range r.Findings {
+		if finding.Field == "proxmox[0].guests[0]" {
+			return
+		}
+	}
+	t.Fatalf("findings = %+v, want invalid guest finding", r.Findings)
+}
+
 func TestValidateProxmoxActionCredentialErrors(t *testing.T) {
 	path := writeConfig(t, `
 proxmox:

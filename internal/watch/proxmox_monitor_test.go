@@ -286,6 +286,43 @@ func TestProxmoxMonitorPartialFailurePreservesGuestState(t *testing.T) {
 	}
 }
 
+func TestProxmoxMonitorACLFilteredEmptyResultPreservesGuestState(t *testing.T) {
+	script := &scriptedServer{responses: []scriptedResponse{
+		{body: resourcesResponse(oneNode, guestJSON("pve1", "qemu", 100, "running"))},
+		{body: `{"data":[]}`},
+		{body: resourcesResponse(oneNode, guestJSON("pve1", "qemu", 100, "running"))},
+	}}
+	server := httptest.NewTLSServer(script.handler(t))
+	defer server.Close()
+
+	pm := &ProxmoxMonitor{Targets: []ProxmoxTarget{{
+		Endpoint: "pve", Client: proxmoxFixtureClient(t, server),
+		Guests: []proxmox.ExpectedGuest{{Node: "pve1", Type: "qemu", VMID: 100}},
+	}}}
+	got := runPolls(t, pm, 2)
+	if len(got) != 2 || got[0].ProxmoxState != ProxmoxStateACLFiltered || got[1].ProxmoxState != ProxmoxStateACLFiltered || !got[1].Recovered {
+		t.Fatalf("incidents = %+v, want only ACL-filtered transition and recovery", got)
+	}
+}
+
+func TestProxmoxMonitorMissingGuestPreservesState(t *testing.T) {
+	script := &scriptedServer{responses: []scriptedResponse{
+		{body: resourcesResponse(oneNode, guestJSON("pve1", "qemu", 100, "running"))},
+		{body: resourcesResponse(oneNode, "")},
+		{body: resourcesResponse(oneNode, guestJSON("pve1", "qemu", 100, "running"))},
+	}}
+	server := httptest.NewTLSServer(script.handler(t))
+	defer server.Close()
+
+	pm := &ProxmoxMonitor{Targets: []ProxmoxTarget{{
+		Endpoint: "pve", Client: proxmoxFixtureClient(t, server),
+		Guests: []proxmox.ExpectedGuest{{Node: "pve1", Type: "qemu", VMID: 100}},
+	}}}
+	if got := runPolls(t, pm, 2); len(got) != 0 {
+		t.Fatalf("incidents = %+v, want none when a configured guest is absent", got)
+	}
+}
+
 func TestProxmoxMonitorNoTargetsBlocksUntilCancelled(t *testing.T) {
 	pm := &ProxmoxMonitor{}
 	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)

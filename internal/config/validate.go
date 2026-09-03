@@ -553,6 +553,12 @@ func (r *ValidationResult) checkProxmox(cfg *Config) {
 				r.add(SeverityError, field+".timeout", fmt.Sprintf("Invalid duration %q.", p.Timeout), `Use a positive Go duration such as "10s".`)
 			}
 		}
+		for j, guest := range p.Guests {
+			if err := guest.Validate(); err != nil {
+				r.add(SeverityError, fmt.Sprintf("%s.guests[%d]", field, j), err.Error(),
+					"Set node, type (qemu or lxc), and a positive vmid.")
+			}
+		}
 
 		if p.ActionTokenID != "" || p.ActionToken != "" || p.ActionTokenFile != "" {
 			if p.ActionTokenID == "" {

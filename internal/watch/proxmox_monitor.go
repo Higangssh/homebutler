@@ -28,9 +28,13 @@ const ProxmoxClassEmptyResult = "empty_result"
 // ProxmoxTarget is one configured Proxmox endpoint to poll, together with the
 // guests on it that are expected to stay running.
 type ProxmoxTarget struct {
-	Endpoint string
-	Client   *proxmox.Client
-	Guests   []proxmox.ExpectedGuest
+	Endpoint  string
+	Client    *proxmox.Client
+	NewClient func() (*proxmox.Client, error)
+	// Err keeps a configured endpoint visible to the monitor when its client
+	// cannot be built, so a bad credential is an incident instead of silence.
+	Err    error
+	Guests []proxmox.ExpectedGuest
 }
 
 // ProxmoxMonitor polls Proxmox endpoints for reachability and for the
@@ -40,6 +44,8 @@ type ProxmoxMonitor struct {
 	Dir      string
 	Interval time.Duration
 	Keep     int
+	Flapping FlappingConfig
+	flapping map[string]bool
 }
 
 type proxmoxEndpointState struct {
@@ -76,7 +82,16 @@ func (pm *ProxmoxMonitor) Watch(ctx context.Context, incidents chan<- Incident) 
 	// Seed without emitting, so a guest that is already stopped or an
 	// endpoint that is already unreachable when watch starts does not fire an
 	// incident for a state that was never observed to change.
-	if err := pm.poll(ctx, endpointPrev, guestPrev, nil); err != nil {
+	for _, target := range pm.Targets {
+		if target.Err != nil {
+			state := pm.endpointState(target.Err)
+			if err := pm.emitEndpointIncident(ctx, target.Endpoint, proxmoxEndpointState{}, state, incidents); err != nil {
+				return err
+			}
+			endpointPrev[endpointKey(target.Endpoint)] = state
+		}
+	}
+	if err := pm.poll(ctx, endpointPrev, guestPrev, incidents); err != nil {
 		return err
 	}
 
@@ -96,22 +111,29 @@ func (pm *ProxmoxMonitor) Watch(ctx context.Context, incidents chan<- Incident) 
 }
 
 func (pm *ProxmoxMonitor) poll(ctx context.Context, endpointPrev map[string]proxmoxEndpointState, guestPrev map[string]bool, incidents chan<- Incident) error {
-	for _, target := range pm.Targets {
-		resources, err := target.Client.Resources(ctx)
+	for i := range pm.Targets {
+		target := &pm.Targets[i]
+		var resources proxmox.Resources
+		var err error
+		if target.Client == nil && target.NewClient != nil {
+			target.Client, target.Err = target.NewClient()
+		}
+		if target.Client == nil {
+			err = target.Err
+			if err == nil {
+				err = fmt.Errorf("Proxmox client is not configured")
+			}
+		} else {
+			resources, err = target.Client.Resources(ctx)
+			if proxmox.Classify(err) == proxmox.FailureAuthentication {
+				target.Client = nil // retry token-file resolution on the next poll
+			}
+		}
 
 		var curr proxmoxEndpointState
 		switch {
 		case err != nil:
-			switch proxmox.Classify(err) {
-			case proxmox.FailureAuthorization:
-				curr = proxmoxEndpointState{state: ProxmoxStateACLFiltered, class: string(proxmox.FailureAuthorization)}
-			case proxmox.FailureTLS:
-				curr = proxmoxEndpointState{state: ProxmoxStateUnavailable, class: string(proxmox.FailureTLS)}
-			case proxmox.FailureAuthentication:
-				curr = proxmoxEndpointState{state: ProxmoxStateUnavailable, class: string(proxmox.FailureAuthentication)}
-			default:
-				curr = proxmoxEndpointState{state: ProxmoxStateUnavailable, class: string(proxmox.FailureTransport)}
-			}
+			curr = pm.endpointState(err)
 		case len(resources.Nodes) == 0 && len(resources.Guests) == 0 && len(resources.Storage) == 0:
 			curr = proxmoxEndpointState{state: ProxmoxStateACLFiltered, class: ProxmoxClassEmptyResult}
 		default:
@@ -129,7 +151,7 @@ func (pm *ProxmoxMonitor) poll(ctx context.Context, endpointPrev map[string]prox
 		// A failed collector carries no resources to check guests against.
 		// Guest state before the failure is left exactly as it was rather
 		// than guessed at, matching #104's "preserve partial results".
-		if err != nil {
+		if err != nil || curr.state == ProxmoxStateACLFiltered {
 			continue
 		}
 
@@ -140,7 +162,10 @@ func (pm *ProxmoxMonitor) poll(ctx context.Context, endpointPrev map[string]prox
 
 		for _, expected := range target.Guests {
 			key := guestKey(target.Endpoint, expected)
-			isRunning := running[fmt.Sprintf("%s-%s-%d", expected.Node, expected.Type, expected.VMID)]
+			isRunning, found := running[fmt.Sprintf("%s-%s-%d", expected.Node, expected.Type, expected.VMID)]
+			if !found {
+				continue
+			}
 
 			if prev, ok := guestPrev[key]; ok && incidents != nil && prev != isRunning {
 				if err := pm.emitGuestIncident(ctx, target.Endpoint, expected, isRunning, incidents); err != nil {
@@ -151,6 +176,19 @@ func (pm *ProxmoxMonitor) poll(ctx context.Context, endpointPrev map[string]prox
 		}
 	}
 	return nil
+}
+
+func (pm *ProxmoxMonitor) endpointState(err error) proxmoxEndpointState {
+	switch proxmox.Classify(err) {
+	case proxmox.FailureAuthorization:
+		return proxmoxEndpointState{state: ProxmoxStateACLFiltered, class: string(proxmox.FailureAuthorization)}
+	case proxmox.FailureTLS:
+		return proxmoxEndpointState{state: ProxmoxStateUnavailable, class: string(proxmox.FailureTLS)}
+	case proxmox.FailureAuthentication:
+		return proxmoxEndpointState{state: ProxmoxStateUnavailable, class: string(proxmox.FailureAuthentication)}
+	default:
+		return proxmoxEndpointState{state: ProxmoxStateUnavailable, class: string(proxmox.FailureTransport)}
+	}
 }
 
 func (pm *ProxmoxMonitor) emitEndpointIncident(ctx context.Context, endpoint string, prev, curr proxmoxEndpointState, incidents chan<- Incident) error {
@@ -171,8 +209,42 @@ func (pm *ProxmoxMonitor) emitEndpointIncident(ctx context.Context, endpoint str
 		Recovered:    recovered,
 		PostLogs:     proxmoxStateMessage(endpoint, "", state, class, recovered),
 	}
+	if pm.isFlapping(&inc) {
+		if pm.flapping[inc.Container] {
+			return nil
+		}
+		pm.flapping[inc.Container] = true
+	} else {
+		delete(pm.flapping, inc.Container)
+	}
 	pm.save(&inc)
 	return send(ctx, incidents, inc)
+}
+
+// isFlapping marks the first incident that crosses the configured threshold;
+// later transitions are coalesced until the endpoint is stable again.
+func (pm *ProxmoxMonitor) isFlapping(inc *Incident) bool {
+	if pm.Dir == "" {
+		return false
+	}
+	refs, err := ListIncidentRefs(pm.Dir)
+	if err != nil {
+		return false
+	}
+	refs = append(refs, IncidentRef{ID: inc.ID, Container: inc.Container, DetectedAt: inc.DetectedAt})
+	flapping := pm.Flapping
+	if flapping.ShortThreshold == 0 && flapping.LongThreshold == 0 {
+		flapping = DefaultFlappingConfig()
+	}
+	result := flapping.CheckRefs(inc.Container, refs, inc.DetectedAt)
+	if !result.IsFlapping {
+		return false
+	}
+	inc.Flapping = &result
+	if pm.flapping == nil {
+		pm.flapping = make(map[string]bool)
+	}
+	return true
 }
 
 func (pm *ProxmoxMonitor) emitGuestIncident(ctx context.Context, endpoint string, guest proxmox.ExpectedGuest, isRunning bool, incidents chan<- Incident) error {

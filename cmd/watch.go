@@ -526,7 +526,7 @@ Docker targets use docker events (real-time). Systemd and PM2 targets use pollin
 			if len(proxmoxTargets) > 0 {
 				monitorCount++
 				wg.Add(1)
-				proxmoxMon := &watch.ProxmoxMonitor{Targets: proxmoxTargets, Dir: dir, Interval: dur, Keep: watchCfg.Retention.MaxIncidents}
+				proxmoxMon := &watch.ProxmoxMonitor{Targets: proxmoxTargets, Dir: dir, Interval: dur, Keep: watchCfg.Retention.MaxIncidents, Flapping: watchCfg.Flapping}
 				go func() {
 					defer wg.Done()
 					if err := proxmoxMon.Watch(ctx, incCh); err != nil && ctx.Err() == nil {
@@ -569,7 +569,11 @@ Docker targets use docker events (real-time). Systemd and PM2 targets use pollin
 					// already saved the incident itself.
 					if inc.Source == "proxmox" {
 						if notifier != nil {
-							_ = notifier.NotifyIncident(inc, watch.FlappingResult{}, nil, time.Now())
+							flap := watch.FlappingResult{}
+							if inc.Flapping != nil {
+								flap = *inc.Flapping
+							}
+							_ = notifier.NotifyIncident(inc, flap, nil, time.Now())
 						}
 						ts := time.Now().Format("15:04:05")
 						verb := "INCIDENT"
@@ -713,6 +717,12 @@ func newWatchHistoryCmd() *cobra.Command {
 				if inc.CrashAnalysis != nil {
 					info += inc.CrashAnalysis.Category
 				}
+				if inc.Source == "proxmox" {
+					if inc.Recovered {
+						info += "[RECOVERED] "
+					}
+					info += inc.ProxmoxState + " " + inc.PostLogs
+				}
 				fmt.Printf("%-20s  %-36s  %-20s  %s\n",
 					inc.Container, id,
 					inc.DetectedAt.Format("2006-01-02 15:04:05"),
@@ -753,6 +763,13 @@ func newWatchShowCmd() *cobra.Command {
 			fmt.Printf("Detected:  %s\n", inc.DetectedAt.Format("2006-01-02 15:04:05"))
 			if inc.RestartCount > 0 {
 				fmt.Printf("Restarts:  %d\n", inc.RestartCount)
+			}
+			if inc.Source == "proxmox" {
+				fmt.Printf("State:     %s\n", inc.ProxmoxState)
+				if inc.ProxmoxClass != "" {
+					fmt.Printf("Class:     %s\n", inc.ProxmoxClass)
+				}
+				fmt.Printf("Recovered: %t\n", inc.Recovered)
 			}
 			fmt.Printf("Previous Start: %s\n", inc.PrevStarted)
 			fmt.Printf("Current Start:  %s\n", inc.CurrStarted)
