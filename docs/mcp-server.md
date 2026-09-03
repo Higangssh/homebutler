@@ -158,6 +158,18 @@ revisions added is either out of scope here — resources, prompts, sampling,
 roots, elicitation, tasks, and everything about Streamable HTTP — or already
 how homebutler behaves.
 
+### Two lists, two questions
+
+`server/discover` advertises every revision this server can be reached by, both
+eras, because a dual-era server genuinely answers an `initialize` handshake as
+well as modern per-request metadata.
+
+`UnsupportedProtocolVersionError` (`-32022`) lists only the revisions that may
+appear in a request's `_meta`. A legacy revision arriving there is a
+contradiction rather than a version the server declined, and offering it back
+would tell a client to retry with the version it was just refused — the spec
+asks the client to pick from that list and try again.
+
 ## Agent Skill
 
 homebutler ships with an [Agent Skill](https://agentskills.io) that works across AI tools:
