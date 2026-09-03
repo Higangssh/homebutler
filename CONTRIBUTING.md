@@ -55,19 +55,19 @@ adding new ones.
 
 Working toward 1.0, which freezes the MCP tool surface and the JSON schema:
 
-- Bound the incident directory in bytes, not only in files (#81)
-- Give `watch` a way to survive logout and reboot (#80)
-- Compare identities rather than counts, so a swap is not read as no change
-  (#58, #59)
+- Compare identities rather than counts, so a container swap is not read as no
+  change (#58)
+- Track processes and network rather than only observing them (#59)
 
-The first two are commitments the code already makes and does not keep. The
-third is the question the tool exists to answer, which is why it comes before
-adding more things to ask it about.
+Those two are the question homebutler exists to answer, which is why they come
+before adding more things to ask it about. They also have to land before 1.0
+rather than after: they change the shape of what `report` returns, and 1.0
+freezes that shape.
 
 New targets generally wait until after 1.0, so open an issue before starting one.
-Work already discussed and agreed in an issue keeps the terms it was given —
-Proxmox (#32) is on Phase 2 now that read-only visibility has landed, with the
-dashboard tracked separately in #79 and the Phase 3 question still open in #62.
+Work already discussed and agreed in an issue keeps the terms it was given.
+Proxmox is past its original scope — #104, #105 and #107 are in review, and #106
+is open and unclaimed.
 
 ## Before submitting a PR
 
@@ -88,6 +88,13 @@ go build ./...
 ```
 
 All four must pass. CI will reject PRs that fail any of these.
+
+If the change is visible to someone using homebutler — new output, a new flag, a
+different default, a message that reads differently — add an entry to
+`CHANGELOG.md` under `## [Unreleased]` in the same PR. Something that used to
+work and now does not goes under `⚠️ Behavior changes`, which is the section
+people read before upgrading. An internal change with no user-visible effect
+does not need one. If you are unsure, write the line and let the review decide.
 
 ## Code style
 

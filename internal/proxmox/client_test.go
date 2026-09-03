@@ -7,6 +7,8 @@ import (
 	"encoding/json"
 	"encoding/pem"
 	"errors"
+	"fmt"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -136,6 +138,38 @@ func TestDefaultViewFlagsNoVisibleResources(t *testing.T) {
 	}
 	if !view.CollectorFailed(CollectorResources) || len(view.Warnings) != 1 || !strings.Contains(view.Warnings[0], "token permissions") {
 		t.Fatalf("DefaultView() = %#v", view)
+	}
+}
+
+// countingRoundTripper always fails, so it stands in for a host that never
+// answers: every request pays the same dial timeout.
+type countingRoundTripper struct {
+	calls int
+	err   error
+}
+
+func (t *countingRoundTripper) RoundTrip(*http.Request) (*http.Response, error) {
+	t.calls++
+	return nil, t.err
+}
+
+func TestDefaultViewStopsAfterTransportFailure(t *testing.T) {
+	client := testClient(t, "https://pve.example")
+	transport := &countingRoundTripper{err: &net.OpError{Op: "dial", Net: "tcp", Err: fmt.Errorf("connection refused")}}
+	client.http.Transport = transport
+
+	view, err := client.DefaultView(context.Background())
+	if err != nil {
+		t.Fatalf("DefaultView() error: %v", err)
+	}
+	if transport.calls != 1 {
+		t.Fatalf("expected one request before DefaultView gave up, got %d", transport.calls)
+	}
+	if !view.CollectorFailed(CollectorVersion) || !view.CollectorFailed(CollectorCluster) || !view.CollectorFailed(CollectorResources) {
+		t.Fatalf("expected every collector marked failed once the host is unreachable, got: %#v", view.Failed)
+	}
+	if Classify(view.FirstErr) != FailureTransport {
+		t.Fatalf("FirstErr class = %q, want %q", Classify(view.FirstErr), FailureTransport)
 	}
 }
 
@@ -487,16 +521,21 @@ func TestTLSModes(t *testing.T) {
 
 func TestFailureClassification(t *testing.T) {
 	t.Run("CA file unreadable", func(t *testing.T) {
+		// A missing or unreadable CA file is a certificate trust problem, not
+		// a credential problem: the token is never even read. Classifying it
+		// FailureAuthentication sent an operator staring at a fine token
+		// while pointing at "the token may be missing, unreadable, or
+		// revoked" instead of the ca_file setting that is actually wrong.
 		_, err := New(Options{Host: "pve.example", TokenID: "id", Token: "secret", CAFile: "missing.pem"})
-		if Classify(err) != FailureAuthentication {
-			t.Fatalf("Classify(%v) = %q, want %q", err, Classify(err), FailureAuthentication)
+		if Classify(err) != FailureTLS {
+			t.Fatalf("Classify(%v) = %q, want %q", err, Classify(err), FailureTLS)
 		}
 	})
 
 	t.Run("fingerprint format", func(t *testing.T) {
 		_, err := New(Options{Host: "pve.example", TokenID: "id", Token: "secret", Fingerprint: "not-hex"})
-		if Classify(err) != FailureAuthentication {
-			t.Fatalf("Classify(%v) = %q, want %q", err, Classify(err), FailureAuthentication)
+		if Classify(err) != FailureTLS {
+			t.Fatalf("Classify(%v) = %q, want %q", err, Classify(err), FailureTLS)
 		}
 	})
 

@@ -170,11 +170,11 @@ func tlsConfig(options Options) (*tls.Config, error) {
 	if options.CAFile != "" {
 		pem, err := os.ReadFile(options.CAFile)
 		if err != nil {
-			return nil, WithFailureClass(FailureAuthentication, fmt.Errorf("read Proxmox CA file: %w", err))
+			return nil, WithFailureClass(FailureTLS, fmt.Errorf("read Proxmox CA file: %w", err))
 		}
 		pool := x509.NewCertPool()
 		if !pool.AppendCertsFromPEM(pem) {
-			return nil, WithFailureClass(FailureAuthentication, fmt.Errorf("proxmox CA file contains no certificates"))
+			return nil, WithFailureClass(FailureTLS, fmt.Errorf("proxmox CA file contains no certificates"))
 		}
 		config.RootCAs = pool
 		return config, nil
@@ -190,7 +190,7 @@ func parseFingerprint(value string) ([]byte, error) {
 	value = strings.ReplaceAll(strings.TrimSpace(value), ":", "")
 	fingerprint, err := hex.DecodeString(value)
 	if err != nil || len(fingerprint) != sha256.Size {
-		return nil, WithFailureClass(FailureAuthentication, fmt.Errorf("proxmox fingerprint must be a SHA-256 certificate fingerprint"))
+		return nil, WithFailureClass(FailureTLS, fmt.Errorf("proxmox fingerprint must be a SHA-256 certificate fingerprint"))
 	}
 	return fingerprint, nil
 }
@@ -342,31 +342,65 @@ func TaskResult(status, exitStatus string) string {
 	return "unknown"
 }
 
-// DefaultView performs the three requests used by the default status view.
+// DefaultView performs the three requests used by the default status view. A
+// FailureTransport on one collector means the host is not answering at all,
+// so the remaining collectors are skipped rather than each re-paying the same
+// dial timeout for no new information.
 func (c *Client) DefaultView(ctx context.Context) (DefaultView, error) {
 	view := DefaultView{}
-	if version, err := c.Version(ctx); err != nil {
-		view.Warnings = append(view.Warnings, "version: "+err.Error())
-		view.Failed = append(view.Failed, CollectorVersion)
+
+	version, err := c.Version(ctx)
+	if err != nil {
+		view.fail(CollectorVersion, err)
+		if Classify(err) == FailureTransport {
+			view.skip(CollectorCluster, CollectorResources)
+			return view, nil
+		}
 	} else {
 		view.Version = version
 	}
-	if cluster, err := c.ClusterStatus(ctx); err != nil {
-		view.Warnings = append(view.Warnings, "cluster: "+err.Error())
-		view.Failed = append(view.Failed, CollectorCluster)
+
+	cluster, err := c.ClusterStatus(ctx)
+	if err != nil {
+		view.fail(CollectorCluster, err)
+		if Classify(err) == FailureTransport {
+			view.skip(CollectorResources)
+			return view, nil
+		}
 	} else {
 		view.Cluster = cluster
 	}
+
 	if resources, err := c.Resources(ctx); err != nil {
-		view.Warnings = append(view.Warnings, "resources: "+err.Error())
-		view.Failed = append(view.Failed, CollectorResources)
+		view.fail(CollectorResources, err)
 	} else if len(resources.Nodes) == 0 && len(resources.Guests) == 0 && len(resources.Storage) == 0 {
 		view.Warnings = append(view.Warnings, "resources: no resources visible; check Proxmox token permissions")
 		view.Failed = append(view.Failed, CollectorResources)
 	} else {
 		view.Resources = resources
 	}
+
 	return view, nil
+}
+
+// fail records a collector's failure and keeps the first error whose class
+// can actually guide the operator: a later classified error (say, resources
+// coming back 403 after version failed to decode for an unrelated reason)
+// outranks an earlier unclassified one, since only the classified error
+// produces an action worth acting on.
+func (v *DefaultView) fail(collector string, err error) {
+	v.Warnings = append(v.Warnings, collector+": "+err.Error())
+	v.Failed = append(v.Failed, collector)
+	if v.FirstErr == nil || (Classify(v.FirstErr) == "" && Classify(err) != "") {
+		v.FirstErr = err
+	}
+}
+
+// skip marks collectors that were never attempted as failed, so callers
+// rendering per-collector status (writeProxmoxStatus, doctor) show them as
+// unavailable instead of a misleadingly empty success.
+func (v *DefaultView) skip(collectors ...string) {
+	v.Failed = append(v.Failed, collectors...)
 }
 
 func (c *Client) get(ctx context.Context, path string, query url.Values, out any) error {

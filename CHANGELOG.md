@@ -4,15 +4,23 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
-**Guest power actions now need their own Proxmox credential, separate from the one that reads status.** The same token drove both, so anything with read access to the config also held `VM.PowerMgmt` on every guest, even though status polling never needed it.
+**Every Linux report filled with kernel threads appearing and disappearing.** `isKernelThread` looks for the `kworker/` prefix, and `parseProcesses` had already stripped it: the slash in `kworker/0:4-events` is not a directory separator, but it was treated as one, leaving `0:4-events` for the filter to not recognise. Two runs seconds apart on an idle Raspberry Pi reported twelve kernel threads gone and twelve new. macOS has no kernel threads by that name, which is why it took running it on Linux to see.
 
 ### ✨ Features
 
+- diagnose each configured Proxmox endpoint in `doctor` with read-only requests (#105). `doctor` said nothing about Proxmox before this; now every endpoint gets one finding, using the same `DefaultView` call `proxmox status` makes, so the two never disagree about what a token can reach. TLS, authentication, authorization, and transport failures stay distinguishable, and the action `doctor` prints never suggests widening a token to Administrator to make a check pass — it names the read-only PVEAuditor role instead
 - require a separate credential for Proxmox guest actions (#107). `action_token_id` plus `action_token` or `action_token_file` configures a second, optional token used only for start, reboot, and shutdown; reads, the dashboard, and the read-only MCP tools keep using the existing token. `config validate` warns when the action credential is the same token as the read one, since that defeats the separation. See [Proxmox setup →](docs/proxmox.md) for creating the second token with a least-privilege ACL
+
+### 🐛 Fixes
+
+- keep a kernel thread's name intact so the filter can recognise it (#59). Only an absolute path is reduced to its base name now — `/usr/bin/node` still becomes `node`, and `kworker/R-rcu_g` stays whole
+- report one line when one port opens. Docker publishes on both address families, so a single container starting printed `new :8099/tcp` twice with nothing to tell the two lines apart. Changes that render identically are now dropped from both the human output and `--json`; this is not the grouping rule, which collapses different changes and stays human-only
 
 ### ⚠️ Behavior changes
 
 - **Guest start, reboot, and shutdown fail with `no action credential configured for Proxmox endpoint "..."` until `action_token_id` and `action_token` (or `action_token_file`) are added to the endpoint.** There is no fallback to the read token and no compatibility flag — reusing it defeated the reason this credential is separate in the first place
+- **`doctor` now makes outbound network calls, one per configured Proxmox endpoint.** A host that is slow to answer or unreachable makes `doctor` take noticeably longer, and `--strict` cron jobs now exit non-zero for a Proxmox host that is merely rebooting or firewalled, not only for problems on the local machine
+
 
 ## [0.25.0](https://github.com/Higangssh/homebutler/compare/v0.24.0...v0.25.0) - 2026-09-02
 

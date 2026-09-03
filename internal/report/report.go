@@ -24,6 +24,7 @@ type Snapshot struct {
 	System     *system.StatusInfo `json:"system"`
 	Containers []docker.Container `json:"containers"`
 	Ports      []ports.PortInfo   `json:"ports"`
+	Processes  []ProcessIdentity  `json:"processes,omitempty"`
 	Warnings   []string           `json:"warnings,omitempty"`
 	// Failed records which collectors did not answer when this snapshot was
 	// taken. A diff that does not know this would report every container as
@@ -45,6 +46,11 @@ type Report struct {
 	NotableChanges   []string `json:"notable_changes"`
 	SuggestedActions []string `json:"suggested_actions"`
 	Warnings         []string `json:"warnings,omitempty"`
+
+	// changes is the same set as NotableChanges, kept structured so the human
+	// renderer can group and align it. Unexported: NotableChanges is the JSON
+	// contract and stays complete and ungrouped.
+	changes []Change
 }
 
 // Options controls report behavior.
@@ -57,9 +63,13 @@ type Options struct {
 // CollectFuncs allows injecting data sources for testing.
 type CollectFuncs = inventory.CollectFuncs
 
-// DefaultCollectFuncs returns real system/docker/ports functions.
+// DefaultCollectFuncs returns real system/docker/ports functions, plus the
+// process collector: report is the only caller that compares runs, so it is
+// the only one that asks for it.
 func DefaultCollectFuncs() CollectFuncs {
-	return inventory.DefaultCollectFuncs()
+	fns := inventory.DefaultCollectFuncs()
+	fns.ProcessesFn = system.AllProcesses
+	return fns
 }
 
 // Run collects current state, compares against previous snapshot, and produces a report.
@@ -117,6 +127,7 @@ func buildSnapshot(inv *inventory.Inventory) *Snapshot {
 		System:     inv.System,
 		Containers: inv.Containers,
 		Ports:      inv.Ports,
+		Processes:  processIdentities(inv.Processes),
 		Warnings:   inv.Warnings,
 		Failed:     inv.Failed,
 	}
@@ -198,31 +209,64 @@ func buildReport(snap *Snapshot, prev *Snapshot) *Report {
 	}
 
 	// Notable changes (diff against previous)
+	// Compare identities rather than counts. A container replaced by a
+	// different container leaves every count identical, and that is the case
+	// this section used to answer with "no significant changes".
+	var changes []Change
 	if prev.System != nil && snap.System != nil {
-		for _, d := range snap.System.Disks {
-			for _, pd := range prev.System.Disks {
-				if d.Mount == pd.Mount {
-					delta := d.UsedGB - pd.UsedGB
-					if delta > 0.5 || delta < -0.5 {
-						r.NotableChanges = append(r.NotableChanges,
-							fmt.Sprintf("Disk %s: %+.1f GB since last report", d.Mount, delta))
-					}
-				}
-			}
-		}
+		changes = append(changes, diffDisks(prev.System.Disks, snap.System.Disks)...)
+	}
+	// A skipped comparison is reported in the section itself, not only as a
+	// trailing warning. "No significant changes since last report" handed to
+	// an agent while the caveat sits in another field is an all-clear the
+	// report cannot stand behind.
+	if collectorAnswered(prev, snap, inventory.CollectorDocker) {
+		changes = append(changes, diffContainers(prev.Containers, snap.Containers)...)
+	} else {
+		changes = append(changes, Change{
+			Kind:    kindSkipped,
+			Subject: nounContainers,
+			Detail:  "not compared — Docker did not answer",
+			noun:    nounContainers,
+		})
+	}
+	switch {
+	case !collectorAnswered(prev, snap, inventory.CollectorProcesses):
+		changes = append(changes, Change{
+			Kind:    kindSkipped,
+			Subject: nounProcesses,
+			Detail:  "not compared — the process collector did not answer",
+			noun:    nounProcesses,
+		})
+	case len(prev.Processes) == 0:
+		// A snapshot written before process tracking existed has no
+		// processes at all. Diffing against it would report every process on
+		// the machine as new on the first run after upgrading.
+		changes = append(changes, Change{
+			Kind:    kindSkipped,
+			Subject: nounProcesses,
+			Detail:  "not compared — the previous snapshot has none",
+			noun:    nounProcesses,
+		})
+	default:
+		changes = append(changes, diffProcesses(prev.Processes, snap.Processes)...)
+	}
+	if collectorAnswered(prev, snap, inventory.CollectorPorts) {
+		changes = append(changes, diffPorts(prev.Ports, snap.Ports)...)
+	} else {
+		changes = append(changes, Change{
+			Kind:    kindSkipped,
+			Subject: nounPorts,
+			Detail:  "not compared — the port collector did not answer",
+			noun:    nounPorts,
+		})
 	}
 
-	if snap.RunningCount != prev.RunningCount {
-		r.NotableChanges = append(r.NotableChanges,
-			fmt.Sprintf("Running containers: %d → %d", prev.RunningCount, snap.RunningCount))
-	}
-	if snap.StoppedCount != prev.StoppedCount {
-		r.NotableChanges = append(r.NotableChanges,
-			fmt.Sprintf("Stopped containers: %d → %d", prev.StoppedCount, snap.StoppedCount))
-	}
-	if snap.PublicPortCount != prev.PublicPortCount {
-		r.NotableChanges = append(r.NotableChanges,
-			fmt.Sprintf("Public ports: %d → %d", prev.PublicPortCount, snap.PublicPortCount))
+	sortChanges(changes)
+	changes = dedupeChanges(changes)
+	r.changes = changes
+	for _, c := range changes {
+		r.NotableChanges = append(r.NotableChanges, c.String())
 	}
 
 	if len(r.NotableChanges) == 0 {
@@ -261,10 +305,9 @@ func FormatHuman(r *Report) string {
 		}
 	}
 
-	fmt.Fprintf(&b, "%s\n", style.Section("Current Status"))
-	b.WriteString(style.LabelledBlock(r.Status, "   "))
-	fmt.Fprintln(&b)
-
+	// What needs doing, then what moved, then the state that explains it.
+	// Current Status used to lead, which put the reading every other tool
+	// already shows ahead of the one only this one prints.
 	if len(r.NeedsAttention) > 0 {
 		fmt.Fprintf(&b, "%s\n", style.Section("Needs Attention"))
 		for _, s := range r.NeedsAttention {
@@ -274,7 +317,15 @@ func FormatHuman(r *Report) string {
 	}
 
 	fmt.Fprintf(&b, "%s\n", style.Section("Notable Changes"))
-	b.WriteString(style.LabelledBlock(r.NotableChanges, "   "))
+	if len(r.changes) > 0 {
+		b.WriteString(changeBlock(groupChanges(r.changes), "   "))
+	} else {
+		b.WriteString(style.LabelledBlock(r.NotableChanges, "   "))
+	}
+	fmt.Fprintln(&b)
+
+	fmt.Fprintf(&b, "%s\n", style.Section("Current Status"))
+	b.WriteString(style.LabelledBlock(r.Status, "   "))
 	fmt.Fprintln(&b)
 
 	if len(r.SuggestedActions) > 0 {
