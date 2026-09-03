@@ -30,7 +30,8 @@ func (wn *WatchNotifier) NotifyIncident(inc Incident, flap FlappingResult, crash
 		return nil
 	}
 
-	shouldNotify := inc.Source == "proxmox" || (flap.IsFlapping && wn.Settings.OnFlapping) ||
+	shouldNotify := (inc.Source == "proxmox" && (wn.Settings.OnIncident || wn.Settings.OnFlapping)) ||
+		(flap.IsFlapping && wn.Settings.OnFlapping) ||
 		(!flap.IsFlapping && wn.Settings.OnIncident)
 	if !shouldNotify {
 		return nil

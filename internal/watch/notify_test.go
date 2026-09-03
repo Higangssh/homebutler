@@ -202,3 +202,19 @@ func TestNotifyIncident_ProxmoxRecoveryBypassesDefaultGateAndCooldown(t *testing
 		t.Fatalf("notifications = %d, want failure and recovery", called)
 	}
 }
+
+func TestNotifyIncident_ProxmoxRespectsNotifyOff(t *testing.T) {
+	called := 0
+	settings := NotifySettings{Enabled: true, NotifyOn: "off", Cooldown: "5m"}
+	settings.Normalize()
+	wn := makeTestNotifier(settings, &called)
+	inc := baseIncident("proxmox-pve", time.Now())
+	inc.Source = "proxmox"
+
+	if err := wn.NotifyIncident(inc, FlappingResult{}, nil, time.Now()); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if called != 0 {
+		t.Errorf("notifications = %d, want 0 when notify_on is off", called)
+	}
+}
