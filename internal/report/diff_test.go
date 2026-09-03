@@ -501,3 +501,89 @@ func TestOnePortOpeningIsOneLine(t *testing.T) {
 		t.Errorf("one port opening produced %d lines: %v", lines, r.NotableChanges)
 	}
 }
+
+// The case the section exists for: a service that stopped being local. It is
+// a departure and an arrival in Notable Changes with nothing correlating
+// them, and no threshold on the current reading can see it at all.
+func TestPortBecomingPublicNeedsAttention(t *testing.T) {
+	prev := snapshotWith(nil, []ports.PortInfo{
+		{Protocol: "tcp", Address: "127.0.0.1", Port: "8080", Process: "vaultwarden"},
+	})
+	curr := snapshotWith(nil, []ports.PortInfo{
+		{Protocol: "tcp", Address: "0.0.0.0", Port: "8080", Process: "vaultwarden"},
+	})
+
+	r := buildReport(curr, prev)
+	got := strings.Join(r.NeedsAttention, " | ")
+	if !strings.Contains(got, ":8080/tcp is now reachable from every interface") {
+		t.Errorf("a port that became public did not need attention: %v", r.NeedsAttention)
+	}
+	if !strings.Contains(got, "vaultwarden") {
+		t.Errorf("the entry does not name what is answering: %v", r.NeedsAttention)
+	}
+}
+
+// A port that was already public is not news the second time.
+func TestAlreadyPublicPortIsNotFlagged(t *testing.T) {
+	listeners := []ports.PortInfo{{Protocol: "tcp", Address: "0.0.0.0", Port: "8080", Process: "nginx"}}
+	r := buildReport(snapshotWith(nil, listeners), snapshotWith(nil, listeners))
+	if len(r.NeedsAttention) != 0 {
+		t.Errorf("an unchanged public port was flagged: %v", r.NeedsAttention)
+	}
+}
+
+// A redeploy that did not come back is the failure a person most needs told,
+// and it was previously a change line whose detail happened to end in exited.
+func TestRedeployThatDidNotComeBackNeedsAttention(t *testing.T) {
+	prev := snapshotWith([]docker.Container{
+		{ID: "aaa111", Name: "gitea", Image: "gitea:1.23", State: "running"},
+	}, nil)
+	curr := snapshotWith([]docker.Container{
+		{ID: "bbb222", Name: "gitea", Image: "gitea:1.24", State: "exited"},
+	}, nil)
+
+	r := buildReport(curr, prev)
+	got := strings.Join(r.NeedsAttention, " | ")
+	if !strings.Contains(got, "gitea was recreated and is exited, not running") {
+		t.Errorf("a failed redeploy did not need attention: %v", r.NeedsAttention)
+	}
+}
+
+func TestContainerStoppedSinceLastReportIsNamed(t *testing.T) {
+	prev := snapshotWith([]docker.Container{
+		{ID: "same", Name: "postgres", Image: "postgres:16", State: "running"},
+	}, nil)
+	curr := snapshotWith([]docker.Container{
+		{ID: "same", Name: "postgres", Image: "postgres:16", State: "exited"},
+	}, nil)
+
+	r := buildReport(curr, prev)
+	got := strings.Join(r.NeedsAttention, " | ")
+	if !strings.Contains(got, "postgres stopped since the last report") {
+		t.Errorf("the stopped container was not named: %v", r.NeedsAttention)
+	}
+}
+
+// Attention is derived from the snapshots, never from the rendered strings —
+// the detail column is prose and nothing may depend on its wording.
+func TestAttentionDoesNotDependOnDetailWording(t *testing.T) {
+	prev := snapshotWith([]docker.Container{
+		{ID: "aaa", Name: "app", Image: "app:1", State: "running"},
+	}, nil)
+	curr := snapshotWith([]docker.Container{
+		{ID: "bbb", Name: "app", Image: "app:1", State: "exited"},
+	}, nil)
+
+	r := buildReport(curr, prev)
+	if len(r.NeedsAttention) == 0 {
+		t.Fatal("nothing needed attention")
+	}
+	for _, c := range r.changes {
+		c.Detail = "wording that no longer says anything"
+		_ = c
+	}
+	again := buildReport(curr, prev)
+	if len(again.NeedsAttention) != len(r.NeedsAttention) {
+		t.Error("attention changed with the detail wording")
+	}
+}

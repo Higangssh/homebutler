@@ -12,6 +12,8 @@ All notable changes to this project will be documented in this file.
 - require a separate credential for Proxmox guest actions (#107). `action_token_id` plus `action_token` or `action_token_file` configures a second, optional token used only for start, reboot, and shutdown; reads, the dashboard, and the read-only MCP tools keep using the existing token. `config validate` warns when the action credential is the same token as the read one, since that defeats the separation. See [Proxmox setup →](docs/proxmox.md) for creating the second token with a least-privilege ACL
 - add the MCP 2026-07-28 `server/discover` RPC, per-request metadata validation, version mismatch errors, result typing, cache hints, and deterministic tool ordering
 
+- decide what is worth acting on from what changed, not only from the current reading (#136). `Needs Attention` was filled entirely by thresholds — memory over 85%, a disk over 85%, a count of stopped containers — so a service that stopped being local and started answering on every interface produced two ordinary lines in `Notable Changes` and nothing above them. A port that became publicly reachable, a container that was recreated and did not come back, and a container that stopped since the last report are now named there. They are derived from the snapshots rather than from the rendered change lines, because the detail column is prose and nothing that decides what matters may depend on its wording
+
 ### 🐛 Fixes
 
 - keep a kernel thread's name intact so the filter can recognise it (#59). Only an absolute path is reduced to its base name now — `/usr/bin/node` still becomes `node`, and `kworker/R-rcu_g` stays whole

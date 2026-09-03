@@ -207,6 +207,12 @@ func buildReport(snap *Snapshot, prev *Snapshot) *Report {
 		r.NeedsAttention = append(r.NeedsAttention,
 			fmt.Sprintf("%d container(s) stopped", snap.StoppedCount))
 	}
+	// What moved is the other half of what needs attention. The checks above
+	// answer "is something wrong right now"; a port that stopped being local
+	// is wrong because of what changed, and no threshold can see it.
+	if prev != nil {
+		r.NeedsAttention = append(r.NeedsAttention, attentionFromChanges(prev, snap)...)
+	}
 
 	if prev == nil {
 		r.IsBaseline = true

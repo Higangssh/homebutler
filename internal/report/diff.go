@@ -549,3 +549,73 @@ func sameHashes(a, b map[string]bool) bool {
 	}
 	return true
 }
+
+// attentionFromChanges derives what to act on from what moved.
+//
+// The threshold checks above it answer "is something wrong right now"; these
+// answer "did something happen that you would want to know about". Both are
+// computed from the snapshots rather than from the rendered change strings —
+// parsing our own prose to decide what matters would make the detail column
+// load-bearing, which is exactly what the column rule says it must not be.
+func attentionFromChanges(prev, snap *Snapshot) []string {
+	var out []string
+
+	for _, p := range newlyPublicListeners(prev.Ports, snap.Ports) {
+		who := owner(p)
+		if who == "" {
+			who = "an unidentified process"
+		}
+		out = append(out, fmt.Sprintf(
+			"Port %s is now reachable from every interface, answered by %s — it was not before",
+			":"+p.Port+"/"+p.Protocol, who))
+	}
+
+	prevByName := indexContainers(prev.Containers)
+	for _, c := range snap.Containers {
+		p, existed := prevByName[c.Name]
+		if !existed || c.State == "running" {
+			continue
+		}
+		switch {
+		case p.ID != c.ID:
+			out = append(out, fmt.Sprintf(
+				"%s was recreated and is %s, not running — the deploy did not come back", c.Name, c.State))
+		case p.Image != c.Image:
+			out = append(out, fmt.Sprintf(
+				"%s took a new image and is %s, not running", c.Name, c.State))
+		case p.State == "running":
+			out = append(out, fmt.Sprintf(
+				"%s stopped since the last report", c.Name))
+		}
+	}
+
+	sort.Strings(out)
+	return out
+}
+
+// newlyPublicListeners reports listeners that are reachable from every
+// interface now and were not before.
+//
+// The comparison is per port and protocol rather than per listener, because
+// the move that matters — 127.0.0.1:8080 becoming 0.0.0.0:8080 — is a
+// departure and an arrival in the change list with nothing correlating them.
+func newlyPublicListeners(prev, curr []ports.PortInfo) []ports.PortInfo {
+	wasPublic := map[string]bool{}
+	for _, p := range prev {
+		if ports.IsPublicBind(p.Address) {
+			wasPublic[p.Port+"/"+p.Protocol] = true
+		}
+	}
+
+	seen := map[string]bool{}
+	var out []ports.PortInfo
+	for _, p := range curr {
+		key := p.Port + "/" + p.Protocol
+		if !ports.IsPublicBind(p.Address) || wasPublic[key] || seen[key] {
+			continue
+		}
+		seen[key] = true
+		out = append(out, p)
+	}
+	return out
+}
