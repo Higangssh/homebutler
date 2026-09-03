@@ -2,7 +2,7 @@
 
 All notable changes to this project will be documented in this file.
 
-## [Unreleased]
+## [0.26.0](https://github.com/Higangssh/homebutler/compare/v0.25.0...v0.26.0) - 2026-09-03
 
 **`report` compared counts and remembered no processes, so a container replaced by a different container read as no change and "what started running since yesterday" had no path to an answer.** The snapshot on disk held the full container and port lists all along; the diff read four integers off it and threw the lists away. `processes` was collected, rendered, and discarded entirely.
 
@@ -11,7 +11,7 @@ All notable changes to this project will be documented in this file.
    gone      vaultwarden   was running
    new       gitea         now running
    replaced  nginx         7d4a91f0aa11 → 91be0322bb22
-   image     jellyfin      jellyfin:10.9.11 → jellyfin:10.10.0
+   replaced  python3       same name, different invocation
    state     7 containers  postgres, redis, grafana, +4
    port      :8080/tcp     vaultwarden → gitea
    disk      /             +2.4 GB since last report
