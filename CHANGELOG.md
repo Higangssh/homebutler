@@ -2,30 +2,31 @@
 
 All notable changes to this project will be documented in this file.
 
-## [Unreleased]
+## [0.27.0](https://github.com/Higangssh/homebutler/compare/v0.26.0...v0.27.0) - 2026-09-03
+**`report` learned what changed and then said nothing about which of it mattered.** `Needs Attention` was filled entirely from thresholds on the current reading — memory over 85%, a disk over 85% — so a service that stopped being local and started answering on every interface produced two ordinary lines in the section below it and nothing above. The suggested actions still compared counts, so they could not name the port or the container, and a port that changed hands without changing the count suggested nothing at all.
 
-**Every Linux report filled with kernel threads appearing and disappearing.** `isKernelThread` looks for the `kworker/` prefix, and `parseProcesses` had already stripped it: the slash in `kworker/0:4-events` is not a directory separator, but it was treated as one, leaving `0:4-events` for the filter to not recognise. Two runs seconds apart on an idle Raspberry Pi reported twelve kernel threads gone and twelve new. macOS has no kernel threads by that name, which is why it took running it on Linux to see.
+```
+── Needs Attention ───────────────────────────────────────────
+   ⚠️  Port :8080/tcp is now reachable from every interface, answered by gitea — it was not before
+
+── Suggested Actions ─────────────────────────────────────────
+   → Verify :8080/tcp should be reachable from every interface, answered by gitea.
+```
 
 ### ✨ Features
 
 - diagnose each configured Proxmox endpoint in `doctor` with read-only requests (#105). `doctor` said nothing about Proxmox before this; now every endpoint gets one finding, using the same `DefaultView` call `proxmox status` makes, so the two never disagree about what a token can reach. TLS, authentication, authorization, and transport failures stay distinguishable, and the action `doctor` prints never suggests widening a token to Administrator to make a check pass — it names the read-only PVEAuditor role instead
 - require a separate credential for Proxmox guest actions (#107). `action_token_id` plus `action_token` or `action_token_file` configures a second, optional token used only for start, reboot, and shutdown; reads, the dashboard, and the read-only MCP tools keep using the existing token. `config validate` warns when the action credential is the same token as the read one, since that defeats the separation. See [Proxmox setup →](docs/proxmox.md) for creating the second token with a least-privilege ACL
 - add the MCP 2026-07-28 `server/discover` RPC, per-request metadata validation, version mismatch errors, result typing, cache hints, and deterministic tool ordering
-
 - decide what is worth acting on from what changed, not only from the current reading (#136). `Needs Attention` was filled entirely by thresholds — memory over 85%, a disk over 85%, a count of stopped containers — so a service that stopped being local and started answering on every interface produced two ordinary lines in `Notable Changes` and nothing above them. A port that became publicly reachable, a container that was recreated and did not come back, and a container that stopped since the last report are now named there. They are derived from the snapshots rather than from the rendered change lines, because the detail column is prose and nothing that decides what matters may depend on its wording
-
 - name what to do and to what, instead of counting (#137). `New public port(s) detected — verify these are intentional` became `Verify :8080/tcp should be answering from gitea.`, and a stopped container now comes with the command to look at it. The old actions compared `PublicPortCount` and `StoppedCount`, so they could not name anything — and a port that changed hands without changing the count suggested nothing at all, which is the blind spot #58 closed one section above
 - collapse the attention list when a reboot stops everything at once. Thirty stopped containers were thirty lines in the section a person reads first; they are now one line naming three and counting the rest
 
 ### 🐛 Fixes
 
 - stop offering back the protocol version that was just refused (#133). `UnsupportedProtocolVersionError` listed every revision homebutler implements, including the legacy one the client had put in `_meta` — and the spec asks a client to pick from that list and retry, so an obedient one loops. The error now lists only what may appear in `_meta`; `server/discover` still advertises both eras, because a dual-era server genuinely can be reached either way
-
 - keep a kernel thread's name intact so the filter can recognise it (#59). Only an absolute path is reduced to its base name now — `/usr/bin/node` still becomes `node`, and `kworker/R-rcu_g` stays whole
 - report one line when one port opens. Docker publishes on both address families, so a single container starting printed `new :8099/tcp` twice with nothing to tell the two lines apart. Changes that render identically are now dropped from both the human output and `--json`; this is not the grouping rule, which collapses different changes and stays human-only
-
-### 🐛 Fixes
-
 - say what happened to a replaced container rather than only which identifiers changed. `replaced nginx — 7d4a91f0aa11 → 91be0322bb22` was two hashes where a sentence belonged; it now reads `recreated, 7d4a91f0aa11 → 91be0322bb22`. The detail column is prose for a person and the identifiers are the evidence behind it — the kind is what anything reading `--json` branches on
 - name the snapshot being compared against in the report header. "What changed" covered the last hour or the last three weeks depending on when `report` last ran, and nothing said which
 
@@ -34,7 +35,6 @@ All notable changes to this project will be documented in this file.
 - **Guest start, reboot, and shutdown fail with `no action credential configured for Proxmox endpoint "..."` until `action_token_id` and `action_token` (or `action_token_file`) are added to the endpoint.** There is no fallback to the read token and no compatibility flag — reusing it defeated the reason this credential is separate in the first place
 - **`doctor` now makes outbound network calls, one per configured Proxmox endpoint.** A host that is slow to answer or unreachable makes `doctor` take noticeably longer, and `--strict` cron jobs now exit non-zero for a Proxmox host that is merely rebooting or firewalled, not only for problems on the local machine
 - modern requests use stateless per-request metadata; legacy `initialize` requests continue to negotiate legacy protocol versions
-
 
 ## [0.26.0](https://github.com/Higangssh/homebutler/compare/v0.25.0...v0.26.0) - 2026-09-03
 
