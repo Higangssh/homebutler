@@ -570,12 +570,15 @@ func attentionFromChanges(prev, snap *Snapshot) []string {
 			":"+p.Port+"/"+p.Protocol, who))
 	}
 
-	prevByName := indexContainers(prev.Containers)
-	for _, c := range snap.Containers {
-		p, existed := prevByName[c.Name]
-		if !existed || c.State == "running" {
-			continue
-		}
+	for _, p := range publicPortsChangedHands(prev.Ports, snap.Ports) {
+		out = append(out, fmt.Sprintf(
+			"Port %s is answered by %s now, and was not at the last report",
+			":"+p.Port+"/"+p.Protocol, owner(p)))
+	}
+
+	var stopped []string
+	for _, c := range containersNeedingAttention(prev, snap) {
+		p := indexContainers(prev.Containers)[c.Name]
 		switch {
 		case p.ID != c.ID:
 			out = append(out, fmt.Sprintf(
@@ -583,13 +586,96 @@ func attentionFromChanges(prev, snap *Snapshot) []string {
 		case p.Image != c.Image:
 			out = append(out, fmt.Sprintf(
 				"%s took a new image and is %s, not running", c.Name, c.State))
-		case p.State == "running":
-			out = append(out, fmt.Sprintf(
-				"%s stopped since the last report", c.Name))
+		default:
+			stopped = append(stopped, c.Name)
+		}
+	}
+
+	// A reboot stops everything at once. Naming thirty containers one per
+	// line turns the section a person reads first into the longest one on the
+	// page, which is the failure this whole feature is trying to avoid.
+	if len(stopped) > groupThreshold {
+		out = append(out, fmt.Sprintf("%d containers stopped since the last report: %s, +%d",
+			len(stopped), strings.Join(stopped[:groupNamed], ", "), len(stopped)-groupNamed))
+	} else {
+		for _, name := range stopped {
+			out = append(out, name+" stopped since the last report")
 		}
 	}
 
 	sort.Strings(out)
+	return out
+}
+
+// containersNeedingAttention returns containers that were present at the last
+// report and are not running now, in a stable order.
+func containersNeedingAttention(prev, snap *Snapshot) []docker.Container {
+	prevByName := indexContainers(prev.Containers)
+	var out []docker.Container
+	for _, c := range snap.Containers {
+		p, existed := prevByName[c.Name]
+		if !existed || c.State == "running" || p.State != "running" && p.ID == c.ID && p.Image == c.Image {
+			continue
+		}
+		out = append(out, c)
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
+	return out
+}
+
+// actionsFromChanges names what to do and to what.
+//
+// The old actions compared counts, so they could not say which port or which
+// container, and a port that changed hands without changing the count
+// produced no action at all — the same blind spot #58 closed one section
+// above, still sitting here.
+func actionsFromChanges(prev, snap *Snapshot) []string {
+	var out []string
+
+	for _, p := range newlyPublicListeners(prev.Ports, snap.Ports) {
+		who := owner(p)
+		if who == "" {
+			who = "whatever is answering"
+		}
+		out = append(out, fmt.Sprintf("Verify %s should be reachable from every interface, answered by %s.",
+			":"+p.Port+"/"+p.Protocol, who))
+	}
+
+	for _, p := range publicPortsChangedHands(prev.Ports, snap.Ports) {
+		out = append(out, fmt.Sprintf("Verify %s should be answering from %s.",
+			":"+p.Port+"/"+p.Protocol, owner(p)))
+	}
+
+	stopped := containersNeedingAttention(prev, snap)
+	if len(stopped) > groupNamed {
+		stopped = stopped[:groupNamed]
+	}
+	for _, c := range stopped {
+		out = append(out, fmt.Sprintf("Check why %s is not running: homebutler docker logs %s", c.Name, c.Name))
+	}
+
+	return out
+}
+
+// publicPortsChangedHands reports listeners reachable from every interface
+// whose answering process changed.
+//
+// The count-based action went silent here: the same number of public ports,
+// a different service behind one of them. That is the blind spot #58 closed
+// for the change list, and it sat one section lower until #137.
+func publicPortsChangedHands(prev, curr []ports.PortInfo) []ports.PortInfo {
+	before := indexPorts(prev)
+	var out []ports.PortInfo
+	for key, c := range indexPorts(curr) {
+		p, existed := before[key]
+		if !existed || !ports.IsPublicBind(c.Address) {
+			continue
+		}
+		if owner(p) != "" && owner(c) != "" && owner(p) != owner(c) {
+			out = append(out, c)
+		}
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Port < out[j].Port })
 	return out
 }
 

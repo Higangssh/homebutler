@@ -107,6 +107,19 @@ identities a snapshot is about 50 KB, against 2 KB before. A Linux server
 running a handful of services is well under that. At the default `--keep 30`
 that is roughly 1.5 MB of history in the worst case measured.
 
+## What to do about it
+
+`Suggested Actions` names the thing and the command, and is built from the same
+changes rather than from counts:
+
+```
+→ Verify :8080/tcp should be answering from gitea.
+→ Check why postgres is not running: homebutler docker logs postgres
+```
+
+A count could not say which port or which container, and a port that changed
+hands without changing the count produced no action at all.
+
 ## The window
 
 The header names the snapshot being compared against:
@@ -136,6 +149,14 @@ stopped right now. These fire whether or not anything changed.
 - a container that was recreated or took a new image and is not running — a
   deploy that did not come back
 - a container that was running at the last report and is not now, by name
+
+A public port whose answering process changed lands here too — the same number
+of public ports, a different service behind one of them.
+
+When more containers stopped than a person will read one at a time, the entry
+collapses: `12 containers stopped since the last report: api, redis, web, +9`.
+A reboot stops everything at once, and the section someone reads first must not
+become the longest one on the page.
 
 These are computed from the snapshots, never from the rendered change lines.
 The detail column is prose that is free to change between releases, so nothing

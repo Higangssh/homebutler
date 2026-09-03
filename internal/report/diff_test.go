@@ -2,6 +2,7 @@ package report
 
 import (
 	"encoding/json"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -585,5 +586,83 @@ func TestAttentionDoesNotDependOnDetailWording(t *testing.T) {
 	again := buildReport(curr, prev)
 	if len(again.NeedsAttention) != len(r.NeedsAttention) {
 		t.Error("attention changed with the detail wording")
+	}
+}
+
+func TestActionNamesThePortAndTheProcess(t *testing.T) {
+	prev := snapshotWith(nil, []ports.PortInfo{
+		{Protocol: "tcp", Address: "127.0.0.1", Port: "8080", Process: "vaultwarden"},
+	})
+	curr := snapshotWith(nil, []ports.PortInfo{
+		{Protocol: "tcp", Address: "0.0.0.0", Port: "8080", Process: "gitea"},
+	})
+
+	r := buildReport(curr, prev)
+	got := strings.Join(r.SuggestedActions, " | ")
+	if !strings.Contains(got, ":8080/tcp") || !strings.Contains(got, "gitea") {
+		t.Errorf("the action names neither the port nor the process: %v", r.SuggestedActions)
+	}
+	if strings.Contains(got, "port(s)") {
+		t.Errorf("the action still speaks in counts: %v", r.SuggestedActions)
+	}
+}
+
+// The count-based action went silent here: same number of public ports, a
+// different process answering. It is the blind spot #58 closed one section up.
+func TestPortChangingHandsStillSuggestsSomething(t *testing.T) {
+	prev := snapshotWith(nil, []ports.PortInfo{
+		{Protocol: "tcp", Address: "0.0.0.0", Port: "8080", Process: "vaultwarden"},
+	})
+	curr := snapshotWith(nil, []ports.PortInfo{
+		{Protocol: "tcp", Address: "0.0.0.0", Port: "8080", Process: "gitea"},
+	})
+
+	r := buildReport(curr, prev)
+	if len(r.SuggestedActions) == 0 {
+		t.Error("a port that changed hands suggested nothing")
+	}
+}
+
+func TestActionNamesTheContainerAndTheCommand(t *testing.T) {
+	prev := snapshotWith([]docker.Container{
+		{ID: "same", Name: "postgres", Image: "postgres:16", State: "running"},
+	}, nil)
+	curr := snapshotWith([]docker.Container{
+		{ID: "same", Name: "postgres", Image: "postgres:16", State: "exited"},
+	}, nil)
+
+	r := buildReport(curr, prev)
+	got := strings.Join(r.SuggestedActions, " | ")
+	if !strings.Contains(got, "homebutler docker logs postgres") {
+		t.Errorf("the action does not name the command to run: %v", r.SuggestedActions)
+	}
+}
+
+// A reboot stops everything at once. The section a person reads first must
+// not become the longest one on the page.
+func TestManyStoppedContainersCollapse(t *testing.T) {
+	var prevList, currList []docker.Container
+	for i := 0; i < 30; i++ {
+		n := fmt.Sprintf("svc-%02d", i)
+		prevList = append(prevList, docker.Container{ID: n, Name: n, Image: "img", State: "running"})
+		currList = append(currList, docker.Container{ID: n, Name: n, Image: "img", State: "exited"})
+	}
+
+	r := buildReport(snapshotWith(currList, nil), snapshotWith(prevList, nil))
+
+	var stoppedLines int
+	for _, a := range r.NeedsAttention {
+		if strings.Contains(a, "stopped since the last report") {
+			stoppedLines++
+		}
+	}
+	if stoppedLines != 1 {
+		t.Errorf("thirty stopped containers produced %d attention lines: %v", stoppedLines, r.NeedsAttention)
+	}
+	if !strings.Contains(strings.Join(r.NeedsAttention, " "), "30 containers stopped") {
+		t.Errorf("the collapsed line does not count what it collapsed: %v", r.NeedsAttention)
+	}
+	if len(r.SuggestedActions) > groupNamed {
+		t.Errorf("thirty stopped containers produced %d actions", len(r.SuggestedActions))
 	}
 }

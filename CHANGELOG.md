@@ -14,6 +14,9 @@ All notable changes to this project will be documented in this file.
 
 - decide what is worth acting on from what changed, not only from the current reading (#136). `Needs Attention` was filled entirely by thresholds — memory over 85%, a disk over 85%, a count of stopped containers — so a service that stopped being local and started answering on every interface produced two ordinary lines in `Notable Changes` and nothing above them. A port that became publicly reachable, a container that was recreated and did not come back, and a container that stopped since the last report are now named there. They are derived from the snapshots rather than from the rendered change lines, because the detail column is prose and nothing that decides what matters may depend on its wording
 
+- name what to do and to what, instead of counting (#137). `New public port(s) detected — verify these are intentional` became `Verify :8080/tcp should be answering from gitea.`, and a stopped container now comes with the command to look at it. The old actions compared `PublicPortCount` and `StoppedCount`, so they could not name anything — and a port that changed hands without changing the count suggested nothing at all, which is the blind spot #58 closed one section above
+- collapse the attention list when a reboot stops everything at once. Thirty stopped containers were thirty lines in the section a person reads first; they are now one line naming three and counting the rest
+
 ### 🐛 Fixes
 
 - keep a kernel thread's name intact so the filter can recognise it (#59). Only an absolute path is reduced to its base name now — `/usr/bin/node` still becomes `node`, and `kworker/R-rcu_g` stays whole

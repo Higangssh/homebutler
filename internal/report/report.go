@@ -286,15 +286,10 @@ func buildReport(snap *Snapshot, prev *Snapshot) *Report {
 		r.NotableChanges = append(r.NotableChanges, "No significant changes since last report.")
 	}
 
-	// Suggested actions
-	if snap.PublicPortCount > prev.PublicPortCount {
-		r.SuggestedActions = append(r.SuggestedActions,
-			"New public port(s) detected — verify these are intentional.")
-	}
-	if snap.StoppedCount > prev.StoppedCount {
-		r.SuggestedActions = append(r.SuggestedActions,
-			"Container(s) stopped since last report — check logs with 'homebutler docker logs'.")
-	}
+	// Suggested actions, built from what changed rather than from counts. A
+	// count cannot say which port or which container, and a port that changed
+	// hands without changing the count produced no action at all.
+	r.SuggestedActions = append(r.SuggestedActions, actionsFromChanges(prev, snap)...)
 	if len(r.NeedsAttention) > 0 && len(r.SuggestedActions) == 0 {
 		r.SuggestedActions = append(r.SuggestedActions,
 			"Address items in 'Needs attention' above.")
