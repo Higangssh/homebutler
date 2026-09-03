@@ -121,7 +121,7 @@ func (pm *ProxmoxMonitor) poll(ctx context.Context, endpointPrev map[string]prox
 		if target.Client == nil {
 			err = target.Err
 			if err == nil {
-				err = fmt.Errorf("Proxmox client is not configured")
+				err = fmt.Errorf("proxmox client is not configured")
 			}
 		} else {
 			resources, err = target.Client.Resources(ctx)
