@@ -49,7 +49,7 @@ func TestRenderedChangeBlock(t *testing.T) {
 	want := []string{
 		"gone      vaultwarden   was running",
 		"new       gitea         now running",
-		"replaced  nginx         7d4a91f0aa11 → 91be0322bb22",
+		"replaced  nginx         recreated, 7d4a91f0aa11 → 91be0322bb22",
 		"image     jellyfin      jellyfin:10.9.11 → jellyfin:10.10.0",
 		"state     7 containers  svc-0, svc-1, svc-2, +4",
 		"port      :8080/tcp     vaultwarden → gitea",

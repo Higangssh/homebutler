@@ -17,6 +17,11 @@ All notable changes to this project will be documented in this file.
 - keep a kernel thread's name intact so the filter can recognise it (#59). Only an absolute path is reduced to its base name now — `/usr/bin/node` still becomes `node`, and `kworker/R-rcu_g` stays whole
 - report one line when one port opens. Docker publishes on both address families, so a single container starting printed `new :8099/tcp` twice with nothing to tell the two lines apart. Changes that render identically are now dropped from both the human output and `--json`; this is not the grouping rule, which collapses different changes and stays human-only
 
+### 🐛 Fixes
+
+- say what happened to a replaced container rather than only which identifiers changed. `replaced nginx — 7d4a91f0aa11 → 91be0322bb22` was two hashes where a sentence belonged; it now reads `recreated, 7d4a91f0aa11 → 91be0322bb22`. The detail column is prose for a person and the identifiers are the evidence behind it — the kind is what anything reading `--json` branches on
+- name the snapshot being compared against in the report header. "What changed" covered the last hour or the last three weeks depending on when `report` last ran, and nothing said which
+
 ### ⚠️ Behavior changes
 
 - **Guest start, reboot, and shutdown fail with `no action credential configured for Proxmox endpoint "..."` until `action_token_id` and `action_token` (or `action_token_file`) are added to the endpoint.** There is no fallback to the read token and no compatibility flag — reusing it defeated the reason this credential is separate in the first place

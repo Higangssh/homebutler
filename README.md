@@ -39,6 +39,36 @@ That is the whole idea. Most homelab tools show you a graph of right now, and le
 time, decides what is worth saying, and says it — six containers before and six after
 is not "no change" when one of them is a different container.
 
+### Reading a change
+
+Every line is three columns: **what kind of change**, **what it happened to**, and
+**what exactly happened**. The kind is one of eight words, and it is the same word in
+`--json`, so an agent branches on it without reading prose:
+
+| Kind | Means | You would see it after |
+| --- | --- | --- |
+| `gone` | it was there last time and is not now | `docker rm`, a service stopping, a port closing |
+| `new` | it was not there last time and is now | starting anything |
+| `replaced` | same name, different thing underneath | `docker compose up -d` — the container is recreated, so the name and the count are unchanged |
+| `image` | same container, different image | pulling a new tag |
+| `state` | same container, running where it was stopped, or the reverse | a crash, or bringing something back up |
+| `port` | same port, a different process answering on it | one service taking over another's port |
+| `disk` | a mount moved by more than half a gigabyte | anything that writes |
+| `skipped` | the comparison could not be made | Docker was down when either snapshot was taken |
+
+`replaced` is the one the rest of this exists for. A container recreated under the
+same name leaves every count identical, which is why a report that compares counts —
+as this one did before 0.26.0 — answers "no significant changes" while the thing you
+were running has been swapped out underneath you.
+
+`skipped` is the second: homebutler says it could not compare rather than reporting
+nothing changed. An all-clear it cannot stand behind is worse than no answer.
+
+The header names the snapshot being compared against, so "what changed" is never
+ambiguous about the window it covers.
+
+📖 **[What earns a line, and what is deliberately suppressed →](docs/report.md)**
+
 HomeButler helps you answer the boring but painful questions every homelab eventually creates:
 
 - What is running on my server right now?

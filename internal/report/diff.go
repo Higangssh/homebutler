@@ -102,7 +102,10 @@ func diffContainers(prev, curr []docker.Container) []Change {
 		}
 		switch {
 		case p.ID != c.ID:
-			detail := shortID(p.ID) + " → " + shortID(c.ID)
+			// The detail column is prose a person reads; the ID pair is the
+			// evidence, not the sentence. "recreated" is what docker compose
+			// up -d does to a container, which is how most people meet this.
+			detail := "recreated, " + shortID(p.ID) + " → " + shortID(c.ID)
 			if p.Image != c.Image {
 				detail += ", " + p.Image + " → " + c.Image
 			}
