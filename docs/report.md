@@ -72,6 +72,13 @@ and counts the rest:
 state     7 containers  postgres, redis, grafana, +4
 ```
 
+Changes that render identically are dropped, in both outputs. Docker publishes
+a port on both address families, so one container starting produces two
+listeners by identity and one sentence by display — one port opening is one
+event. That is not the grouping rule: grouping collapses *different* changes
+into a summary and is human-only, while an exact duplicate carries nothing for
+anything reading the output.
+
 `--json` never groups and never truncates. A person needs the section to stay
 readable; anything reading the output needs all of it, and quietly handing a
 shortened list to an agent is how an agent becomes confidently wrong.

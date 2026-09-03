@@ -284,8 +284,9 @@ func TestReplacedContainerAlsoNamesItsState(t *testing.T) {
 }
 
 // df can print the same mountpoint twice. Without a break the join is a cross
-// product and one mount reports four times.
-func TestDuplicateMountDoesNotCrossProduct(t *testing.T) {
+// product and one mount reported four times; the identical rows that survive
+// the join are then collapsed by dedupeChanges, so one mount is one line.
+func TestDuplicateMountReportsOnce(t *testing.T) {
 	prev := snapshotWith(nil, nil)
 	curr := snapshotWith(nil, nil)
 	prev.System = &system.StatusInfo{Disks: []system.DiskInfo{
@@ -302,8 +303,8 @@ func TestDuplicateMountDoesNotCrossProduct(t *testing.T) {
 			diskLines++
 		}
 	}
-	if diskLines != 2 {
-		t.Errorf("two df rows for one mount should report twice, not %d times: %v", diskLines, r.NotableChanges)
+	if diskLines != 1 {
+		t.Errorf("one mount should report once, got %d lines: %v", diskLines, r.NotableChanges)
 	}
 }
 
@@ -477,5 +478,26 @@ func TestFailedProcessCollectorDoesNotEmptyTheMachine(t *testing.T) {
 	}
 	if !strings.Contains(got, "skipped: processes — not compared") {
 		t.Errorf("the skipped comparison is not in notable_changes: %s", got)
+	}
+}
+
+// Found on a Raspberry Pi: docker publishes a port on both address families,
+// so one container starting printed "new :8099/tcp" twice with nothing to
+// tell the two lines apart.
+func TestOnePortOpeningIsOneLine(t *testing.T) {
+	curr := snapshotWith(nil, []ports.PortInfo{
+		{Protocol: "tcp", Address: "0.0.0.0", Port: "8099", Process: "docker-proxy"},
+		{Protocol: "tcp", Address: "[::]", Port: "8099", Process: "docker-proxy"},
+	})
+
+	r := buildReport(curr, snapshotWith(nil, nil))
+	var lines int
+	for _, c := range r.NotableChanges {
+		if strings.Contains(c, ":8099") {
+			lines++
+		}
+	}
+	if lines != 1 {
+		t.Errorf("one port opening produced %d lines: %v", lines, r.NotableChanges)
 	}
 }

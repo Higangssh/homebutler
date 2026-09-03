@@ -260,6 +260,21 @@ func parseElapsed(value string) time.Duration {
 	return total
 }
 
+// trimExecutablePath reduces a path to its base name, and only a path.
+//
+// The slash in a Linux kernel thread — kworker/0:4-events, kworker/R-rcu_g —
+// is not a directory separator, and treating it as one leaves 0:4-events,
+// which no longer matches the kworker/ prefix isKernelThread looks for. Every
+// such thread then survives the filter, and since they are created and
+// destroyed constantly, a report comparing two runs on Linux fills with them.
+// An executable path is absolute; a thread name is not.
+func trimExecutablePath(name string) string {
+	if strings.HasPrefix(name, "/") {
+		return filepath.Base(name)
+	}
+	return name
+}
+
 // isKernelThread detects common Linux kernel thread names.
 func isKernelThread(name string) bool {
 	kernelPrefixes := []string{
@@ -307,10 +322,7 @@ func parseProcesses(output string, n int) []ProcessInfo {
 				fmt.Sscanf(fields[0], "%d", &pid)
 				fmt.Sscanf(fields[1], "%f", &cpu)
 				fmt.Sscanf(fields[2], "%f", &mem)
-				name := strings.Join(fields[3:], " ")
-				if strings.Contains(name, "/") {
-					name = filepath.Base(name)
-				}
+				name := trimExecutablePath(strings.Join(fields[3:], " "))
 				procs = append(procs, ProcessInfo{PID: pid, Name: name, CPU: cpu, Mem: mem})
 				if n > 0 && len(procs) >= n {
 					break
@@ -329,10 +341,7 @@ func parseProcesses(output string, n int) []ProcessInfo {
 		state := fields[4]
 
 		// comm is the last column and may contain path with spaces
-		name := strings.Join(fields[5:], " ")
-		if strings.Contains(name, "/") {
-			name = filepath.Base(name)
-		}
+		name := trimExecutablePath(strings.Join(fields[5:], " "))
 
 		isZombie := strings.HasPrefix(state, "Z")
 

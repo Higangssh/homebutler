@@ -148,6 +148,28 @@ func diffPorts(prev, curr []ports.PortInfo) []Change {
 	return changes
 }
 
+// dedupeChanges drops changes that render identically.
+//
+// Docker publishes a port on both address families, so one container starting
+// produces 0.0.0.0:8099 and [::]:8099 — two listeners by identity, one line
+// by display, and the reader gets the same sentence twice with nothing to
+// tell them apart. One port opening is one event. This is not the grouping
+// rule: grouping collapses different changes into a summary and is left to
+// the human renderer, while an exact duplicate carries no information for
+// anything reading the output, JSON included.
+func dedupeChanges(changes []Change) []Change {
+	seen := make(map[Change]bool, len(changes))
+	out := changes[:0]
+	for _, c := range changes {
+		if seen[c] {
+			continue
+		}
+		seen[c] = true
+		out = append(out, c)
+	}
+	return out
+}
+
 // sortChanges orders by how actionable the kind is, then by subject, so the
 // same two snapshots always produce the same report. Map iteration above is
 // unordered and would otherwise reshuffle the section on every run.
