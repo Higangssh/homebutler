@@ -286,6 +286,9 @@ type DefaultView struct {
 	// which points to an ACL-limited token rather than a genuinely empty
 	// cluster.
 	Failed []string `json:"failed_collectors,omitempty"`
+	// FirstErr is the first classified collector error, for callers that
+	// branch on FailureClass rather than display text. Not serialized.
+	FirstErr error `json:"-"`
 }
 
 // Collector names recorded in DefaultView.Failed.
