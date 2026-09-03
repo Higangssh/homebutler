@@ -120,6 +120,27 @@ The header names the snapshot being compared against:
 `report` hourly and running it once a month produce the same kinds of line about
 very different spans, and the header is what tells them apart.
 
+## What needs attention
+
+`Needs Attention` answers a different question from `Notable Changes`: not what
+moved, but what is worth doing something about. Two kinds of entry land there.
+
+**Thresholds on the current reading** — memory or a disk above 85%, containers
+stopped right now. These fire whether or not anything changed.
+
+**Consequences of what changed**, which no threshold can see:
+
+- a port that is reachable from every interface now and was not before. The
+  move from `127.0.0.1:8080` to `0.0.0.0:8080` is a departure and an arrival in
+  the section below, with nothing correlating them
+- a container that was recreated or took a new image and is not running — a
+  deploy that did not come back
+- a container that was running at the last report and is not now, by name
+
+These are computed from the snapshots, never from the rendered change lines.
+The detail column is prose that is free to change between releases, so nothing
+that decides what matters may depend on its wording.
+
 ## Order
 
 `Needs Attention`, then `Notable Changes`, then `Current Status`, then
