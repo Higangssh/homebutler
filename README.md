@@ -28,7 +28,7 @@
 </p>
 
 <p align="center">
-  <img src="assets/report-card.svg" alt="homebutler report output: what changed since the last report — a container gone, one new, one replaced behind the same name, a process running a different invocation, a port that changed owner — then current status" width="620">
+  <img src="assets/report-card.svg" alt="homebutler report output: a port answered by a different service flagged under Needs Attention, then what changed since the last report — a container gone, one new, one recreated behind the same name, a process running a different invocation, a port that changed owner — then current status and the command to verify the port" width="620">
 </p>
 
 Section rules, labels, and severities are colour-coded in a terminal. Colour is
