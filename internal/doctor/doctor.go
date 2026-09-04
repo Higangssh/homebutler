@@ -11,6 +11,7 @@ import (
 
 	"github.com/Higangssh/homebutler/internal/backup"
 	"github.com/Higangssh/homebutler/internal/config"
+	"github.com/Higangssh/homebutler/internal/docker"
 	"github.com/Higangssh/homebutler/internal/inventory"
 	"github.com/Higangssh/homebutler/internal/ports"
 	"github.com/Higangssh/homebutler/internal/proxmox"
@@ -73,6 +74,9 @@ type CollectFuncs struct {
 
 	// WatchDir holds the watch list. Empty takes the real one.
 	WatchDir string
+	// InspectFn returns a container's details. Injected so the socket check
+	// is testable without a docker daemon.
+	InspectFn func(string) (*docker.InspectResult, error)
 	// WatchServiceFn reports whether a supervisor unit for watch is installed
 	// and where it is. Injected so the check is testable without a systemd or
 	// launchd on the machine running the tests.
@@ -117,6 +121,9 @@ func Run(cfg *config.Config, fns CollectFuncs, opts Options) (*Result, error) {
 	if fns.SnapshotDir == "" {
 		fns.SnapshotDir = defaultSnapshotDir()
 	}
+	if fns.InspectFn == nil {
+		fns.InspectFn = docker.Inspect
+	}
 	if fns.ProxmoxOpenFn == nil {
 		fns.ProxmoxOpenFn = openProxmoxEndpoint
 	}
@@ -137,6 +144,9 @@ func Run(cfg *config.Config, fns CollectFuncs, opts Options) (*Result, error) {
 	checkContainers(r, inv)
 	checkPublicPorts(r, inv.Ports)
 	checkBackups(r, cfg, fns.BackupListFn, opts)
+	checkDockerSocketMounts(r, inv, fns.InspectFn)
+	checkProxmoxTrust(r, cfg)
+	checkIncidentRetention(r, cfg, fns.WatchDir)
 	checkWatching(r, fns.WatchDir, fns.WatchServiceFn)
 	checkConfigPermissions(r, cfg)
 	checkNotifications(r, cfg)
@@ -313,6 +323,99 @@ func formatBytes(b int64) string {
 		exp++
 	}
 	return fmt.Sprintf("%.1f %cB", float64(b)/float64(div), "KMGT"[exp])
+}
+
+// dockerSocket is the path that turns a container into a host-root shell.
+const dockerSocket = "/var/run/docker.sock"
+
+// checkDockerSocketMounts reports a running container that can create
+// containers on the host as root.
+//
+// homebutler installs one of these itself — the README says `install portainer`
+// mounts the socket — and then never mentions it again. This costs one
+// `docker inspect` per running container, which is why it stops at the first
+// collector failure rather than retrying per container.
+func checkDockerSocketMounts(r *Result, inv *inventory.Inventory, inspectFn func(string) (*docker.InspectResult, error)) {
+	if inv == nil || inspectFn == nil {
+		return
+	}
+	for _, c := range inv.Containers {
+		if c.State != "running" {
+			continue
+		}
+		details, err := inspectFn(c.Name)
+		if err != nil {
+			return
+		}
+		for _, m := range details.Mounts {
+			if m.Source != dockerSocket {
+				continue
+			}
+			r.add(SeverityWarn, "docker",
+				fmt.Sprintf("%s mounts the Docker socket", c.Name),
+				"A container with "+dockerSocket+" mounted can create containers on the host as root, "+
+					"so it holds host root however unprivileged it looks. Some images need it; most do not.",
+				"Confirm this container is one that needs it, and remove the mount if it is not.",
+				"homebutler docker inspect "+c.Name)
+			break
+		}
+	}
+}
+
+// checkProxmoxTrust reports an endpoint left on insecure: true.
+//
+// #62 settled that insecure should be "last and loud". It is last — the trust
+// order is fingerprint, then CA file, then insecure — and it was loud nowhere:
+// no runtime warning, no config validate finding, and until now no doctor
+// check. A debugging session that was never undone is exactly what a periodic
+// check is for.
+func checkProxmoxTrust(r *Result, cfg *config.Config) {
+	if cfg == nil {
+		return
+	}
+	for _, p := range cfg.Proxmox {
+		if !p.Insecure {
+			continue
+		}
+		r.add(SeverityWarn, "proxmox",
+			fmt.Sprintf("Proxmox endpoint %q accepts any certificate", p.Name),
+			"insecure: true disables certificate verification entirely, so anything on the network path "+
+				"can read the API token and answer for the endpoint.",
+			"Pin the certificate with fingerprint, or trust its issuer with ca_file, and remove insecure.",
+			"homebutler proxmox status --endpoint "+p.Name)
+	}
+}
+
+// incidentDirNearCap is the fraction of the retention limit at which the
+// directory is worth mentioning. Pruning is not a failure — it is the setting
+// working — but history disappearing is worth knowing about before it is the
+// history someone wanted.
+const incidentDirNearCap = 0.8
+
+func checkIncidentRetention(r *Result, cfg *config.Config, dir string) {
+	if cfg == nil {
+		return
+	}
+	keep := cfg.Watch.Retention.MaxIncidents
+	if keep <= 0 {
+		return // unlimited by explicit request
+	}
+	if dir == "" {
+		d, err := watch.WatchDir()
+		if err != nil {
+			return
+		}
+		dir = d
+	}
+	refs, err := watch.ListIncidentRefs(dir)
+	if err != nil || len(refs) < int(float64(keep)*incidentDirNearCap) {
+		return
+	}
+	r.add(SeverityWarn, "watch",
+		fmt.Sprintf("%d of %d incidents kept", len(refs), keep),
+		"The oldest incidents are discarded once the limit is reached, so history from before that point is gone.",
+		"Raise the limit if you want to keep more, or leave it if the recent history is enough.",
+		"homebutler watch history")
 }
 
 // checkWatching reports a watch list that nothing is installed to poll.

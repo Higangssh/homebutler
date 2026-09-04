@@ -6,6 +6,10 @@ All notable changes to this project will be documented in this file.
 
 ### ✨ Features
 
+- report a running container that mounts the Docker socket (#99). A container with `/var/run/docker.sock` mounted can create containers on the host as root — it holds host root however unprivileged it looks — and homebutler installs one itself, since `install portainer` mounts the socket and nothing has mentioned it since. Costs one `docker inspect` per running container and stops at the first collector failure rather than retrying per container
+- report a Proxmox endpoint left on `insecure: true` (#99). #62 settled that it should be "last and loud"; it was last, and loud nowhere — no runtime warning, no `config validate` finding, and no check. A debugging session that was never undone is what a periodic check is for
+- report incident history approaching its limit (#99). #101 bounded the directory; knowing how full it is before the pruning starts discarding history someone wanted is the other half. Explicitly unlimited history is a choice and is not flagged
+
 - tell the operator when nothing is installed to watch what they asked to be watched (#99). A watch list with entries and no supervisor is the state that makes every other monitoring feature silent — no incidents recorded, no notifications sent, nothing for `report` to compare against — and it was also the only way to never learn `watch install` exists. The finding says plainly that it checked whether a service is installed rather than whether it is running: a stopped unit is a state this cannot see, and asking systemd or launchd on every `doctor` run is a side effect the command should not grow quietly
 - report a config file that holds plaintext secrets and is readable by others, in `doctor` (#99). The check already existed in `config validate` and in `Load`'s refusal; the decision now lives in one exported function that all three call rather than three copies of `perm&0o077`
 
