@@ -380,6 +380,42 @@ func TestLoadProxmoxConfig(t *testing.T) {
 	}
 }
 
+func TestLoadProxmoxConfigGuests(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.yaml")
+	content := `proxmox:
+  - name: pve
+    host: pve.example
+    token_id: monitoring@pve!readonly
+    token: inline
+    guests:
+      - node: pve1
+        type: qemu
+        vmid: 100
+      - node: pve1
+        type: lxc
+        vmid: 101
+`
+	if err := os.WriteFile(path, []byte(content), 0600); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	guests := cfg.Proxmox[0].Guests
+	if len(guests) != 2 {
+		t.Fatalf("Guests = %d, want 2", len(guests))
+	}
+	if guests[0].Node != "pve1" || guests[0].Type != "qemu" || guests[0].VMID != 100 {
+		t.Errorf("guests[0] = %+v", guests[0])
+	}
+	if guests[1].Type != "lxc" || guests[1].VMID != 101 {
+		t.Errorf("guests[1] = %+v", guests[1])
+	}
+}
+
 func TestResolveBackupDir(t *testing.T) {
 	tests := []struct {
 		name      string

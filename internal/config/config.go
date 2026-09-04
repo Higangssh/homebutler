@@ -180,6 +180,11 @@ type ProxmoxConfig struct {
 	ActionTokenID   string `yaml:"action_token_id,omitempty"`
 	ActionToken     string `yaml:"action_token,omitempty" json:"-" secret:"true"`
 	ActionTokenFile string `yaml:"action_token_file,omitempty"`
+
+	// Guests names guests `watch start` expects to stay running on this
+	// endpoint. A guest not listed here is observational only: watch never
+	// alerts on it, deliberately stopped or not.
+	Guests []proxmox.ExpectedGuest `yaml:"guests,omitempty"`
 }
 
 // APIPort returns the configured API port or Proxmox's default HTTPS port.

@@ -88,7 +88,9 @@ func History(dir string, opts HistoryOptions) ([]Incident, error) {
 		copy(stripped, incidents)
 		for i := range stripped {
 			stripped[i].PreLogs = ""
-			stripped[i].PostLogs = ""
+			if stripped[i].Source != "proxmox" {
+				stripped[i].PostLogs = ""
+			}
 		}
 		incidents = stripped
 	}

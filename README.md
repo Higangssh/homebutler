@@ -331,6 +331,13 @@ thresholds, and runs any remediation rules you have configured — one process,
 one set of notification providers. `alerts --watch` still exists and does the
 threshold half on its own.
 
+Every endpoint under `proxmox:` in your config is polled too: unreachable or
+ACL-filtered endpoints and any guest listed under that endpoint's `guests:`
+report one incident when the problem starts and one recovery incident when it
+clears. A guest not listed there is observational only — `watch start` never
+alerts on it, deliberately stopped or not. See
+[Proxmox setup →](docs/proxmox.md#watch-integration) for the `guests:` field.
+
 When a crash is detected, you'll see:
 
 ```

@@ -79,6 +79,21 @@ type Incident struct {
 	OOMKilled     bool            `json:"oom_killed,omitempty"`
 	Flapping      *FlappingResult `json:"flapping,omitempty"`
 	CrashAnalysis *CrashSummary   `json:"crash_analysis,omitempty"`
+
+	// Source distinguishes an incident that did not come from a restart
+	// monitor. Empty means docker/systemd/pm2, as it always has; a non-empty
+	// value opts the incident out of restart-shaped handling (crash analysis,
+	// flapping) in cmd/watch.go's print loop.
+	Source string `json:"source,omitempty"`
+	// ProxmoxState is the state the incident transitioned into: "unavailable",
+	// "acl_filtered", or "guest_down". Empty outside Source == "proxmox".
+	ProxmoxState string `json:"proxmox_state,omitempty"`
+	// ProxmoxClass is the specific failure behind ProxmoxState — tls,
+	// authentication, authorization, transport, or empty_result — kept
+	// alongside the coarser state per #104.
+	ProxmoxClass string `json:"proxmox_class,omitempty"`
+	// Recovered marks a transition back to healthy rather than into failure.
+	Recovered bool `json:"recovered,omitempty"`
 }
 
 func WatchDir() (string, error) {
