@@ -383,6 +383,10 @@ func newDefaultConfig() *Config {
 }
 
 func Load(path string) (*Config, error) {
+	return load(path, true)
+}
+
+func load(path string, refuseOpenPermissions bool) (*Config, error) {
 	cfg := newDefaultConfig()
 
 	if path == "" {
@@ -406,17 +410,41 @@ func Load(path string) (*Config, error) {
 
 	cfg.Path = path
 
-	// Refuse unsafe config permissions when plaintext secrets are present (non-Windows).
-	if runtime.GOOS != "windows" && hasSecrets(cfg) {
-		if info, err := os.Stat(path); err == nil {
-			perm := info.Mode().Perm()
-			if perm&0o077 != 0 {
-				return nil, fmt.Errorf("config file %s contains plaintext secrets but permissions are too open (%04o); run: chmod 600 %s", path, perm, path)
-			}
-		}
+	// Refuse unsafe config permissions when plaintext secrets are present.
+	if perm, tooOpen := PermissionProblem(path, cfg); refuseOpenPermissions && tooOpen {
+		return nil, fmt.Errorf("config file %s contains plaintext secrets but permissions are too open (%04o); run: chmod 600 %s", path, perm, path)
 	}
 
 	return cfg, nil
+}
+
+// LoadForDiagnosis parses a config without refusing it for open permissions.
+//
+// Only doctor should call this. The command whose job is to explain what is
+// wrong with a machine cannot be the one command that will not start because
+// something is wrong — a user whose config is 0644 currently meets a refusal
+// they read as homebutler being broken, from every command including the one
+// that would have named the problem.
+func LoadForDiagnosis(path string) (*Config, error) {
+	return load(path, false)
+}
+
+// PermissionProblem reports whether a config file is more open than one
+// holding plaintext secrets should be, and the permissions it found.
+//
+// One decision, three renderings: Load refuses, config validate reports it as
+// an error, and doctor surfaces it before either has to. #47 and #65 were both
+// about the version of this where each caller kept its own copy of the rule.
+func PermissionProblem(path string, cfg *Config) (os.FileMode, bool) {
+	if runtime.GOOS == "windows" || !hasSecrets(cfg) {
+		return 0, false
+	}
+	info, err := os.Stat(path)
+	if err != nil {
+		return 0, false
+	}
+	perm := info.Mode().Perm()
+	return perm, perm&0o077 != 0
 }
 
 // FindServer returns the server config by name, or nil if not found.

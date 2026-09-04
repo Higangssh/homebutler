@@ -426,14 +426,7 @@ func plural(n int, noun string) string {
 // checkPermissions mirrors the guard in Load so that validate reports the
 // same refusal instead of the user meeting it later mid-command.
 func (r *ValidationResult) checkPermissions(path string, cfg *Config) {
-	if runtime.GOOS == "windows" || !hasSecrets(cfg) {
-		return
-	}
-	info, err := os.Stat(path)
-	if err != nil {
-		return
-	}
-	if perm := info.Mode().Perm(); perm&0o077 != 0 {
+	if perm, tooOpen := PermissionProblem(path, cfg); tooOpen {
 		r.add(SeverityError, "",
 			fmt.Sprintf("Config contains plaintext secrets but permissions are too open (%04o).", perm),
 			fmt.Sprintf("Run: chmod 600 %s", path))
