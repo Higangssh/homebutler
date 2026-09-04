@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/Higangssh/homebutler/internal/config"
 	"github.com/Higangssh/homebutler/internal/doctor"
 	"github.com/spf13/cobra"
 )
@@ -17,11 +18,20 @@ func newDoctorCmd() *cobra.Command {
 		Short: "Diagnose homelab health, exposure, backups, and readiness",
 		Long: `Run a read-only diagnosis for the things that usually hurt self-hosted servers:
 resource pressure, stopped containers, public bind ports, backup hygiene,
-notification readiness, report baseline status, and configured Proxmox
-endpoint reachability.`,
+notification readiness, report baseline status, whether anything is installed
+to watch what you asked it to watch, config file permissions, and configured
+Proxmox endpoint reachability.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if err := loadConfig(); err != nil {
-				return err
+				// doctor is the command that explains what is wrong, so a
+				// refusal it can name has to reach the checks rather than the
+				// exit code. LoadForDiagnosis differs from Load only in the
+				// permission refusal, so succeeding here means that was it.
+				permissive, perr := config.LoadForDiagnosis(config.Resolve(cfgPath))
+				if perr != nil {
+					return err
+				}
+				cfg = permissive
 			}
 			if handled, err := maybeRouteRemote(); handled {
 				return err

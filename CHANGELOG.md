@@ -4,6 +4,15 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### ✨ Features
+
+- tell the operator when nothing is installed to watch what they asked to be watched (#99). A watch list with entries and no supervisor is the state that makes every other monitoring feature silent — no incidents recorded, no notifications sent, nothing for `report` to compare against — and it was also the only way to never learn `watch install` exists. The finding says plainly that it checked whether a service is installed rather than whether it is running: a stopped unit is a state this cannot see, and asking systemd or launchd on every `doctor` run is a side effect the command should not grow quietly
+- report a config file that holds plaintext secrets and is readable by others, in `doctor` (#99). The check already existed in `config validate` and in `Load`'s refusal; the decision now lives in one exported function that all three call rather than three copies of `perm&0o077`
+
+### ⚠️ Behavior changes
+
+- **`doctor` runs on a config the other commands refuse.** A config holding plaintext secrets with open permissions is refused by `Load`, which meant the one command whose job is to explain what is wrong was also the one that would not start. `doctor` now parses it anyway and reports the permissions as a failure; every other command refuses exactly as before
+
 ### 🐛 Fixes
 
 - redraw the report card, which had stopped matching the command it illustrates. It showed `New public port(s) detected — verify these are intentional.`, a sentence removed in #137, and had no `Needs Attention` section at all — so the picture at the top of the README showed the diff without the judgement that decides which of it matters. `TestRenderedChangeBlock` now pins every section the card shows rather than only the change block, which is why the drift went a release unnoticed

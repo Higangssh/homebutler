@@ -78,7 +78,7 @@ Restart your AI client — homebutler tools will appear automatically.
 |--------------------------|------------------------------------------------------------------------------------------------------------------------|
 | `system_status`          | CPU, memory, disk, uptime                                                                                              |
 | `report`                 | Butler-style health report with snapshot comparison and suggested actions                                              |
-| `doctor`                 | Read-only diagnosis of resource pressure, stopped containers, public ports, backup hygiene, notification readiness, and configured Proxmox endpoint reachability |
+| `doctor`                 | Read-only diagnosis of resource pressure, stopped containers, public ports, backup hygiene, notification readiness, whether a watch service is installed, config file permissions, and configured Proxmox endpoint reachability |
 | `watch_check`            | One-shot restart check on watched targets; reports systemd and pm2 targets as skipped rather than healthy              |
 | `watch_history`          | Recorded restart incidents, newest first. Captured logs are excluded unless `include_logs` is set                      |
 | `watch_list`             | Targets being watched, with their kind and what the last check recorded                                                |

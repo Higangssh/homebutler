@@ -14,7 +14,9 @@ import (
 	"github.com/Higangssh/homebutler/internal/inventory"
 	"github.com/Higangssh/homebutler/internal/ports"
 	"github.com/Higangssh/homebutler/internal/proxmox"
+	"github.com/Higangssh/homebutler/internal/service"
 	"github.com/Higangssh/homebutler/internal/style"
+	"github.com/Higangssh/homebutler/internal/watch"
 	"github.com/charmbracelet/lipgloss"
 )
 
@@ -68,6 +70,13 @@ type CollectFuncs struct {
 	BackupListFn  func(string) ([]backup.ListEntry, error)
 	SnapshotDir   string
 	ProxmoxOpenFn func(config.ProxmoxConfig) (*proxmox.Client, error)
+
+	// WatchDir holds the watch list. Empty takes the real one.
+	WatchDir string
+	// WatchServiceFn reports whether a supervisor unit for watch is installed
+	// and where it is. Injected so the check is testable without a systemd or
+	// launchd on the machine running the tests.
+	WatchServiceFn func() (bool, string)
 }
 
 // DefaultCollectFuncs returns real doctor data sources.
@@ -128,6 +137,8 @@ func Run(cfg *config.Config, fns CollectFuncs, opts Options) (*Result, error) {
 	checkContainers(r, inv)
 	checkPublicPorts(r, inv.Ports)
 	checkBackups(r, cfg, fns.BackupListFn, opts)
+	checkWatching(r, fns.WatchDir, fns.WatchServiceFn)
+	checkConfigPermissions(r, cfg)
 	checkNotifications(r, cfg)
 	checkReportBaseline(r, fns.SnapshotDir)
 	checkProxmox(r, cfg, fns.ProxmoxOpenFn)
@@ -302,6 +313,80 @@ func formatBytes(b int64) string {
 		exp++
 	}
 	return fmt.Sprintf("%.1f %cB", float64(b)/float64(div), "KMGT"[exp])
+}
+
+// checkWatching reports a watch list that nothing is installed to poll.
+//
+// A list with entries and no supervisor is the state that makes every other
+// monitoring feature silent: no incidents recorded, no notifications sent,
+// nothing to compare a report against. It is also the only place a user finds
+// out that `watch install` exists.
+//
+// It checks whether a unit is installed, not whether it is running. A stopped
+// unit is a state this cannot see, and claiming otherwise would be worse than
+// saying less — asking systemd or launchd on every doctor run is a side
+// effect this command should not grow quietly.
+func checkWatching(r *Result, dir string, installedFn func() (bool, string)) {
+	if installedFn == nil {
+		installedFn = watchServiceInstalled
+	}
+	if dir == "" {
+		d, err := watch.WatchDir()
+		if err != nil {
+			return
+		}
+		dir = d
+	}
+
+	targets, err := watch.LoadTargets(dir)
+	if err != nil || len(targets) == 0 {
+		return
+	}
+
+	installed, where := installedFn()
+	if installed {
+		r.add(SeverityPass, "watch",
+			fmt.Sprintf("%d target(s) watched by an installed service", len(targets)),
+			"Unit: "+where, "", "")
+		return
+	}
+
+	r.add(SeverityWarn, "watch",
+		fmt.Sprintf("%d target(s) on the watch list and no service installed to check them", len(targets)),
+		"Nothing is polling them, so a restart records no incident and sends no notification. "+
+			"This checks whether a service is installed, not whether it is running.",
+		"Install the watch service so monitoring survives logout and reboot.",
+		"homebutler watch install")
+}
+
+func watchServiceInstalled() (bool, string) {
+	kind, err := service.Detect()
+	if err != nil {
+		return false, ""
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return false, ""
+	}
+	path := service.UnitPath(kind, home)
+	return service.Installed(path), path
+}
+
+// checkConfigPermissions surfaces the refusal Load would make, before the
+// user meets it as homebutler appearing to be broken.
+func checkConfigPermissions(r *Result, cfg *config.Config) {
+	if cfg == nil || cfg.Path == "" {
+		return
+	}
+	perm, tooOpen := config.PermissionProblem(cfg.Path, cfg)
+	if !tooOpen {
+		return
+	}
+	r.add(SeverityFail, "config",
+		fmt.Sprintf("Config holds plaintext secrets and is readable by others (%04o)", perm),
+		cfg.Path+" can be read by any user on this machine, and homebutler will refuse to load it.",
+		"Restrict it to your account.",
+		"chmod 600 "+cfg.Path)
 }
 
 func checkNotifications(r *Result, cfg *config.Config) {
