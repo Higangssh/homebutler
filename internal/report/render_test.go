@@ -40,6 +40,8 @@ func TestRenderedChangeBlock(t *testing.T) {
 	prev.System = &system.StatusInfo{Disks: []system.DiskInfo{{Mount: "/", UsedGB: 45, TotalGB: 128}}}
 	curr.System = &system.StatusInfo{Disks: []system.DiskInfo{{Mount: "/", UsedGB: 47.4, TotalGB: 128}}}
 	curr.ServerName = "homelab"
+	prev.Timestamp = "2026-09-03T21:40:11Z"
+	curr.Timestamp = "2026-09-04T09:14:03Z"
 
 	r := buildReport(curr, prev)
 	human := FormatHuman(r)
@@ -66,5 +68,27 @@ func TestRenderedChangeBlock(t *testing.T) {
 	// Changes lead. Current Status is context, not the headline.
 	if strings.Index(human, "Notable Changes") > strings.Index(human, "Current Status") {
 		t.Error("Current Status is printed before Notable Changes")
+	}
+
+	// The card shows four sections, and the two that carry the judgement are
+	// the ones it went a release without. Pin their text as well as the change
+	// block: the card drifted from the binary once because only the block
+	// below was pinned.
+	for _, line := range []string{
+		"Port :8080/tcp is answered by gitea now, and was not at the last report",
+		"Verify :8080/tcp should be answering from gitea.",
+		"compared with",
+	} {
+		if !strings.Contains(human, line) {
+			t.Errorf("the report no longer contains %q, so assets/report-card.svg is out of date:\n%s", line, human)
+		}
+	}
+	if strings.Contains(human, "New public port(s) detected") {
+		t.Error("the count-based action is back")
+	}
+	for _, section := range []string{"Needs Attention", "Notable Changes", "Current Status", "Suggested Actions"} {
+		if !strings.Contains(human, section) {
+			t.Errorf("the card shows a %q section the report does not print", section)
+		}
 	}
 }

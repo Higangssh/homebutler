@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### 🐛 Fixes
+
+- redraw the report card, which had stopped matching the command it illustrates. It showed `New public port(s) detected — verify these are intentional.`, a sentence removed in #137, and had no `Needs Attention` section at all — so the picture at the top of the README showed the diff without the judgement that decides which of it matters. `TestRenderedChangeBlock` now pins every section the card shows rather than only the change block, which is why the drift went a release unnoticed
+
 ## [0.27.0](https://github.com/Higangssh/homebutler/compare/v0.26.0...v0.27.0) - 2026-09-03
 **`report` learned what changed and then said nothing about which of it mattered.** `Needs Attention` was filled entirely from thresholds on the current reading — memory over 85%, a disk over 85% — so a service that stopped being local and started answering on every interface produced two ordinary lines in the section below it and nothing above. The suggested actions still compared counts, so they could not name the port or the container, and a port that changed hands without changing the count suggested nothing at all.
 

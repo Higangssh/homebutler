@@ -1,4 +1,4 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="600" height="604" viewBox="0 0 600 604" role="img" aria-label="Terminal showing homebutler report output: notable changes since the last report — a container gone, one new, one replaced behind the same name, a process running a different invocation, seven state changes collapsed into a line, a port that changed owner, and disk growth — followed by current status and a suggested action">
+<svg xmlns="http://www.w3.org/2000/svg" width="680" height="673" viewBox="0 0 680 673" role="img" aria-label="Terminal showing homebutler report output: a port answered by a different service flagged under Needs Attention, then what changed since the last report — a container gone, one new, one recreated behind the same name, a process running a different invocation, a port that changed owner, disk growth — then current status and the command to verify the port">
   <!--
     Terminal card used at the top of README.md. See assets/README.md.
 
@@ -8,70 +8,65 @@
     honoured, which Chromium does not do reliably, so spacing alone would not
     survive.
 
-    The kind column is coloured by severity rather than by category — red is
-    gone, green is new, amber is changed in place — which is what lets the
-    section sort itself before it is read. Keep it to those three.
+    Sections appear in the order FormatHuman prints them. Needs Attention is
+    first because that is where the report says which of the changes below it
+    matters, and a card that omitted it showed the diff without the judgement.
+
+    Kind colour is severity, not category: red is gone, green is new, amber is
+    changed in place. Keep it to those three.
   -->
-  <rect x="0" y="0" width="600" height="604" rx="10" fill="#11151c"/>
-  <path d="M0 10a10 10 0 0 1 10-10h580a10 10 0 0 1 10 10v30H0z" fill="#1b212a"/>
-  <line x1="0" y1="40" x2="600" y2="40" stroke="#2a323d" stroke-width="1"/>
+  <rect x="0" y="0" width="680" height="673" rx="10" fill="#11151c"/>
+  <path d="M0 10a10 10 0 0 1 10-10h660a10 10 0 0 1 10 10v30H0z" fill="#1b212a"/>
+  <line x1="0" y1="40" x2="680" y2="40" stroke="#2a323d" stroke-width="1"/>
   <circle cx="22" cy="20" r="6" fill="#ff5f56"/>
   <circle cx="42" cy="20" r="6" fill="#ffbd2e"/>
   <circle cx="62" cy="20" r="6" fill="#27c93f"/>
-  <text x="300" y="25" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="12" fill="#6e7681" text-anchor="middle">homebutler — report</text>
+  <text x="340" y="25" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="12" fill="#6e7681" text-anchor="middle">homebutler — report</text>
 
   <g font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace" font-size="14">
     <text x="22" y="74" fill="#7ee787">$</text>
     <text x="39" y="74" fill="#c9d1d9">homebutler report</text>
-
     <text x="22" y="112" fill="#c9d1d9">🏠</text>
     <text x="47" y="112" fill="#e6edf3" font-weight="bold">Homebutler Report — homelab</text>
-    <text x="47" y="135" fill="#6e7681">2026-09-02T09:14:03Z</text>
-
-    <text x="22" y="181" fill="#00add8">── Notable Changes ───────────────────────────────────────────</text>
-
-    <text x="47" y="204" fill="#ff7b72">gone</text>
-    <text x="131" y="204" fill="#e6edf3">vaultwarden</text>
-    <text x="249" y="204" fill="#8b949e">was running</text>
-
-    <text x="47" y="227" fill="#7ee787">new</text>
-    <text x="131" y="227" fill="#e6edf3">gitea</text>
-    <text x="249" y="227" fill="#8b949e">now running</text>
-
-    <text x="47" y="250" fill="#e3b341">replaced</text>
-    <text x="131" y="250" fill="#e6edf3">nginx</text>
-    <text x="249" y="250" fill="#8b949e">7d4a91f0aa11 → 91be0322bb22</text>
-
-    <text x="47" y="273" fill="#e3b341">replaced</text>
-    <text x="131" y="273" fill="#e6edf3">python3</text>
-    <text x="249" y="273" fill="#8b949e">same name, different invocation</text>
-
-    <text x="47" y="296" fill="#e3b341">state</text>
-    <text x="131" y="296" fill="#e6edf3">7 containers</text>
-    <text x="249" y="296" fill="#8b949e">postgres, redis, grafana, +4</text>
-
-    <text x="47" y="319" fill="#e3b341">port</text>
-    <text x="131" y="319" fill="#e6edf3">:8080/tcp</text>
-    <text x="249" y="319" fill="#8b949e">vaultwarden → gitea</text>
-
-    <text x="47" y="342" fill="#e3b341">disk</text>
-    <text x="131" y="342" fill="#e6edf3">/</text>
-    <text x="249" y="342" fill="#8b949e">+2.4 GB since last report</text>
-
-    <text x="22" y="388" fill="#00add8">── Current Status ────────────────────────────────────────────</text>
-    <text x="47" y="411" fill="#8b949e">Host</text>
-    <text x="180" y="411" fill="#c9d1d9">homelab (linux/arm64), uptime 42d 7h</text>
-    <text x="47" y="434" fill="#8b949e">CPU</text>
-    <text x="180" y="434" fill="#c9d1d9">23.5% (4 cores), Memory: 3.2/8.0 GB (40%)</text>
-    <text x="47" y="457" fill="#8b949e">Disk /</text>
-    <text x="180" y="457" fill="#c9d1d9">47.4/128.0 GB (37%)</text>
-    <text x="47" y="480" fill="#8b949e">Containers</text>
-    <text x="180" y="480" fill="#c9d1d9">10 running, 0 stopped</text>
-    <text x="47" y="503" fill="#8b949e">Public ports</text>
-    <text x="180" y="503" fill="#c9d1d9">2</text>
-
-    <text x="22" y="549" fill="#00add8">── Suggested Actions ─────────────────────────────────────────</text>
-    <text x="47" y="572" fill="#00add8">→</text>
-    <text x="72" y="572" fill="#c9d1d9">New public port(s) detected — verify these are intentional.</text>
+    <text x="47" y="135" fill="#6e7681">2026-09-04T09:14:03Z  ·  compared with 2026-09-03T21:40:11Z</text>
+    <text x="22" y="181" fill="#00add8">── Needs Attention ────────────────────────────────────────────────────────</text>
+    <text x="47" y="204" fill="#e3b341">⚠</text>
+    <text x="72" y="204" fill="#e3b341">Port :8080/tcp is answered by gitea now, and was not at the last report</text>
+    <text x="22" y="250" fill="#00add8">── Notable Changes ────────────────────────────────────────────────────────</text>
+    <text x="47" y="273" fill="#ff7b72">gone</text>
+    <text x="131" y="273" fill="#e6edf3">vaultwarden</text>
+    <text x="249" y="273" fill="#8b949e">was running</text>
+    <text x="47" y="296" fill="#7ee787">new</text>
+    <text x="131" y="296" fill="#e6edf3">gitea</text>
+    <text x="249" y="296" fill="#8b949e">now running</text>
+    <text x="47" y="319" fill="#e3b341">replaced</text>
+    <text x="131" y="319" fill="#e6edf3">nginx</text>
+    <text x="249" y="319" fill="#8b949e">recreated, 7d4a91f0aa11 → 91be0322bb22</text>
+    <text x="47" y="342" fill="#e3b341">replaced</text>
+    <text x="131" y="342" fill="#e6edf3">python3</text>
+    <text x="249" y="342" fill="#8b949e">same name, different invocation</text>
+    <text x="47" y="365" fill="#e3b341">state</text>
+    <text x="131" y="365" fill="#e6edf3">7 containers</text>
+    <text x="249" y="365" fill="#8b949e">postgres, redis, grafana, +4</text>
+    <text x="47" y="388" fill="#e3b341">port</text>
+    <text x="131" y="388" fill="#e6edf3">:8080/tcp</text>
+    <text x="249" y="388" fill="#8b949e">vaultwarden → gitea</text>
+    <text x="47" y="411" fill="#e3b341">disk</text>
+    <text x="131" y="411" fill="#e6edf3">/</text>
+    <text x="249" y="411" fill="#8b949e">+2.4 GB since last report</text>
+    <text x="22" y="457" fill="#00add8">── Current Status ─────────────────────────────────────────────────────────</text>
+    <text x="47" y="480" fill="#8b949e">Host</text>
+    <text x="180" y="480" fill="#c9d1d9">homelab (linux/arm64), uptime 42d 7h</text>
+    <text x="47" y="503" fill="#8b949e">CPU</text>
+    <text x="180" y="503" fill="#c9d1d9">23.5% (4 cores), Memory: 3.2/8.0 GB (40%)</text>
+    <text x="47" y="526" fill="#8b949e">Disk /</text>
+    <text x="180" y="526" fill="#c9d1d9">47.4/128.0 GB (37%)</text>
+    <text x="47" y="549" fill="#8b949e">Containers</text>
+    <text x="180" y="549" fill="#c9d1d9">10 running, 0 stopped</text>
+    <text x="47" y="572" fill="#8b949e">Public ports</text>
+    <text x="180" y="572" fill="#c9d1d9">2</text>
+    <text x="22" y="618" fill="#00add8">── Suggested Actions ──────────────────────────────────────────────────────</text>
+    <text x="47" y="641" fill="#00add8">→</text>
+    <text x="72" y="641" fill="#c9d1d9">Verify :8080/tcp should be answering from gitea.</text>
   </g>
 </svg>
