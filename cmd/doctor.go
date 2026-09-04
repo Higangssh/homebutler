@@ -19,8 +19,9 @@ func newDoctorCmd() *cobra.Command {
 		Long: `Run a read-only diagnosis for the things that usually hurt self-hosted servers:
 resource pressure, stopped containers, public bind ports, backup hygiene,
 notification readiness, report baseline status, whether anything is installed
-to watch what you asked it to watch, config file permissions, and configured
-Proxmox endpoint reachability.`,
+to watch what you asked it to watch, config file permissions, containers that
+mount the Docker socket, Proxmox endpoints that accept any certificate, incident
+history nearing its limit, and configured Proxmox endpoint reachability.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if err := loadConfig(); err != nil {
 				// doctor is the command that explains what is wrong, so a

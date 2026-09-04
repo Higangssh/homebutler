@@ -1,6 +1,7 @@
 package doctor
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -9,6 +10,8 @@ import (
 	"time"
 
 	"github.com/Higangssh/homebutler/internal/config"
+	"github.com/Higangssh/homebutler/internal/docker"
+	"github.com/Higangssh/homebutler/internal/inventory"
 	"github.com/Higangssh/homebutler/internal/watch"
 )
 
@@ -108,5 +111,126 @@ func TestOpenConfigWithoutSecretsIsFine(t *testing.T) {
 	checkConfigPermissions(r, &config.Config{Path: path})
 	if got := findingsFor(r, "config"); len(got) != 0 {
 		t.Errorf("a config with no secrets was flagged: %+v", got)
+	}
+}
+
+func TestDockerSocketMountIsAWarning(t *testing.T) {
+	inv := &inventory.Inventory{Containers: []docker.Container{
+		{Name: "portainer", State: "running"},
+		{Name: "nginx", State: "running"},
+	}}
+	inspect := func(name string) (*docker.InspectResult, error) {
+		if name == "portainer" {
+			return &docker.InspectResult{Mounts: []docker.Mount{
+				{Source: "/var/run/docker.sock", Destination: "/var/run/docker.sock"},
+			}}, nil
+		}
+		return &docker.InspectResult{Mounts: []docker.Mount{{Source: "/srv/data", Destination: "/data"}}}, nil
+	}
+
+	r := &Result{}
+	checkDockerSocketMounts(r, inv, inspect)
+
+	got := findingsFor(r, "docker")
+	if len(got) != 1 || got[0].Severity != SeverityWarn {
+		t.Fatalf("expected one warning, got %+v", got)
+	}
+	if !strings.Contains(got[0].Title, "portainer") {
+		t.Errorf("the finding does not name the container: %q", got[0].Title)
+	}
+	if !strings.Contains(got[0].Detail, "host root") {
+		t.Errorf("the finding does not say what the mount grants: %q", got[0].Detail)
+	}
+}
+
+// A stopped container cannot do anything with a socket it is not running on.
+func TestStoppedContainerWithTheSocketIsNotFlagged(t *testing.T) {
+	inv := &inventory.Inventory{Containers: []docker.Container{{Name: "old", State: "exited"}}}
+	called := 0
+	r := &Result{}
+	checkDockerSocketMounts(r, inv, func(string) (*docker.InspectResult, error) {
+		called++
+		return &docker.InspectResult{Mounts: []docker.Mount{{Source: "/var/run/docker.sock"}}}, nil
+	})
+	if len(findingsFor(r, "docker")) != 0 || called != 0 {
+		t.Errorf("a stopped container was inspected or flagged (calls=%d)", called)
+	}
+}
+
+// Docker being unavailable is not a finding, and must not become N of them.
+func TestInspectFailureStopsAtTheFirstContainer(t *testing.T) {
+	inv := &inventory.Inventory{Containers: []docker.Container{
+		{Name: "a", State: "running"}, {Name: "b", State: "running"}, {Name: "c", State: "running"},
+	}}
+	calls := 0
+	r := &Result{}
+	checkDockerSocketMounts(r, inv, func(string) (*docker.InspectResult, error) {
+		calls++
+		return nil, errors.New("docker daemon is not running")
+	})
+	if calls != 1 {
+		t.Errorf("a failing collector was retried per container: %d calls", calls)
+	}
+	if len(findingsFor(r, "docker")) != 0 {
+		t.Error("a collector failure produced a finding")
+	}
+}
+
+func TestInsecureProxmoxEndpointIsAWarning(t *testing.T) {
+	cfg := &config.Config{Proxmox: []config.ProxmoxConfig{
+		{Name: "pve", Insecure: true},
+		{Name: "pve2", Fingerprint: "aa:bb"},
+	}}
+	r := &Result{}
+	checkProxmoxTrust(r, cfg)
+
+	got := findingsFor(r, "proxmox")
+	if len(got) != 1 {
+		t.Fatalf("expected one warning, got %+v", got)
+	}
+	if !strings.Contains(got[0].Title, "pve") || strings.Contains(got[0].Title, "pve2") {
+		t.Errorf("the wrong endpoint was named: %q", got[0].Title)
+	}
+}
+
+func TestIncidentDirectoryNearItsCap(t *testing.T) {
+	dir := t.TempDir()
+	for i := 0; i < 9; i++ {
+		at := time.Now().Add(time.Duration(i) * time.Second)
+		if err := watch.SaveIncident(dir, &watch.Incident{
+			ID: watch.GenerateIncidentID("nginx", at), Container: "nginx", DetectedAt: at,
+		}, 0); err != nil {
+			t.Fatalf("SaveIncident: %v", err)
+		}
+	}
+	cfg := &config.Config{}
+	cfg.Watch.Retention.MaxIncidents = 10
+
+	r := &Result{}
+	checkIncidentRetention(r, cfg, dir)
+	got := findingsFor(r, "watch")
+	if len(got) != 1 {
+		t.Fatalf("nine of ten kept should be worth mentioning, got %+v", got)
+	}
+	if !strings.Contains(got[0].Title, "9 of 10") {
+		t.Errorf("the finding does not say how full it is: %q", got[0].Title)
+	}
+}
+
+// Unlimited history is a choice, not a problem.
+func TestUnlimitedIncidentHistoryIsNotFlagged(t *testing.T) {
+	dir := t.TempDir()
+	for i := 0; i < 5; i++ {
+		at := time.Now().Add(time.Duration(i) * time.Second)
+		_ = watch.SaveIncident(dir, &watch.Incident{ID: watch.GenerateIncidentID("n", at), Container: "n", DetectedAt: at}, 0)
+	}
+	cfg := &config.Config{}
+	cfg.Watch.Retention.MaxIncidents = -1
+	cfg.Watch.Retention.Normalize()
+
+	r := &Result{}
+	checkIncidentRetention(r, cfg, dir)
+	if got := findingsFor(r, "watch"); len(got) != 0 {
+		t.Errorf("explicitly unlimited history was flagged: %+v", got)
 	}
 }
