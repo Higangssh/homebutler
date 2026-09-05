@@ -51,7 +51,7 @@
   }
 
   function formatTimestamp(value) {
-    return value ? new Date(value).toISOString().replace('T', ' ').replace('.000Z', ' UTC') : '';
+    return value ? new Date(value).toISOString().replace('T', ' ').replace(/\.\d{3}Z$/, ' UTC') : '';
   }
 
   function formatAge(value) {
@@ -89,7 +89,7 @@
       ? data.refresh_failure_classes
       : data?.failure_classes;
     return collectors?.map((collector) => {
-      const reason = failureLabel(classes?.[collector] || data.failure_class);
+      const reason = failureLabel(classes ? classes[collector] : data.failure_class);
       return reason ? `${collector}: ${reason}` : collector;
     }).join(', ') || '';
   }
@@ -174,6 +174,7 @@
         {/if}
         {#if failureDetails()} · Failed collectors: {failureDetails()}{/if}
         {#if !failedCollectors() && failureLabel(data.failure_class)} · {failureLabel(data.failure_class)}{/if}
+        {#if data.message} · {data.message}{/if}
       </p>
 
       {#if data.status !== 'unavailable'}
@@ -371,13 +372,12 @@
   .ok { color: var(--green); }
   .bad, .error { color: var(--red); }
   .muted { color: var(--text-secondary); }
+  .freshness { color: var(--text-secondary); }
   .unavailable, .warnings { color: var(--yellow); }
 
   .error, .muted, .unavailable, .warnings, .freshness {
     font-size: 0.8rem;
   }
-
-  .freshness { color: var(--text-secondary); }
 
   .warnings {
     border-top: 1px solid var(--border);

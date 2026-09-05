@@ -201,3 +201,27 @@ func TestProxmoxStatusRetainsLastGoodSnapshot(t *testing.T) {
 		t.Fatalf("stale snapshot was not retained: current=%#v stale=%#v", current, stale)
 	}
 }
+
+func TestWriteProxmoxFailurePreservesSafeDetails(t *testing.T) {
+	srv := New(&config.Config{}, "127.0.0.1", 8080)
+	recorder := httptest.NewRecorder()
+	srv.writeProxmoxFailure(recorder, "pve", proxmox.FailureAuthorization, []string{proxmox.CollectorVersion, proxmox.CollectorCluster}, map[string]proxmox.FailureClass{proxmox.CollectorCluster: proxmox.FailureAuthorization})
+
+	var response proxmoxStatusResponse
+	if err := json.Unmarshal(recorder.Body.Bytes(), &response); err != nil {
+		t.Fatal(err)
+	}
+	if response.FailureClasses[proxmox.CollectorCluster] != proxmox.FailureAuthorization || response.FailureClasses[proxmox.CollectorVersion] != "" {
+		t.Fatalf("failure classes = %#v", response.FailureClasses)
+	}
+
+	recorder = httptest.NewRecorder()
+	srv.writeProxmoxFailure(recorder, "pve", "", nil, nil)
+	response = proxmoxStatusResponse{}
+	if err := json.Unmarshal(recorder.Body.Bytes(), &response); err != nil {
+		t.Fatal(err)
+	}
+	if response.Message != "Proxmox status is unavailable" {
+		t.Fatalf("message = %q", response.Message)
+	}
+}

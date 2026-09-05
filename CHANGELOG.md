@@ -21,6 +21,7 @@ All notable changes to this project will be documented in this file.
 
 ### ⚠️ Behavior changes
 
+- **`/api/proxmox/status` reports refresh failures as HTTP 200 with a freshness body instead of HTTP 500 or 502.** API consumers should inspect `status`, `failure_class`, and the per-collector fields; readable snapshots can now be retained and returned as `stale`
 - **`doctor` runs on a config the other commands refuse.** A config holding plaintext secrets with open permissions is refused by `Load`, which meant the one command whose job is to explain what is wrong was also the one that would not start. `doctor` now parses it anyway and reports the permissions as a failure; every other command refuses exactly as before
 
 ## [0.27.0](https://github.com/Higangssh/homebutler/compare/v0.26.0...v0.27.0) - 2026-09-03

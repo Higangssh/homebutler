@@ -59,6 +59,7 @@ type proxmoxStatusResponse struct {
 	Status                  string                          `json:"status"`
 	UpdatedAt               *time.Time                      `json:"updated_at,omitempty"`
 	FailureClass            proxmox.FailureClass            `json:"failure_class,omitempty"`
+	Message                 string                          `json:"message,omitempty"`
 	RefreshFailedCollectors []string                        `json:"refresh_failed_collectors,omitempty"`
 	RefreshFailureClasses   map[string]proxmox.FailureClass `json:"refresh_failure_classes,omitempty"`
 }
@@ -549,14 +550,18 @@ func (s *Server) handleProxmoxStatus(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) writeProxmoxFailure(w http.ResponseWriter, endpoint string, class proxmox.FailureClass, failed []string, failureClasses map[string]proxmox.FailureClass) {
+	message := ""
+	if class == "" {
+		message = "Proxmox status is unavailable"
+	}
 	s.proxmoxMu.RLock()
 	snapshot, ok := s.proxmoxCache[endpoint]
 	s.proxmoxMu.RUnlock()
 	if ok {
-		writeJSON(w, proxmoxStatusResponse{DefaultView: snapshot.view, Status: "stale", UpdatedAt: &snapshot.updatedAt, FailureClass: class, RefreshFailedCollectors: failed, RefreshFailureClasses: failureClasses})
+		writeJSON(w, proxmoxStatusResponse{DefaultView: snapshot.view, Status: "stale", UpdatedAt: &snapshot.updatedAt, FailureClass: class, Message: message, RefreshFailedCollectors: failed, RefreshFailureClasses: failureClasses})
 		return
 	}
-	writeJSON(w, proxmoxStatusResponse{DefaultView: proxmox.DefaultView{Failed: failed}, Status: "unavailable", FailureClass: class})
+	writeJSON(w, proxmoxStatusResponse{DefaultView: proxmox.DefaultView{Failed: failed, FailureClasses: failureClasses}, Status: "unavailable", FailureClass: class, Message: message})
 }
 
 // serverInfo is a safe subset of config.ServerConfig for the API response.
