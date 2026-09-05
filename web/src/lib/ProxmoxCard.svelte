@@ -70,6 +70,8 @@
       tls: 'TLS verification failed',
       authentication: 'Authentication failed',
       authorization: 'Authorization/ACL failure',
+      configuration: 'Configuration failed',
+      response: 'Unexpected endpoint response',
       transport: 'Transport failure',
     }[value] || '';
   }
@@ -169,11 +171,13 @@
           Partially readable · Updated <time datetime={data.updated_at} title={formatTimestamp(data.updated_at)}>{formatAge(data.updated_at)}</time>
         {:else if data.status === 'stale'}
           Stale · Last successful update <time datetime={data.updated_at} title={formatTimestamp(data.updated_at)}>{formatAge(data.updated_at)}</time>
+        {:else if data.status === 'unavailable' && data.failure_class === 'configuration'}
+          Proxmox is not configured
         {:else}
           Unavailable
         {/if}
         {#if failureDetails()} · Failed collectors: {failureDetails()}{/if}
-        {#if !failedCollectors() && failureLabel(data.failure_class)} · {failureLabel(data.failure_class)}{/if}
+        {#if !failedCollectors() && failureLabel(data.failure_class) && !(data.status === 'unavailable' && data.failure_class === 'configuration')} · {failureLabel(data.failure_class)}{/if}
         {#if data.message} · {data.message}{/if}
       </p>
 

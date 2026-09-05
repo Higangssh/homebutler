@@ -531,19 +531,25 @@ func TestTLSModes(t *testing.T) {
 
 func TestFailureClassification(t *testing.T) {
 	t.Run("CA file unreadable", func(t *testing.T) {
-		// A missing or unreadable CA file is a certificate trust problem, not
-		// a credential problem: the token is never even read. Classifying it
-		// FailureAuthentication sent an operator staring at a fine token
-		// while pointing at "the token may be missing, unreadable, or
-		// revoked" instead of the ca_file setting that is actually wrong.
 		_, err := New(Options{Host: "pve.example", TokenID: "id", Token: "secret", CAFile: "missing.pem"})
-		if Classify(err) != FailureTLS {
-			t.Fatalf("Classify(%v) = %q, want %q", err, Classify(err), FailureTLS)
+		if Classify(err) != FailureConfiguration {
+			t.Fatalf("Classify(%v) = %q, want %q", err, Classify(err), FailureConfiguration)
 		}
 	})
 
 	t.Run("fingerprint format", func(t *testing.T) {
 		_, err := New(Options{Host: "pve.example", TokenID: "id", Token: "secret", Fingerprint: "not-hex"})
+		if Classify(err) != FailureConfiguration {
+			t.Fatalf("Classify(%v) = %q, want %q", err, Classify(err), FailureConfiguration)
+		}
+	})
+
+	t.Run("TLS peer certificate parse", func(t *testing.T) {
+		config, err := tlsConfig(Options{Fingerprint: strings.Repeat("00", sha256.Size)})
+		if err != nil {
+			t.Fatal(err)
+		}
+		err = config.VerifyPeerCertificate([][]byte{[]byte("not a certificate")}, nil)
 		if Classify(err) != FailureTLS {
 			t.Fatalf("Classify(%v) = %q, want %q", err, Classify(err), FailureTLS)
 		}
@@ -598,6 +604,25 @@ func TestFailureClassification(t *testing.T) {
 			t.Fatalf("Classify(%v) = %q, want %q", err, Classify(err), FailureTransport)
 		}
 	})
+
+	for _, tt := range []struct {
+		name string
+		body string
+	}{
+		{name: "response decode", body: "<html>not Proxmox</html>"},
+		{name: "data decode", body: `{"data":"not a version"}`},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				_, _ = w.Write([]byte(tt.body))
+			}))
+			defer server.Close()
+			_, err := testClient(t, server.URL).Version(context.Background())
+			if Classify(err) != FailureResponse {
+				t.Fatalf("Classify(%v) = %q, want %q", err, Classify(err), FailureResponse)
+			}
+		})
+	}
 }
 
 type roundTripperFunc func(*http.Request) (*http.Response, error)
@@ -610,17 +635,29 @@ func (errReader) Read([]byte) (int, error) { return 0, errors.New("read failed")
 func (errReader) Close() error             { return nil }
 
 func TestNewValidation(t *testing.T) {
-	for _, options := range []Options{
-		{TokenID: "id", Token: "token"},
-		{Host: "pve.example", Token: "token"},
-		{Host: "pve.example", TokenID: "id"},
-		{Host: "pve.example", TokenID: "id", Token: "token", Port: 70000},
-		{Host: "pve.example", TokenID: "id", Token: "token", Timeout: -time.Second},
-		{Host: "pve.example", TokenID: "id", Token: "token", Fingerprint: "bad"},
+	emptyCAFile := filepath.Join(t.TempDir(), "empty-ca.pem")
+	if err := os.WriteFile(emptyCAFile, nil, 0600); err != nil {
+		t.Fatal(err)
+	}
+	for _, tt := range []struct {
+		name    string
+		options Options
+	}{
+		{name: "missing host", options: Options{TokenID: "id", Token: "token"}},
+		{name: "missing token ID", options: Options{Host: "pve.example", Token: "token"}},
+		{name: "missing token", options: Options{Host: "pve.example", TokenID: "id"}},
+		{name: "invalid port", options: Options{Host: "pve.example", TokenID: "id", Token: "token", Port: 70000}},
+		{name: "invalid timeout", options: Options{Host: "pve.example", TokenID: "id", Token: "token", Timeout: -time.Second}},
+		{name: "malformed fingerprint", options: Options{Host: "pve.example", TokenID: "id", Token: "token", Fingerprint: "bad"}},
+		{name: "unreadable CA file", options: Options{Host: "pve.example", TokenID: "id", Token: "token", CAFile: "missing.pem"}},
+		{name: "empty CA file", options: Options{Host: "pve.example", TokenID: "id", Token: "token", CAFile: emptyCAFile}},
 	} {
-		if _, err := New(options); err == nil {
-			t.Errorf("New(%+v) error = nil", options)
-		}
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := New(tt.options)
+			if err == nil || Classify(err) != FailureConfiguration {
+				t.Errorf("Classify(%v) = %q, want %q", err, Classify(err), FailureConfiguration)
+			}
+		})
 	}
 }
 

@@ -88,8 +88,8 @@ type Incident struct {
 	// ProxmoxState is the state the incident transitioned into: "unavailable",
 	// "acl_filtered", or "guest_down". Empty outside Source == "proxmox".
 	ProxmoxState string `json:"proxmox_state,omitempty"`
-	// ProxmoxClass is the specific failure behind ProxmoxState — tls,
-	// authentication, authorization, transport, or empty_result — kept
+	// ProxmoxClass is the specific failure behind ProxmoxState: configuration,
+	// tls, authentication, authorization, response, transport, or empty_result, kept
 	// alongside the coarser state per #104.
 	ProxmoxClass string `json:"proxmox_class,omitempty"`
 	// Recovered marks a transition back to healthy rather than into failure.

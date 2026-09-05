@@ -111,15 +111,16 @@ func TestProxmoxStatusSelectsEndpointAndPreservesPartialResults(t *testing.T) {
 	}
 }
 
-func TestProxmoxStatusHidesCredentialPaths(t *testing.T) {
+func TestProxmoxStatusHidesSensitiveDetails(t *testing.T) {
 	tests := []struct {
 		name     string
 		endpoint config.ProxmoxConfig
-		secret   string
+		secrets  []string
 		class    string
 	}{
-		{name: "token file", endpoint: config.ProxmoxConfig{Name: "pve", Host: "pve.example", TokenID: "monitoring@pve!readonly", TokenFile: "/sensitive/proxmox-token"}, secret: "/sensitive/proxmox-token", class: "authentication"},
-		{name: "CA file", endpoint: config.ProxmoxConfig{Name: "pve", Host: "pve.example", TokenID: "monitoring@pve!readonly", Token: "test-token", CAFile: "/sensitive/proxmox-ca.pem"}, secret: "/sensitive/proxmox-ca.pem", class: "tls"},
+		{name: "token file", endpoint: config.ProxmoxConfig{Name: "pve", Host: "pve.example", TokenID: "monitoring@pve!readonly", TokenFile: "/sensitive/proxmox-token"}, secrets: []string{"/sensitive/proxmox-token"}, class: "authentication"},
+		{name: "CA file", endpoint: config.ProxmoxConfig{Name: "pve", Host: "pve.example", TokenID: "monitoring@pve!readonly", Token: "test-token", CAFile: "/sensitive/proxmox-ca.pem"}, secrets: []string{"/sensitive/proxmox-ca.pem"}, class: "configuration"},
+		{name: "missing read token", endpoint: config.ProxmoxConfig{Name: "pve", Host: "pve.example", TokenID: "monitoring@pve!readonly"}, secrets: []string{"proxmox token is not configured", "monitoring@pve!readonly"}, class: "configuration"},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -130,8 +131,10 @@ func TestProxmoxStatusHidesCredentialPaths(t *testing.T) {
 			if recorder.Code != http.StatusOK {
 				t.Fatalf("status = %d, want %d", recorder.Code, http.StatusOK)
 			}
-			if strings.Contains(recorder.Body.String(), test.secret) {
-				t.Fatalf("response leaked credential path %q", test.secret)
+			for _, secret := range test.secrets {
+				if strings.Contains(recorder.Body.String(), secret) {
+					t.Fatalf("response leaked sensitive detail %q", secret)
+				}
 			}
 			if !strings.Contains(recorder.Body.String(), `"status":"unavailable"`) {
 				t.Fatalf("response = %s, want unavailable status", recorder.Body.String())
