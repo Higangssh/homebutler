@@ -51,6 +51,9 @@ jobs:
       - name: Build web frontend
         run: make build-web
 
+      - name: Test web frontend
+        run: npm --prefix web test
+
       - name: Build
         run: go build ./...
 

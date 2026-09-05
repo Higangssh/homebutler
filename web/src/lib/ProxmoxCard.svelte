@@ -7,6 +7,7 @@
   let data = $state(null);
   let error = $state('');
   let loading = $state(false);
+  let now = $state(Date.now());
 
   onMount(async () => {
     try {
@@ -16,6 +17,11 @@
       endpoints = [];
       error = err.message;
     }
+  });
+
+  onMount(() => {
+    const timer = setInterval(() => now = Date.now(), 30_000);
+    return () => clearInterval(timer);
   });
 
   $effect(() => {
@@ -42,6 +48,50 @@
 
   function failed(collector) {
     return data?.failed_collectors?.includes(collector);
+  }
+
+  function formatTimestamp(value) {
+    return value ? new Date(value).toISOString().replace('T', ' ').replace('.000Z', ' UTC') : '';
+  }
+
+  function formatAge(value) {
+    const seconds = Math.max(0, Math.floor((now - new Date(value).getTime()) / 1000));
+    if (seconds < 60) return `${seconds} seconds ago`;
+    const minutes = Math.floor(seconds / 60);
+    if (minutes < 60) return `${minutes} minute${minutes === 1 ? '' : 's'} ago`;
+    const hours = Math.floor(minutes / 60);
+    if (hours < 24) return `${hours} hour${hours === 1 ? '' : 's'} ago`;
+    const days = Math.floor(hours / 24);
+    return `${days} day${days === 1 ? '' : 's'} ago`;
+  }
+
+  function failureLabel(value) {
+    return {
+      tls: 'TLS verification failed',
+      authentication: 'Authentication failed',
+      authorization: 'Authorization/ACL failure',
+      transport: 'Transport failure',
+    }[value] || '';
+  }
+
+  function failedCollectors() {
+    const collectors = data?.status === 'stale'
+      ? data.refresh_failed_collectors
+      : data?.failed_collectors;
+    return collectors?.join(', ') || '';
+  }
+
+  function failureDetails() {
+    const collectors = data?.status === 'stale'
+      ? data.refresh_failed_collectors
+      : data?.failed_collectors;
+    const classes = data?.status === 'stale'
+      ? data.refresh_failure_classes
+      : data?.failure_classes;
+    return collectors?.map((collector) => {
+      const reason = failureLabel(classes?.[collector] || data.failure_class);
+      return reason ? `${collector}: ${reason}` : collector;
+    }).join(', ') || '';
   }
 
   function clusterSummary(entries = []) {
@@ -88,8 +138,7 @@
   }
 </script>
 
-{#if endpoints === null || endpoints.length > 0 || error}
-  <section class="card">
+<section class="card">
     <div class="card-header">
       <h2>Proxmox VE</h2>
       {#if endpoints?.length === 1}
@@ -106,9 +155,28 @@
 
     {#if error}
       <p class="error" role="alert">{error}</p>
-    {:else if endpoints === null || loading || !data}
+    {:else if endpoints === null || loading}
+      <p class="muted">Loading...</p>
+    {:else if endpoints.length === 0}
+      <p class="muted" role="status">Proxmox is not configured</p>
+    {:else if !data}
       <p class="muted">Loading...</p>
     {:else}
+      <p class:unavailable={data.status !== 'current'} class="freshness" role="status">
+        {#if data.status === 'current'}
+          Current · Updated <time datetime={data.updated_at} title={formatTimestamp(data.updated_at)}>{formatAge(data.updated_at)}</time>
+        {:else if data.status === 'partially_readable'}
+          Partially readable · Updated <time datetime={data.updated_at} title={formatTimestamp(data.updated_at)}>{formatAge(data.updated_at)}</time>
+        {:else if data.status === 'stale'}
+          Stale · Last successful update <time datetime={data.updated_at} title={formatTimestamp(data.updated_at)}>{formatAge(data.updated_at)}</time>
+        {:else}
+          Unavailable
+        {/if}
+        {#if failureDetails()} · Failed collectors: {failureDetails()}{/if}
+        {#if !failedCollectors() && failureLabel(data.failure_class)} · {failureLabel(data.failure_class)}{/if}
+      </p>
+
+      {#if data.status !== 'unavailable'}
       <div class="section">
         <h3>Cluster</h3>
         {#if failed('cluster')}
@@ -208,9 +276,9 @@
           </ul>
         </div>
       {/if}
+      {/if}
     {/if}
-  </section>
-{/if}
+</section>
 
 <style>
   .card {
@@ -305,9 +373,11 @@
   .muted { color: var(--text-secondary); }
   .unavailable, .warnings { color: var(--yellow); }
 
-  .error, .muted, .unavailable, .warnings {
+  .error, .muted, .unavailable, .warnings, .freshness {
     font-size: 0.8rem;
   }
+
+  .freshness { color: var(--text-secondary); }
 
   .warnings {
     border-top: 1px solid var(--border);

@@ -136,8 +136,18 @@ func TestDefaultViewFlagsNoVisibleResources(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !view.CollectorFailed(CollectorResources) || len(view.Warnings) != 1 || !strings.Contains(view.Warnings[0], "token permissions") {
+	if !view.CollectorFailed(CollectorResources) || len(view.Warnings) != 1 || !strings.Contains(view.Warnings[0], "token permissions") || Classify(view.FirstErr) != FailureAuthorization {
 		t.Fatalf("DefaultView() = %#v", view)
+	}
+}
+
+func TestDefaultViewRecordsCollectorFailureClasses(t *testing.T) {
+	view := DefaultView{}
+	view.fail(CollectorVersion, WithFailureClass(FailureAuthentication, errors.New("unauthorized")))
+	view.fail(CollectorCluster, WithFailureClass(FailureAuthorization, errors.New("forbidden")))
+
+	if view.FailureClasses[CollectorVersion] != FailureAuthentication || view.FailureClasses[CollectorCluster] != FailureAuthorization {
+		t.Fatalf("failure classes = %#v", view.FailureClasses)
 	}
 }
 

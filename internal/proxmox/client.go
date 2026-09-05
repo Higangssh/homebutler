@@ -353,7 +353,7 @@ func (c *Client) DefaultView(ctx context.Context) (DefaultView, error) {
 	if err != nil {
 		view.fail(CollectorVersion, err)
 		if Classify(err) == FailureTransport {
-			view.skip(CollectorCluster, CollectorResources)
+			view.skip(FailureTransport, CollectorCluster, CollectorResources)
 			return view, nil
 		}
 	} else {
@@ -364,7 +364,7 @@ func (c *Client) DefaultView(ctx context.Context) (DefaultView, error) {
 	if err != nil {
 		view.fail(CollectorCluster, err)
 		if Classify(err) == FailureTransport {
-			view.skip(CollectorResources)
+			view.skip(FailureTransport, CollectorResources)
 			return view, nil
 		}
 	} else {
@@ -374,8 +374,7 @@ func (c *Client) DefaultView(ctx context.Context) (DefaultView, error) {
 	if resources, err := c.Resources(ctx); err != nil {
 		view.fail(CollectorResources, err)
 	} else if len(resources.Nodes) == 0 && len(resources.Guests) == 0 && len(resources.Storage) == 0 {
-		view.Warnings = append(view.Warnings, "resources: no resources visible; check Proxmox token permissions")
-		view.Failed = append(view.Failed, CollectorResources)
+		view.fail(CollectorResources, WithFailureClass(FailureAuthorization, fmt.Errorf("no resources visible; check Proxmox token permissions")))
 	} else {
 		view.Resources = resources
 	}
@@ -391,6 +390,12 @@ func (c *Client) DefaultView(ctx context.Context) (DefaultView, error) {
 func (v *DefaultView) fail(collector string, err error) {
 	v.Warnings = append(v.Warnings, collector+": "+err.Error())
 	v.Failed = append(v.Failed, collector)
+	if class := Classify(err); class != "" {
+		if v.FailureClasses == nil {
+			v.FailureClasses = make(map[string]FailureClass)
+		}
+		v.FailureClasses[collector] = class
+	}
 	if v.FirstErr == nil || (Classify(v.FirstErr) == "" && Classify(err) != "") {
 		v.FirstErr = err
 	}
@@ -399,8 +404,14 @@ func (v *DefaultView) fail(collector string, err error) {
 // skip marks collectors that were never attempted as failed, so callers
 // rendering per-collector status (writeProxmoxStatus, doctor) show them as
 // unavailable instead of a misleadingly empty success.
-func (v *DefaultView) skip(collectors ...string) {
+func (v *DefaultView) skip(class FailureClass, collectors ...string) {
 	v.Failed = append(v.Failed, collectors...)
+	if v.FailureClasses == nil {
+		v.FailureClasses = make(map[string]FailureClass)
+	}
+	for _, collector := range collectors {
+		v.FailureClasses[collector] = class
+	}
 }
 
 func (c *Client) get(ctx context.Context, path string, query url.Values, out any) error {
