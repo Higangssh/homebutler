@@ -236,6 +236,16 @@ func TestProxmoxMonitorAuthorizationFailureIsACLFiltered(t *testing.T) {
 	}
 }
 
+func TestProxmoxMonitorConfigurationAndResponseFailuresKeepTheirClasses(t *testing.T) {
+	pm := &ProxmoxMonitor{}
+	for _, class := range []proxmox.FailureClass{proxmox.FailureConfiguration, proxmox.FailureResponse} {
+		state := pm.endpointState(proxmox.WithFailureClass(class, fmt.Errorf("fixture")))
+		if state.state != ProxmoxStateUnavailable || state.class != string(class) {
+			t.Errorf("state for %q = %+v, want unavailable/%q", class, state, class)
+		}
+	}
+}
+
 func TestProxmoxMonitorSeedDoesNotAlertOnAlreadyStoppedGuest(t *testing.T) {
 	script := &scriptedServer{responses: []scriptedResponse{
 		{body: resourcesResponse(oneNode, guestJSON("pve1", "qemu", 100, "stopped"))},

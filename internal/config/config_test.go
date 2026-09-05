@@ -249,8 +249,8 @@ func TestProxmoxConfigTokenValue(t *testing.T) {
 	if got, err := inline.TokenValue(); err != nil || got != "inline-token" {
 		t.Errorf("TokenValue() = (%q, %v), want (inline-token, nil)", got, err)
 	}
-	if _, err := (ProxmoxConfig{}).TokenValue(); err == nil {
-		t.Error("TokenValue() should fail without a token source")
+	if _, err := (ProxmoxConfig{}).TokenValue(); err == nil || proxmox.Classify(err) != proxmox.FailureConfiguration {
+		t.Errorf("TokenValue() error = %v, want configuration error without a token source", err)
 	}
 
 	if _, err := (ProxmoxConfig{TokenFile: filepath.Join(dir, "missing"), Token: "inline-secret"}).TokenValue(); err == nil {
@@ -337,8 +337,8 @@ func TestProxmoxConfigResolveCredential(t *testing.T) {
 		t.Errorf("ResolveCredential(true) = (%q, %q, %v), want (monitoring@pve!action, action-token, nil)", tokenID, token, err)
 	}
 
-	if _, _, err := (ProxmoxConfig{Name: "pve"}).ResolveCredential(false); err == nil {
-		t.Error("ResolveCredential(false) should fail without a read token source")
+	if _, _, err := (ProxmoxConfig{Name: "pve"}).ResolveCredential(false); err == nil || proxmox.Classify(err) != proxmox.FailureConfiguration {
+		t.Errorf("ResolveCredential(false) error = %v, want configuration error without a read token source", err)
 	}
 }
 

@@ -217,7 +217,7 @@ func (p ProxmoxConfig) TokenFilePath() string {
 func (p ProxmoxConfig) TokenValue() (string, error) {
 	if p.TokenFile == "" {
 		if p.Token == "" {
-			return "", fmt.Errorf("proxmox token is not configured")
+			return "", proxmox.WithFailureClass(proxmox.FailureConfiguration, fmt.Errorf("proxmox token is not configured"))
 		}
 		return p.Token, nil
 	}

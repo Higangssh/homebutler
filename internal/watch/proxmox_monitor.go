@@ -182,10 +182,14 @@ func (pm *ProxmoxMonitor) endpointState(err error) proxmoxEndpointState {
 	switch proxmox.Classify(err) {
 	case proxmox.FailureAuthorization:
 		return proxmoxEndpointState{state: ProxmoxStateACLFiltered, class: string(proxmox.FailureAuthorization)}
+	case proxmox.FailureConfiguration:
+		return proxmoxEndpointState{state: ProxmoxStateUnavailable, class: string(proxmox.FailureConfiguration)}
 	case proxmox.FailureTLS:
 		return proxmoxEndpointState{state: ProxmoxStateUnavailable, class: string(proxmox.FailureTLS)}
 	case proxmox.FailureAuthentication:
 		return proxmoxEndpointState{state: ProxmoxStateUnavailable, class: string(proxmox.FailureAuthentication)}
+	case proxmox.FailureResponse:
+		return proxmoxEndpointState{state: ProxmoxStateUnavailable, class: string(proxmox.FailureResponse)}
 	default:
 		return proxmoxEndpointState{state: ProxmoxStateUnavailable, class: string(proxmox.FailureTransport)}
 	}

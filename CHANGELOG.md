@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### ✨ Features
+
+- add `configuration` and `response` Proxmox failure classes (#149). The dashboard distinguishes an unconfigured endpoint, doctor names the configuration fields to check, and watch records the precise class
+
 ## [0.28.0](https://github.com/Higangssh/homebutler/compare/v0.27.0...v0.28.0) - 2026-09-05
 **`doctor` knew six things it never said, and the dashboard could show you yesterday's cluster without mentioning that it was yesterday's.** Nothing was installed to poll the watch list; notifications were configured and switched off; a config holding plaintext secrets was readable by everyone; a container held the Docker socket, which is host root wearing a container's clothes; an endpoint had been left accepting any certificate after a debugging session; incident history was one restart from discarding the oldest. Every one of those was already in data homebutler had.
 
@@ -13,7 +19,6 @@ All notable changes to this project will be documented in this file.
 ```
 
 ### ✨ Features
-
 - report a watch list that will tell nobody (#147). Three gates stand between an incident and a message and two are closed by default — `watch.notify.enabled` is false, and `notify_on: flapping` means a single restart is not sent — while `doctor` only checked the third, whether a channel exists at all. The person that failed is the one who did the work: configured Telegram, ran `notify test`, saw it arrive, installed the service, and was covered except for a flag nobody mentioned. When notifications are on, `doctor` now also states what the current `notify_on` will and will not send, because the value alone does not tell an operator which incidents reach them
 - show whether each Proxmox dashboard snapshot is current, partial, stale, unavailable, or not configured (#106). Refresh timestamps now come from the server with the data, partial collectors keep readable results visible, and a failed refresh retains the last readable snapshot with only its safe failure class
 - report a running container that mounts the Docker socket (#99). A container with `/var/run/docker.sock` mounted can create containers on the host as root — it holds host root however unprivileged it looks — and homebutler installs one itself, since `install portainer` mounts the socket and nothing has mentioned it since. Costs one `docker inspect` per running container and stops at the first collector failure rather than retrying per container

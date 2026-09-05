@@ -72,6 +72,17 @@ describe('Proxmox freshness states', () => {
     expect(document.body.textContent).not.toContain('monitoring@pve!readonly');
   });
 
+  it('shows configuration failures as not configured without rendering data', async () => {
+    const status = await show({ status: 'unavailable', failure_class: 'configuration' });
+    expect(status.textContent.replace(/\s+/g, ' ').trim()).toBe('Proxmox is not configured');
+    expect(screen.queryByRole('table')).toBeNull();
+  });
+
+  it('labels an unexpected endpoint response', async () => {
+    const status = await show({ status: 'unavailable', failure_class: 'response' });
+    expect(status.textContent.replace(/\s+/g, ' ')).toContain('Unavailable · Unexpected endpoint response');
+  });
+
   it('does not assign a classified collector reason to an unclassified failure', async () => {
     const status = await show({ status: 'unavailable', failed_collectors: ['version', 'cluster'], failure_classes: { cluster: 'authorization' }, failure_class: 'authorization' });
     expect(status.textContent.replace(/\s+/g, ' ')).toContain('version, cluster: Authorization/ACL failure');

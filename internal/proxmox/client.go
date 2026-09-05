@@ -28,6 +28,8 @@ const defaultTimeout = 10 * time.Second
 type FailureClass string
 
 const (
+	FailureConfiguration  FailureClass = "configuration"
+	FailureResponse       FailureClass = "response"
 	FailureTLS            FailureClass = "tls"
 	FailureAuthentication FailureClass = "authentication"
 	FailureAuthorization  FailureClass = "authorization"
@@ -99,27 +101,27 @@ type Client struct {
 // New returns a client configured for one Proxmox endpoint.
 func New(options Options) (*Client, error) {
 	if options.Host == "" {
-		return nil, fmt.Errorf("proxmox host is required")
+		return nil, WithFailureClass(FailureConfiguration, fmt.Errorf("proxmox host is required"))
 	}
 	if options.TokenID == "" || options.Token == "" {
-		return nil, fmt.Errorf("proxmox token ID and token are required")
+		return nil, WithFailureClass(FailureConfiguration, fmt.Errorf("proxmox token ID and token are required"))
 	}
 	if options.Port == 0 {
 		options.Port = 8006
 	}
 	if options.Port < 1 || options.Port > 65535 {
-		return nil, fmt.Errorf("invalid Proxmox port %d", options.Port)
+		return nil, WithFailureClass(FailureConfiguration, fmt.Errorf("invalid Proxmox port %d", options.Port))
 	}
 	if options.Timeout == 0 {
 		options.Timeout = defaultTimeout
 	}
 	if options.Timeout < 0 {
-		return nil, fmt.Errorf("invalid Proxmox timeout %s", options.Timeout)
+		return nil, WithFailureClass(FailureConfiguration, fmt.Errorf("invalid Proxmox timeout %s", options.Timeout))
 	}
 
 	tlsConfig, err := tlsConfig(options)
 	if err != nil {
-		return nil, WithFailureClass(FailureTLS, err)
+		return nil, WithFailureClass(FailureConfiguration, err)
 	}
 
 	return &Client{
@@ -156,7 +158,7 @@ func tlsConfig(options Options) (*tls.Config, error) {
 				return WithFailureClass(FailureTLS, fmt.Errorf("proxmox TLS peer sent no certificate"))
 			}
 			if _, err := x509.ParseCertificate(rawCerts[0]); err != nil {
-				return fmt.Errorf("parse Proxmox TLS certificate: %w", err)
+				return WithFailureClass(FailureTLS, fmt.Errorf("parse Proxmox TLS certificate: %w", err))
 			}
 			actual := sha256.Sum256(rawCerts[0])
 			if subtle.ConstantTimeCompare(actual[:], expected) != 1 {
@@ -170,11 +172,11 @@ func tlsConfig(options Options) (*tls.Config, error) {
 	if options.CAFile != "" {
 		pem, err := os.ReadFile(options.CAFile)
 		if err != nil {
-			return nil, WithFailureClass(FailureTLS, fmt.Errorf("read Proxmox CA file: %w", err))
+			return nil, WithFailureClass(FailureConfiguration, fmt.Errorf("read Proxmox CA file: %w", err))
 		}
 		pool := x509.NewCertPool()
 		if !pool.AppendCertsFromPEM(pem) {
-			return nil, WithFailureClass(FailureTLS, fmt.Errorf("proxmox CA file contains no certificates"))
+			return nil, WithFailureClass(FailureConfiguration, fmt.Errorf("proxmox CA file contains no certificates"))
 		}
 		config.RootCAs = pool
 		return config, nil
@@ -190,7 +192,7 @@ func parseFingerprint(value string) ([]byte, error) {
 	value = strings.ReplaceAll(strings.TrimSpace(value), ":", "")
 	fingerprint, err := hex.DecodeString(value)
 	if err != nil || len(fingerprint) != sha256.Size {
-		return nil, WithFailureClass(FailureTLS, fmt.Errorf("proxmox fingerprint must be a SHA-256 certificate fingerprint"))
+		return nil, WithFailureClass(FailureConfiguration, fmt.Errorf("proxmox fingerprint must be a SHA-256 certificate fingerprint"))
 	}
 	return fingerprint, nil
 }
@@ -220,25 +222,25 @@ func (c *Client) Resources(ctx context.Context) (Resources, error) {
 			Type string `json:"type"`
 		}
 		if err := json.Unmarshal(item, &kind); err != nil {
-			return Resources{}, fmt.Errorf("decode Proxmox resource type: %w", err)
+			return Resources{}, WithFailureClass(FailureResponse, fmt.Errorf("decode Proxmox resource type: %w", err))
 		}
 		switch kind.Type {
 		case "node":
 			var node Node
 			if err := json.Unmarshal(item, &node); err != nil {
-				return Resources{}, fmt.Errorf("decode Proxmox node: %w", err)
+				return Resources{}, WithFailureClass(FailureResponse, fmt.Errorf("decode Proxmox node: %w", err))
 			}
 			resources.Nodes = append(resources.Nodes, node)
 		case "qemu", "lxc":
 			var guest Guest
 			if err := json.Unmarshal(item, &guest); err != nil {
-				return Resources{}, fmt.Errorf("decode Proxmox guest: %w", err)
+				return Resources{}, WithFailureClass(FailureResponse, fmt.Errorf("decode Proxmox guest: %w", err))
 			}
 			resources.Guests = append(resources.Guests, guest)
 		case "storage":
 			var store Store
 			if err := json.Unmarshal(item, &store); err != nil {
-				return Resources{}, fmt.Errorf("decode Proxmox storage: %w", err)
+				return Resources{}, WithFailureClass(FailureResponse, fmt.Errorf("decode Proxmox storage: %w", err))
 			}
 			resources.Storage = append(resources.Storage, store)
 		}
@@ -464,10 +466,10 @@ func (c *Client) request(ctx context.Context, method, path string, query url.Val
 		Data json.RawMessage `json:"data"`
 	}
 	if err := json.Unmarshal(body, &envelope); err != nil {
-		return fmt.Errorf("decode Proxmox response %s: %w", path, err)
+		return WithFailureClass(FailureResponse, fmt.Errorf("decode Proxmox response %s: %w", path, err))
 	}
 	if err := json.Unmarshal(envelope.Data, out); err != nil {
-		return fmt.Errorf("decode Proxmox data %s: %w", path, err)
+		return WithFailureClass(FailureResponse, fmt.Errorf("decode Proxmox data %s: %w", path, err))
 	}
 	return nil
 }
