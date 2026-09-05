@@ -130,7 +130,7 @@ homebutler report --json
 - **Run a doctor check** — diagnose resource pressure, stopped containers, public ports, backup hygiene, notifications, report baseline readiness, and configured Proxmox endpoint reachability
 - **Catch crashes** — save logs before/after Docker, systemd, or PM2 restarts and detect flapping loops
 - **Verify backups** — boot backups in isolated containers before you trust them
-- **See a Proxmox cluster** — nodes, QEMU and LXC guests, storage, and task status, with power actions that name their target explicitly
+- **See a Proxmox cluster** — nodes, QEMU and LXC guests, storage, task status, and honest dashboard freshness, with power actions that name their target explicitly
 - **Use it anywhere** — CLI, JSON, web dashboard, or MCP for AI agents without giving them SSH
 
 ## Why homebutler?

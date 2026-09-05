@@ -286,6 +286,8 @@ type DefaultView struct {
 	// which points to an ACL-limited token rather than a genuinely empty
 	// cluster.
 	Failed []string `json:"failed_collectors,omitempty"`
+	// FailureClasses gives UI and API callers a safe reason per failed collector.
+	FailureClasses map[string]FailureClass `json:"failure_classes,omitempty"`
 	// FirstErr is the first classified collector error, for callers that
 	// branch on FailureClass rather than display text. Not serialized.
 	FirstErr error `json:"-"`

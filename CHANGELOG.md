@@ -7,7 +7,7 @@ All notable changes to this project will be documented in this file.
 ### ✨ Features
 
 - report a watch list that will tell nobody (#147). Three gates stand between an incident and a message and two are closed by default — `watch.notify.enabled` is false, and `notify_on: flapping` means a single restart is not sent — while `doctor` only checked the third, whether a channel exists at all. The person that failed is the one who did the work: configured Telegram, ran `notify test`, saw it arrive, installed the service, and was covered except for a flag nobody mentioned. When notifications are on, `doctor` now also states what the current `notify_on` will and will not send, because the value alone does not tell an operator which incidents reach them
-
+- show whether each Proxmox dashboard snapshot is current, partial, stale, unavailable, or not configured (#106). Refresh timestamps now come from the server with the data, partial collectors keep readable results visible, and a failed refresh retains the last readable snapshot with only its safe failure class
 - report a running container that mounts the Docker socket (#99). A container with `/var/run/docker.sock` mounted can create containers on the host as root — it holds host root however unprivileged it looks — and homebutler installs one itself, since `install portainer` mounts the socket and nothing has mentioned it since. Costs one `docker inspect` per running container and stops at the first collector failure rather than retrying per container
 - report a Proxmox endpoint left on `insecure: true` (#99). #62 settled that it should be "last and loud"; it was last, and loud nowhere — no runtime warning, no `config validate` finding, and no check. A debugging session that was never undone is what a periodic check is for
 - report incident history approaching its limit (#99). #101 bounded the directory; knowing how full it is before the pruning starts discarding history someone wanted is the other half. Explicitly unlimited history is a choice and is not flagged
@@ -21,6 +21,7 @@ All notable changes to this project will be documented in this file.
 
 ### ⚠️ Behavior changes
 
+- **`/api/proxmox/status` reports refresh failures as HTTP 200 with a freshness body instead of HTTP 500 or 502.** API consumers should inspect `status`, `failure_class`, and the per-collector fields; readable snapshots can now be retained and returned as `stale`
 - **`doctor` runs on a config the other commands refuse.** A config holding plaintext secrets with open permissions is refused by `Load`, which meant the one command whose job is to explain what is wrong was also the one that would not start. `doctor` now parses it anyway and reports the permissions as a failure; every other command refuses exactly as before
 
 ## [0.27.0](https://github.com/Higangssh/homebutler/compare/v0.26.0...v0.27.0) - 2026-09-03

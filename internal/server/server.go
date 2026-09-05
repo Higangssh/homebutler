@@ -12,6 +12,7 @@ import (
 	"os"
 	"os/signal"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -44,6 +45,23 @@ type Server struct {
 	version      string
 	mux          *http.ServeMux
 	remoteRunner RemoteRunner
+	proxmoxMu    sync.RWMutex
+	proxmoxCache map[string]proxmoxSnapshot
+}
+
+type proxmoxSnapshot struct {
+	view      proxmox.DefaultView
+	updatedAt time.Time
+}
+
+type proxmoxStatusResponse struct {
+	proxmox.DefaultView
+	Status                  string                          `json:"status"`
+	UpdatedAt               *time.Time                      `json:"updated_at,omitempty"`
+	FailureClass            proxmox.FailureClass            `json:"failure_class,omitempty"`
+	Message                 string                          `json:"message,omitempty"`
+	RefreshFailedCollectors []string                        `json:"refresh_failed_collectors,omitempty"`
+	RefreshFailureClasses   map[string]proxmox.FailureClass `json:"refresh_failure_classes,omitempty"`
 }
 
 // New creates a new Server with the given config, host, port, and version.
@@ -52,7 +70,7 @@ func New(cfg *config.Config, host string, port int, demo ...bool) *Server {
 	if host == "" {
 		host = "127.0.0.1"
 	}
-	s := &Server{cfg: cfg, host: host, port: port, demo: d, version: "dev", mux: http.NewServeMux(), remoteRunner: remote.Run}
+	s := &Server{cfg: cfg, host: host, port: port, demo: d, version: "dev", mux: http.NewServeMux(), remoteRunner: remote.Run, proxmoxCache: make(map[string]proxmoxSnapshot)}
 	s.routes()
 	return s
 }
@@ -497,7 +515,7 @@ func (s *Server) handleProxmoxStatus(w http.ResponseWriter, r *http.Request) {
 	tokenID, token, err := endpoint.ResolveCredential(false)
 	if err != nil {
 		log.Print(err)
-		writeError(w, http.StatusInternalServerError, fmt.Sprintf("Proxmox endpoint %q credentials are unavailable", endpoint.Name))
+		s.writeProxmoxFailure(w, endpoint.Name, proxmox.Classify(err), nil, nil)
 		return
 	}
 	client, err := proxmox.New(proxmox.Options{
@@ -506,15 +524,44 @@ func (s *Server) handleProxmoxStatus(w http.ResponseWriter, r *http.Request) {
 	})
 	if err != nil {
 		log.Printf("configure Proxmox endpoint %q: %v", endpoint.Name, err)
-		writeError(w, http.StatusInternalServerError, fmt.Sprintf("Proxmox endpoint %q is not configured correctly", endpoint.Name))
+		s.writeProxmoxFailure(w, endpoint.Name, proxmox.Classify(err), nil, nil)
 		return
 	}
 	view, err := client.DefaultView(r.Context())
 	if err != nil {
-		writeError(w, http.StatusBadGateway, fmt.Sprintf("get Proxmox status from %q: %v", endpoint.Name, err))
+		s.writeProxmoxFailure(w, endpoint.Name, proxmox.Classify(err), nil, nil)
 		return
 	}
-	writeJSON(w, view)
+	class := proxmox.Classify(view.FirstErr)
+	if view.CollectorFailed(proxmox.CollectorVersion) && view.CollectorFailed(proxmox.CollectorCluster) && view.CollectorFailed(proxmox.CollectorResources) {
+		s.writeProxmoxFailure(w, endpoint.Name, class, view.Failed, view.FailureClasses)
+		return
+	}
+
+	updatedAt := time.Now().UTC()
+	status := "current"
+	if len(view.Failed) > 0 {
+		status = "partially_readable"
+	}
+	s.proxmoxMu.Lock()
+	s.proxmoxCache[endpoint.Name] = proxmoxSnapshot{view: view, updatedAt: updatedAt}
+	s.proxmoxMu.Unlock()
+	writeJSON(w, proxmoxStatusResponse{DefaultView: view, Status: status, UpdatedAt: &updatedAt, FailureClass: class})
+}
+
+func (s *Server) writeProxmoxFailure(w http.ResponseWriter, endpoint string, class proxmox.FailureClass, failed []string, failureClasses map[string]proxmox.FailureClass) {
+	message := ""
+	if class == "" {
+		message = "Proxmox status is unavailable"
+	}
+	s.proxmoxMu.RLock()
+	snapshot, ok := s.proxmoxCache[endpoint]
+	s.proxmoxMu.RUnlock()
+	if ok {
+		writeJSON(w, proxmoxStatusResponse{DefaultView: snapshot.view, Status: "stale", UpdatedAt: &snapshot.updatedAt, FailureClass: class, Message: message, RefreshFailedCollectors: failed, RefreshFailureClasses: failureClasses})
+		return
+	}
+	writeJSON(w, proxmoxStatusResponse{DefaultView: proxmox.DefaultView{Failed: failed, FailureClasses: failureClasses}, Status: "unavailable", FailureClass: class, Message: message})
 }
 
 // serverInfo is a safe subset of config.ServerConfig for the API response.

@@ -88,6 +88,17 @@ func TestProxmoxStatusSelectsEndpointAndPreservesPartialResults(t *testing.T) {
 	if !view.CollectorFailed(proxmox.CollectorCluster) || len(view.Warnings) != 1 {
 		t.Fatalf("partial failure = %#v", view)
 	}
+	var status struct {
+		Status       string               `json:"status"`
+		UpdatedAt    string               `json:"updated_at"`
+		FailureClass proxmox.FailureClass `json:"failure_class"`
+	}
+	if err := json.Unmarshal(recorder.Body.Bytes(), &status); err != nil {
+		t.Fatal(err)
+	}
+	if status.Status != "partially_readable" || status.UpdatedAt == "" || status.FailureClass != proxmox.FailureAuthorization {
+		t.Fatalf("status metadata = %#v", status)
+	}
 	if strings.Contains(recorder.Body.String(), "test-token") {
 		t.Fatal("response leaked the Proxmox token")
 	}
@@ -105,9 +116,10 @@ func TestProxmoxStatusHidesCredentialPaths(t *testing.T) {
 		name     string
 		endpoint config.ProxmoxConfig
 		secret   string
+		class    string
 	}{
-		{name: "token file", endpoint: config.ProxmoxConfig{Name: "pve", Host: "pve.example", TokenID: "monitoring@pve!readonly", TokenFile: "/sensitive/proxmox-token"}, secret: "/sensitive/proxmox-token"},
-		{name: "CA file", endpoint: config.ProxmoxConfig{Name: "pve", Host: "pve.example", TokenID: "monitoring@pve!readonly", Token: "test-token", CAFile: "/sensitive/proxmox-ca.pem"}, secret: "/sensitive/proxmox-ca.pem"},
+		{name: "token file", endpoint: config.ProxmoxConfig{Name: "pve", Host: "pve.example", TokenID: "monitoring@pve!readonly", TokenFile: "/sensitive/proxmox-token"}, secret: "/sensitive/proxmox-token", class: "authentication"},
+		{name: "CA file", endpoint: config.ProxmoxConfig{Name: "pve", Host: "pve.example", TokenID: "monitoring@pve!readonly", Token: "test-token", CAFile: "/sensitive/proxmox-ca.pem"}, secret: "/sensitive/proxmox-ca.pem", class: "tls"},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -115,12 +127,101 @@ func TestProxmoxStatusHidesCredentialPaths(t *testing.T) {
 			cfg := &config.Config{Proxmox: []config.ProxmoxConfig{test.endpoint}}
 			New(cfg, "127.0.0.1", 8080).Handler().ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/api/proxmox/status", nil))
 
-			if recorder.Code != http.StatusInternalServerError {
-				t.Fatalf("status = %d, want %d", recorder.Code, http.StatusInternalServerError)
+			if recorder.Code != http.StatusOK {
+				t.Fatalf("status = %d, want %d", recorder.Code, http.StatusOK)
 			}
 			if strings.Contains(recorder.Body.String(), test.secret) {
 				t.Fatalf("response leaked credential path %q", test.secret)
 			}
+			if !strings.Contains(recorder.Body.String(), `"status":"unavailable"`) {
+				t.Fatalf("response = %s, want unavailable status", recorder.Body.String())
+			}
+			if !strings.Contains(recorder.Body.String(), `"failure_class":"`+test.class+`"`) || strings.Contains(recorder.Body.String(), "updated_at") {
+				t.Fatalf("response metadata = %s", recorder.Body.String())
+			}
 		})
+	}
+}
+
+func TestProxmoxStatusRetainsLastGoodSnapshot(t *testing.T) {
+	api := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/api2/json/version":
+			_, _ = w.Write([]byte(`{"data":{"version":"8.2.0","release":"8.2"}}`))
+		case "/api2/json/cluster/status":
+			_, _ = w.Write([]byte(`{"data":[{"type":"node","name":"pve1","online":1}]}`))
+		case "/api2/json/cluster/resources":
+			_, _ = w.Write([]byte(`{"data":[{"type":"node","node":"pve1","status":"online"}]}`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+
+	apiURL, err := url.Parse(api.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	host, portText, err := net.SplitHostPort(apiURL.Host)
+	if err != nil {
+		t.Fatal(err)
+	}
+	port, err := strconv.Atoi(portText)
+	if err != nil {
+		t.Fatal(err)
+	}
+	srv := New(&config.Config{Proxmox: []config.ProxmoxConfig{{Name: "pve", Host: host, Port: port, TokenID: "monitoring@pve!readonly", Token: "test-token", Insecure: true}}}, "127.0.0.1", 8080)
+
+	request := func() map[string]any {
+		t.Helper()
+		recorder := httptest.NewRecorder()
+		srv.Handler().ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/api/proxmox/status", nil))
+		if recorder.Code != http.StatusOK {
+			t.Fatalf("status = %d: %s", recorder.Code, recorder.Body.String())
+		}
+		var response map[string]any
+		if err := json.Unmarshal(recorder.Body.Bytes(), &response); err != nil {
+			t.Fatal(err)
+		}
+		return response
+	}
+
+	current := request()
+	if current["status"] != "current" || current["updated_at"] == nil {
+		t.Fatalf("current response = %#v", current)
+	}
+	api.Close()
+	stale := request()
+	if stale["status"] != "stale" || stale["failure_class"] != "transport" {
+		t.Fatalf("stale response = %#v", stale)
+	}
+	if len(stale["refresh_failed_collectors"].([]any)) != 3 || stale["refresh_failure_classes"].(map[string]any)["resources"] != "transport" {
+		t.Fatalf("stale failure details = %#v", stale)
+	}
+	if stale["updated_at"] != current["updated_at"] || stale["resources"] == nil {
+		t.Fatalf("stale snapshot was not retained: current=%#v stale=%#v", current, stale)
+	}
+}
+
+func TestWriteProxmoxFailurePreservesSafeDetails(t *testing.T) {
+	srv := New(&config.Config{}, "127.0.0.1", 8080)
+	recorder := httptest.NewRecorder()
+	srv.writeProxmoxFailure(recorder, "pve", proxmox.FailureAuthorization, []string{proxmox.CollectorVersion, proxmox.CollectorCluster}, map[string]proxmox.FailureClass{proxmox.CollectorCluster: proxmox.FailureAuthorization})
+
+	var response proxmoxStatusResponse
+	if err := json.Unmarshal(recorder.Body.Bytes(), &response); err != nil {
+		t.Fatal(err)
+	}
+	if response.FailureClasses[proxmox.CollectorCluster] != proxmox.FailureAuthorization || response.FailureClasses[proxmox.CollectorVersion] != "" {
+		t.Fatalf("failure classes = %#v", response.FailureClasses)
+	}
+
+	recorder = httptest.NewRecorder()
+	srv.writeProxmoxFailure(recorder, "pve", "", nil, nil)
+	response = proxmoxStatusResponse{}
+	if err := json.Unmarshal(recorder.Body.Bytes(), &response); err != nil {
+		t.Fatal(err)
+	}
+	if response.Message != "Proxmox status is unavailable" {
+		t.Fatalf("message = %q", response.Message)
 	}
 }
