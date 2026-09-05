@@ -6,6 +6,8 @@ All notable changes to this project will be documented in this file.
 
 ### ✨ Features
 
+- report a watch list that will tell nobody (#147). Three gates stand between an incident and a message and two are closed by default — `watch.notify.enabled` is false, and `notify_on: flapping` means a single restart is not sent — while `doctor` only checked the third, whether a channel exists at all. The person that failed is the one who did the work: configured Telegram, ran `notify test`, saw it arrive, installed the service, and was covered except for a flag nobody mentioned. When notifications are on, `doctor` now also states what the current `notify_on` will and will not send, because the value alone does not tell an operator which incidents reach them
+
 - report a running container that mounts the Docker socket (#99). A container with `/var/run/docker.sock` mounted can create containers on the host as root — it holds host root however unprivileged it looks — and homebutler installs one itself, since `install portainer` mounts the socket and nothing has mentioned it since. Costs one `docker inspect` per running container and stops at the first collector failure rather than retrying per container
 - report a Proxmox endpoint left on `insecure: true` (#99). #62 settled that it should be "last and loud"; it was last, and loud nowhere — no runtime warning, no `config validate` finding, and no check. A debugging session that was never undone is what a periodic check is for
 - report incident history approaching its limit (#99). #101 bounded the directory; knowing how full it is before the pruning starts discarding history someone wanted is the other half. Explicitly unlimited history is a choice and is not flagged

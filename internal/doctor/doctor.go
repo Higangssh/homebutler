@@ -148,6 +148,7 @@ func Run(cfg *config.Config, fns CollectFuncs, opts Options) (*Result, error) {
 	checkProxmoxTrust(r, cfg)
 	checkIncidentRetention(r, cfg, fns.WatchDir)
 	checkWatching(r, fns.WatchDir, fns.WatchServiceFn)
+	checkWatchNotifications(r, cfg, fns.WatchDir)
 	checkConfigPermissions(r, cfg)
 	checkNotifications(r, cfg)
 	checkReportBaseline(r, fns.SnapshotDir)
@@ -460,6 +461,64 @@ func checkWatching(r *Result, dir string, installedFn func() (bool, string)) {
 			"This checks whether a service is installed, not whether it is running.",
 		"Install the watch service so monitoring survives logout and reboot.",
 		"homebutler watch install")
+}
+
+// checkWatchNotifications reports a watch list that will tell nobody.
+//
+// Three gates stand between an incident and a message and two are closed by
+// default: watch.notify.enabled is false, and notify_on is "flapping", under
+// which a single restart is not reported. checkNotifications covers the third
+// — no channel configured at all — so this stays quiet in that case rather
+// than making one gap into two findings.
+//
+// The person this fails is the one who did the work: configured a channel,
+// tested it, installed the service, and is covered except for a flag they
+// were never told about.
+func checkWatchNotifications(r *Result, cfg *config.Config, dir string) {
+	if cfg == nil || len(cfg.Notify.EnabledChannels()) == 0 {
+		return
+	}
+	if dir == "" {
+		d, err := watch.WatchDir()
+		if err != nil {
+			return
+		}
+		dir = d
+	}
+	targets, err := watch.LoadTargets(dir)
+	if err != nil || len(targets) == 0 {
+		return
+	}
+
+	notify := cfg.Watch.Notify
+	if !notify.Enabled {
+		r.add(SeverityWarn, "notifications",
+			"Notifications are configured and switched off for watch",
+			"A channel is set up and reachable, but watch.notify.enabled is false, so an incident is written "+
+				"to disk and printed to the terminal and nothing is sent anywhere.",
+			"Turn it on if you want to hear about incidents away from this machine.",
+			"homebutler notify test")
+		return
+	}
+
+	r.add(SeverityPass, "notifications",
+		"Watch notifications are on",
+		notifyOnMeans(notify.NotifyOn), "", "")
+}
+
+// notifyOnMeans says what the setting will and will not send, because the
+// value alone does not tell an operator which incidents reach them.
+func notifyOnMeans(mode string) string {
+	switch mode {
+	case "all":
+		return "notify_on: all — every incident is sent, including a single restart."
+	case "incident":
+		return "notify_on: incident — every incident is sent; repeated restarts are not sent again as flapping."
+	case "off":
+		return "notify_on: off — nothing is sent, despite notifications being enabled."
+	default:
+		return "notify_on: " + mode + " — repeated restarts are sent as flapping. A single restart is recorded but not sent."
+	}
 }
 
 func watchServiceInstalled() (bool, string) {
