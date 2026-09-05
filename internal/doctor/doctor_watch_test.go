@@ -12,6 +12,7 @@ import (
 	"github.com/Higangssh/homebutler/internal/config"
 	"github.com/Higangssh/homebutler/internal/docker"
 	"github.com/Higangssh/homebutler/internal/inventory"
+	"github.com/Higangssh/homebutler/internal/notify"
 	"github.com/Higangssh/homebutler/internal/watch"
 )
 
@@ -232,5 +233,72 @@ func TestUnlimitedIncidentHistoryIsNotFlagged(t *testing.T) {
 	checkIncidentRetention(r, cfg, dir)
 	if got := findingsFor(r, "watch"); len(got) != 0 {
 		t.Errorf("explicitly unlimited history was flagged: %+v", got)
+	}
+}
+
+func cfgWithChannel() *config.Config {
+	cfg := &config.Config{}
+	cfg.Notify.Telegram = &notify.TelegramConfig{BotToken: "t", ChatID: "c"}
+	return cfg
+}
+
+// The person this fails is the one who did the work: configured a channel,
+// tested it, installed the service, and is covered except for a flag nobody
+// told them about.
+func TestConfiguredChannelWithWatchNotificationsOffIsAWarning(t *testing.T) {
+	dir := watchDirWith(t, watch.Target{Container: "nginx", AddedAt: time.Now()})
+	cfg := cfgWithChannel()
+	cfg.Watch.Notify.Enabled = false
+
+	r := &Result{}
+	checkWatchNotifications(r, cfg, dir)
+
+	got := findingsFor(r, "notifications")
+	if len(got) != 1 || got[0].Severity != SeverityWarn {
+		t.Fatalf("expected one warning, got %+v", got)
+	}
+	if !strings.Contains(got[0].Detail, "nothing is sent anywhere") {
+		t.Errorf("the finding does not say what does not happen: %q", got[0].Detail)
+	}
+}
+
+// notify_on: flapping is the default and means a single restart is silent.
+// Correct behaviour, and not something an operator can infer.
+func TestEnabledNotificationsSayWhatWillNotBeSent(t *testing.T) {
+	dir := watchDirWith(t, watch.Target{Container: "nginx", AddedAt: time.Now()})
+	cfg := cfgWithChannel()
+	cfg.Watch.Notify.Enabled = true
+	cfg.Watch.Notify.NotifyOn = "flapping"
+
+	r := &Result{}
+	checkWatchNotifications(r, cfg, dir)
+
+	got := findingsFor(r, "notifications")
+	if len(got) != 1 || got[0].Severity != SeverityPass {
+		t.Fatalf("expected one pass, got %+v", got)
+	}
+	if !strings.Contains(got[0].Detail, "single restart is recorded but not sent") {
+		t.Errorf("the pass does not say what stays silent: %q", got[0].Detail)
+	}
+}
+
+// checkNotifications already covers "no channel at all". Two findings about
+// one gap is how a report becomes noise.
+func TestNoChannelIsNotReportedTwice(t *testing.T) {
+	dir := watchDirWith(t, watch.Target{Container: "nginx", AddedAt: time.Now()})
+	r := &Result{}
+	checkWatchNotifications(r, &config.Config{}, dir)
+	if got := findingsFor(r, "notifications"); len(got) != 0 {
+		t.Errorf("an unconfigured channel was reported here too: %+v", got)
+	}
+}
+
+// Nothing on the watch list means nothing to be silent about.
+func TestEmptyWatchListSaysNothingAboutNotifications(t *testing.T) {
+	cfg := cfgWithChannel()
+	r := &Result{}
+	checkWatchNotifications(r, cfg, watchDirWith(t))
+	if got := findingsFor(r, "notifications"); len(got) != 0 {
+		t.Errorf("an empty watch list produced %+v", got)
 	}
 }

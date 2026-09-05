@@ -18,7 +18,7 @@ func newDoctorCmd() *cobra.Command {
 		Short: "Diagnose homelab health, exposure, backups, and readiness",
 		Long: `Run a read-only diagnosis for the things that usually hurt self-hosted servers:
 resource pressure, stopped containers, public bind ports, backup hygiene,
-notification readiness, report baseline status, whether anything is installed
+notification readiness including whether watch will actually send anything, report baseline status, whether anything is installed
 to watch what you asked it to watch, config file permissions, containers that
 mount the Docker socket, Proxmox endpoints that accept any certificate, incident
 history nearing its limit, and configured Proxmox endpoint reachability.`,
