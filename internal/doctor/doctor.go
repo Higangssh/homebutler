@@ -574,8 +574,8 @@ func checkReportBaseline(r *Result, snapshotDir string) {
 }
 
 // checkProxmox diagnoses each configured Proxmox endpoint with read-only
-// requests. It reports one finding per endpoint and keeps TLS, authentication,
-// authorization, and transport failures distinguishable rather than
+// requests. It reports one finding per endpoint and keeps configuration, TLS,
+// authentication, authorization, response, and transport failures distinguishable rather than
 // collapsing them into a single "unavailable" result, per #105 and #111.
 func checkProxmox(r *Result, cfg *config.Config, openFn func(config.ProxmoxConfig) (*proxmox.Client, error)) {
 	if cfg == nil || len(cfg.Proxmox) == 0 {
@@ -618,12 +618,16 @@ func checkProxmoxEndpoint(r *Result, name string, client *proxmox.Client, comman
 // token to Administrator just to make a check pass (#105).
 func proxmoxFailureAction(err error) string {
 	switch proxmox.Classify(err) {
+	case proxmox.FailureConfiguration:
+		return "Check the endpoint configuration fields: host, port, timeout, token ID and token, fingerprint, and CA file."
 	case proxmox.FailureTLS:
 		return "Check the configured certificate trust: the fingerprint or CA file against the endpoint's actual certificate."
 	case proxmox.FailureAuthentication:
 		return "Check the token ID, the token value, and the token file's ownership and permissions; the token may be missing, unreadable, or revoked."
 	case proxmox.FailureAuthorization:
 		return "Check that the read-only PVEAuditor role is applied to both the API user and the privilege-separated token. Do not grant Administrator to make this pass."
+	case proxmox.FailureResponse:
+		return "Check that the configured host and port serve the Proxmox API, not a reverse-proxy error page."
 	case proxmox.FailureTransport:
 		return "Check network reachability to the configured host and port, and any firewall rules in between."
 	default:

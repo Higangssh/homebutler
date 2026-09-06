@@ -180,6 +180,29 @@ func TestCheckProxmox_TokenFileUnreadableIsFail(t *testing.T) {
 	}
 }
 
+func TestCheckProxmox_ConfigurationFailureNamesFields(t *testing.T) {
+	cfg := &config.Config{Proxmox: []config.ProxmoxConfig{{Name: "home"}}}
+	r := &Result{}
+	checkProxmox(r, cfg, func(config.ProxmoxConfig) (*proxmox.Client, error) {
+		return nil, proxmox.WithFailureClass(proxmox.FailureConfiguration, fmt.Errorf("proxmox host is required"))
+	})
+
+	f := findTitle(r.Findings, `Proxmox endpoint "home" could not be configured`)
+	if f == nil || f.Severity != SeverityFail {
+		t.Fatalf("expected configuration finding, got: %#v", r.Findings)
+	}
+	if !strings.Contains(f.Action, "host, port, timeout") || !strings.Contains(f.Action, "CA file") {
+		t.Fatalf("expected configuration action naming fields, got: %q", f.Action)
+	}
+}
+
+func TestProxmoxFailureAction_Response(t *testing.T) {
+	action := proxmoxFailureAction(proxmox.WithFailureClass(proxmox.FailureResponse, fmt.Errorf("decode Proxmox response")))
+	if !strings.Contains(action, "Proxmox API") || !strings.Contains(action, "reverse-proxy") {
+		t.Fatalf("response action = %q", action)
+	}
+}
+
 func TestCheckProxmox_NoEndpointsIsSilent(t *testing.T) {
 	r := &Result{}
 	checkProxmox(r, &config.Config{}, openProxmoxEndpoint)

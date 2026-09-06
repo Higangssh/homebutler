@@ -70,6 +70,8 @@
       tls: 'TLS verification failed',
       authentication: 'Authentication failed',
       authorization: 'Authorization/ACL failure',
+      configuration: 'Configuration failed',
+      response: 'Unexpected endpoint response',
       transport: 'Transport failure',
     }[value] || '';
   }

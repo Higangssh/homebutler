@@ -112,8 +112,9 @@ docker/systemd/pm2 targets — no separate scheduler or long-running command.
 It reports three kinds of state transition, each with a recovery incident
 when the problem clears:
 
-- the endpoint became unreachable (TLS, authentication/token expiry, or
-  transport/timeout failures)
+- the endpoint became unavailable because of configuration, TLS,
+  authentication/token expiry, an unexpected response, or transport/timeout
+  failures
 - the endpoint authenticated but returned nothing at all, or a 403 — recorded
   as ACL-filtered, because `proxmox status` treats an empty resource list as a
   permissions problem rather than a genuinely empty cluster

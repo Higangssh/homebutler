@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### ✨ Features
+
+- add `configuration` and `response` Proxmox failure classes (#149). The dashboard labels the precise class, doctor names the configuration fields to check, and watch records it
+
+### ⚠️ Behavior changes
+
+- **Malformed fingerprints and unreadable CA files now report as `configuration` rather than `tls`.** Proxmox incident history, alerts, and `/api/proxmox/status` consumers that match `tls` should also handle `configuration`.
+
 ## [0.28.0](https://github.com/Higangssh/homebutler/compare/v0.27.0...v0.28.0) - 2026-09-05
 **`doctor` knew six things it never said, and the dashboard could show you yesterday's cluster without mentioning that it was yesterday's.** Nothing was installed to poll the watch list; notifications were configured and switched off; a config holding plaintext secrets was readable by everyone; a container held the Docker socket, which is host root wearing a container's clothes; an endpoint had been left accepting any certificate after a debugging session; incident history was one restart from discarding the oldest. Every one of those was already in data homebutler had.
 

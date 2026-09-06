@@ -186,8 +186,8 @@ func TestProxmoxMonitorEndpointUnavailableAndRecovered(t *testing.T) {
 	if len(got) != 2 {
 		t.Fatalf("incidents = %d, want 2: %+v", len(got), got)
 	}
-	if got[0].ProxmoxState != ProxmoxStateUnavailable || got[0].ProxmoxClass != string(proxmox.FailureTransport) || got[0].Recovered {
-		t.Errorf("first incident = %+v, want unrecovered unavailable/transport", got[0])
+	if got[0].ProxmoxState != ProxmoxStateUnavailable || got[0].ProxmoxClass != string(proxmox.FailureResponse) || got[0].Recovered {
+		t.Errorf("first incident = %+v, want unrecovered unavailable/response", got[0])
 	}
 	if !got[1].Recovered || got[1].ProxmoxState != ProxmoxStateUnavailable {
 		t.Errorf("second incident = %+v, want recovered unavailable", got[1])
@@ -233,6 +233,16 @@ func TestProxmoxMonitorAuthorizationFailureIsACLFiltered(t *testing.T) {
 	}
 	if got[0].ProxmoxState != ProxmoxStateACLFiltered || got[0].ProxmoxClass != string(proxmox.FailureAuthorization) {
 		t.Errorf("incident = %+v, want acl_filtered/authorization", got[0])
+	}
+}
+
+func TestProxmoxMonitorConfigurationAndResponseFailuresKeepTheirClasses(t *testing.T) {
+	pm := &ProxmoxMonitor{}
+	for _, class := range []proxmox.FailureClass{proxmox.FailureConfiguration, proxmox.FailureResponse} {
+		state := pm.endpointState(proxmox.WithFailureClass(class, fmt.Errorf("fixture")))
+		if state.state != ProxmoxStateUnavailable || state.class != string(class) {
+			t.Errorf("state for %q = %+v, want unavailable/%q", class, state, class)
+		}
 	}
 }
 

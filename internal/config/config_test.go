@@ -249,8 +249,8 @@ func TestProxmoxConfigTokenValue(t *testing.T) {
 	if got, err := inline.TokenValue(); err != nil || got != "inline-token" {
 		t.Errorf("TokenValue() = (%q, %v), want (inline-token, nil)", got, err)
 	}
-	if _, err := (ProxmoxConfig{}).TokenValue(); err == nil {
-		t.Error("TokenValue() should fail without a token source")
+	if _, err := (ProxmoxConfig{}).TokenValue(); err == nil || proxmox.Classify(err) != proxmox.FailureConfiguration {
+		t.Errorf("TokenValue() error = %v, want configuration error without a token source", err)
 	}
 
 	if _, err := (ProxmoxConfig{TokenFile: filepath.Join(dir, "missing"), Token: "inline-secret"}).TokenValue(); err == nil {
@@ -289,8 +289,8 @@ func TestProxmoxConfigActionTokenValue(t *testing.T) {
 	if got, err := inline.ActionTokenValue(); err != nil || got != "inline-action-token" {
 		t.Errorf("ActionTokenValue() = (%q, %v), want (inline-action-token, nil)", got, err)
 	}
-	if _, err := (ProxmoxConfig{}).ActionTokenValue(); err == nil {
-		t.Error("ActionTokenValue() should fail without an action token source")
+	if _, err := (ProxmoxConfig{}).ActionTokenValue(); err == nil || proxmox.Classify(err) != proxmox.FailureConfiguration {
+		t.Errorf("ActionTokenValue() error = %v, want configuration error without an action token source", err)
 	}
 
 	if _, err := (ProxmoxConfig{ActionTokenFile: filepath.Join(dir, "missing"), ActionToken: "inline-secret"}).ActionTokenValue(); err == nil {
@@ -326,8 +326,8 @@ func TestProxmoxConfigResolveCredential(t *testing.T) {
 	}
 	if _, _, err := readOnly.ResolveCredential(true); err == nil || !strings.Contains(err.Error(), "no action credential configured") {
 		t.Errorf("ResolveCredential(true) without an action credential = %v, want a 'no action credential configured' error", err)
-	} else if class := proxmox.Classify(err); class != proxmox.FailureAuthentication {
-		t.Errorf("Classify(ResolveCredential(true) error) = %q, want %q", class, proxmox.FailureAuthentication)
+	} else if class := proxmox.Classify(err); class != proxmox.FailureConfiguration {
+		t.Errorf("Classify(ResolveCredential(true) error) = %q, want %q", class, proxmox.FailureConfiguration)
 	}
 
 	withAction := readOnly
@@ -337,8 +337,8 @@ func TestProxmoxConfigResolveCredential(t *testing.T) {
 		t.Errorf("ResolveCredential(true) = (%q, %q, %v), want (monitoring@pve!action, action-token, nil)", tokenID, token, err)
 	}
 
-	if _, _, err := (ProxmoxConfig{Name: "pve"}).ResolveCredential(false); err == nil {
-		t.Error("ResolveCredential(false) should fail without a read token source")
+	if _, _, err := (ProxmoxConfig{Name: "pve"}).ResolveCredential(false); err == nil || proxmox.Classify(err) != proxmox.FailureConfiguration {
+		t.Errorf("ResolveCredential(false) error = %v, want configuration error without a read token source", err)
 	}
 }
 
