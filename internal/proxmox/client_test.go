@@ -606,6 +606,26 @@ func TestFailureClassification(t *testing.T) {
 	})
 
 	for _, tt := range []struct {
+		name   string
+		status int
+		body   string
+	}{
+		{name: "unexpected status", status: http.StatusBadGateway, body: "<html>upstream unavailable</html>"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				w.WriteHeader(tt.status)
+				_, _ = w.Write([]byte(tt.body))
+			}))
+			defer server.Close()
+			_, err := testClient(t, server.URL).Version(context.Background())
+			if Classify(err) != FailureResponse {
+				t.Fatalf("Classify(%v) = %q, want %q", err, Classify(err), FailureResponse)
+			}
+		})
+	}
+
+	for _, tt := range []struct {
 		name string
 		body string
 	}{

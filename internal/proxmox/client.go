@@ -384,11 +384,8 @@ func (c *Client) DefaultView(ctx context.Context) (DefaultView, error) {
 	return view, nil
 }
 
-// fail records a collector's failure and keeps the first error whose class
-// can actually guide the operator: a later classified error (say, resources
-// coming back 403 after version failed to decode for an unrelated reason)
-// outranks an earlier unclassified one, since only the classified error
-// produces an action worth acting on.
+// fail records a collector's failure and keeps the first classified one for
+// callers that need a single operator action.
 func (v *DefaultView) fail(collector string, err error) {
 	v.Warnings = append(v.Warnings, collector+": "+err.Error())
 	v.Failed = append(v.Failed, collector)
@@ -481,7 +478,7 @@ func httpFailureClass(statusCode int) FailureClass {
 	case http.StatusForbidden:
 		return FailureAuthorization
 	default:
-		return ""
+		return FailureResponse
 	}
 }
 

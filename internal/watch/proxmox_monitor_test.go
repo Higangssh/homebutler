@@ -186,8 +186,8 @@ func TestProxmoxMonitorEndpointUnavailableAndRecovered(t *testing.T) {
 	if len(got) != 2 {
 		t.Fatalf("incidents = %d, want 2: %+v", len(got), got)
 	}
-	if got[0].ProxmoxState != ProxmoxStateUnavailable || got[0].ProxmoxClass != string(proxmox.FailureTransport) || got[0].Recovered {
-		t.Errorf("first incident = %+v, want unrecovered unavailable/transport", got[0])
+	if got[0].ProxmoxState != ProxmoxStateUnavailable || got[0].ProxmoxClass != string(proxmox.FailureResponse) || got[0].Recovered {
+		t.Errorf("first incident = %+v, want unrecovered unavailable/response", got[0])
 	}
 	if !got[1].Recovered || got[1].ProxmoxState != ProxmoxStateUnavailable {
 		t.Errorf("second incident = %+v, want recovered unavailable", got[1])

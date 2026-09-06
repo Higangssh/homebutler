@@ -72,9 +72,9 @@ describe('Proxmox freshness states', () => {
     expect(document.body.textContent).not.toContain('monitoring@pve!readonly');
   });
 
-  it('shows configuration failures as not configured without rendering data', async () => {
+  it('labels configuration failures without rendering data', async () => {
     const status = await show({ status: 'unavailable', failure_class: 'configuration' });
-    expect(status.textContent.replace(/\s+/g, ' ').trim()).toBe('Proxmox is not configured');
+    expect(status.textContent.replace(/\s+/g, ' ').trim()).toBe('Unavailable · Configuration failed');
     expect(screen.queryByRole('table')).toBeNull();
   });
 

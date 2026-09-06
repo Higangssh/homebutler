@@ -250,7 +250,7 @@ func (p ProxmoxConfig) ActionTokenFilePath() string {
 func (p ProxmoxConfig) ActionTokenValue() (string, error) {
 	if p.ActionTokenFile == "" {
 		if p.ActionToken == "" {
-			return "", fmt.Errorf("proxmox action token is not configured")
+			return "", proxmox.WithFailureClass(proxmox.FailureConfiguration, fmt.Errorf("proxmox action token is not configured"))
 		}
 		return p.ActionToken, nil
 	}
@@ -279,7 +279,7 @@ func (p ProxmoxConfig) ResolveCredential(action bool) (tokenID, token string, er
 		return p.TokenID, token, nil
 	}
 	if !p.HasActionCredential() {
-		return "", "", proxmox.WithFailureClass(proxmox.FailureAuthentication,
+		return "", "", proxmox.WithFailureClass(proxmox.FailureConfiguration,
 			fmt.Errorf("no action credential configured for Proxmox endpoint %q; guest actions require action_token_id and action_token or action_token_file — see docs/proxmox.md", p.Name))
 	}
 	token, err = p.ActionTokenValue()
