@@ -8,6 +8,10 @@ All notable changes to this project will be documented in this file.
 
 - add `configuration` and `response` Proxmox failure classes (#149). The dashboard labels the precise class, doctor names the configuration fields to check, and watch records it
 
+### 🐛 Fixes
+
+- say the dashboard is missing instead of listing a directory when the binary was built without it (#152). `go install` and a plain `go build` embed `web_dist` with only its tracked `.gitkeep`, which counted as content, so `serve` answered `/` with an autoindex of one dotfile. "Built" now means `index.html` is present, and the page names the repair for each route in: the release binaries and `install.sh` ship the dashboard, a checkout gets it with `make build-all`
+
 ### ⚠️ Behavior changes
 
 - **Malformed fingerprints and unreadable CA files now report as `configuration` rather than `tls`.** Proxmox incident history, alerts, and `/api/proxmox/status` consumers that match `tls` should also handle `configuration`.

@@ -186,7 +186,7 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("OPTIONS /api/", s.handleOptions)
 
 	// Serve frontend static files
-	s.mux.Handle("/", s.frontendHandler())
+	s.mux.Handle("/", frontendHandler(webFS))
 }
 
 func (s *Server) cors(next http.HandlerFunc) http.HandlerFunc {
@@ -620,19 +620,15 @@ func (s *Server) handleServerStatus(w http.ResponseWriter, r *http.Request) {
 	w.Write(out)
 }
 
-func (s *Server) frontendHandler() http.Handler {
-	// Check if embedded web_dist has content
-	entries, err := webFS.ReadDir("web_dist")
-	if err != nil || len(entries) == 0 {
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			w.Header().Set("Content-Type", "text/html; charset=utf-8")
-			w.Write([]byte(fallbackHTML))
-		})
+// frontendHandler serves the dashboard embedded under web_dist in web. A binary
+// built without the dashboard still embeds the tracked .gitkeep, so "built"
+// means index.html is present, not that the directory has entries.
+func frontendHandler(web fs.FS) http.Handler {
+	sub, err := fs.Sub(web, "web_dist")
+	if err == nil {
+		_, err = fs.Stat(sub, "index.html")
 	}
-
-	sub, err := fs.Sub(webFS, "web_dist")
 	if err != nil {
-		log.Printf("warning: failed to access embedded web files: %v", err)
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Content-Type", "text/html; charset=utf-8")
 			w.Write([]byte(fallbackHTML))
@@ -682,8 +678,11 @@ const fallbackHTML = `<!DOCTYPE html>
 <body style="background:#0d1117;color:#c9d1d9;font-family:monospace;display:flex;justify-content:center;align-items:center;height:100vh;margin:0">
 <div style="text-align:center">
 <h1 style="color:#58a6ff">homebutler</h1>
-<p>Web dashboard not built yet.</p>
-<pre style="background:#161b22;padding:1em;border-radius:6px">make build-web</pre>
+<p>This binary was built without the web dashboard.</p>
+<p>Installed with <code>go install</code>? The <a href="https://github.com/Higangssh/homebutler/releases" style="color:#58a6ff">release binaries</a> ship it:</p>
+<pre style="background:#161b22;padding:1em;border-radius:6px">curl -fsSL https://raw.githubusercontent.com/Higangssh/homebutler/main/install.sh | sh</pre>
+<p>Building from a checkout? Compile the dashboard in and rebuild:</p>
+<pre style="background:#161b22;padding:1em;border-radius:6px">make build-all</pre>
 </div>
 </body>
 </html>`

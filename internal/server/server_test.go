@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"testing/fstest"
 
 	"github.com/Higangssh/homebutler/internal/config"
 )
@@ -341,10 +342,12 @@ func TestDockerEndpointReturnsJSON(t *testing.T) {
 }
 
 func TestFrontendFallback(t *testing.T) {
-	srv := testServer()
+	// go install and a plain go build embed web_dist with only its tracked
+	// .gitkeep; that must not turn into a directory listing.
+	h := frontendHandler(fstest.MapFS{"web_dist/.gitkeep": {}})
 	req := httptest.NewRequest("GET", "/", nil)
 	w := httptest.NewRecorder()
-	srv.Handler().ServeHTTP(w, req)
+	h.ServeHTTP(w, req)
 
 	if w.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d", w.Code)
@@ -352,9 +355,8 @@ func TestFrontendFallback(t *testing.T) {
 	if ct := w.Header().Get("Content-Type"); ct != "text/html; charset=utf-8" {
 		t.Fatalf("expected text/html, got %s", ct)
 	}
-	body := w.Body.String()
-	if len(body) == 0 {
-		t.Fatal("expected non-empty HTML body")
+	if got := w.Body.String(); got != fallbackHTML {
+		t.Fatalf("expected fallback page, got %q", got)
 	}
 }
 
@@ -1574,14 +1576,17 @@ func TestHandleServerStatus_RemoteInvalidJSON(t *testing.T) {
 // --- SPA fallback ---
 
 func TestSPAFallback_UnknownPath(t *testing.T) {
-	srv := testServer()
+	const index = "<!DOCTYPE html><title>dashboard</title>"
+	h := frontendHandler(fstest.MapFS{"web_dist/index.html": {Data: []byte(index)}})
 	req := httptest.NewRequest("GET", "/some/unknown/path", nil)
 	w := httptest.NewRecorder()
-	srv.Handler().ServeHTTP(w, req)
+	h.ServeHTTP(w, req)
 
-	// Should serve index.html (or fallback HTML) with 200
 	if w.Code != http.StatusOK {
 		t.Fatalf("expected 200 for SPA fallback, got %d", w.Code)
+	}
+	if got := w.Body.String(); got != index {
+		t.Fatalf("expected index.html, got %q", got)
 	}
 }
 
