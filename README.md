@@ -898,8 +898,13 @@ go install github.com/Higangssh/homebutler@latest
 ```bash
 git clone https://github.com/Higangssh/homebutler.git
 cd homebutler
-make build
+make build-all
 ```
+
+`make build-all` compiles the web dashboard into the binary and needs Node
+installed. `make build` skips it — the CLI is complete either way, and
+`homebutler serve` then says the dashboard is missing and names the two ways
+to get it.
 
 ## Uninstall
 
