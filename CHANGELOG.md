@@ -2,7 +2,17 @@
 
 All notable changes to this project will be documented in this file.
 
-## [Unreleased]
+## [0.29.0](https://github.com/Higangssh/homebutler/compare/v0.28.0...v0.29.0) - 2026-09-09
+**Twice homebutler answered with something the reader could not act on.** A binary built without the dashboard — `go install`, or `make build` from a checkout — still embedded the tracked `.gitkeep`, which counted as content, so `serve` answered `/` with a directory listing of one dotfile and the page written to explain exactly that could not be reached. A malformed fingerprint or an unreadable CA file left Proxmox with no failure class at all, so the dashboard, `doctor` and `watch` each decided separately what a config mistake meant.
+
+```
+$ go install github.com/Higangssh/homebutler@latest
+$ homebutler serve
+$ curl -s localhost:8080/
+<pre>
+<a href=".gitkeep">.gitkeep</a>
+</pre>
+```
 
 ### ✨ Features
 
