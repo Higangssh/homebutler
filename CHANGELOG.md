@@ -6,7 +6,7 @@ All notable changes to this project will be documented in this file.
 
 ### 🐛 Fixes
 
-- parse older incident filenames so prune and doctor agree on what counts (#174). Filenames without the millisecond and hex suffix — the form homebutler wrote before the current layout — were skipped by `ListIncidentRefs`, so `max_incidents` never reached them and `doctor`'s incident count under-reported the directory. Both shapes are named explicitly now; a name that fits neither is still left alone
+- parse older incident filenames so prune and doctor agree on what counts (#169). Filenames without the millisecond and hex suffix — the form homebutler wrote before the current layout — were skipped by `ListIncidentRefs`, so `max_incidents` never reached them and `doctor`'s incident count under-reported the directory. Both shapes are named explicitly now; a name that fits neither is still left alone
 
 ### ⚠️ Behavior changes
 
