@@ -2,7 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
-## [Unreleased]
+## [0.30.0](https://github.com/Higangssh/homebutler/compare/v0.29.1...v0.30.0) - 2026-09-12
+**The dashboard was the least capable interface homebutler ships, and switching on authentication broke it outright.** An agent could list containers, read incident history, run a backup drill and shut down a Proxmox guest. A person with the dashboard open got six cards, no view of anything `watch` had recorded, and — if the server was started with `--token`, which is the only supported way to reach it from another machine — a page that loaded and then failed every request inside it.
+
+```
+GET /api/capabilities
+  40 capabilities · 10 reachable from the dashboard · 30 carrying a recorded reason why not
+```
 
 ### ✨ Features
 
