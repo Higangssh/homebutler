@@ -34,6 +34,41 @@ jobs:
         with:
           version: latest
 
+  e2e:
+    name: End-to-end
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.26"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      # No make build-web here: the suite serves the frontend with vite and
+      # points it at a real `homebutler serve --demo`, so a component change
+      # does not have to be built and embedded before it can be tested. The
+      # embedded path is covered by the Go tests instead.
+      - name: Install web dependencies
+        run: npm --prefix web install
+
+      - name: Install Chromium
+        run: npx --prefix web playwright install --with-deps chromium
+
+      - name: End-to-end tests
+        run: npm --prefix web run e2e
+
+      - name: Upload the report when something fails
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: web/playwright-report/
+          retention-days: 7
+
   test:
     name: Test
     runs-on: ubuntu-latest
