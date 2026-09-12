@@ -2,7 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
-## [Unreleased]
+## [0.29.1](https://github.com/Higangssh/homebutler/compare/v0.29.0...v0.29.1) - 2026-09-12
+**`init` sent every new user's second command to an error.** The wizard has offered `homebutler tui` since the day after the TUI was added, and no version has ever had that command — the TUI was `homebutler watch` at the time and is `homebutler watch tui` now. It survived six months because the screen appears once, on a machine being set up for the first time, and the people who saw it had no reason to assume the tool was wrong rather than themselves.
+
+```
+  Try it out:
+    homebutler status
+    homebutler watch tui
+```
 
 ### 🐛 Fixes
 
