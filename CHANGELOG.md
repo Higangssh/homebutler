@@ -2,6 +2,17 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### 🐛 Fixes
+
+- parse older incident filenames so prune and doctor agree on what counts (#174). Filenames without the millisecond and hex suffix — the form homebutler wrote before the current layout — were skipped by `ListIncidentRefs`, so `max_incidents` never reached them and `doctor`'s incident count under-reported the directory. Both shapes are named explicitly now; a name that fits neither is still left alone
+
+### ⚠️ Behavior changes
+
+- **Older-format incident files are pruning candidates.** `PruneIncidents` previously only deleted names it could parse in the current layout, so April-era files like `ghostmeet-backend-1-20260410-174933.json` were immortal. After this they count toward `max_incidents` and can be removed on the next `SaveIncident` when over the limit — data the operator cannot get back. Upgrade with a full incidents directory in mind.
+- **`doctor`'s `N of M incidents kept` can rise on an unchanged directory.** It now counts every parseable name, including the older form, so a `--strict` cron that was green can start warning without anyone touching the machine.
+
 ## [0.30.0](https://github.com/Higangssh/homebutler/compare/v0.29.1...v0.30.0) - 2026-09-12
 **The dashboard was the least capable interface homebutler ships, and switching on authentication broke it outright.** An agent could list containers, read incident history, run a backup drill and shut down a Proxmox guest. A person with the dashboard open got six cards, no view of anything `watch` had recorded, and — if the server was started with `--token`, which is the only supported way to reach it from another machine — a page that loaded and then failed every request inside it.
 

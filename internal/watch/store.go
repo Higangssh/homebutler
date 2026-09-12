@@ -222,10 +222,10 @@ func SaveIncident(dir string, inc *Incident, keep int) error {
 // PruneIncidents deletes the oldest incidents until at most keep remain, and
 // reports how many it removed. keep of zero or less keeps everything.
 //
-// Files whose names do not fit any incident format homebutler has written are
-// left alone: ListIncidentRefs skips them, so they are never selected for
-// deletion. That still covers both the current name and the older
-// container-timestamp form without milliseconds or a suffix.
+// Files whose names fit neither the current layout
+// (container-YYYYMMDD-HHMMSS.mmm-hex) nor the older container-timestamp form
+// without milliseconds or a suffix are left alone: ListIncidentRefs skips
+// them, so they are never selected for deletion.
 func PruneIncidents(dir string, keep int) (int, error) {
 	if keep <= 0 {
 		return 0, nil
