@@ -177,9 +177,30 @@ jobs:
       # mcpName field back out of the published npm package, so this cannot run
       # before the npm publish above succeeds. The manifest was stamped and
       # validated before anything was published; this publishes that same copy.
+      #
+      # npm answers the publish before it serves the version - "your package is
+      # being processed and may take a few minutes to become available" - and
+      # the registry resolves the package itself, so it 400s on a version npm
+      # has accepted and is not serving yet. v0.29.1 failed 1.7 seconds after a
+      # successful publish. This is the one check that cannot be moved ahead of
+      # the publish, so it waits for the thing it depends on instead.
       - name: Publish to MCP Registry
         if: steps.npm.outputs.published == 'true'
         run: |
+          TAG=${GITHUB_REF#refs/tags/v}
+
+          for attempt in $(seq 1 30); do
+            if curl -fs -o /dev/null "https://registry.npmjs.org/homebutler/$TAG"; then
+              echo "npm is serving $TAG after ${attempt} attempt(s)"
+              break
+            fi
+            if [ "$attempt" -eq 30 ]; then
+              echo "::error::npm has not served $TAG after 5 minutes; the registry would reject it"
+              exit 1
+            fi
+            sleep 10
+          done
+
           cd "$RUNNER_TEMP/registry"
           ./mcp-publisher login github-oidc
           ./mcp-publisher publish
