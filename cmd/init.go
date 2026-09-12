@@ -206,17 +206,37 @@ func runInit() error {
 	fmt.Println("  🔐 Config permissions set to 600 (owner-only)")
 	fmt.Println("  💡 Prefer SSH keys over password auth when possible")
 	fmt.Println()
-	fmt.Println("  Try it out:")
-	fmt.Println("    homebutler status")
-	fmt.Println("    homebutler tui")
-	fmt.Println()
-	// The second interaction is the one that sells a change-detection tool, and
-	// it only happens if something is running when nothing is watched by hand.
-	fmt.Println("  Then keep it watching, so it can tell you what changed:")
-	fmt.Println("    homebutler watch add <container>")
-	fmt.Println("    homebutler watch install")
-	fmt.Println()
+	for _, step := range nextSteps {
+		fmt.Printf("  %s\n", step.heading)
+		for _, command := range step.commands {
+			fmt.Printf("    homebutler %s\n", command)
+		}
+		fmt.Println()
+	}
 	return nil
+}
+
+// nextSteps is what init offers once the config is written. The commands are
+// data rather than Println calls so that TestNextStepsResolve can look each one
+// up in the command tree: `homebutler tui` was printed here from the day the
+// wizard was written and has never been a command (#159). This screen appears
+// on a machine being set up for the first time and nobody runs it twice, which
+// is why it went six months without anyone saying so.
+var nextSteps = []struct {
+	heading  string
+	commands []string
+}{
+	{
+		heading:  "Try it out:",
+		commands: []string{"status", "watch tui"},
+	},
+	{
+		// The second interaction is the one that sells a change-detection tool,
+		// and it only happens if something is running when nothing is watched
+		// by hand.
+		heading:  "Then keep it watching, so it can tell you what changed:",
+		commands: []string{"watch add <container>", "watch install"},
+	},
 }
 
 func promptRemoteServer(scanner *bufio.Scanner, home string) (*config.ServerConfig, error) {
