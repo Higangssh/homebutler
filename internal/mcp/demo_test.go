@@ -3,6 +3,8 @@ package mcp
 import (
 	"testing"
 
+	"github.com/Higangssh/homebutler/internal/capability"
+
 	"github.com/Higangssh/homebutler/internal/config"
 )
 
@@ -79,23 +81,23 @@ func TestEveryAdvertisedToolHasADemoImplementation(t *testing.T) {
 		"slug":     "docker",
 	}
 
-	for _, c := range capabilityRegistry {
+	for _, c := range capability.Registry {
 		args := map[string]any{}
-		for prop := range c.tool.InputSchema.Properties {
+		for prop := range c.Tool.InputSchema.Properties {
 			if v, ok := sample[prop]; ok {
 				args[prop] = v
 			}
 		}
 		// Every required argument has to be covered, or the tool is not really
 		// being exercised.
-		for _, req := range c.tool.InputSchema.Required {
+		for _, req := range c.Tool.InputSchema.Required {
 			if _, ok := args[req]; !ok {
-				t.Fatalf("tool %q requires argument %q; add a sample value to this test", c.tool.Name, req)
+				t.Fatalf("tool %q requires argument %q; add a sample value to this test", c.Tool.Name, req)
 			}
 		}
 
-		if _, err := s.executeDemoTool(c.tool.Name, args); err != nil {
-			t.Errorf("demo mode advertises %q but calling it fails: %v", c.tool.Name, err)
+		if _, err := s.executeDemoTool(c.Tool.Name, args); err != nil {
+			t.Errorf("demo mode advertises %q but calling it fails: %v", c.Tool.Name, err)
 		}
 	}
 }

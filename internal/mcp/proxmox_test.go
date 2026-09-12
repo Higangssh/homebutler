@@ -11,6 +11,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/Higangssh/homebutler/internal/capability"
+
 	"github.com/Higangssh/homebutler/internal/config"
 	"github.com/Higangssh/homebutler/internal/proxmox"
 )
@@ -101,11 +103,11 @@ func TestProxmoxToolSelectionAndArguments(t *testing.T) {
 
 func TestProxmoxToolDefinitionsAreReadOnlyAPIEndpoints(t *testing.T) {
 	for _, name := range []string{"proxmox_status", "proxmox_guests", "proxmox_node", "proxmox_tasks"} {
-		cap, ok := capabilityFor(name)
+		cap, ok := capability.For(name)
 		if !ok {
 			t.Fatalf("%s is not registered", name)
 		}
-		if cap.risk != riskRead || !cap.supports(targetProxmox) || cap.supports(targetLocal) || cap.supports(targetServer) {
+		if cap.Risk != capability.RiskRead || !cap.Supports(capability.TargetProxmox) || cap.Supports(capability.TargetLocal) || cap.Supports(capability.TargetServer) {
 			t.Errorf("%s capability = %#v", name, cap)
 		}
 	}
@@ -199,29 +201,29 @@ func TestProxmoxGuestActionRequiresActionCredential(t *testing.T) {
 func TestProxmoxPhase2CapabilityMetadataAndSchemas(t *testing.T) {
 	tests := []struct {
 		name     string
-		risk     capabilityRisk
+		risk     capability.Risk
 		required []string
 	}{
-		{name: "proxmox_guest_start", risk: riskWrite, required: []string{"endpoint", "node", "type", "vmid", "confirm"}},
-		{name: "proxmox_guest_reboot", risk: riskWrite, required: []string{"endpoint", "node", "type", "vmid", "confirm"}},
-		{name: "proxmox_guest_shutdown", risk: riskDestructive, required: []string{"endpoint", "node", "type", "vmid", "confirm"}},
-		{name: "proxmox_task_status", risk: riskRead, required: []string{"endpoint", "node", "upid"}},
+		{name: "proxmox_guest_start", risk: capability.RiskWrite, required: []string{"endpoint", "node", "type", "vmid", "confirm"}},
+		{name: "proxmox_guest_reboot", risk: capability.RiskWrite, required: []string{"endpoint", "node", "type", "vmid", "confirm"}},
+		{name: "proxmox_guest_shutdown", risk: capability.RiskDestructive, required: []string{"endpoint", "node", "type", "vmid", "confirm"}},
+		{name: "proxmox_task_status", risk: capability.RiskRead, required: []string{"endpoint", "node", "upid"}},
 	}
 	for _, tt := range tests {
-		cap, ok := capabilityFor(tt.name)
+		cap, ok := capability.For(tt.name)
 		if !ok {
 			t.Fatalf("%s is not registered", tt.name)
 		}
-		if cap.risk != tt.risk || !cap.supports(targetProxmox) || cap.supports(targetLocal) || cap.supports(targetServer) {
+		if cap.Risk != tt.risk || !cap.Supports(capability.TargetProxmox) || cap.Supports(capability.TargetLocal) || cap.Supports(capability.TargetServer) {
 			t.Errorf("%s capability = %#v", tt.name, cap)
 		}
-		if got := strings.Join(cap.tool.InputSchema.Required, ","); got != strings.Join(tt.required, ",") {
+		if got := strings.Join(cap.Tool.InputSchema.Required, ","); got != strings.Join(tt.required, ",") {
 			t.Errorf("%s required = %q", tt.name, got)
 		}
 	}
-	start, _ := capabilityFor("proxmox_guest_start")
-	if start.tool.InputSchema.Properties["vmid"].Type != "integer" || start.tool.InputSchema.Properties["confirm"].Type != "boolean" {
-		t.Errorf("action schema = %#v", start.tool.InputSchema)
+	start, _ := capability.For("proxmox_guest_start")
+	if start.Tool.InputSchema.Properties["vmid"].Type != "integer" || start.Tool.InputSchema.Properties["confirm"].Type != "boolean" {
+		t.Errorf("action schema = %#v", start.Tool.InputSchema)
 	}
 }
 

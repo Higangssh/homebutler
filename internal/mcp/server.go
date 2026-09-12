@@ -11,6 +11,7 @@ import (
 
 	"github.com/Higangssh/homebutler/internal/alerts"
 	"github.com/Higangssh/homebutler/internal/backup"
+	"github.com/Higangssh/homebutler/internal/capability"
 	"github.com/Higangssh/homebutler/internal/config"
 	"github.com/Higangssh/homebutler/internal/docker"
 	"github.com/Higangssh/homebutler/internal/doctor"
@@ -150,22 +151,10 @@ type capInfo struct {
 
 type toolsCap struct{}
 
-type toolDef struct {
-	Name        string      `json:"name"`
-	Description string      `json:"description"`
-	InputSchema inputSchema `json:"inputSchema"`
-}
-
-type inputSchema struct {
-	Type       string             `json:"type"`
-	Properties map[string]propDef `json:"properties,omitempty"`
-	Required   []string           `json:"required,omitempty"`
-}
-
-type propDef struct {
-	Type        string `json:"type"`
-	Description string `json:"description"`
-}
+// The tool shape lives in internal/capability now: it describes what a
+// capability is called and what it takes, which is not MCP's to own. Aliases
+// rather than conversions, so the wire format cannot drift from the registry.
+type toolDef = capability.Definition
 
 type toolsListResult struct {
 	ResultType string       `json:"resultType"`
@@ -299,7 +288,7 @@ func (s *Server) handleRequest(req *jsonRPCRequest) {
 	case "tools/list":
 		s.writeResult(req.ID, toolsListResult{
 			ResultType: "complete",
-			Tools:      toolDefinitions(),
+			Tools:      capability.Definitions(),
 			TTLMS:      toolsListTTLMS,
 			CacheScope: "public",
 			Meta:       responseMeta{ServerInfo: serverInfo{Name: "homebutler", Version: s.version}},
@@ -406,7 +395,7 @@ func (s *Server) executeTool(name string, args map[string]any) (any, error) {
 		return s.executeDemoTool(name, args)
 	}
 
-	if cap, ok := capabilityFor(name); ok && cap.supports(targetProxmox) {
+	if cap, ok := capability.For(name); ok && cap.Supports(capability.TargetProxmox) {
 		if stringArg(args, "server") != "" {
 			return nil, fmt.Errorf("tool %q cannot be pointed at a server; use endpoint", name)
 		}
@@ -426,11 +415,11 @@ func (s *Server) executeTool(name string, args map[string]any) (any, error) {
 			// the decision lived in executeRemote's switch default, so the
 			// registry described a behaviour it did not control and the two
 			// could disagree without any test noticing.
-			cap, ok := capabilityFor(name)
+			cap, ok := capability.For(name)
 			if !ok {
 				return nil, fmt.Errorf("unknown tool: %s", name)
 			}
-			if !cap.supports(targetServer) {
+			if !cap.Supports(capability.TargetServer) {
 				return nil, fmt.Errorf("tool %q cannot be pointed at a server", name)
 			}
 			return s.executeRemote(srv, name, args)
@@ -796,7 +785,7 @@ func (s *Server) executeRemote(srv *config.ServerConfig, tool string, args map[s
 		}
 	default:
 		// Unreachable: executeTool checks the registry before routing here.
-		// Kept so a tool added to the registry with targetServer but no argv
+		// Kept so a tool added to the registry with capability.TargetServer but no argv
 		// mapping fails loudly instead of running an empty remote command.
 		return nil, fmt.Errorf("tool %q has no remote command mapping", tool)
 	}

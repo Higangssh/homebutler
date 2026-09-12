@@ -6,26 +6,28 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/Higangssh/homebutler/internal/capability"
+
 	"github.com/Higangssh/homebutler/internal/config"
 )
 
 // Every registry entry declares at least one target. Proxmox is an API target,
 // not the local machine or an SSH server, so its tools deliberately declare
-// only targetProxmox.
+// only capability.TargetProxmox.
 func TestEveryCapabilityDeclaresATarget(t *testing.T) {
-	for _, c := range capabilityRegistry {
-		if len(c.targets) == 0 {
-			t.Errorf("tool %q declares no targets", c.tool.Name)
+	for _, c := range capability.Registry {
+		if len(c.Targets) == 0 {
+			t.Errorf("tool %q declares no targets", c.Tool.Name)
 			continue
 		}
-		if !c.supports(targetLocal) && !c.supports(targetProxmox) {
-			t.Errorf("tool %q declares neither targetLocal nor targetProxmox", c.tool.Name)
+		if !c.Supports(capability.TargetLocal) && !c.Supports(capability.TargetProxmox) {
+			t.Errorf("tool %q declares neither capability.TargetLocal nor capability.TargetProxmox", c.Tool.Name)
 		}
-		for _, k := range c.targets {
+		for _, k := range c.Targets {
 			switch k {
-			case targetLocal, targetServer, targetProxmox:
+			case capability.TargetLocal, capability.TargetServer, capability.TargetProxmox:
 			default:
-				t.Errorf("tool %q declares unknown target %q", c.tool.Name, k)
+				t.Errorf("tool %q declares unknown target %q", c.Tool.Name, k)
 			}
 		}
 	}
@@ -58,25 +60,25 @@ func TestRegistryTargetsMatchRemoteArgvMapping(t *testing.T) {
 		t.Fatal("found no case arms in executeRemote; the regex above needs updating")
 	}
 
-	for _, c := range capabilityRegistry {
-		claims := c.supports(targetServer)
+	for _, c := range capability.Registry {
+		claims := c.Supports(capability.TargetServer)
 		switch {
-		case claims && !mapped[c.tool.Name]:
-			t.Errorf("%q declares targetServer but executeRemote has no argv mapping for it, so pointing it at a server fails after the gate lets it through", c.tool.Name)
-		case !claims && mapped[c.tool.Name]:
-			t.Errorf("%q has an argv mapping in executeRemote but does not declare targetServer, so the gate now rejects it and the mapping is dead", c.tool.Name)
+		case claims && !mapped[c.Tool.Name]:
+			t.Errorf("%q declares capability.TargetServer but executeRemote has no argv mapping for it, so pointing it at a server fails after the gate lets it through", c.Tool.Name)
+		case !claims && mapped[c.Tool.Name]:
+			t.Errorf("%q has an argv mapping in executeRemote but does not declare capability.TargetServer, so the gate now rejects it and the mapping is dead", c.Tool.Name)
 		}
 	}
 
 	for name := range mapped {
-		if _, ok := capabilityFor(name); !ok {
+		if _, ok := capability.For(name); !ok {
 			t.Errorf("executeRemote maps %q, which is not in the capability registry", name)
 		}
 	}
 }
 
 func TestCapabilityForUnknownTool(t *testing.T) {
-	if _, ok := capabilityFor("no_such_tool"); ok {
+	if _, ok := capability.For("no_such_tool"); ok {
 		t.Error("capabilityFor returned a capability for an unregistered tool")
 	}
 }
@@ -119,12 +121,12 @@ func TestUnknownServerStillReportedBeforeTheGate(t *testing.T) {
 // Pointing it at a remote would answer about a different file, so the registry
 // declares it local-only and the gate has to enforce that.
 func TestConfigValidateCannotBePointedAtAServer(t *testing.T) {
-	c, ok := capabilityFor("config_validate")
+	c, ok := capability.For("config_validate")
 	if !ok {
 		t.Fatal("config_validate is not registered")
 	}
-	if c.supports(targetServer) {
-		t.Error("config_validate must not declare targetServer; it would validate a different file than the one asked about")
+	if c.Supports(capability.TargetServer) {
+		t.Error("config_validate must not declare capability.TargetServer; it would validate a different file than the one asked about")
 	}
 
 	s := NewServer(&config.Config{

@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -20,6 +21,7 @@ import (
 	"path/filepath"
 
 	"github.com/Higangssh/homebutler/internal/alerts"
+	"github.com/Higangssh/homebutler/internal/capability"
 	"github.com/Higangssh/homebutler/internal/config"
 	"github.com/Higangssh/homebutler/internal/docker"
 	"github.com/Higangssh/homebutler/internal/ports"
@@ -158,44 +160,113 @@ func (s *Server) routes() {
 		return s.requireAuth(s.cors(h))
 	}
 
+	// The method and path of anything that is a capability come from the
+	// registry rather than from this list, so an endpoint the dashboard can
+	// reach is one the registry says it can reach. This file supplies the
+	// implementation and nothing else; TestEveryExposedCapabilityHasAHandler
+	// pins that the two sets match, in both modes.
+	handlers := s.capabilityHandlers()
+	for _, c := range capability.Registry {
+		if !c.Exposed() {
+			continue
+		}
+		if h, ok := handlers[c.Tool.Name]; ok {
+			s.mux.HandleFunc(c.HTTP.Method+" "+c.HTTP.Path, api(h))
+		}
+	}
+
+	// Endpoints that are not capabilities: they describe this server rather
+	// than something homebutler can do to a machine, so the registry has
+	// nothing to say about them.
 	if s.demo {
-		s.mux.HandleFunc("GET /api/status", api(s.demoStatus))
-		s.mux.HandleFunc("GET /api/docker", api(s.demoDocker))
-		s.mux.HandleFunc("GET /api/docker/stats", api(s.demoDockerStats))
-		s.mux.HandleFunc("GET /api/processes", api(s.demoProcesses))
-		s.mux.HandleFunc("GET /api/alerts", api(s.demoAlerts))
-		s.mux.HandleFunc("GET /api/ports", api(s.demoPorts))
 		s.mux.HandleFunc("GET /api/wake", api(s.demoWake))
-		s.mux.HandleFunc("POST /api/wake/{name}", api(s.demoWakeSend))
 		s.mux.HandleFunc("GET /api/servers", api(s.demoServers))
 		s.mux.HandleFunc("GET /api/servers/{name}/status", api(s.demoServerStatus))
 		s.mux.HandleFunc("GET /api/config", api(s.demoConfig))
-		s.mux.HandleFunc("GET /api/watch", api(s.demoWatch))
-		s.mux.HandleFunc("GET /api/watch/incidents", api(s.demoWatchIncidents))
 		s.mux.HandleFunc("GET /api/watch/incidents/{id}", api(s.demoWatchIncident))
 	} else {
-		s.mux.HandleFunc("GET /api/status", api(s.handleStatus))
-		s.mux.HandleFunc("GET /api/docker", api(s.handleDocker))
-		s.mux.HandleFunc("GET /api/docker/stats", api(s.handleDockerStats))
-		s.mux.HandleFunc("GET /api/processes", api(s.handleProcesses))
-		s.mux.HandleFunc("GET /api/alerts", api(s.handleAlerts))
-		s.mux.HandleFunc("GET /api/ports", api(s.handlePorts))
 		s.mux.HandleFunc("GET /api/wake", api(s.handleWakeList))
-		s.mux.HandleFunc("POST /api/wake/{name}", api(s.handleWakeSend))
 		s.mux.HandleFunc("GET /api/servers", api(s.handleServers))
 		s.mux.HandleFunc("GET /api/servers/{name}/status", api(s.handleServerStatus))
 		s.mux.HandleFunc("GET /api/config", api(s.handleConfig))
-		s.mux.HandleFunc("GET /api/watch", api(s.handleWatch))
-		s.mux.HandleFunc("GET /api/watch/incidents", api(s.handleWatchIncidents))
 		s.mux.HandleFunc("GET /api/watch/incidents/{id}", api(s.handleWatchIncident))
 	}
 	s.mux.HandleFunc("GET /api/proxmox/endpoints", api(s.handleProxmoxEndpoints))
-	s.mux.HandleFunc("GET /api/proxmox/status", api(s.handleProxmoxStatus))
+	s.mux.HandleFunc("GET /api/capabilities", api(s.handleCapabilities))
 	s.mux.HandleFunc("GET /api/version", api(s.handleVersion))
 	s.mux.HandleFunc("OPTIONS /api/", s.handleOptions)
 
 	// Serve frontend static files
 	s.mux.Handle("/", frontendHandler(webFS))
+}
+
+// capabilityHandlers maps a capability to what answers for it here. Demo mode
+// answers the same paths from fixed data, which is what makes the end-to-end
+// suite deterministic, so the split is over handlers rather than over routes.
+func (s *Server) capabilityHandlers() map[string]http.HandlerFunc {
+	if s.demo {
+		return map[string]http.HandlerFunc{
+			"system_status":  s.demoStatus,
+			"docker_list":    s.demoDocker,
+			"docker_stats":   s.demoDockerStats,
+			"processes":      s.demoProcesses,
+			"alerts":         s.demoAlerts,
+			"open_ports":     s.demoPorts,
+			"wake":           s.demoWakeSend,
+			"proxmox_status": s.handleProxmoxStatus,
+			"watch_list":     s.demoWatch,
+			"watch_history":  s.demoWatchIncidents,
+		}
+	}
+	return map[string]http.HandlerFunc{
+		"system_status":  s.handleStatus,
+		"docker_list":    s.handleDocker,
+		"docker_stats":   s.handleDockerStats,
+		"processes":      s.handleProcesses,
+		"alerts":         s.handleAlerts,
+		"open_ports":     s.handlePorts,
+		"wake":           s.handleWakeSend,
+		"proxmox_status": s.handleProxmoxStatus,
+		"watch_list":     s.handleWatch,
+		"watch_history":  s.handleWatchIncidents,
+	}
+}
+
+// capabilityInfo is one row of what homebutler can do, as the dashboard needs
+// to know it: what it is called, what it costs to call, what it can be pointed
+// at, and whether this interface can reach it at all.
+type capabilityInfo struct {
+	Name        string   `json:"name"`
+	Description string   `json:"description"`
+	Risk        string   `json:"risk"`
+	Targets     []string `json:"targets"`
+	Method      string   `json:"method,omitempty"`
+	Path        string   `json:"path,omitempty"`
+	Absent      string   `json:"absent,omitempty"`
+}
+
+// handleCapabilities answers what homebutler can do and how much of it this
+// interface reaches. The absent half is the point: MCP has forty tools and the
+// dashboard reaches ten, and until now nothing said so.
+func (s *Server) handleCapabilities(w http.ResponseWriter, r *http.Request) {
+	out := make([]capabilityInfo, 0, len(capability.Registry))
+	for _, c := range capability.Registry {
+		targets := make([]string, 0, len(c.Targets))
+		for _, t := range c.Targets {
+			targets = append(targets, string(t))
+		}
+		out = append(out, capabilityInfo{
+			Name:        c.Tool.Name,
+			Description: c.Tool.Description,
+			Risk:        string(c.Risk),
+			Targets:     targets,
+			Method:      c.HTTP.Method,
+			Path:        c.HTTP.Path,
+			Absent:      c.HTTP.Absent,
+		})
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
+	writeJSON(w, out)
 }
 
 func (s *Server) cors(next http.HandlerFunc) http.HandlerFunc {

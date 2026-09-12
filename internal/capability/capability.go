@@ -1,37 +1,95 @@
-package mcp
+// Package capability is what homebutler can do, described once.
+//
+// It was private to internal/mcp, which made the MCP tool list the only place
+// the answer existed: the dashboard had eleven hand-registered endpoints and no
+// way to know it was missing the other twenty-nine. Risk and targets are not
+// protocol details — risk is what decides whether an operation needs a token
+// and a confirmation, and targets is what decides which selector applies — so
+// they belong to homebutler rather than to one of its interfaces.
+package capability
 
 import "sort"
 
-type capabilityRisk string
+// Definition is what a capability is called, what it does, and what it takes.
+// The json tags are the MCP tools/list shape and must not drift: a client reads
+// them to decide how to call the tool.
+type Definition struct {
+	Name        string `json:"name"`
+	Description string `json:"description"`
+	InputSchema Schema `json:"inputSchema"`
+}
+
+type Schema struct {
+	Type       string              `json:"type"`
+	Properties map[string]Property `json:"properties,omitempty"`
+	Required   []string            `json:"required,omitempty"`
+}
+
+type Property struct {
+	Type        string   `json:"type"`
+	Description string   `json:"description,omitempty"`
+	Enum        []string `json:"enum,omitempty"`
+	Minimum     *float64 `json:"minimum,omitempty"`
+	Maximum     *float64 `json:"maximum,omitempty"`
+}
+
+type Risk string
 
 const (
-	riskRead        capabilityRisk = "read"
-	riskWrite       capabilityRisk = "write"
-	riskDestructive capabilityRisk = "destructive"
+	RiskRead        Risk = "read"
+	RiskWrite       Risk = "write"
+	RiskDestructive Risk = "destructive"
 )
 
-// targetKind is what a tool can be pointed at. A bool could only ask "is this a
+// TargetKind is what a tool can be pointed at. A bool could only ask "is this a
 // named SSH server from servers:", which is the only kind of target homebutler
 // has had so far. An API-backed target has no agent on the far side and a
 // different way of being addressed, so the question has to be open-ended before
 // 1.0 freezes the answer.
-type targetKind string
+type TargetKind string
 
 const (
-	targetLocal   targetKind = "local"   // this machine; no target argument
-	targetServer  targetKind = "server"  // a named SSH server from servers:
-	targetProxmox targetKind = "proxmox" // a named endpoint from proxmox:
+	TargetLocal   TargetKind = "local"   // this machine; no target argument
+	TargetServer  TargetKind = "server"  // a named SSH server from servers:
+	TargetProxmox TargetKind = "proxmox" // a named endpoint from proxmox:
 )
 
-type capability struct {
-	tool    toolDef
-	risk    capabilityRisk
-	targets []targetKind
+// HTTP is how a capability is reached from the dashboard, or why it is not.
+//
+// Every capability carries one, because the failure this field exists to
+// prevent is silent: a tool added to the registry appears in MCP immediately
+// and in the browser never, and nothing said which of those was intended. An
+// absent exposure has to name its reason, and Exposed is what the server
+// registers routes from rather than a second list kept alongside this one.
+type HTTP struct {
+	Method string // GET or POST; empty when the dashboard cannot reach it
+	Path   string
+	Absent string // why not, when Method is empty
+}
+
+// Exposed reports whether the dashboard can reach this capability.
+func (c Capability) Exposed() bool { return c.HTTP.Method != "" }
+
+// The reasons a capability is not on the HTTP surface. Shared constants rather
+// than repeated prose, so a decision that changes changes in one place.
+const (
+	// A write the dashboard has no confirmation rule for yet. #154 is where
+	// that surface and the token requirement behind it get decided.
+	AbsentNeedsWriteSurface = "no write surface yet: #154 decides the confirmation rule and the token requirement behind it"
+	// A read nobody has built a screen for. Not a decision against it.
+	AbsentNoViewYet = "no view built for it yet"
+)
+
+type Capability struct {
+	Tool    Definition
+	Risk    Risk
+	Targets []TargetKind
+	HTTP    HTTP
 }
 
 // supports reports whether the tool can be pointed at kind.
-func (c capability) supports(kind targetKind) bool {
-	for _, t := range c.targets {
+func (c Capability) Supports(kind TargetKind) bool {
+	for _, t := range c.Targets {
 		if t == kind {
 			return true
 		}
@@ -39,42 +97,44 @@ func (c capability) supports(kind targetKind) bool {
 	return false
 }
 
-// capabilityFor returns the registry entry for a tool name.
-func capabilityFor(name string) (capability, bool) {
-	for _, c := range capabilityRegistry {
-		if c.tool.Name == name {
+// For returns the registry entry for a tool name.
+func For(name string) (Capability, bool) {
+	for _, c := range Registry {
+		if c.Tool.Name == name {
 			return c, true
 		}
 	}
-	return capability{}, false
+	return Capability{}, false
 }
 
-func toolDefinitions() []toolDef {
-	defs := make([]toolDef, 0, len(capabilityRegistry))
-	for _, c := range capabilityRegistry {
-		defs = append(defs, c.tool)
+func Definitions() []Definition {
+	defs := make([]Definition, 0, len(Registry))
+	for _, c := range Registry {
+		defs = append(defs, c.Tool)
 	}
 	sort.Slice(defs, func(i, j int) bool { return defs[i].Name < defs[j].Name })
 	return defs
 }
 
-var capabilityRegistry = []capability{
+var Registry = []Capability{
 	{
-		risk:    riskRead,
-		targets: []targetKind{targetProxmox},
-		tool: toolDef{
+		Risk:    RiskRead,
+		Targets: []TargetKind{TargetProxmox},
+		HTTP:    HTTP{Method: "GET", Path: "/api/proxmox/status"},
+		Tool: Definition{
 			Name:        "proxmox_status",
 			Description: "Get Proxmox VE version, cluster status, and resources",
-			InputSchema: inputSchema{Type: "object", Properties: proxmoxEndpointProperties()},
+			InputSchema: Schema{Type: "object", Properties: proxmoxEndpointProperties()},
 		},
 	},
 	{
-		risk:    riskRead,
-		targets: []targetKind{targetProxmox},
-		tool: toolDef{
+		Risk:    RiskRead,
+		Targets: []TargetKind{TargetProxmox},
+		HTTP:    HTTP{Absent: AbsentNoViewYet},
+		Tool: Definition{
 			Name:        "proxmox_guests",
 			Description: "List Proxmox QEMU and LXC guests, optionally filtered by node, status, or type",
-			InputSchema: inputSchema{Type: "object", Properties: map[string]propDef{
+			InputSchema: Schema{Type: "object", Properties: map[string]Property{
 				"endpoint": {Type: "string", Description: "Proxmox endpoint name from config (optional when exactly one is configured)"},
 				"node":     {Type: "string", Description: "Only guests on this Proxmox node (optional)"},
 				"status":   {Type: "string", Description: "Only guests with this status, such as running or stopped (optional)"},
@@ -83,77 +143,84 @@ var capabilityRegistry = []capability{
 		},
 	},
 	{
-		risk:    riskRead,
-		targets: []targetKind{targetProxmox},
-		tool: toolDef{
+		Risk:    RiskRead,
+		Targets: []TargetKind{TargetProxmox},
+		HTTP:    HTTP{Absent: AbsentNoViewYet},
+		Tool: Definition{
 			Name:        "proxmox_node",
 			Description: "Get detailed Proxmox node status",
-			InputSchema: inputSchema{Type: "object", Properties: map[string]propDef{
+			InputSchema: Schema{Type: "object", Properties: map[string]Property{
 				"endpoint": {Type: "string", Description: "Proxmox endpoint name from config (optional when exactly one is configured)"},
 				"node":     {Type: "string", Description: "Proxmox node name"},
 			}, Required: []string{"node"}},
 		},
 	},
 	{
-		risk:    riskRead,
-		targets: []targetKind{targetProxmox},
-		tool: toolDef{
+		Risk:    RiskRead,
+		Targets: []TargetKind{TargetProxmox},
+		HTTP:    HTTP{Absent: AbsentNoViewYet},
+		Tool: Definition{
 			Name:        "proxmox_tasks",
 			Description: "Get the 50 most recent Proxmox tasks for a node",
-			InputSchema: inputSchema{Type: "object", Properties: map[string]propDef{
+			InputSchema: Schema{Type: "object", Properties: map[string]Property{
 				"endpoint": {Type: "string", Description: "Proxmox endpoint name from config (optional when exactly one is configured)"},
 				"node":     {Type: "string", Description: "Proxmox node name"},
 			}, Required: []string{"node"}},
 		},
 	},
 	{
-		risk:    riskRead,
-		targets: []targetKind{targetLocal, targetServer},
-		tool: toolDef{
+		Risk:    RiskRead,
+		Targets: []TargetKind{TargetLocal, TargetServer},
+		HTTP:    HTTP{Method: "GET", Path: "/api/status"},
+		Tool: Definition{
 			Name:        "system_status",
 			Description: "Get system status including CPU, memory, disk usage, and uptime",
-			InputSchema: inputSchema{
+			InputSchema: Schema{
 				Type: "object",
-				Properties: map[string]propDef{
+				Properties: map[string]Property{
 					"server": {Type: "string", Description: "Remote server name from config (optional, runs locally if omitted)"},
 				},
 			},
 		},
 	},
 	{
-		risk:    riskWrite,
-		targets: []targetKind{targetProxmox},
-		tool: toolDef{
+		Risk:    RiskWrite,
+		Targets: []TargetKind{TargetProxmox},
+		HTTP:    HTTP{Absent: AbsentNeedsWriteSurface},
+		Tool: Definition{
 			Name:        "proxmox_guest_start",
 			Description: "Start one explicitly targeted Proxmox guest after confirmation and return the accepted task UPID",
 			InputSchema: proxmoxGuestActionSchema(),
 		},
 	},
 	{
-		risk:    riskWrite,
-		targets: []targetKind{targetProxmox},
-		tool: toolDef{
+		Risk:    RiskWrite,
+		Targets: []TargetKind{TargetProxmox},
+		HTTP:    HTTP{Absent: AbsentNeedsWriteSurface},
+		Tool: Definition{
 			Name:        "proxmox_guest_reboot",
 			Description: "Reboot one explicitly targeted Proxmox guest after confirmation and return the accepted task UPID",
 			InputSchema: proxmoxGuestActionSchema(),
 		},
 	},
 	{
-		risk:    riskDestructive,
-		targets: []targetKind{targetProxmox},
-		tool: toolDef{
+		Risk:    RiskDestructive,
+		Targets: []TargetKind{TargetProxmox},
+		HTTP:    HTTP{Absent: AbsentNeedsWriteSurface},
+		Tool: Definition{
 			Name:        "proxmox_guest_shutdown",
 			Description: "Gracefully shut down one explicitly targeted Proxmox guest after confirmation and return the accepted task UPID",
 			InputSchema: proxmoxGuestActionSchema(),
 		},
 	},
 	{
-		risk:    riskRead,
-		targets: []targetKind{targetProxmox},
-		tool: toolDef{
+		Risk:    RiskRead,
+		Targets: []TargetKind{TargetProxmox},
+		HTTP:    HTTP{Absent: AbsentNoViewYet},
+		Tool: Definition{
 			Name:        "proxmox_task_status",
 			Description: "Inspect one asynchronous Proxmox task by node and opaque UPID",
-			InputSchema: inputSchema{Type: "object", Properties: map[string]propDef{
+			InputSchema: Schema{Type: "object", Properties: map[string]Property{
 				"endpoint": {Type: "string", Description: "Explicit Proxmox endpoint name from config"},
 				"node":     {Type: "string", Description: "Proxmox node name"},
 				"upid":     {Type: "string", Description: "Opaque Proxmox task UPID"},
@@ -161,48 +228,52 @@ var capabilityRegistry = []capability{
 		},
 	},
 	{
-		risk:    riskRead,
-		targets: []targetKind{targetLocal},
-		tool: toolDef{
+		Risk:    RiskRead,
+		Targets: []TargetKind{TargetLocal},
+		HTTP:    HTTP{Absent: AbsentNoViewYet},
+		Tool: Definition{
 			Name:        "proxmox_script_list",
 			Description: "List the curated Proxmox VE Community Scripts catalog (community-scripts/ProxmoxVE)",
-			InputSchema: inputSchema{Type: "object"},
+			InputSchema: Schema{Type: "object"},
 		},
 	},
 	{
-		risk:    riskRead,
-		targets: []targetKind{targetLocal},
-		tool: toolDef{
+		Risk:    RiskRead,
+		Targets: []TargetKind{TargetLocal},
+		HTTP:    HTTP{Absent: AbsentNoViewYet},
+		Tool: Definition{
 			Name:        "proxmox_script_command",
 			Description: "Render the pinned install command for one Proxmox VE Community Script. Never fetches or runs it; the caller reviews and runs it themselves on the Proxmox host",
-			InputSchema: inputSchema{Type: "object", Properties: map[string]propDef{
+			InputSchema: Schema{Type: "object", Properties: map[string]Property{
 				"slug": {Type: "string", Description: "Script slug from proxmox_script_list, such as docker"},
 			}, Required: []string{"slug"}},
 		},
 	},
 	{
-		risk:    riskRead,
-		targets: []targetKind{targetLocal, targetServer},
-		tool: toolDef{
+		Risk:    RiskRead,
+		Targets: []TargetKind{TargetLocal, TargetServer},
+		HTTP:    HTTP{Method: "GET", Path: "/api/docker"},
+		Tool: Definition{
 			Name:        "docker_list",
 			Description: "List Docker containers with their status, image, and ports",
-			InputSchema: inputSchema{
+			InputSchema: Schema{
 				Type: "object",
-				Properties: map[string]propDef{
+				Properties: map[string]Property{
 					"server": {Type: "string", Description: "Remote server name from config (optional, runs locally if omitted)"},
 				},
 			},
 		},
 	},
 	{
-		risk:    riskWrite,
-		targets: []targetKind{targetLocal, targetServer},
-		tool: toolDef{
+		Risk:    RiskWrite,
+		Targets: []TargetKind{TargetLocal, TargetServer},
+		HTTP:    HTTP{Absent: AbsentNeedsWriteSurface},
+		Tool: Definition{
 			Name:        "docker_restart",
 			Description: "Restart a Docker container by name",
-			InputSchema: inputSchema{
+			InputSchema: Schema{
 				Type: "object",
-				Properties: map[string]propDef{
+				Properties: map[string]Property{
 					"name":   {Type: "string", Description: "Container name to restart"},
 					"server": {Type: "string", Description: "Remote server name from config (optional, runs locally if omitted)"},
 				},
@@ -211,14 +282,15 @@ var capabilityRegistry = []capability{
 		},
 	},
 	{
-		risk:    riskDestructive,
-		targets: []targetKind{targetLocal, targetServer},
-		tool: toolDef{
+		Risk:    RiskDestructive,
+		Targets: []TargetKind{TargetLocal, TargetServer},
+		HTTP:    HTTP{Absent: AbsentNeedsWriteSurface},
+		Tool: Definition{
 			Name:        "docker_stop",
 			Description: "Stop a Docker container by name",
-			InputSchema: inputSchema{
+			InputSchema: Schema{
 				Type: "object",
-				Properties: map[string]propDef{
+				Properties: map[string]Property{
 					"name":   {Type: "string", Description: "Container name to stop"},
 					"server": {Type: "string", Description: "Remote server name from config (optional, runs locally if omitted)"},
 				},
@@ -227,14 +299,15 @@ var capabilityRegistry = []capability{
 		},
 	},
 	{
-		risk:    riskRead,
-		targets: []targetKind{targetLocal, targetServer},
-		tool: toolDef{
+		Risk:    RiskRead,
+		Targets: []TargetKind{TargetLocal, TargetServer},
+		HTTP:    HTTP{Absent: AbsentNoViewYet},
+		Tool: Definition{
 			Name:        "docker_logs",
 			Description: "Get logs from a Docker container",
-			InputSchema: inputSchema{
+			InputSchema: Schema{
 				Type: "object",
-				Properties: map[string]propDef{
+				Properties: map[string]Property{
 					"name":   {Type: "string", Description: "Container name to get logs from"},
 					"lines":  {Type: "string", Description: "Number of log lines to return (default: 50)"},
 					"server": {Type: "string", Description: "Remote server name from config (optional, runs locally if omitted)"},
@@ -244,28 +317,30 @@ var capabilityRegistry = []capability{
 		},
 	},
 	{
-		risk:    riskRead,
-		targets: []targetKind{targetLocal, targetServer},
-		tool: toolDef{
+		Risk:    RiskRead,
+		Targets: []TargetKind{TargetLocal, TargetServer},
+		HTTP:    HTTP{Method: "GET", Path: "/api/docker/stats"},
+		Tool: Definition{
 			Name:        "docker_stats",
 			Description: "Get resource usage statistics (CPU, memory, network, block I/O) for all running Docker containers",
-			InputSchema: inputSchema{
+			InputSchema: Schema{
 				Type: "object",
-				Properties: map[string]propDef{
+				Properties: map[string]Property{
 					"server": {Type: "string", Description: "Remote server name from config (optional, runs locally if omitted)"},
 				},
 			},
 		},
 	},
 	{
-		risk:    riskRead,
-		targets: []targetKind{targetLocal, targetServer},
-		tool: toolDef{
+		Risk:    RiskRead,
+		Targets: []TargetKind{TargetLocal, TargetServer},
+		HTTP:    HTTP{Absent: AbsentNoViewYet},
+		Tool: Definition{
 			Name:        "docker_top",
 			Description: "List the processes running inside a Docker container, read from the host. Read-only: no exec, no TTY",
-			InputSchema: inputSchema{
+			InputSchema: Schema{
 				Type: "object",
-				Properties: map[string]propDef{
+				Properties: map[string]Property{
 					"name":   {Type: "string", Description: "Container name to inspect"},
 					"server": {Type: "string", Description: "Remote server name from config (optional, runs locally if omitted)"},
 				},
@@ -274,14 +349,15 @@ var capabilityRegistry = []capability{
 		},
 	},
 	{
-		risk:    riskRead,
-		targets: []targetKind{targetLocal, targetServer},
-		tool: toolDef{
+		Risk:    RiskRead,
+		Targets: []TargetKind{TargetLocal, TargetServer},
+		HTTP:    HTTP{Absent: AbsentNoViewYet},
+		Tool: Definition{
 			Name:        "docker_inspect",
 			Description: "Summarize a Docker container's image, state, restart policy, ports, mounts, networks, and health. Environment variable values are never included",
-			InputSchema: inputSchema{
+			InputSchema: Schema{
 				Type: "object",
-				Properties: map[string]propDef{
+				Properties: map[string]Property{
 					"name":   {Type: "string", Description: "Container name to summarize"},
 					"server": {Type: "string", Description: "Remote server name from config (optional, runs locally if omitted)"},
 				},
@@ -290,14 +366,15 @@ var capabilityRegistry = []capability{
 		},
 	},
 	{
-		risk:    riskWrite,
-		targets: []targetKind{targetLocal},
-		tool: toolDef{
+		Risk:    RiskWrite,
+		Targets: []TargetKind{TargetLocal},
+		HTTP:    HTTP{Method: "POST", Path: "/api/wake/{name}"},
+		Tool: Definition{
 			Name:        "wake",
 			Description: "Send a Wake-on-LAN magic packet to wake a machine",
-			InputSchema: inputSchema{
+			InputSchema: Schema{
 				Type: "object",
-				Properties: map[string]propDef{
+				Properties: map[string]Property{
 					"target":    {Type: "string", Description: "MAC address or configured device name"},
 					"broadcast": {Type: "string", Description: "Broadcast address (default: 255.255.255.255)"},
 				},
@@ -306,67 +383,72 @@ var capabilityRegistry = []capability{
 		},
 	},
 	{
-		risk:    riskRead,
-		targets: []targetKind{targetLocal, targetServer},
-		tool: toolDef{
+		Risk:    RiskRead,
+		Targets: []TargetKind{TargetLocal, TargetServer},
+		HTTP:    HTTP{Method: "GET", Path: "/api/ports"},
+		Tool: Definition{
 			Name:        "open_ports",
 			Description: "List open network ports with associated process information",
-			InputSchema: inputSchema{
+			InputSchema: Schema{
 				Type: "object",
-				Properties: map[string]propDef{
+				Properties: map[string]Property{
 					"server": {Type: "string", Description: "Remote server name from config (optional, runs locally if omitted)"},
 				},
 			},
 		},
 	},
 	{
-		risk:    riskRead,
-		targets: []targetKind{targetLocal},
-		tool: toolDef{
+		Risk:    RiskRead,
+		Targets: []TargetKind{TargetLocal},
+		HTTP:    HTTP{Absent: AbsentNoViewYet},
+		Tool: Definition{
 			Name:        "network_scan",
 			Description: "Scan the local network to discover devices (IP, MAC, hostname)",
-			InputSchema: inputSchema{
+			InputSchema: Schema{
 				Type: "object",
 			},
 		},
 	},
 	{
-		risk:    riskRead,
-		targets: []targetKind{targetLocal, targetServer},
-		tool: toolDef{
+		Risk:    RiskRead,
+		Targets: []TargetKind{TargetLocal, TargetServer},
+		HTTP:    HTTP{Method: "GET", Path: "/api/alerts"},
+		Tool: Definition{
 			Name:        "alerts",
 			Description: "Check resource alerts for CPU, memory, and disk usage against configured thresholds",
-			InputSchema: inputSchema{
+			InputSchema: Schema{
 				Type: "object",
-				Properties: map[string]propDef{
+				Properties: map[string]Property{
 					"server": {Type: "string", Description: "Remote server name from config (optional, runs locally if omitted)"},
 				},
 			},
 		},
 	},
 	{
-		risk:    riskRead,
-		targets: []targetKind{targetLocal, targetServer},
-		tool: toolDef{
+		Risk:    RiskRead,
+		Targets: []TargetKind{TargetLocal, TargetServer},
+		HTTP:    HTTP{Absent: AbsentNoViewYet},
+		Tool: Definition{
 			Name:        "inventory_scan",
 			Description: "Collect server inventory/topology including system status, Docker containers, app ports, and system ports",
-			InputSchema: inputSchema{
+			InputSchema: Schema{
 				Type: "object",
-				Properties: map[string]propDef{
+				Properties: map[string]Property{
 					"server": {Type: "string", Description: "Remote server name from config (optional, runs locally if omitted)"},
 				},
 			},
 		},
 	},
 	{
-		risk:    riskRead,
-		targets: []targetKind{targetLocal, targetServer},
-		tool: toolDef{
+		Risk:    RiskRead,
+		Targets: []TargetKind{TargetLocal, TargetServer},
+		HTTP:    HTTP{Absent: AbsentNoViewYet},
+		Tool: Definition{
 			Name:        "inventory_export",
 			Description: "Export server inventory/topology as a Mermaid diagram locally, or JSON locally/remotely",
-			InputSchema: inputSchema{
+			InputSchema: Schema{
 				Type: "object",
-				Properties: map[string]propDef{
+				Properties: map[string]Property{
 					"format": {Type: "string", Description: "Export format: mermaid (default, local) or json"},
 					"server": {Type: "string", Description: "Remote server name from config (optional; remote supports format=json)"},
 				},
@@ -374,14 +456,15 @@ var capabilityRegistry = []capability{
 		},
 	},
 	{
-		risk:    riskWrite,
-		targets: []targetKind{targetLocal, targetServer},
-		tool: toolDef{
+		Risk:    RiskWrite,
+		Targets: []TargetKind{TargetLocal, TargetServer},
+		HTTP:    HTTP{Absent: AbsentNeedsWriteSurface},
+		Tool: Definition{
 			Name:        "report",
 			Description: "Generate a butler-style health report with snapshot comparison, warnings, notable changes, and suggested actions",
-			InputSchema: inputSchema{
+			InputSchema: Schema{
 				Type: "object",
-				Properties: map[string]propDef{
+				Properties: map[string]Property{
 					"keep":    {Type: "number", Description: "Number of snapshots to retain (default: 30)"},
 					"no_save": {Type: "boolean", Description: "Preview without writing a snapshot"},
 					"server":  {Type: "string", Description: "Remote server name from config (optional, runs locally if omitted)"},
@@ -390,14 +473,15 @@ var capabilityRegistry = []capability{
 		},
 	},
 	{
-		risk:    riskRead,
-		targets: []targetKind{targetLocal, targetServer},
-		tool: toolDef{
+		Risk:    RiskRead,
+		Targets: []TargetKind{TargetLocal, TargetServer},
+		HTTP:    HTTP{Absent: AbsentNoViewYet},
+		Tool: Definition{
 			Name:        "doctor",
 			Description: "Run a read-only diagnosis for resource pressure, stopped containers, public ports, backup hygiene, notifications, and report baseline readiness",
-			InputSchema: inputSchema{
+			InputSchema: Schema{
 				Type: "object",
-				Properties: map[string]propDef{
+				Properties: map[string]Property{
 					"backup_max_age_hours": {Type: "number", Description: "Warn when the latest backup is older than this many hours (default: 168)"},
 					"server":               {Type: "string", Description: "Remote server name from config (optional, runs locally if omitted)"},
 				},
@@ -408,28 +492,30 @@ var capabilityRegistry = []capability{
 		// Write rather than read: CheckTargets records the new container state
 		// and saves any incident it detects, so a caller cannot treat this as a
 		// free query the way system_status is.
-		risk:    riskWrite,
-		targets: []targetKind{targetLocal, targetServer},
-		tool: toolDef{
+		Risk:    RiskWrite,
+		Targets: []TargetKind{TargetLocal, TargetServer},
+		HTTP:    HTTP{Absent: AbsentNeedsWriteSurface},
+		Tool: Definition{
 			Name:        "watch_check",
 			Description: "Run a one-shot restart check on watched targets and report restarts detected since the last check. Only docker targets can be inspected this way; systemd and pm2 targets are reported as skipped rather than assumed healthy",
-			InputSchema: inputSchema{
+			InputSchema: Schema{
 				Type: "object",
-				Properties: map[string]propDef{
+				Properties: map[string]Property{
 					"server": {Type: "string", Description: "Remote server name from config (optional, runs locally if omitted)"},
 				},
 			},
 		},
 	},
 	{
-		risk:    riskRead,
-		targets: []targetKind{targetLocal, targetServer},
-		tool: toolDef{
+		Risk:    RiskRead,
+		Targets: []TargetKind{TargetLocal, TargetServer},
+		HTTP:    HTTP{Method: "GET", Path: "/api/processes"},
+		Tool: Definition{
 			Name:        "processes",
 			Description: "List the top processes by CPU or memory, with a total count and any zombies broken out separately",
-			InputSchema: inputSchema{
+			InputSchema: Schema{
 				Type: "object",
-				Properties: map[string]propDef{
+				Properties: map[string]Property{
 					"limit":   {Type: "string", Description: "Number of processes to return (default: 10, 0 for all)"},
 					"sort_by": {Type: "string", Description: "Sort by cpu (default) or mem"},
 					"server":  {Type: "string", Description: "Remote server name from config (optional, runs locally if omitted)"},
@@ -441,28 +527,30 @@ var capabilityRegistry = []capability{
 		// Local only. It answers "is the config this MCP server is running on
 		// valid", which is a question about this machine. Pointing it at a
 		// remote would silently answer about a different file.
-		risk:    riskRead,
-		targets: []targetKind{targetLocal},
-		tool: toolDef{
+		Risk:    RiskRead,
+		Targets: []TargetKind{TargetLocal},
+		HTTP:    HTTP{Absent: AbsentNoViewYet},
+		Tool: Definition{
 			Name:        "config_validate",
 			Description: "Check the config file this server is running on: which file was used, which rule selected it, what was read from each section, and anything wrong or silently ignored",
-			InputSchema: inputSchema{
+			InputSchema: Schema{
 				Type: "object",
-				Properties: map[string]propDef{
+				Properties: map[string]Property{
 					"strict": {Type: "boolean", Description: "Treat warnings as failures in the passed field (default: false)"},
 				},
 			},
 		},
 	},
 	{
-		risk:    riskRead,
-		targets: []targetKind{targetLocal, targetServer},
-		tool: toolDef{
+		Risk:    RiskRead,
+		Targets: []TargetKind{TargetLocal, TargetServer},
+		HTTP:    HTTP{Method: "GET", Path: "/api/watch/incidents"},
+		Tool: Definition{
 			Name:        "watch_history",
 			Description: "List recorded restart incidents, newest first. Captured logs are excluded unless include_logs is set, because every incident carries a hundred lines of output twice over",
-			InputSchema: inputSchema{
+			InputSchema: Schema{
 				Type: "object",
-				Properties: map[string]propDef{
+				Properties: map[string]Property{
 					"limit":        {Type: "string", Description: "Most recent N incidents (default: 10, 0 for all)"},
 					"container":    {Type: "string", Description: "Only incidents for this target (optional)"},
 					"include_logs": {Type: "boolean", Description: "Include the logs captured before and after each restart (default: false)"},
@@ -472,28 +560,30 @@ var capabilityRegistry = []capability{
 		},
 	},
 	{
-		risk:    riskRead,
-		targets: []targetKind{targetLocal, targetServer},
-		tool: toolDef{
+		Risk:    RiskRead,
+		Targets: []TargetKind{TargetLocal, TargetServer},
+		HTTP:    HTTP{Method: "GET", Path: "/api/watch"},
+		Tool: Definition{
 			Name:        "watch_list",
 			Description: "List the targets being watched, with their kind and what the last check recorded",
-			InputSchema: inputSchema{
+			InputSchema: Schema{
 				Type: "object",
-				Properties: map[string]propDef{
+				Properties: map[string]Property{
 					"server": {Type: "string", Description: "Remote server name from config (optional, runs locally if omitted)"},
 				},
 			},
 		},
 	},
 	{
-		risk:    riskWrite,
-		targets: []targetKind{targetLocal, targetServer},
-		tool: toolDef{
+		Risk:    RiskWrite,
+		Targets: []TargetKind{TargetLocal, TargetServer},
+		HTTP:    HTTP{Absent: AbsentNeedsWriteSurface},
+		Tool: Definition{
 			Name:        "backup_create",
 			Description: "Create a Docker compose backup archive for all services or one service",
-			InputSchema: inputSchema{
+			InputSchema: Schema{
 				Type: "object",
-				Properties: map[string]propDef{
+				Properties: map[string]Property{
 					"service": {Type: "string", Description: "Specific service to back up (optional)"},
 					"to":      {Type: "string", Description: "Custom backup destination directory (optional)"},
 					"server":  {Type: "string", Description: "Remote server name from config (optional, runs locally if omitted)"},
@@ -502,28 +592,30 @@ var capabilityRegistry = []capability{
 		},
 	},
 	{
-		risk:    riskRead,
-		targets: []targetKind{targetLocal, targetServer},
-		tool: toolDef{
+		Risk:    RiskRead,
+		Targets: []TargetKind{TargetLocal, TargetServer},
+		HTTP:    HTTP{Absent: AbsentNoViewYet},
+		Tool: Definition{
 			Name:        "backup_list",
 			Description: "List existing backup archives in the configured backup directory",
-			InputSchema: inputSchema{
+			InputSchema: Schema{
 				Type: "object",
-				Properties: map[string]propDef{
+				Properties: map[string]Property{
 					"server": {Type: "string", Description: "Remote server name from config (optional, runs locally if omitted)"},
 				},
 			},
 		},
 	},
 	{
-		risk:    riskWrite,
-		targets: []targetKind{targetLocal, targetServer},
-		tool: toolDef{
+		Risk:    RiskWrite,
+		Targets: []TargetKind{TargetLocal, TargetServer},
+		HTTP:    HTTP{Absent: AbsentNeedsWriteSurface},
+		Tool: Definition{
 			Name:        "backup_drill",
 			Description: "Verify a backup by booting an app in an isolated Docker environment and checking that it responds",
-			InputSchema: inputSchema{
+			InputSchema: Schema{
 				Type: "object",
-				Properties: map[string]propDef{
+				Properties: map[string]Property{
 					"app":     {Type: "string", Description: "App/service to drill (required unless all=true)"},
 					"all":     {Type: "boolean", Description: "Drill all supported apps in the backup"},
 					"archive": {Type: "string", Description: "Specific backup archive to verify (optional)"},
@@ -533,14 +625,15 @@ var capabilityRegistry = []capability{
 		},
 	},
 	{
-		risk:    riskDestructive,
-		targets: []targetKind{targetLocal, targetServer},
-		tool: toolDef{
+		Risk:    RiskDestructive,
+		Targets: []TargetKind{TargetLocal, TargetServer},
+		HTTP:    HTTP{Absent: AbsentNeedsWriteSurface},
+		Tool: Definition{
 			Name:        "backup_restore",
 			Description: "Restore Docker volumes from a backup archive. Destructive: confirm intent before calling.",
-			InputSchema: inputSchema{
+			InputSchema: Schema{
 				Type: "object",
-				Properties: map[string]propDef{
+				Properties: map[string]Property{
 					"archive": {Type: "string", Description: "Backup archive path to restore"},
 					"service": {Type: "string", Description: "Specific service to restore (optional)"},
 					"server":  {Type: "string", Description: "Remote server name from config (optional, runs locally if omitted)"},
@@ -550,25 +643,27 @@ var capabilityRegistry = []capability{
 		},
 	},
 	{
-		risk:    riskRead,
-		targets: []targetKind{targetLocal},
-		tool: toolDef{
+		Risk:    RiskRead,
+		Targets: []TargetKind{TargetLocal},
+		HTTP:    HTTP{Absent: AbsentNoViewYet},
+		Tool: Definition{
 			Name:        "install_list",
 			Description: "List available self-hosted apps that can be installed",
-			InputSchema: inputSchema{
+			InputSchema: Schema{
 				Type: "object",
 			},
 		},
 	},
 	{
-		risk:    riskWrite,
-		targets: []targetKind{targetLocal},
-		tool: toolDef{
+		Risk:    RiskWrite,
+		Targets: []TargetKind{TargetLocal},
+		HTTP:    HTTP{Absent: AbsentNeedsWriteSurface},
+		Tool: Definition{
 			Name:        "install_app",
 			Description: "Install a self-hosted app via docker compose. Pre-checks docker, ports, and duplicates automatically.",
-			InputSchema: inputSchema{
+			InputSchema: Schema{
 				Type: "object",
-				Properties: map[string]propDef{
+				Properties: map[string]Property{
 					"app":  {Type: "string", Description: "App name (e.g. uptime-kuma, vaultwarden)"},
 					"port": {Type: "string", Description: "Custom host port (optional, uses default if omitted)"},
 				},
@@ -577,14 +672,15 @@ var capabilityRegistry = []capability{
 		},
 	},
 	{
-		risk:    riskRead,
-		targets: []targetKind{targetLocal},
-		tool: toolDef{
+		Risk:    RiskRead,
+		Targets: []TargetKind{TargetLocal},
+		HTTP:    HTTP{Absent: AbsentNoViewYet},
+		Tool: Definition{
 			Name:        "install_status",
 			Description: "Check the status of an installed app",
-			InputSchema: inputSchema{
+			InputSchema: Schema{
 				Type: "object",
-				Properties: map[string]propDef{
+				Properties: map[string]Property{
 					"app": {Type: "string", Description: "App name"},
 				},
 				Required: []string{"app"},
@@ -592,14 +688,15 @@ var capabilityRegistry = []capability{
 		},
 	},
 	{
-		risk:    riskWrite,
-		targets: []targetKind{targetLocal},
-		tool: toolDef{
+		Risk:    RiskWrite,
+		Targets: []TargetKind{TargetLocal},
+		HTTP:    HTTP{Absent: AbsentNeedsWriteSurface},
+		Tool: Definition{
 			Name:        "install_uninstall",
 			Description: "Stop an installed app and remove its containers. Data is preserved.",
-			InputSchema: inputSchema{
+			InputSchema: Schema{
 				Type: "object",
-				Properties: map[string]propDef{
+				Properties: map[string]Property{
 					"app": {Type: "string", Description: "App name"},
 				},
 				Required: []string{"app"},
@@ -607,18 +704,35 @@ var capabilityRegistry = []capability{
 		},
 	},
 	{
-		risk:    riskDestructive,
-		targets: []targetKind{targetLocal},
-		tool: toolDef{
+		Risk:    RiskDestructive,
+		Targets: []TargetKind{TargetLocal},
+		HTTP:    HTTP{Absent: AbsentNeedsWriteSurface},
+		Tool: Definition{
 			Name:        "install_purge",
 			Description: "Stop an installed app and delete all data including containers, config, and volumes.",
-			InputSchema: inputSchema{
+			InputSchema: Schema{
 				Type: "object",
-				Properties: map[string]propDef{
+				Properties: map[string]Property{
 					"app": {Type: "string", Description: "App name"},
 				},
 				Required: []string{"app"},
 			},
 		},
 	},
+}
+
+func proxmoxEndpointProperties() map[string]Property {
+	return map[string]Property{
+		"endpoint": {Type: "string", Description: "Proxmox endpoint name from config (optional when exactly one is configured)"},
+	}
+}
+
+func proxmoxGuestActionSchema() Schema {
+	return Schema{Type: "object", Properties: map[string]Property{
+		"endpoint": {Type: "string", Description: "Explicit Proxmox endpoint name from config"},
+		"node":     {Type: "string", Description: "Proxmox node name"},
+		"type":     {Type: "string", Description: "Guest type: qemu or lxc"},
+		"vmid":     {Type: "integer", Description: "Proxmox guest VMID from 1 through 999999999"},
+		"confirm":  {Type: "boolean", Description: "Must be true to confirm the explicit guest action target"},
+	}, Required: []string{"endpoint", "node", "type", "vmid", "confirm"}}
 }
