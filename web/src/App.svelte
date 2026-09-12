@@ -1,6 +1,15 @@
 <script>
   import { onMount } from 'svelte';
-  import { getServers, getServerStatus, getVersion } from './lib/api.js';
+  import {
+    getServers,
+    getServerStatus,
+    getVersion,
+    clearToken,
+    onUnauthorized,
+    setToken,
+    UnauthorizedError,
+  } from './lib/api.js';
+  import TokenGate from './lib/TokenGate.svelte';
   import ServerOverviewCard from './lib/ServerOverviewCard.svelte';
   import StatusCard from './lib/StatusCard.svelte';
   import DockerCard from './lib/DockerCard.svelte';
@@ -16,72 +25,126 @@
   let version = $state('dev');
   let activeTab = $state('dashboard');
 
-  onMount(async () => {
+  // 'checking' until one request has answered. Nothing that fetches is mounted
+  // before then, so a dashboard that needs a token says so once instead of
+  // every card reporting its own 401.
+  let auth = $state('checking');
+  let rejected = $state(false);
+
+  // /api/version is the cheapest guarded endpoint, so it answers the only
+  // question that has to be settled first.
+  async function checkAuth() {
+    try {
+      const v = await getVersion();
+      version = v.version || 'dev';
+      auth = 'ok';
+      return true;
+    } catch (err) {
+      if (err instanceof UnauthorizedError) {
+        auth = 'token-required';
+        return false;
+      }
+      // Anything else is a failure the cards can describe better than a
+      // full-page message can.
+      auth = 'ok';
+      return true;
+    }
+  }
+
+  async function loadServers() {
     try {
       servers = await getServers();
       const local = servers.find(s => s.local);
       if (local) selectedServer = local.name;
     } catch {}
-    try {
-      const v = await getVersion();
-      version = v.version || 'dev';
-    } catch {}
+  }
+
+  async function submitToken(token) {
+    setToken(token);
+    rejected = false;
+    if (await checkAuth()) {
+      await loadServers();
+      return;
+    }
+    // Never keep a credential the server has refused: the next page load would
+    // send it again and land back here with nothing said about why.
+    clearToken();
+    rejected = true;
+  }
+
+  onMount(async () => {
+    // A token can stop being valid while the page is open — the server gets
+    // restarted under a different one — so any 401 comes back here.
+    onUnauthorized(() => {
+      auth = 'token-required';
+    });
+    if (await checkAuth()) await loadServers();
   });
 </script>
 
-<header>
-  <div class="header-left">
-    <img src="/logo.png" alt="HomeButler" class="logo" />
-    <h1>HomeButler</h1>
-  </div>
-  <nav class="tabs">
-    <button
-      class="tab"
-      class:active={activeTab === 'dashboard'}
-      onclick={() => activeTab = 'dashboard'}
-    >Dashboard</button>
-    <button
-      class="tab"
-      class:active={activeTab === 'config'}
-      onclick={() => activeTab = 'config'}
-    >Config</button>
-  </nav>
-  {#if activeTab === 'dashboard' && servers.length > 0}
-    <div class="header-right">
-      <select bind:value={selectedServer}>
-        {#each servers as srv}
-          <option value={srv.name}>{srv.name}{srv.local ? ' (local)' : ''}</option>
-        {/each}
-      </select>
+{#if auth === 'checking'}
+  <div class="booting"></div>
+{:else if auth === 'token-required'}
+  <TokenGate {rejected} onsubmit={submitToken} />
+{:else}
+  <header>
+    <div class="header-left">
+      <img src="/logo.png" alt="HomeButler" class="logo" />
+      <h1>HomeButler</h1>
     </div>
-  {/if}
-</header>
+    <nav class="tabs">
+      <button
+        class="tab"
+        class:active={activeTab === 'dashboard'}
+        onclick={() => activeTab = 'dashboard'}
+      >Dashboard</button>
+      <button
+        class="tab"
+        class:active={activeTab === 'config'}
+        onclick={() => activeTab = 'config'}
+      >Config</button>
+    </nav>
+    {#if activeTab === 'dashboard' && servers.length > 0}
+      <div class="header-right">
+        <select bind:value={selectedServer}>
+          {#each servers as srv}
+            <option value={srv.name}>{srv.name}{srv.local ? ' (local)' : ''}</option>
+          {/each}
+        </select>
+      </div>
+    {/if}
+  </header>
 
-<main>
-  {#if activeTab === 'dashboard'}
-    <div class="overview-row">
-      <ServerOverviewCard />
-    </div>
+  <main>
+    {#if activeTab === 'dashboard'}
+      <div class="overview-row">
+        <ServerOverviewCard />
+      </div>
 
-    <div class="grid">
-      <ProxmoxCard />
-      <StatusCard server={selectedServer} />
-      <DockerCard server={selectedServer} />
-      <ProcessCard server={selectedServer} />
-      <AlertCard server={selectedServer} />
-      <PortsCard server={selectedServer} />
-      <WakeCard />
-    </div>
-  {:else}
-    <ConfigCard />
-  {/if}
-</main>
+      <div class="grid">
+        <ProxmoxCard />
+        <StatusCard server={selectedServer} />
+        <DockerCard server={selectedServer} />
+        <ProcessCard server={selectedServer} />
+        <AlertCard server={selectedServer} />
+        <PortsCard server={selectedServer} />
+        <WakeCard />
+      </div>
+    {:else}
+      <ConfigCard />
+    {/if}
+  </main>
 
-<footer>
-  <span>homebutler {version} · powered by Go</span>
-</footer>
+  <footer>
+    <span>homebutler {version} · powered by Go</span>
+  </footer>
+{/if}
 
 <style>
+  .booting {
+    min-height: 100vh;
+  }
+
   header {
     display: flex;
     align-items: center;
