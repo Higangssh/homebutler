@@ -3,6 +3,8 @@ package mcp
 import (
 	"testing"
 
+	"github.com/Higangssh/homebutler/internal/capability"
+
 	"github.com/Higangssh/homebutler/internal/config"
 	"github.com/Higangssh/homebutler/internal/watch"
 )
@@ -12,22 +14,22 @@ import (
 // tools behind confirmation relies on this classification.
 func TestWatchCheckCapabilityIsWriteAndRemoteCapable(t *testing.T) {
 	var found bool
-	for _, c := range capabilityRegistry {
-		if c.tool.Name != "watch_check" {
+	for _, c := range capability.Registry {
+		if c.Tool.Name != "watch_check" {
 			continue
 		}
 		found = true
-		if c.risk != riskWrite {
-			t.Errorf("watch_check risk = %q, want %q", c.risk, riskWrite)
+		if c.Risk != capability.RiskWrite {
+			t.Errorf("watch_check risk = %q, want %q", c.Risk, capability.RiskWrite)
 		}
-		if !c.supports(targetServer) {
+		if !c.Supports(capability.TargetServer) {
 			t.Error("watch_check should be routable to a remote server")
 		}
-		if _, ok := c.tool.InputSchema.Properties["server"]; !ok {
+		if _, ok := c.Tool.InputSchema.Properties["server"]; !ok {
 			t.Error("watch_check should accept a server argument")
 		}
-		if len(c.tool.InputSchema.Required) != 0 {
-			t.Errorf("watch_check should have no required arguments, got %v", c.tool.InputSchema.Required)
+		if len(c.Tool.InputSchema.Required) != 0 {
+			t.Errorf("watch_check should have no required arguments, got %v", c.Tool.InputSchema.Required)
 		}
 	}
 	if !found {

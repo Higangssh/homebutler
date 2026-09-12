@@ -6,6 +6,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/Higangssh/homebutler/internal/capability"
+
 	"github.com/Higangssh/homebutler/internal/config"
 )
 
@@ -102,13 +104,13 @@ func TestToolsList(t *testing.T) {
 	// had nothing to say about the change — it only knew the list had moved.
 	// What is worth asserting is that tools/list reports exactly what the
 	// registry holds, which is the thing that could actually be wrong.
-	if len(list.Tools) != len(capabilityRegistry) {
-		t.Errorf("tools/list returned %d tools, registry holds %d", len(list.Tools), len(capabilityRegistry))
+	if len(list.Tools) != len(capability.Registry) {
+		t.Errorf("tools/list returned %d tools, registry holds %d", len(list.Tools), len(capability.Registry))
 	}
 
-	expectedTools := make(map[string]bool, len(capabilityRegistry))
-	for _, c := range capabilityRegistry {
-		expectedTools[c.tool.Name] = false
+	expectedTools := make(map[string]bool, len(capability.Registry))
+	for _, c := range capability.Registry {
+		expectedTools[c.Tool.Name] = false
 	}
 
 	for _, tool := range list.Tools {
@@ -285,7 +287,7 @@ func TestEmptyLines(t *testing.T) {
 }
 
 func TestToolDefinitionsHaveRequiredFields(t *testing.T) {
-	tools := toolDefinitions()
+	tools := capability.Definitions()
 	requireMap := map[string][]string{
 		"docker_restart":         {"name"},
 		"docker_stop":            {"name"},
@@ -334,26 +336,26 @@ func TestToolDefinitionsHaveRequiredFields(t *testing.T) {
 }
 
 func TestCapabilityRegistryMetadata(t *testing.T) {
-	if len(capabilityRegistry) != len(toolDefinitions()) {
-		t.Fatalf("capability registry count mismatch: registry=%d tools=%d", len(capabilityRegistry), len(toolDefinitions()))
+	if len(capability.Registry) != len(capability.Definitions()) {
+		t.Fatalf("capability registry count mismatch: registry=%d tools=%d", len(capability.Registry), len(capability.Definitions()))
 	}
 
 	names := make(map[string]bool)
-	for _, c := range capabilityRegistry {
-		if c.tool.Name == "" {
+	for _, c := range capability.Registry {
+		if c.Tool.Name == "" {
 			t.Fatal("capability has empty tool name")
 		}
-		if names[c.tool.Name] {
-			t.Fatalf("duplicate capability for tool %q", c.tool.Name)
+		if names[c.Tool.Name] {
+			t.Fatalf("duplicate capability for tool %q", c.Tool.Name)
 		}
-		names[c.tool.Name] = true
-		if c.risk == "" {
-			t.Fatalf("tool %q has empty risk", c.tool.Name)
+		names[c.Tool.Name] = true
+		if c.Risk == "" {
+			t.Fatalf("tool %q has empty risk", c.Tool.Name)
 		}
-		switch c.risk {
-		case riskRead, riskWrite, riskDestructive:
+		switch c.Risk {
+		case capability.RiskRead, capability.RiskWrite, capability.RiskDestructive:
 		default:
-			t.Fatalf("tool %q has unknown risk %q", c.tool.Name, c.risk)
+			t.Fatalf("tool %q has unknown risk %q", c.Tool.Name, c.Risk)
 		}
 	}
 }

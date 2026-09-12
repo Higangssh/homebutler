@@ -9,22 +9,6 @@ import (
 	"github.com/Higangssh/homebutler/internal/proxmox"
 )
 
-func proxmoxEndpointProperties() map[string]propDef {
-	return map[string]propDef{
-		"endpoint": {Type: "string", Description: "Proxmox endpoint name from config (optional when exactly one is configured)"},
-	}
-}
-
-func proxmoxGuestActionSchema() inputSchema {
-	return inputSchema{Type: "object", Properties: map[string]propDef{
-		"endpoint": {Type: "string", Description: "Explicit Proxmox endpoint name from config"},
-		"node":     {Type: "string", Description: "Proxmox node name"},
-		"type":     {Type: "string", Description: "Guest type: qemu or lxc"},
-		"vmid":     {Type: "integer", Description: "Proxmox guest VMID from 1 through 999999999"},
-		"confirm":  {Type: "boolean", Description: "Must be true to confirm the explicit guest action target"},
-	}, Required: []string{"endpoint", "node", "type", "vmid", "confirm"}}
-}
-
 type proxmoxGuestActionRequest struct {
 	Endpoint string
 	Node     string

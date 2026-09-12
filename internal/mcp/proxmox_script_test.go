@@ -4,17 +4,19 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/Higangssh/homebutler/internal/capability"
+
 	"github.com/Higangssh/homebutler/internal/config"
 	"github.com/Higangssh/homebutler/internal/proxmox"
 )
 
 func TestProxmoxScriptToolsAreLocalReadOnly(t *testing.T) {
 	for _, name := range []string{"proxmox_script_list", "proxmox_script_command"} {
-		cap, ok := capabilityFor(name)
+		cap, ok := capability.For(name)
 		if !ok {
 			t.Fatalf("%s is not registered", name)
 		}
-		if cap.risk != riskRead || !cap.supports(targetLocal) || cap.supports(targetProxmox) || cap.supports(targetServer) {
+		if cap.Risk != capability.RiskRead || !cap.Supports(capability.TargetLocal) || cap.Supports(capability.TargetProxmox) || cap.Supports(capability.TargetServer) {
 			t.Errorf("%s capability = %#v", name, cap)
 		}
 	}
