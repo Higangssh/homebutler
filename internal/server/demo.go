@@ -3,6 +3,9 @@ package server
 import (
 	"encoding/json"
 	"net/http"
+	"time"
+
+	"github.com/Higangssh/homebutler/internal/watch"
 )
 
 // demoServerName returns the server name from the ?server query param.
@@ -359,4 +362,79 @@ func (s *Server) demoServerStatus(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusNotFound)
 	json.NewEncoder(w).Encode(map[string]string{"error": "server not found"})
+}
+
+// The demo watch list is the state doctor warns about: targets on the list and
+// no service installed to poll them. Showing the healthy case would make the
+// screen prettier and teach nobody what it is for.
+func (s *Server) demoWatch(w http.ResponseWriter, r *http.Request) {
+	added := time.Now().Add(-72 * time.Hour)
+	writeJSON(w, watchOverview{
+		Targets: []watch.Target{
+			{Container: "plex", Kind: "docker", Unit: "plex", AddedAt: added},
+			{Container: "gitea", Kind: "docker", Unit: "gitea", AddedAt: added.Add(time.Hour)},
+			{Container: "node-exporter", Kind: "systemd", Unit: "node-exporter.service", AddedAt: added.Add(2 * time.Hour)},
+		},
+		Service:   watchService{Installed: false},
+		Retention: watchRetention{Kept: 3, Max: 50},
+	})
+}
+
+func demoIncidents() []watch.Incident {
+	now := time.Now()
+	exit137 := 137
+	exit1 := 1
+	return []watch.Incident{
+		{
+			ID:           "plex-20260912T031422Z",
+			Container:    "plex",
+			DetectedAt:   now.Add(-5 * time.Hour),
+			RestartCount: 4,
+			ExitCode:     &exit137,
+			OOMKilled:    true,
+			Flapping:     &watch.FlappingResult{IsFlapping: true, Level: "short", Count: 4, Window: "10m", Since: now.Add(-5*time.Hour - 10*time.Minute)},
+			PreLogs:      "[transcode] session started for 1 client\n[transcode] buffer grew to 2.1 GB\nKilled",
+			PostLogs:     "Starting Plex Media Server\n[transcode] ready",
+		},
+		{
+			ID:           "gitea-20260911T221003Z",
+			Container:    "gitea",
+			DetectedAt:   now.Add(-29 * time.Hour),
+			RestartCount: 1,
+			ExitCode:     &exit1,
+			PreLogs:      "level=fatal msg=\"unable to open database file: disk I/O error\"",
+			PostLogs:     "level=info msg=\"gitea started\"",
+		},
+		{
+			ID:           "node-exporter-20260910T084411Z",
+			Container:    "node-exporter",
+			DetectedAt:   now.Add(-3 * 24 * time.Hour),
+			RestartCount: 1,
+			PreLogs:      "caller=node_exporter.go msg=\"stopping\"",
+			PostLogs:     "caller=node_exporter.go msg=\"listening on :9100\"",
+		},
+	}
+}
+
+func (s *Server) demoWatchIncidents(w http.ResponseWriter, r *http.Request) {
+	// Same contract as the real handler: the list never carries logs.
+	incidents := demoIncidents()
+	stripped := make([]watch.Incident, len(incidents))
+	copy(stripped, incidents)
+	for i := range stripped {
+		stripped[i].PreLogs = ""
+		stripped[i].PostLogs = ""
+	}
+	writeJSON(w, stripped)
+}
+
+func (s *Server) demoWatchIncident(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	for _, incident := range demoIncidents() {
+		if incident.ID == id {
+			writeJSON(w, incident)
+			return
+		}
+	}
+	writeError(w, http.StatusNotFound, "incident not found")
 }

@@ -129,3 +129,18 @@ export function getVersion() {
 export function getConfig() {
   return fetchJSON('/api/config');
 }
+
+export function getWatch() {
+  return fetchJSON('/api/watch');
+}
+
+export function getWatchIncidents(limit) {
+  const query = limit ? `?limit=${encodeURIComponent(limit)}` : '';
+  return fetchJSON(`/api/watch/incidents${query}`);
+}
+
+// Fetched one at a time: the list deliberately carries no logs, and an incident
+// holds two hundred lines of them.
+export function getWatchIncident(id) {
+  return fetchJSON(`/api/watch/incidents/${encodeURIComponent(id)}`);
+}

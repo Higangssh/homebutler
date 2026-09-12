@@ -325,6 +325,31 @@ func parseIncidentRef(name string) (IncidentRef, bool) {
 	return IncidentRef{ID: id, Container: container, DetectedAt: detected}, true
 }
 
+// CountIncidents reports how many incident files are on disk.
+//
+// It counts what ListIncidents will read, which is every .json file, rather
+// than what ListIncidentRefs can parse, which is every file whose name fits the
+// current format. The two disagree on a directory holding incidents written
+// before the name gained its millisecond and suffix fields, and a view showing
+// a count above the list it came from cannot use the smaller number.
+func CountIncidents(dir string) (int, error) {
+	entries, err := os.ReadDir(incidentsDir(dir))
+	if err != nil {
+		if os.IsNotExist(err) {
+			return 0, nil
+		}
+		return 0, err
+	}
+	count := 0
+	for _, e := range entries {
+		if e.IsDir() || !strings.HasSuffix(e.Name(), ".json") {
+			continue
+		}
+		count++
+	}
+	return count, nil
+}
+
 // ListIncidentRefs returns one ref per parseable incident file, newest first,
 // without opening any of them.
 func ListIncidentRefs(dir string) ([]IncidentRef, error) {

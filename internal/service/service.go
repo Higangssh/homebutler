@@ -200,6 +200,23 @@ func Write(path, content string) error {
 	return nil
 }
 
+// InstalledUnit reports whether a watch service is installed on this host and
+// where its unit file is. It answers about the file, not the supervisor: a unit
+// that exists and is stopped reads as installed here, and saying more would
+// mean asking systemd or launchd on every call.
+func InstalledUnit() (bool, string) {
+	kind, err := Detect()
+	if err != nil {
+		return false, ""
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return false, ""
+	}
+	path := UnitPath(kind, home)
+	return Installed(path), path
+}
+
 // Installed reports whether a unit file is already present at path.
 func Installed(path string) bool {
 	_, err := os.Stat(path)
