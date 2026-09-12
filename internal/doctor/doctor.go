@@ -432,7 +432,7 @@ func checkIncidentRetention(r *Result, cfg *config.Config, dir string) {
 // effect this command should not grow quietly.
 func checkWatching(r *Result, dir string, installedFn func() (bool, string)) {
 	if installedFn == nil {
-		installedFn = watchServiceInstalled
+		installedFn = service.InstalledUnit
 	}
 	if dir == "" {
 		d, err := watch.WatchDir()
@@ -519,19 +519,6 @@ func notifyOnMeans(mode string) string {
 	default:
 		return "notify_on: " + mode + " — repeated restarts are sent as flapping. A single restart is recorded but not sent."
 	}
-}
-
-func watchServiceInstalled() (bool, string) {
-	kind, err := service.Detect()
-	if err != nil {
-		return false, ""
-	}
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return false, ""
-	}
-	path := service.UnitPath(kind, home)
-	return service.Installed(path), path
 }
 
 // checkConfigPermissions surfaces the refusal Load would make, before the

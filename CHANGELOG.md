@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### ✨ Features
+
+- show what `watch` recorded in the dashboard (#165). A new Watch tab lists the incidents on disk newest first — restart count, exit code, OOM kill, and whether the restart was classified as flapping — and opening one fetches the logs captured before the container died, which is the reason `watch` takes them before the restart rather than reading them afterwards. It also shows what is on the watch list, and says when nothing is installed to poll it, in the words `doctor` already uses for that state. Read-only, and local to the machine `serve` runs on
+
 ### 🐛 Fixes
 
 - carry the token in the dashboard, so `--token` no longer turns it into a page of error cards (#163). `requireAuth` guards `/api/*` and the frontend sent no `Authorization` header, so a token left `/` loading and every card inside it failing — the only two states were exposed without authentication, or authenticated and broken. The dashboard now asks for the token once, keeps it in that browser, and sends it on every request. A 401 is answered by one screen instead of each card reporting a failure it cannot explain, including when the server is restarted under a different token while the page is open, and a token the server refuses is not kept

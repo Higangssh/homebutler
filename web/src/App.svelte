@@ -18,6 +18,7 @@
   import PortsCard from './lib/PortsCard.svelte';
   import WakeCard from './lib/WakeCard.svelte';
   import ConfigCard from './lib/ConfigCard.svelte';
+  import WatchCard from './lib/WatchCard.svelte';
   import ProxmoxCard from './lib/ProxmoxCard.svelte';
 
   let servers = $state([]);
@@ -100,6 +101,11 @@
       >Dashboard</button>
       <button
         class="tab"
+        class:active={activeTab === 'watch'}
+        onclick={() => activeTab = 'watch'}
+      >Watch</button>
+      <button
+        class="tab"
         class:active={activeTab === 'config'}
         onclick={() => activeTab = 'config'}
       >Config</button>
@@ -130,6 +136,8 @@
         <PortsCard server={selectedServer} />
         <WakeCard />
       </div>
+    {:else if activeTab === 'watch'}
+      <WatchCard />
     {:else}
       <ConfigCard />
     {/if}

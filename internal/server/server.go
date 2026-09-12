@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strconv"
 	"strings"
 	"sync"
 	"syscall"
@@ -24,8 +25,10 @@ import (
 	"github.com/Higangssh/homebutler/internal/ports"
 	"github.com/Higangssh/homebutler/internal/proxmox"
 	"github.com/Higangssh/homebutler/internal/remote"
+	"github.com/Higangssh/homebutler/internal/service"
 	"github.com/Higangssh/homebutler/internal/system"
 	"github.com/Higangssh/homebutler/internal/wake"
+	"github.com/Higangssh/homebutler/internal/watch"
 )
 
 //go:embed all:web_dist
@@ -167,6 +170,9 @@ func (s *Server) routes() {
 		s.mux.HandleFunc("GET /api/servers", api(s.demoServers))
 		s.mux.HandleFunc("GET /api/servers/{name}/status", api(s.demoServerStatus))
 		s.mux.HandleFunc("GET /api/config", api(s.demoConfig))
+		s.mux.HandleFunc("GET /api/watch", api(s.demoWatch))
+		s.mux.HandleFunc("GET /api/watch/incidents", api(s.demoWatchIncidents))
+		s.mux.HandleFunc("GET /api/watch/incidents/{id}", api(s.demoWatchIncident))
 	} else {
 		s.mux.HandleFunc("GET /api/status", api(s.handleStatus))
 		s.mux.HandleFunc("GET /api/docker", api(s.handleDocker))
@@ -179,6 +185,9 @@ func (s *Server) routes() {
 		s.mux.HandleFunc("GET /api/servers", api(s.handleServers))
 		s.mux.HandleFunc("GET /api/servers/{name}/status", api(s.handleServerStatus))
 		s.mux.HandleFunc("GET /api/config", api(s.handleConfig))
+		s.mux.HandleFunc("GET /api/watch", api(s.handleWatch))
+		s.mux.HandleFunc("GET /api/watch/incidents", api(s.handleWatchIncidents))
+		s.mux.HandleFunc("GET /api/watch/incidents/{id}", api(s.handleWatchIncident))
 	}
 	s.mux.HandleFunc("GET /api/proxmox/endpoints", api(s.handleProxmoxEndpoints))
 	s.mux.HandleFunc("GET /api/proxmox/status", api(s.handleProxmoxStatus))
@@ -481,6 +490,115 @@ func (s *Server) handleConfig(w http.ResponseWriter, r *http.Request) {
 		},
 		"wake": wakeTargets,
 	})
+}
+
+// watchService is what doctor checks and the dashboard now shows: whether a
+// unit exists to poll the watch list. Installed is about the file, not whether
+// the supervisor has it running.
+type watchService struct {
+	Installed bool   `json:"installed"`
+	Unit      string `json:"unit,omitempty"`
+}
+
+// watchRetention says how full the incident directory is. Max is 0 when
+// history was made unlimited on purpose, which is a choice rather than a
+// state to warn about.
+type watchRetention struct {
+	Kept int `json:"kept"`
+	Max  int `json:"max"`
+}
+
+type watchOverview struct {
+	Targets   []watch.Target `json:"targets"`
+	Service   watchService   `json:"service"`
+	Retention watchRetention `json:"retention"`
+}
+
+// handleWatch answers what is being watched, whether anything is installed to
+// poll it, and how much history is being kept. The three are one request
+// because a target list is misleading on its own: entries with no service is
+// the state where every other monitoring feature is silent.
+func (s *Server) handleWatch(w http.ResponseWriter, r *http.Request) {
+	dir, err := watch.WatchDir()
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	targets, err := watch.LoadTargets(dir)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	if targets == nil {
+		targets = []watch.Target{}
+	}
+
+	installed, unit := service.InstalledUnit()
+
+	// A directory that cannot be listed is reported as no incidents kept
+	// rather than failing the whole view: the target list is the part that
+	// answers "is anything watched at all".
+	kept, _ := watch.CountIncidents(dir)
+
+	writeJSON(w, watchOverview{
+		Targets: targets,
+		Service: watchService{Installed: installed, Unit: unit},
+		Retention: watchRetention{
+			Kept: kept,
+			Max:  s.cfg.Watch.Retention.MaxIncidents,
+		},
+	})
+}
+
+// handleWatchIncidents lists recorded incidents, newest first, without logs.
+// Every incident carries two hundred lines of captured output, so the list
+// stays cheap and a single incident is fetched whole when one is opened.
+func (s *Server) handleWatchIncidents(w http.ResponseWriter, r *http.Request) {
+	dir, err := watch.WatchDir()
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	limit := 25
+	if raw := r.URL.Query().Get("limit"); raw != "" {
+		if n, err := strconv.Atoi(raw); err == nil && n > 0 {
+			limit = n
+		}
+	}
+
+	incidents, err := watch.History(dir, watch.HistoryOptions{
+		Limit:     limit,
+		Container: r.URL.Query().Get("container"),
+	})
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	if incidents == nil {
+		incidents = []watch.Incident{}
+	}
+	writeJSON(w, incidents)
+}
+
+// handleWatchIncident returns one incident with the logs captured around it.
+// The pre-restart logs are the reason watch takes them before the container
+// dies rather than reading them afterwards, so they are the point of opening
+// an incident at all.
+func (s *Server) handleWatchIncident(w http.ResponseWriter, r *http.Request) {
+	dir, err := watch.WatchDir()
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	incident, err := watch.LoadIncident(dir, r.PathValue("id"))
+	if err != nil {
+		writeError(w, http.StatusNotFound, err.Error())
+		return
+	}
+	writeJSON(w, incident)
 }
 
 func (s *Server) handleVersion(w http.ResponseWriter, r *http.Request) {
