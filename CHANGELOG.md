@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### 🐛 Fixes
+
+- offer `watch tui` rather than `tui` after `init` (#159). The wizard has printed `homebutler tui` since it was written and that has never been a command — the TUI was `homebutler watch` at the time and is `homebutler watch tui` now. Every command the wizard offers is now checked against the command tree by a test, because this screen appears on a machine being set up for the first time and nobody runs it twice, which is how it went six months without anyone saying so
+
 ## [0.29.0](https://github.com/Higangssh/homebutler/compare/v0.28.0...v0.29.0) - 2026-09-09
 **Twice homebutler answered with something the reader could not act on.** A binary built without the dashboard — `go install`, or `make build` from a checkout — still embedded the tracked `.gitkeep`, which counted as content, so `serve` answered `/` with a directory listing of one dotfile and the page written to explain exactly that could not be reached. A malformed fingerprint or an unreadable CA file left Proxmox with no failure class at all, so the dashboard, `doctor` and `watch` each decided separately what a config mistake meant.
 
