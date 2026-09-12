@@ -10,6 +10,10 @@ homebutler
 /bin/
 web/dist/
 web/node_modules/
+web/test-results/
+web/playwright-report/
+web/blob-report/
+web/.playwright/
 internal/server/web_dist/*
 !internal/server/web_dist/.gitkeep
 

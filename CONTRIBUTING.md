@@ -89,6 +89,27 @@ go build ./...
 
 All four must pass. CI will reject PRs that fail any of these.
 
+If you touched anything under `web/`, there are two more. The component tests
+are quick:
+
+```bash
+npm --prefix web test
+```
+
+The end-to-end suite drives a browser against a real `homebutler serve --demo`,
+so it needs Chromium once:
+
+```bash
+npx --prefix web playwright install chromium
+npm --prefix web run e2e
+```
+
+It starts both servers itself and covers the states that are otherwise only
+reached by accident — a dashboard asking for its token, an endpoint returning
+500, an incident opened to read the logs captured before the container died. CI
+runs it in a job of its own, so a frontend change that builds and still breaks
+in a browser fails there rather than on someone's dashboard.
+
 If the change is visible to someone using homebutler — new output, a new flag, a
 different default, a message that reads differently — add an entry to
 `CHANGELOG.md` under `## [Unreleased]` in the same PR. Something that used to
