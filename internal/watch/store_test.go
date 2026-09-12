@@ -653,3 +653,80 @@ func TestLoadWatchConfig_AppliesRetentionDefault(t *testing.T) {
 		t.Errorf("expected default cap %d, got %d", defaultMaxIncidents, cfg.Retention.MaxIncidents)
 	}
 }
+
+func TestParseIncidentRef_CurrentAndOlderFormats(t *testing.T) {
+	cases := []struct {
+		name      string
+		container string
+		ok        bool
+	}{
+		{"plex-20260410-224033.581-7a2124.json", "plex", true},
+		{"ghostmeet-backend-1-20260410-174933.json", "ghostmeet-backend-1", true},
+		{"gitea-20260410-174933.json", "gitea", true},
+		{"not-an-incident.json", "", false},
+		{"readme.txt", "", false},
+	}
+	for _, tc := range cases {
+		ref, ok := parseIncidentRef(tc.name)
+		if ok != tc.ok {
+			t.Fatalf("%s: ok=%v want %v", tc.name, ok, tc.ok)
+		}
+		if !tc.ok {
+			continue
+		}
+		if ref.Container != tc.container {
+			t.Fatalf("%s: container=%q want %q", tc.name, ref.Container, tc.container)
+		}
+		if ref.ID != strings.TrimSuffix(tc.name, ".json") {
+			t.Fatalf("%s: id=%q", tc.name, ref.ID)
+		}
+		if ref.DetectedAt.IsZero() {
+			t.Fatalf("%s: zero DetectedAt", tc.name)
+		}
+	}
+}
+
+func TestPruneIncidents_IncludesOlderFilenames(t *testing.T) {
+	dir := t.TempDir()
+	idir := filepath.Join(dir, "incidents")
+	if err := os.MkdirAll(idir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	// Three older-format files; prune should see all three and keep the newest two.
+	names := []string{
+		"svc-20260410-100000.json",
+		"svc-20260410-110000.json",
+		"svc-20260410-120000.json",
+	}
+	for _, name := range names {
+		path := filepath.Join(idir, name)
+		if err := os.WriteFile(path, []byte(`{"id":"`+strings.TrimSuffix(name, ".json")+`"}`), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	removed, err := PruneIncidents(dir, 2)
+	if err != nil {
+		t.Fatalf("PruneIncidents: %v", err)
+	}
+	if removed != 1 {
+		t.Fatalf("removed=%d want 1", removed)
+	}
+	if _, err := os.Stat(filepath.Join(idir, names[0])); !os.IsNotExist(err) {
+		t.Fatalf("oldest older-format file should be gone: %v", err)
+	}
+	for _, name := range names[1:] {
+		if _, err := os.Stat(filepath.Join(idir, name)); err != nil {
+			t.Fatalf("kept %s: %v", name, err)
+		}
+	}
+
+	n, err := CountIncidents(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n != 2 {
+		t.Fatalf("CountIncidents=%d want 2", n)
+	}
+}

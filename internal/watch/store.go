@@ -222,11 +222,10 @@ func SaveIncident(dir string, inc *Incident, keep int) error {
 // PruneIncidents deletes the oldest incidents until at most keep remain, and
 // reports how many it removed. keep of zero or less keeps everything.
 //
-// Files whose names do not fit the incident format are left alone:
-// ListIncidentRefs skips them, so they are never selected for deletion.
-// Refusing to delete a file we do not understand is the safer half of that
-// trade, and the criterion moved from "cannot be unmarshalled" to "cannot be
-// named" only because pruning no longer opens anything.
+// Files whose names fit neither the current layout
+// (container-YYYYMMDD-HHMMSS.mmm-hex) nor the older container-timestamp form
+// without milliseconds or a suffix are left alone: ListIncidentRefs skips
+// them, so they are never selected for deletion.
 func PruneIncidents(dir string, keep int) (int, error) {
 	if keep <= 0 {
 		return 0, nil
@@ -298,56 +297,51 @@ type IncidentRef struct {
 }
 
 // parseIncidentRef recovers the container and time from an incident filename.
-// A name that does not fit the format is not ours to interpret, so it is
-// reported as unparseable rather than guessed at; callers skip those, which is
-// also what keeps PruneIncidents from deleting a file it does not understand.
+// It accepts the current form (milliseconds + 6-hex suffix) and the older
+// container-YYYYMMDD-HHMMSS form homebutler used to write. A name that fits
+// neither is unparseable; callers skip those so PruneIncidents never deletes
+// a file it does not understand.
 func parseIncidentRef(name string) (IncidentRef, bool) {
 	id := strings.TrimSuffix(name, ".json")
 	if id == name {
 		return IncidentRef{}, false
 	}
-	// The suffix is 6 hex characters and the timestamp is fixed width, so the
-	// container name is whatever precedes them, dashes and all.
-	const tsLayout = "20060102-150405.000"
 	parts := strings.Split(id, "-")
-	if len(parts) < 4 {
-		return IncidentRef{}, false
+
+	// Current: container-20060102-150405.000-xxxxxx
+	if len(parts) >= 4 {
+		tsStr := parts[len(parts)-3] + "-" + parts[len(parts)-2]
+		if detected, err := time.Parse("20060102-150405.000", tsStr); err == nil {
+			container := strings.Join(parts[:len(parts)-3], "-")
+			if container != "" {
+				return IncidentRef{ID: id, Container: container, DetectedAt: detected}, true
+			}
+		}
 	}
-	tsStr := parts[len(parts)-3] + "-" + parts[len(parts)-2]
-	detected, err := time.Parse(tsLayout, tsStr)
-	if err != nil {
-		return IncidentRef{}, false
+
+	// Older: container-20060102-150405 (no milliseconds, no suffix)
+	if len(parts) >= 3 {
+		tsStr := parts[len(parts)-2] + "-" + parts[len(parts)-1]
+		if detected, err := time.Parse("20060102-150405", tsStr); err == nil {
+			container := strings.Join(parts[:len(parts)-2], "-")
+			if container != "" {
+				return IncidentRef{ID: id, Container: container, DetectedAt: detected}, true
+			}
+		}
 	}
-	container := strings.Join(parts[:len(parts)-3], "-")
-	if container == "" {
-		return IncidentRef{}, false
-	}
-	return IncidentRef{ID: id, Container: container, DetectedAt: detected}, true
+
+	return IncidentRef{}, false
 }
 
-// CountIncidents reports how many incident files are on disk.
-//
-// It counts what ListIncidents will read, which is every .json file, rather
-// than what ListIncidentRefs can parse, which is every file whose name fits the
-// current format. The two disagree on a directory holding incidents written
-// before the name gained its millisecond and suffix fields, and a view showing
-// a count above the list it came from cannot use the smaller number.
+// CountIncidents reports how many incident files ListIncidentRefs can name.
+// That is the same set prune and doctor use, including older filenames without
+// milliseconds or a suffix.
 func CountIncidents(dir string) (int, error) {
-	entries, err := os.ReadDir(incidentsDir(dir))
+	refs, err := ListIncidentRefs(dir)
 	if err != nil {
-		if os.IsNotExist(err) {
-			return 0, nil
-		}
 		return 0, err
 	}
-	count := 0
-	for _, e := range entries {
-		if e.IsDir() || !strings.HasSuffix(e.Name(), ".json") {
-			continue
-		}
-		count++
-	}
-	return count, nil
+	return len(refs), nil
 }
 
 // ListIncidentRefs returns one ref per parseable incident file, newest first,
