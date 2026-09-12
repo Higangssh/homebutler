@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### 🐛 Fixes
+
+- carry the token in the dashboard, so `--token` no longer turns it into a page of error cards (#163). `requireAuth` guards `/api/*` and the frontend sent no `Authorization` header, so a token left `/` loading and every card inside it failing — the only two states were exposed without authentication, or authenticated and broken. The dashboard now asks for the token once, keeps it in that browser, and sends it on every request. A 401 is answered by one screen instead of each card reporting a failure it cannot explain, including when the server is restarted under a different token while the page is open, and a token the server refuses is not kept
+
 ## [0.29.1](https://github.com/Higangssh/homebutler/compare/v0.29.0...v0.29.1) - 2026-09-12
 **`init` sent every new user's second command to an error.** The wizard has offered `homebutler tui` since the day after the TUI was added, and no version has ever had that command — the TUI was `homebutler watch` at the time and is `homebutler watch tui` now. It survived six months because the screen appears once, on a machine being set up for the first time, and the people who saw it had no reason to assume the tool was wrong rather than themselves.
 
