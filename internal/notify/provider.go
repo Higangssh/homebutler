@@ -158,6 +158,19 @@ func sendWebhook(cfg *WebhookConfig, event Event) error {
 	return postJSON(cfg.URL, payload)
 }
 
+// safeAddress is the part of an address that is not a credential. The host has
+// to survive so that "which service is unreachable" stays answerable from the
+// log when more than one channel is configured; the path and query must not,
+// because that is where every provider keeps its secret. Userinfo goes with
+// them — url.URL.Host excludes it.
+func safeAddress(raw string) string {
+	parsed, err := url.Parse(raw)
+	if err != nil || parsed.Host == "" {
+		return "the configured endpoint"
+	}
+	return parsed.Scheme + "://" + parsed.Host
+}
+
 func postJSON(endpoint string, payload interface{}) error {
 	body, err := json.Marshal(payload)
 	if err != nil {
@@ -166,15 +179,14 @@ func postJSON(endpoint string, payload interface{}) error {
 
 	resp, err := httpClient.Post(endpoint, "application/json", bytes.NewReader(body))
 	if err != nil {
-		// *url.Error puts the whole request URL in its message, and the URL is
-		// the credential here: Telegram carries the bot token in the path, and
-		// a Slack, Discord or webhook address is itself the secret. This error
+		// *url.Error puts the whole request URL in its message, and the secret
+		// is always in the path or the query: Telegram's bot token, a Slack or
+		// Discord webhook path, a generic webhook's token parameter. This error
 		// is printed as "→ notify error: ..." by the watcher, which under an
-		// installed service means journald or the launchd log. Keep the cause,
-		// drop the address.
+		// installed service means journald or the launchd log.
 		var urlErr *url.Error
 		if errors.As(err, &urlErr) {
-			return fmt.Errorf("request failed: %w", urlErr.Err)
+			return fmt.Errorf("request to %s failed: %w", safeAddress(urlErr.URL), urlErr.Err)
 		}
 		return fmt.Errorf("request failed: %w", err)
 	}

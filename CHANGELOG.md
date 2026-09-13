@@ -10,7 +10,7 @@ All notable changes to this project will be documented in this file.
 
 ### 🐛 Fixes
 
-- keep the bot token and webhook URL out of the log when a notification cannot connect (#176). A transport failure returns `*url.Error`, whose message is the whole request URL, and `postJSON` wrapped it — so `→ notify error:` carried a Telegram bot token, or a Slack, Discord or webhook address, which is itself the secret. With `watch` installed as a service that line goes to journald or the launchd log, and into every log someone pastes when asking for help. The cause is kept and the address is dropped. **Rotate any token or webhook URL that has already been written to a log**
+- keep the bot token and webhook URL out of the log when a notification cannot connect (#176). A transport failure returns `*url.Error`, whose message is the whole request URL, and `postJSON` wrapped it — so `→ notify error:` carried a Telegram bot token, or a Slack, Discord or webhook address, which is itself the secret. With `watch` installed as a service that line goes to journald or the launchd log, and into every log someone pastes when asking for help. The scheme and host survive, so which channel is unreachable stays answerable, and the path and query — where every provider keeps its secret — do not. **Rotate any token or webhook URL that has already been written to a log**
 
 - parse older incident filenames so prune and doctor agree on what counts (#169). Filenames without the millisecond and hex suffix — the form homebutler wrote before the current layout — were skipped by `ListIncidentRefs`, so `max_incidents` never reached them and `doctor`'s incident count under-reported the directory. Both shapes are named explicitly now; a name that fits neither is still left alone
 
