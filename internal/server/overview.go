@@ -3,7 +3,6 @@ package server
 import (
 	"encoding/json"
 	"net/http"
-	"sync"
 	"time"
 
 	"github.com/Higangssh/homebutler/internal/config"
@@ -53,34 +52,42 @@ type overviewResponse struct {
 // SSH round trips in series every fifteen seconds, and a host that was slow to
 // answer stalled every machine behind it in the loop.
 func (s *Server) handleOverview(w http.ResponseWriter, r *http.Request) {
-	readings := make([]serverReading, len(s.cfg.Servers))
-	done := make(chan struct{})
+	// Each collection reports through a buffered channel rather than writing
+	// into a shared slice. A goroutine that finishes after the deadline still
+	// has somewhere to put its result and never touches what the response is
+	// built from, so the late arrival races nothing — it only reaches the
+	// cache, which is where the next refresh will find it.
+	type result struct {
+		index   int
+		reading serverReading
+	}
+	results := make(chan result, len(s.cfg.Servers))
 
-	var wg sync.WaitGroup
 	for i := range s.cfg.Servers {
-		wg.Add(1)
 		go func(i int, srv config.ServerConfig) {
-			defer wg.Done()
-			readings[i] = s.readServer(&srv)
+			results <- result{index: i, reading: s.readServer(&srv)}
 		}(i, s.cfg.Servers[i])
 	}
-	go func() {
-		wg.Wait()
-		close(done)
-	}()
 
-	select {
-	case <-done:
-	case <-time.After(overviewDeadline):
-		// Whatever has not answered yet is filled in from its snapshot below.
-		// The goroutine still finishes and still writes to the cache, so the
-		// reading it was after is one refresh away rather than lost.
-	case <-r.Context().Done():
-		return
+	readings := make([]serverReading, len(s.cfg.Servers))
+	answered := make([]bool, len(s.cfg.Servers))
+	deadline := time.After(overviewDeadline)
+
+collect:
+	for range s.cfg.Servers {
+		select {
+		case got := <-results:
+			readings[got.index] = got.reading
+			answered[got.index] = true
+		case <-deadline:
+			break collect
+		case <-r.Context().Done():
+			return
+		}
 	}
 
 	for i, srv := range s.cfg.Servers {
-		if readings[i].Name == "" {
+		if !answered[i] {
 			readings[i] = s.snapshotReading(&srv, "", "Still collecting. The last reading is shown.")
 		}
 	}
