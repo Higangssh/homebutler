@@ -144,3 +144,10 @@ export function getWatchIncidents(limit) {
 export function getWatchIncident(id) {
   return fetchJSON(`/api/watch/incidents/${encodeURIComponent(id)}`);
 }
+
+// One request for every server, rather than the list and then a round trip per
+// server. Each reading carries its own freshness, so a machine that did not
+// answer is labelled rather than missing.
+export function getOverview() {
+  return fetchJSON('/api/overview');
+}

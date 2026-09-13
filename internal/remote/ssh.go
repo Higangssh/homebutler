@@ -30,7 +30,7 @@ func Run(server *config.ServerConfig, args ...string) ([]byte, error) {
 
 	session, err := client.NewSession()
 	if err != nil {
-		return nil, fmt.Errorf("[%s] failed to open SSH session: %w\n  → Check if the server is accepting new connections", server.Name, err)
+		return nil, classified(ClassRemote, "[%s] failed to open SSH session: %w\n  → Check if the server is accepting new connections", server.Name, err)
 	}
 	defer session.Close()
 
@@ -40,7 +40,7 @@ func Run(server *config.ServerConfig, args ...string) ([]byte, error) {
 	cmd := fmt.Sprintf("export PATH=$HOME/.local/bin:$HOME/bin:$HOME/go/bin:/opt/homebrew/bin:/usr/local/bin:/usr/local/sbin:/snap/bin:$PATH; %s %s", util.ShellQuote(binPath), util.ShellQuoteArgs(args))
 	out, err := session.CombinedOutput(cmd)
 	if err != nil {
-		return nil, fmt.Errorf("[%s] remote command failed: %w\n  → Output: %s\n  → Check if homebutler is installed on the remote server: homebutler deploy %s", server.Name, err, strings.TrimSpace(string(out)), server.Name)
+		return nil, classified(ClassRemote, "[%s] remote command failed: %w\n  → Output: %s\n  → Check if homebutler is installed on the remote server: homebutler deploy %s", server.Name, err, strings.TrimSpace(string(out)), server.Name)
 	}
 
 	return out, nil
@@ -52,12 +52,12 @@ func connect(server *config.ServerConfig) (*ssh.Client, error) {
 	if server.UseKeyAuth() {
 		signer, err := loadKey(server.KeyFile)
 		if err != nil {
-			return nil, fmt.Errorf("[%s] failed to load SSH key (%s): %w\n  → Check the key_file path in your config: ~/.config/homebutler/config.yaml", server.Name, server.KeyFile, err)
+			return nil, classified(ClassAuthentication, "[%s] failed to load SSH key (%s): %w\n  → Check the key_file path in your config: ~/.config/homebutler/config.yaml", server.Name, server.KeyFile, err)
 		}
 		authMethods = append(authMethods, ssh.PublicKeys(signer))
 	} else {
 		if server.Password == "" {
-			return nil, fmt.Errorf("[%s] no SSH credentials configured\n  → Add 'key_file' or 'password' to this server in ~/.config/homebutler/config.yaml", server.Name)
+			return nil, classified(ClassAuthentication, "[%s] no SSH credentials configured\n  → Add 'key_file' or 'password' to this server in ~/.config/homebutler/config.yaml", server.Name)
 		}
 		authMethods = append(authMethods, ssh.Password(server.Password))
 	}
@@ -78,14 +78,14 @@ func connect(server *config.ServerConfig) (*ssh.Client, error) {
 	client, err := ssh.Dial("tcp", addr, cfg)
 	if err != nil {
 		if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
-			return nil, fmt.Errorf("[%s] connection timed out (%s)\n  → Check if the server is online and reachable\n  → Verify host/port in ~/.config/homebutler/config.yaml", server.Name, addr)
+			return nil, classified(ClassUnreachable, "[%s] connection timed out (%s)\n  → Check if the server is online and reachable\n  → Verify host/port in ~/.config/homebutler/config.yaml", server.Name, addr)
 		}
 		// Wrap known_hosts errors with actionable messages
 		var keyErr *knownhosts.KeyError
 		if errors.As(err, &keyErr) {
 			if len(keyErr.Want) > 0 {
 				// Key mismatch — known_hosts has a different key
-				return nil, fmt.Errorf("[%s] ⚠️  SSH HOST KEY CHANGED (%s)\n"+
+				return nil, classified(ClassHostKey, "[%s] ⚠️  SSH HOST KEY CHANGED (%s)\n"+
 					"  The server's host key does not match the one in ~/.ssh/known_hosts.\n"+
 					"  This could mean:\n"+
 					"    1. The server was reinstalled or its SSH keys were regenerated\n"+
@@ -103,15 +103,22 @@ func connect(server *config.ServerConfig) (*ssh.Client, error) {
 					retryCfg.HostKeyCallback = newCb
 					retryClient, retryErr := ssh.Dial("tcp", addr, &retryCfg)
 					if retryErr != nil {
-						return nil, fmt.Errorf("[%s] connected but failed to establish session after registering host key (%s): %w\n  → Try again, or manually: homebutler trust %s", server.Name, addr, retryErr, server.Name)
+						return nil, classified(ClassHostKey, "[%s] connected but failed to establish session after registering host key (%s): %w\n  → Try again, or manually: homebutler trust %s", server.Name, addr, retryErr, server.Name)
 					}
 					return retryClient, nil
 				}
 			}
 			return nil, tofuFailureError(server, addr, tofuErr)
 		}
-		// Generic SSH error
-		return nil, fmt.Errorf("[%s] SSH connection failed (%s): %w\n  → Check: server online? correct host/port? firewall rules?\n  → Config: ~/.config/homebutler/config.yaml", server.Name, addr, err)
+		// Generic SSH error. x/crypto reports a refused credential in the
+		// message rather than a distinct type, and the difference matters to
+		// anything downstream: one is a machine that is down, the other is a
+		// machine that is up and said no.
+		class := ClassUnreachable
+		if strings.Contains(err.Error(), "unable to authenticate") {
+			class = ClassAuthentication
+		}
+		return nil, classified(class, "[%s] SSH connection failed (%s): %w\n  → Check: server online? correct host/port? firewall rules?\n  → Config: ~/.config/homebutler/config.yaml", server.Name, addr, err)
 	}
 
 	return client, nil
@@ -356,10 +363,12 @@ func tofuFailureError(server *config.ServerConfig, addr string, tofuErr error) e
 	// Pointing at `homebutler trust` here would send the user down the wrong path.
 	var dialErr *tofuDialError
 	if errors.As(tofuErr, &dialErr) {
-		return fmt.Errorf("[%s] SSH connection failed while registering a new host key (%s): %w\n  %s",
+		// The connection never got as far as a host key, so this is the host
+		// being unreachable rather than a trust problem.
+		return classified(ClassUnreachable, "[%s] SSH connection failed while registering a new host key (%s): %w\n  %s",
 			server.Name, addr, tofuErr, connHint)
 	}
 
-	return fmt.Errorf("[%s] failed to auto-register host key for %s: %w\n  → Register manually: homebutler trust %s\n  %s",
+	return classified(ClassHostKey, "[%s] failed to auto-register host key for %s: %w\n  → Register manually: homebutler trust %s\n  %s",
 		server.Name, addr, tofuErr, server.Name, connHint)
 }

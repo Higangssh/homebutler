@@ -52,6 +52,8 @@ type Server struct {
 	remoteRunner RemoteRunner
 	proxmoxMu    sync.RWMutex
 	proxmoxCache map[string]proxmoxSnapshot
+	serverMu     sync.RWMutex
+	serverCache  map[string]serverSnapshot
 }
 
 type proxmoxSnapshot struct {
@@ -75,7 +77,7 @@ func New(cfg *config.Config, host string, port int, demo ...bool) *Server {
 	if host == "" {
 		host = "127.0.0.1"
 	}
-	s := &Server{cfg: cfg, host: host, port: port, demo: d, version: "dev", mux: http.NewServeMux(), remoteRunner: remote.Run, proxmoxCache: make(map[string]proxmoxSnapshot)}
+	s := &Server{cfg: cfg, host: host, port: port, demo: d, version: "dev", mux: http.NewServeMux(), remoteRunner: remote.Run, proxmoxCache: make(map[string]proxmoxSnapshot), serverCache: make(map[string]serverSnapshot)}
 	s.routes()
 	return s
 }
@@ -180,12 +182,14 @@ func (s *Server) routes() {
 	// nothing to say about them.
 	if s.demo {
 		s.mux.HandleFunc("GET /api/wake", api(s.demoWake))
+		s.mux.HandleFunc("GET /api/overview", api(s.demoOverview))
 		s.mux.HandleFunc("GET /api/servers", api(s.demoServers))
 		s.mux.HandleFunc("GET /api/servers/{name}/status", api(s.demoServerStatus))
 		s.mux.HandleFunc("GET /api/config", api(s.demoConfig))
 		s.mux.HandleFunc("GET /api/watch/incidents/{id}", api(s.demoWatchIncident))
 	} else {
 		s.mux.HandleFunc("GET /api/wake", api(s.handleWakeList))
+		s.mux.HandleFunc("GET /api/overview", api(s.handleOverview))
 		s.mux.HandleFunc("GET /api/servers", api(s.handleServers))
 		s.mux.HandleFunc("GET /api/servers/{name}/status", api(s.handleServerStatus))
 		s.mux.HandleFunc("GET /api/config", api(s.handleConfig))
@@ -791,10 +795,14 @@ func (s *Server) handleServerStatus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Run remotely via SSH
+	// Run remotely via SSH. The error is not passed through: remote failures
+	// name the address, the config file, ~/.ssh/known_hosts and whatever the
+	// far side printed, which is right for a terminal and wrong for a browser.
+	// What crosses is the class and the sentence that goes with it.
 	out, err := s.remoteRunner(srv, "status", "--json")
 	if err != nil {
-		writeError(w, http.StatusBadGateway, err.Error())
+		log.Print(err)
+		writeError(w, http.StatusBadGateway, remote.Describe(remote.Classify(err)))
 		return
 	}
 

@@ -4,12 +4,17 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### ✨ Features
+
+- read every server in one request, with the age of each reading attached (#166). The overview asked for the server list and then fetched each server's status one after another, so ten machines meant ten SSH round trips in series every fifteen seconds and one slow host stalled every machine behind it in the loop. `GET /api/overview` collects them in parallel behind a four-second deadline and answers with the freshness envelope #146 settled for Proxmox: `current`, `stale` with the last reading that worked and how old it is, or `unavailable` when there has never been one. A machine that is briefly unreachable keeps showing the numbers it had, labelled, rather than going blank
+
 ### 🐛 Fixes
 
 - parse older incident filenames so prune and doctor agree on what counts (#169). Filenames without the millisecond and hex suffix — the form homebutler wrote before the current layout — were skipped by `ListIncidentRefs`, so `max_incidents` never reached them and `doctor`'s incident count under-reported the directory. Both shapes are named explicitly now; a name that fits neither is still left alone
 
 ### ⚠️ Behavior changes
 
+- **`/api/servers/{name}/status` no longer returns the SSH error.** It answered with the message written for a terminal, which names the address and port, `~/.config/homebutler/config.yaml`, `~/.ssh/known_hosts` and whatever the remote command printed. The body is now one sentence derived from a failure class — `unreachable`, `host_key`, `authentication` or `remote` — and the detail goes to the server's log. Anything parsing that body for text will need the class instead.
 - **Older-format incident files are pruning candidates.** `PruneIncidents` previously only deleted names it could parse in the current layout, so April-era files like `ghostmeet-backend-1-20260410-174933.json` were immortal. After this they count toward `max_incidents` and can be removed on the next `SaveIncident` when over the limit — data the operator cannot get back. Upgrade with a full incidents directory in mind.
 - **`doctor`'s `N of M incidents kept` can rise on an unchanged directory.** It now counts every parseable name, including the older form, so a `--strict` cron that was green can start warning without anyone touching the machine.
 
