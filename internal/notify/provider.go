@@ -3,9 +3,11 @@ package notify
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"time"
 )
 
@@ -156,14 +158,24 @@ func sendWebhook(cfg *WebhookConfig, event Event) error {
 	return postJSON(cfg.URL, payload)
 }
 
-func postJSON(url string, payload interface{}) error {
+func postJSON(endpoint string, payload interface{}) error {
 	body, err := json.Marshal(payload)
 	if err != nil {
 		return fmt.Errorf("failed to marshal payload: %w", err)
 	}
 
-	resp, err := httpClient.Post(url, "application/json", bytes.NewReader(body))
+	resp, err := httpClient.Post(endpoint, "application/json", bytes.NewReader(body))
 	if err != nil {
+		// *url.Error puts the whole request URL in its message, and the URL is
+		// the credential here: Telegram carries the bot token in the path, and
+		// a Slack, Discord or webhook address is itself the secret. This error
+		// is printed as "→ notify error: ..." by the watcher, which under an
+		// installed service means journald or the launchd log. Keep the cause,
+		// drop the address.
+		var urlErr *url.Error
+		if errors.As(err, &urlErr) {
+			return fmt.Errorf("request failed: %w", urlErr.Err)
+		}
 		return fmt.Errorf("request failed: %w", err)
 	}
 	defer func() {
