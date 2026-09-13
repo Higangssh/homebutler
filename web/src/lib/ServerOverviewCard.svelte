@@ -1,27 +1,21 @@
 <script>
   import { onMount, onDestroy } from 'svelte';
-  import { getServers, getServerStatus } from './api.js';
+  import { getOverview } from './api.js';
 
   let servers = $state([]);
-  let statuses = $state({});
+  let collectedAt = $state('');
   let error = $state('');
   let timer;
 
+  // One request. The previous version asked for the server list and then
+  // fetched each server's status in sequence, so ten machines meant ten SSH
+  // round trips in series and one slow host stalled every machine behind it.
   async function refresh() {
     try {
-      servers = await getServers();
+      const overview = await getOverview();
+      servers = overview.servers;
+      collectedAt = overview.collected_at;
       error = '';
-      // Fetch status for each server
-      for (const srv of servers) {
-        try {
-          const status = await getServerStatus(srv.name);
-          statuses[srv.name] = { ok: true, data: status };
-          statuses = statuses;
-        } catch {
-          statuses[srv.name] = { ok: false };
-          statuses = statuses;
-        }
-      }
     } catch (err) {
       error = err.message;
     }
@@ -34,16 +28,18 @@
 
   onDestroy(() => clearInterval(timer));
 
-  function cpuOf(name) {
-    return statuses[name]?.data?.cpu?.usage_percent ?? null;
+  function dotColor(server) {
+    if (server.status === 'current') return 'var(--green)';
+    if (server.status === 'stale') return 'var(--yellow)';
+    return 'var(--red)';
   }
 
-  function memOf(name) {
-    return statuses[name]?.data?.memory?.usage_percent ?? null;
-  }
-
-  function uptimeOf(name) {
-    return statuses[name]?.data?.uptime ?? null;
+  function age(iso) {
+    const seconds = Math.round((Date.now() - new Date(iso).getTime()) / 1000);
+    if (seconds < 90) return `${seconds}s ago`;
+    const minutes = Math.round(seconds / 60);
+    if (minutes < 90) return `${minutes}m ago`;
+    return `${Math.round(minutes / 60)}h ago`;
   }
 </script>
 
@@ -62,27 +58,33 @@
   {:else}
     <div class="server-grid">
       {#each servers as srv}
-        {@const s = statuses[srv.name]}
         <div class="server-item">
           <div class="server-top">
-            <span class="dot" style="background:{s ? (s.ok ? 'var(--green)' : 'var(--red)') : 'var(--text-secondary)'}"></span>
+            <span class="dot" style="background:{dotColor(srv)}"></span>
             <span class="server-name">{srv.name}</span>
             <span class="server-type">{srv.local ? 'local' : srv.host}</span>
           </div>
-          {#if s?.ok}
+
+          {#if srv.system}
             <div class="server-metrics">
-              <span class="metric">CPU {cpuOf(srv.name)?.toFixed(0) ?? '—'}%</span>
-              <span class="metric">MEM {memOf(srv.name)?.toFixed(0) ?? '—'}%</span>
-              <span class="metric">{uptimeOf(srv.name) ?? '—'}</span>
+              <span class="metric">CPU {srv.system.cpu?.usage_percent?.toFixed(0) ?? '—'}%</span>
+              <span class="metric">MEM {srv.system.memory?.usage_percent?.toFixed(0) ?? '—'}%</span>
+              <span class="metric">{srv.system.uptime ?? '—'}</span>
             </div>
-          {:else if s}
-            <div class="server-metrics">
-              <span class="metric offline">offline</span>
-            </div>
+            {#if srv.status === 'stale'}
+              <!-- The reading is worth showing and so is its age: a number with
+                   no timestamp is what makes stale data look healthy. -->
+              <div class="staleness" title={srv.message}>
+                last answered {age(srv.updated_at)} · {srv.failure_class}
+              </div>
+            {/if}
           {:else}
             <div class="server-metrics">
-              <span class="metric loading-text">connecting...</span>
+              <span class="metric offline">{srv.failure_class || 'unavailable'}</span>
             </div>
+            {#if srv.message}
+              <div class="staleness">{srv.message}</div>
+            {/if}
           {/if}
         </div>
       {/each}
@@ -91,6 +93,13 @@
 </div>
 
 <style>
+  .staleness {
+    margin-top: 0.3rem;
+    font-size: 0.7rem;
+    line-height: 1.4;
+    color: var(--text-secondary);
+  }
+
   .card {
     background: var(--bg-card);
     border: 1px solid var(--border);

@@ -5,6 +5,8 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/Higangssh/homebutler/internal/remote"
+	"github.com/Higangssh/homebutler/internal/system"
 	"github.com/Higangssh/homebutler/internal/watch"
 )
 
@@ -437,4 +439,45 @@ func (s *Server) demoWatchIncident(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	writeError(w, http.StatusNotFound, "incident not found")
+}
+
+// demoOverview answers the three states the real one can be in. A demo where
+// every machine is current would make the screen prettier and leave the stale
+// and unavailable branches — the ones that only appear when something is
+// wrong — reachable by nobody.
+func (s *Server) demoOverview(w http.ResponseWriter, r *http.Request) {
+	now := time.Now().UTC()
+	lastGood := now.Add(-6 * time.Minute)
+
+	reading := func(name, host string, local bool, cpu, memUsed, memTotal float64, uptime string) *system.StatusInfo {
+		return &system.StatusInfo{
+			Hostname: name, OS: "linux", Arch: "amd64", Uptime: uptime,
+			CPU:    system.CPUInfo{UsagePercent: cpu, Cores: 8},
+			Memory: system.MemInfo{TotalGB: memTotal, UsedGB: memUsed, Percent: memUsed / memTotal * 100},
+			Disks:  []system.DiskInfo{{Mount: "/", TotalGB: 500, UsedGB: 187.5, Percent: 37.5}},
+		}
+	}
+
+	writeJSON(w, overviewResponse{
+		CollectedAt: now,
+		Servers: []serverReading{
+			{Name: "homelab-server", Host: "192.168.1.10", Local: true, Status: "current", UpdatedAt: &now,
+				System: reading("homelab-server", "192.168.1.10", true, 23.4, 12.4, 32, "4d 12h")},
+			{Name: "nas-box", Host: "192.168.1.20", Status: "current", UpdatedAt: &now,
+				System: reading("nas-box", "192.168.1.20", false, 5.2, 6.8, 16, "12d 3h")},
+			{Name: "raspberry-pi", Host: "192.168.1.30", Status: "current", UpdatedAt: &now,
+				System: reading("raspberry-pi", "192.168.1.30", false, 12.1, 3.2, 8, "28d 7h")},
+			// Answered six minutes ago and not since: the reading is still worth
+			// showing, and saying how old it is, is the whole point of #146.
+			{Name: "media-server", Host: "192.168.1.40", Status: "stale", UpdatedAt: &lastGood,
+				System:       reading("media-server", "192.168.1.40", false, 61.0, 11.0, 16, "2d 1h"),
+				FailureClass: remote.ClassUnreachable, Message: remote.Describe(remote.ClassUnreachable)},
+			// Never read since this server started, so there is nothing to show.
+			{Name: "backup-nas", Host: "192.168.1.60", Status: "unavailable",
+				FailureClass: remote.ClassAuthentication, Message: remote.Describe(remote.ClassAuthentication)},
+			// The one an operator has to look at from a terminal.
+			{Name: "vpn-gateway", Host: "192.168.1.90", Status: "unavailable",
+				FailureClass: remote.ClassHostKey, Message: remote.Describe(remote.ClassHostKey)},
+		},
+	})
 }
