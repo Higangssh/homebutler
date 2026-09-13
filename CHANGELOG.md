@@ -2,7 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
-## [Unreleased]
+## [0.31.0](https://github.com/Higangssh/homebutler/compare/v0.30.0...v0.31.0) - 2026-09-13
+**A dashboard with ten machines paid ten SSH round trips in series, and a notification that could not connect wrote the bot token into the log.** The overview fetched the server list and then each server's status one after another, so the wait was the sum and one slow host stalled every machine behind it in the loop. Separately, a transport failure returns the whole request URL in its message, and the URL is the credential — Telegram's bot token sits in the path, and a Slack, Discord or webhook address is the secret in full.
+
+```
+before   → notify error: request failed: Post "https://api.telegram.org/bot<token>/sendMessage": dial tcp: ...
+after    → notify error: request to https://api.telegram.org failed: dial tcp: ...
+```
 
 ### ✨ Features
 
@@ -17,7 +23,7 @@ All notable changes to this project will be documented in this file.
 ### ⚠️ Behavior changes
 
 - **`/api/servers/{name}/status` no longer returns the SSH error.** It answered with the message written for a terminal, which names the address and port, `~/.config/homebutler/config.yaml`, `~/.ssh/known_hosts` and whatever the remote command printed. The body is now one sentence derived from a failure class — `unreachable`, `host_key`, `authentication` or `remote` — and the detail goes to the server's log. Anything parsing that body for text will need the class instead.
-- **Older-format incident files are pruning candidates.** `PruneIncidents` previously only deleted names it could parse in the current layout, so April-era files like `ghostmeet-backend-1-20260410-174933.json` were immortal. After this they count toward `max_incidents` and can be removed on the next `SaveIncident` when over the limit — data the operator cannot get back. Upgrade with a full incidents directory in mind.
+- **Older-format incident files are pruning candidates.** `PruneIncidents` previously only deleted names it could parse in the current layout, so April-era files like `ghostmeet-backend-1-20260410-174933.json` were immortal. After this they count toward `max_incidents` and can be removed on the next `SaveIncident` when over the limit — data the operator cannot get back. **Back up `~/.homebutler/watch/incidents` before upgrading** if the history there matters.
 - **`doctor`'s `N of M incidents kept` can rise on an unchanged directory.** It now counts every parseable name, including the older form, so a `--strict` cron that was green can start warning without anyone touching the machine.
 
 ## [0.30.0](https://github.com/Higangssh/homebutler/compare/v0.29.1...v0.30.0) - 2026-09-12
