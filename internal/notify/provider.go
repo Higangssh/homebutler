@@ -23,38 +23,64 @@ type WebhookPayload struct {
 
 var httpClient = &http.Client{Timeout: 10 * time.Second}
 
+// ChannelError says which channel failed, so a caller does not have to work it
+// out from the message. cmd/alerts.go used to search the text for the channel
+// name, and a Discord failure quotes a URL containing "webhook", so one failure
+// was reported as two (#177).
+type ChannelError struct {
+	Channel Channel
+	Err     error
+}
+
+func (e *ChannelError) Error() string { return string(e.Channel) + ": " + e.Err.Error() }
+func (e *ChannelError) Unwrap() error { return e.Err }
+
+// FailedChannel reports which channel err came from, if it came from one.
+func FailedChannel(err error) (Channel, bool) {
+	var ce *ChannelError
+	if errors.As(err, &ce) {
+		return ce.Channel, true
+	}
+	return "", false
+}
+
+// SendAll delivers event through every configured channel and returns one
+// error per channel that failed. A channel that is not configured is not a
+// failure and says nothing.
 func SendAll(cfg *ProviderConfig, event Event) []error {
 	if cfg == nil {
 		return nil
 	}
 
 	var errs []error
-
-	if cfg.Telegram != nil && cfg.Telegram.BotToken != "" && cfg.Telegram.ChatID != "" {
-		if err := sendTelegram(cfg.Telegram, event); err != nil {
-			errs = append(errs, fmt.Errorf("telegram: %w", err))
+	for _, p := range providers {
+		if !p.enabled(cfg) {
+			continue
+		}
+		if err := p.send(cfg, event); err != nil {
+			errs = append(errs, &ChannelError{Channel: p.channel, Err: err})
 		}
 	}
-
-	if cfg.Slack != nil && cfg.Slack.WebhookURL != "" {
-		if err := sendSlack(cfg.Slack, event); err != nil {
-			errs = append(errs, fmt.Errorf("slack: %w", err))
-		}
-	}
-
-	if cfg.Discord != nil && cfg.Discord.WebhookURL != "" {
-		if err := sendDiscord(cfg.Discord, event); err != nil {
-			errs = append(errs, fmt.Errorf("discord: %w", err))
-		}
-	}
-
-	if cfg.Webhook != nil && cfg.Webhook.URL != "" {
-		if err := sendWebhook(cfg.Webhook, event); err != nil {
-			errs = append(errs, fmt.Errorf("webhook: %w", err))
-		}
-	}
-
 	return errs
+}
+
+// Priority is how loudly a channel should announce an event. It is derived
+// from the event rather than configured per message, so the two servers that
+// have a priority concept agree on what "this one matters" means.
+type Priority int
+
+const (
+	PriorityDefault Priority = iota
+	PriorityHigh
+)
+
+// priorityFor maps an event to how loudly it should arrive. A trigger is the
+// thing someone wants to be woken by; a recovery is not.
+func priorityFor(event Event) Priority {
+	if event.Status == "triggered" {
+		return PriorityHigh
+	}
+	return PriorityDefault
 }
 
 func buildTelegramText(event Event) string {

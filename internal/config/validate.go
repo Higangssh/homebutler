@@ -218,6 +218,8 @@ func cleanYAMLError(msg string) string {
 		{"type notify.SlackConfig", "notify.slack"},
 		{"type notify.DiscordConfig", "notify.discord"},
 		{"type notify.WebhookConfig", "notify.webhook"},
+		{"type notify.NtfyConfig", "notify.ntfy"},
+		{"type notify.GotifyConfig", "notify.gotify"},
 		{"type watch.NotifySettings", "watch.notify"},
 		{"type watch.FlappingConfig", "watch.flapping"},
 	}
@@ -652,6 +654,22 @@ func (r *ValidationResult) checkNotify(cfg *Config) {
 	}
 	if w := cfg.Notify.Webhook; w != nil {
 		urls = append(urls, struct{ field, url string }{"notify.webhook.url", w.URL})
+	}
+	if n := cfg.Notify.Ntfy; n != nil {
+		urls = append(urls, struct{ field, url string }{"notify.ntfy.url", n.URL})
+		if n.Topic == "" {
+			r.add(SeverityWarning, "notify.ntfy.topic",
+				"topic is missing, so ntfy stays disabled.", "")
+		}
+	}
+	if g := cfg.Notify.Gotify; g != nil {
+		urls = append(urls, struct{ field, url string }{"notify.gotify.url", g.URL})
+		if g.Token == "" {
+			// Gotify has no unauthenticated publish: the application token is
+			// what says which application a message belongs to.
+			r.add(SeverityWarning, "notify.gotify.token",
+				"token is missing, so Gotify stays disabled.", "")
+		}
 	}
 	for _, u := range urls {
 		provider := strings.Split(u.field, ".")[1]

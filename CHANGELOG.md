@@ -6,6 +6,14 @@ All notable changes to this project will be documented in this file.
 
 ### ✨ Features
 
+- send to ntfy and Gotify (#177). The two push servers people self-host to receive exactly this kind of message were the two homebutler could not reach, so getting a notification to a phone that already runs one meant pointing `notify.webhook` at something that translated the payload. Neither accepts it as-is — ntfy wants the message as the request body with the title and priority as headers, Gotify wants `{title, message, priority}` with an application token — and both now arrive at a priority derived from the event: an alert that triggered arrives high, a recovery does not. Tokens travel in a header rather than the URL, so a failed request cannot put one in a log (#176). `docs/configuration.md` documents every channel, which it did not before
+
+- report which channel a notification failed on (#177). `alerts test-notify` decided that by looking for the channel's name in the error text, so a Discord failure quoting a URL that contains `webhook` was counted as a webhook failure as well. `SendAll` returns errors that carry their channel and the command reads that, which is also what stops the problem growing as channels are added
+
+### 🐛 Fixes
+
+- read `notify:` from the config file in `notify test` (#177). The command that exists to check notification delivery never loaded `config.yaml`, so it fell through to the deprecated `~/.homebutler/alerts.yaml` and reported "no notification providers configured" for a config that was correct and in the documented place. Found while testing ntfy against a real server
+
 - let an agent act on what `doctor` reports (#157). `doctor` hands back the command that repairs each finding, in a field called `command`, and for some of them no MCP tool could run it — so an agent's only honest answer was to ask the operator to open a terminal, which is the situation homebutler exists to remove. Every finding now says who can carry its command out: `runner` is `mcp` with `tool` naming the tool, `cli` when homebutler can do it and no tool exposes it, or `shell` when the command is not homebutler's at all. `watch_add`, `watch_remove` and `alerts_history` close most of the gap, and a test fails the build if a new finding arrives with a command in neither list
 
 - add `watch_add`, `watch_remove` and `alerts_history` to the MCP tools (#157). "This keeps dying, watch it" had no tool, though every part of reading the result did, and `watch_history` was exposed while `alerts history` was not. `watch install` deliberately stays out: the unit it writes records the path of the binary that installed it, so an agent running homebutler through `npx` or a container would install a service pointing at a cache directory that later disappears — the service dies quietly and `doctor` reports the same finding again, with nothing to show that anything was installed

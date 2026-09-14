@@ -80,6 +80,66 @@ Two cases are worth calling out because nothing else surfaces them:
   rather than failing, so commands run and succeed against a config that was
   never read. `config validate` reports this as an error.
 
+## Notifications
+
+Off by default. A channel is used only when its block has everything it needs,
+so an incomplete block disables that channel and leaves the others alone —
+`homebutler config validate` says which, and `homebutler notify test` sends one
+message through each and reports them separately.
+
+```yaml
+notify:
+  telegram:
+    bot_token: "123456:AA..."
+    chat_id: "987654321"
+  slack:
+    webhook_url: "https://hooks.slack.com/services/..."
+  discord:
+    webhook_url: "https://discord.com/api/webhooks/..."
+  webhook:
+    url: "https://example.com/hook"     # receives homebutler's own JSON payload
+  ntfy:
+    url: https://ntfy.sh                # or your own server
+    topic: homelab
+    token: "tk_..."                     # optional, for a protected topic
+  gotify:
+    url: https://gotify.example.com
+    token: "AxxxxAppToken"              # application token, required
+```
+
+| Channel | Needs | Notes |
+| --- | --- | --- |
+| `telegram` | `bot_token`, `chat_id` | |
+| `slack` | `webhook_url` | |
+| `discord` | `webhook_url` | |
+| `webhook` | `url` | Receives homebutler's JSON, not a provider's format |
+| `ntfy` | `url`, `topic` | `token` only for a protected topic. On a public server the topic is the only thing keeping strangers out, so homebutler treats it as a credential |
+| `gotify` | `url`, `token` | Gotify has no unauthenticated publish |
+
+### ntfy and Gotify
+
+Both are push servers people self-host to receive exactly this kind of message,
+and both take their own shape rather than homebutler's webhook payload — which
+is why pointing `notify.webhook` at one does not work without something in
+between.
+
+Messages arrive with a priority derived from the event rather than configured:
+an alert that has **triggered** arrives high (ntfy `4`, Gotify `8`), and
+everything else — a recovery, a test — arrives at the default. That is so the
+one that should get through a phone's quiet hours does, and the rest does not.
+
+Tokens travel in a header, never in the URL, so a failed request cannot put one
+into an error message or a log.
+
+On a public ntfy server the topic is the access control — anyone who knows it
+can subscribe and read everything homebutler sends — so pick a name nobody can
+guess, and expect homebutler to hold the config file to `chmod 600` once a
+topic is in it, the same as it does for a token.
+
+```bash
+homebutler notify test        # one message per configured channel, reported per channel
+```
+
 ## Alert Thresholds
 
 **Default thresholds** (no config needed):
