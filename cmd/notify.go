@@ -8,9 +8,9 @@ func newNotifyCmd() *cobra.Command {
 		Short: "Notification helpers",
 		Long: `Notification helpers for testing configured delivery providers.
 
-Use this command to verify that your Telegram, Slack, Discord, or webhook
-configuration can actually send messages before relying on alerts or watch
-notifications.`,
+Use this command to verify that your Telegram, Slack, Discord, webhook, ntfy
+or Gotify configuration can actually send messages before relying on alerts or
+watch notifications.`,
 	}
 
 	cmd.AddCommand(newNotifyTestCmd())

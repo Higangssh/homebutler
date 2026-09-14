@@ -113,7 +113,7 @@ notify:
 | `slack` | `webhook_url` | |
 | `discord` | `webhook_url` | |
 | `webhook` | `url` | Receives homebutler's JSON, not a provider's format |
-| `ntfy` | `url`, `topic` | `token` only for a protected topic |
+| `ntfy` | `url`, `topic` | `token` only for a protected topic. On a public server the topic is the only thing keeping strangers out, so homebutler treats it as a credential |
 | `gotify` | `url`, `token` | Gotify has no unauthenticated publish |
 
 ### ntfy and Gotify
@@ -130,6 +130,11 @@ one that should get through a phone's quiet hours does, and the rest does not.
 
 Tokens travel in a header, never in the URL, so a failed request cannot put one
 into an error message or a log.
+
+On a public ntfy server the topic is the access control — anyone who knows it
+can subscribe and read everything homebutler sends — so pick a name nobody can
+guess, and expect homebutler to hold the config file to `chmod 600` once a
+topic is in it, the same as it does for a token.
 
 ```bash
 homebutler notify test        # one message per configured channel, reported per channel

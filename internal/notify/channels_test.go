@@ -2,6 +2,7 @@ package notify
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -42,23 +43,48 @@ func TestEveryProviderFieldHasATableEntry(t *testing.T) {
 	}
 }
 
-// The bug this replaces: cmd/alerts.go decided which provider failed by looking
-// for the channel's name in the message, so a Discord failure that quoted a URL
-// containing "webhook" was reported as a webhook failure as well.
+// Attribution is read from the error's type, not from its text.
 //
-// #176 removed the path from these messages, which took away the commonest way
-// that happened. The host survives, so a Discord webhook served from a host with
-// the word in it still produces the collision — and so would adding ntfy and
-// gotify to a substring match. The channel is read from the error's type now,
-// and this checks that it holds even when the text names another channel.
+// cmd/alerts.go used to look for the channel's name in the message, so a
+// Discord failure quoting a URL containing "webhook" was reported as a webhook
+// failure as well. #176 removed the request path from these messages, which
+// took away the commonest way that happened — the host survives, so a webhook
+// relay on a host with the word in it still collides, and adding ntfy and
+// gotify to a substring match would add more.
+//
+// Built rather than sent: the condition is a message that names another
+// channel, and making a real request produce one would mean resolving a
+// hostname chosen for its spelling.
+func TestTheChannelComesFromTheTypeNotTheText(t *testing.T) {
+	err := &ChannelError{
+		Channel: ChannelDiscord,
+		Err:     errors.New("request to https://webhook.example.com failed: connection refused"),
+	}
+
+	if !strings.Contains(err.Error(), string(ChannelWebhook)) {
+		t.Fatal("this test is pointless unless the message names the other channel")
+	}
+
+	channel, ok := FailedChannel(err)
+	if !ok {
+		t.Fatal("the error does not name a channel")
+	}
+	if channel != ChannelDiscord {
+		t.Fatalf("attribution followed the text and reported %q", channel)
+	}
+}
+
+// One channel failing is one error, and the channels that worked say nothing.
 func TestOneFailureIsReportedAgainstOneChannel(t *testing.T) {
 	accepted := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
 	defer accepted.Close()
 
+	refused := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
+	refusedURL := refused.URL
+	refused.Close()
+
 	cfg := &ProviderConfig{
-		// Nothing listens on port 1, and the host carries the word that used
-		// to be read as a second failure.
-		Discord: &DiscordConfig{WebhookURL: "http://webhook.example.invalid:1/api/webhooks/123/abc"},
+		Discord: &DiscordConfig{WebhookURL: refusedURL + "/api/webhooks/123/abc"},
 		Webhook: &WebhookConfig{URL: accepted.URL + "/hook"},
 	}
 
@@ -66,22 +92,9 @@ func TestOneFailureIsReportedAgainstOneChannel(t *testing.T) {
 	if len(errs) != 1 {
 		t.Fatalf("expected one failure, got %d: %v", len(errs), errs)
 	}
-
 	channel, ok := FailedChannel(errs[0])
-	if !ok {
-		t.Fatalf("the error does not name a channel: %v", errs[0])
-	}
-	if channel != ChannelDiscord {
-		t.Fatalf("the failure was attributed to %q", channel)
-	}
-
-	// The text still contains the other channel's name, which is exactly the
-	// condition under which reading it would give the wrong answer.
-	if !strings.Contains(errs[0].Error(), string(ChannelWebhook)) {
-		t.Skip("the message no longer contains the other channel's name; the type is what this test is about")
-	}
-	if strings.Contains(errs[0].Error(), string(ChannelWebhook)) && channel == ChannelWebhook {
-		t.Fatal("attribution followed the text rather than the type")
+	if !ok || channel != ChannelDiscord {
+		t.Fatalf("expected the discord channel, got %q (named: %v)", channel, ok)
 	}
 }
 

@@ -38,8 +38,14 @@ type WebhookConfig struct {
 // needs none, and a protected one takes an access token. It goes in a header
 // rather than the URL so it cannot end up quoted in an error (#176).
 type NtfyConfig struct {
-	URL   string `yaml:"url" json:"url"`
-	Topic string `yaml:"topic" json:"topic"`
+	URL string `yaml:"url" json:"url"`
+	// Topic is a credential on a public server. ntfy.sh has no accounts in the
+	// default arrangement: anyone who knows the topic can subscribe to it and
+	// read every event homebutler sends, which is why ntfy's own documentation
+	// asks for a name nobody can guess. It is tagged like one so the config
+	// permission check covers a file that has only this, and so the dashboard
+	// cannot serialize it when #154 gives it settings to show.
+	Topic string `yaml:"topic" json:"-" secret:"true"`
 	Token string `yaml:"token,omitempty" json:"-" secret:"true"`
 }
 
