@@ -72,15 +72,10 @@ func (d *Dispatcher) resolveProviders(event Event) *ProviderConfig {
 
 	filtered := &ProviderConfig{}
 	for _, ch := range event.Channels {
-		switch ch {
-		case ChannelTelegram:
-			filtered.Telegram = d.Providers.Telegram
-		case ChannelSlack:
-			filtered.Slack = d.Providers.Slack
-		case ChannelDiscord:
-			filtered.Discord = d.Providers.Discord
-		case ChannelWebhook:
-			filtered.Webhook = d.Providers.Webhook
+		for _, p := range providers {
+			if p.channel == ch {
+				p.pick(filtered, d.Providers)
+			}
 		}
 	}
 	if filtered.IsEmpty() {

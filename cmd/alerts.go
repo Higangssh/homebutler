@@ -3,6 +3,7 @@ package cmd
 import (
 	"bufio"
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"os/signal"
@@ -15,6 +16,7 @@ import (
 	"github.com/Higangssh/homebutler/internal/alerts"
 	"github.com/Higangssh/homebutler/internal/config"
 	"github.com/Higangssh/homebutler/internal/docker"
+	"github.com/Higangssh/homebutler/internal/notify"
 	"github.com/Higangssh/homebutler/internal/watch"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/spf13/cobra"
@@ -149,6 +151,15 @@ func newAlertsTestNotifyCmd() *cobra.Command {
 For new users, prefer 'homebutler notify test'.
 This command remains for backward compatibility.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			// Without this the package-level cfg is nil, loadAlertsConfig skips
+			// the config.yaml branch entirely, and the command that exists to
+			// test notify cannot see the notify block in the file the docs tell
+			// people to put it in. A missing config file is not an error here —
+			// Load returns defaults — so the legacy path still works.
+			if err := loadConfig(); err != nil {
+				return err
+			}
+
 			rulesCfg, err := loadAlertsConfig(alertsConfig)
 			if err != nil {
 				return err
@@ -174,36 +185,25 @@ This command remains for backward compatibility.`,
 			fmt.Println("Sending test notification...")
 			errs := alerts.NotifyAll(notifyCfg, event)
 
-			// Report results per provider
-			providers := []string{}
-			if notifyCfg.Telegram != nil {
-				providers = append(providers, "telegram")
-			}
-			if notifyCfg.Slack != nil {
-				providers = append(providers, "slack")
-			}
-			if notifyCfg.Discord != nil {
-				providers = append(providers, "discord")
-			}
-			if notifyCfg.Webhook != nil {
-				providers = append(providers, "webhook")
+			// Which channel failed comes from the error itself. Searching the
+			// message for the channel name reported a Discord failure as a
+			// webhook failure too, because the error quotes a URL containing
+			// the word (#177).
+			failed := make(map[notify.Channel]error, len(errs))
+			for _, err := range errs {
+				if channel, ok := notify.FailedChannel(err); ok {
+					failed[channel] = err
+					continue
+				}
+				fmt.Printf("  ❌ %s\n", err)
 			}
 
-			errMap := make(map[string]bool)
-			for _, e := range errs {
-				for _, p := range providers {
-					if strings.Contains(e.Error(), p) {
-						errMap[p] = true
-					}
+			for _, channel := range notifyCfg.EnabledChannels() {
+				if err := failed[channel]; err != nil {
+					fmt.Printf("  ❌ %s: %s\n", channel, errors.Unwrap(err))
+					continue
 				}
-			}
-
-			for _, p := range providers {
-				if errMap[p] {
-					fmt.Printf("  ❌ %s: failed\n", p)
-				} else {
-					fmt.Printf("  ✅ %s: sent\n", p)
-				}
+				fmt.Printf("  ✅ %s: sent\n", channel)
 			}
 
 			if len(errs) > 0 {

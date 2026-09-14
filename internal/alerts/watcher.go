@@ -367,7 +367,7 @@ func ResolveNotifyConfig(cfg *AlertsConfig) *NotifyConfig {
 	}
 
 	// Return nil if nothing is configured
-	if nc.Telegram == nil && nc.Slack == nil && nc.Discord == nil && nc.Webhook == nil {
+	if nc.IsEmpty() {
 		return nil
 	}
 	return &nc
