@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### ✨ Features
+
+- let an agent act on what `doctor` reports (#157). `doctor` hands back the command that repairs each finding, in a field called `command`, and for some of them no MCP tool could run it — so an agent's only honest answer was to ask the operator to open a terminal, which is the situation homebutler exists to remove. Every finding now says who can carry its command out: `runner` is `mcp` with `tool` naming the tool, `cli` when homebutler can do it and no tool exposes it, or `shell` when the command is not homebutler's at all. `watch_add`, `watch_remove` and `alerts_history` close most of the gap, and a test fails the build if a new finding arrives with a command in neither list
+
+- add `watch_add`, `watch_remove` and `alerts_history` to the MCP tools (#157). "This keeps dying, watch it" had no tool, though every part of reading the result did, and `watch_history` was exposed while `alerts history` was not. `watch install` deliberately stays out: the unit it writes records the path of the binary that installed it, so an agent running homebutler through `npx` or a container would install a service pointing at a cache directory that later disappears — the service dies quietly and `doctor` reports the same finding again, with nothing to show that anything was installed
+
+### ⚠️ Behavior changes
+
+- **`doctor --json` findings carry two more fields, `runner` and `tool`.** Both are omitted when empty, so a consumer reading known fields is unaffected; one that rejects unknown fields will need them added before upgrading.
+
 ## [0.31.0](https://github.com/Higangssh/homebutler/compare/v0.30.0...v0.31.0) - 2026-09-13
 **A dashboard with ten machines paid ten SSH round trips in series, and a notification that could not connect wrote the bot token into the log.** The overview fetched the server list and then each server's status one after another, so the wait was the sum and one slow host stalled every machine behind it in the loop. Separately, a transport failure returns the whole request URL in its message, and the URL is the credential — Telegram's bot token sits in the path, and a Slack, Discord or webhook address is the secret in full.
 

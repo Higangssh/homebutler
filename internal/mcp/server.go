@@ -6,7 +6,9 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"slices"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/Higangssh/homebutler/internal/alerts"
@@ -559,6 +561,52 @@ func (s *Server) executeTool(name string, args map[string]any) (any, error) {
 			return nil, err
 		}
 		return watch.ListWatched(dir)
+	case "watch_add":
+		container := stringArg(args, "container")
+		if container == "" {
+			return nil, fmt.Errorf("container is required")
+		}
+		kind := stringArg(args, "kind")
+		if kind == "" {
+			kind = watch.KindDocker
+		}
+		if !slices.Contains(watch.Kinds(), kind) {
+			return nil, fmt.Errorf("invalid kind %q: must be one of %s", kind, strings.Join(watch.Kinds(), ", "))
+		}
+		dir, err := watch.WatchDir()
+		if err != nil {
+			return nil, err
+		}
+		added, err := watch.AddTarget(dir, watch.Target{
+			Container: container,
+			Kind:      kind,
+			Unit:      stringArg(args, "unit"),
+		})
+		if err != nil {
+			return nil, err
+		}
+		// "already watched" is an outcome rather than a failure: an agent that
+		// retries should not be told the second attempt broke something.
+		return map[string]any{"container": container, "kind": kind, "added": added}, nil
+	case "watch_remove":
+		container := stringArg(args, "container")
+		if container == "" {
+			return nil, fmt.Errorf("container is required")
+		}
+		dir, err := watch.WatchDir()
+		if err != nil {
+			return nil, err
+		}
+		removed, err := watch.RemoveTarget(dir, container)
+		if err != nil {
+			return nil, err
+		}
+		if !removed {
+			return nil, fmt.Errorf("container %q is not in the watch list", container)
+		}
+		return map[string]any{"container": container, "removed": true}, nil
+	case "alerts_history":
+		return alerts.LoadHistory()
 	case "backup_create":
 		backupDir := stringArg(args, "to")
 		if backupDir == "" {
@@ -750,6 +798,20 @@ func (s *Server) executeRemote(srv *config.ServerConfig, tool string, args map[s
 		}
 	case "watch_list":
 		remoteArgs = []string{"watch", "list", "--json"}
+	case "watch_add":
+		remoteArgs = []string{"watch", "add", stringArg(args, "container"), "--json"}
+		kind := stringArg(args, "kind")
+		if kind == "" {
+			// The CLI prompts when --kind is absent and stdin is a terminal,
+			// which over SSH means it fails instead. The tool's default is
+			// explicit for the same reason it is explicit locally.
+			kind = watch.KindDocker
+		}
+		remoteArgs = append(remoteArgs, "--kind", kind)
+	case "watch_remove":
+		remoteArgs = []string{"watch", "remove", stringArg(args, "container"), "--json"}
+	case "alerts_history":
+		remoteArgs = []string{"alerts", "history", "--json"}
 	case "backup_list":
 		remoteArgs = []string{"backup", "list", "--json"}
 	case "backup_create":

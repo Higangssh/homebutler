@@ -196,6 +196,23 @@ func (s *Server) executeDemoTool(name string, args map[string]any) (any, error) 
 	case "watch_history":
 		return demoWatchHistory(args), nil
 
+	case "watch_add":
+		// Demo mode writes nothing, so it answers as the state after the call:
+		// the target is on the list. Reporting added=false would be the shape
+		// of "already there", which is a different outcome and not this one.
+		return map[string]any{
+			"container": stringArg(args, "container"),
+			"kind":      demoKind(args),
+			"added":     true,
+		}, nil
+	case "watch_remove":
+		return map[string]any{"container": stringArg(args, "container"), "removed": true}, nil
+	case "alerts_history":
+		return []map[string]any{
+			{"time": "2026-04-30 03:14:22", "rule": "disk", "server": "homelab-server", "detail": "Disk / at 91%", "action": "docker prune", "outcome": "resolved"},
+			{"time": "2026-04-29 22:08:10", "rule": "memory", "server": "nas-box", "detail": "Memory at 93%", "action": "none", "outcome": "recovered on its own"},
+			{"time": "2026-04-28 06:41:55", "rule": "container", "server": "homelab-server", "detail": "plex exited (137)", "action": "restart", "outcome": "resolved"},
+		}, nil
 	case "watch_list":
 		// Mirrors demoWatchHistory's targets, and carries a systemd entry with
 		// no last_checked: watch check cannot inspect those, so a caller that
@@ -671,4 +688,13 @@ func demoProcesses(args map[string]any) map[string]any {
 			{"pid": 2077, "name": "ffmpeg", "cpu": 0.0, "mem": 0.0, "rss": 0, "state": "Z", "zombie": true},
 		},
 	}
+}
+
+// demoKind mirrors the default the real tool applies, so the demo answer is
+// the shape a caller would get rather than an empty field.
+func demoKind(args map[string]any) string {
+	if kind := stringArg(args, "kind"); kind != "" {
+		return kind
+	}
+	return "docker"
 }

@@ -575,6 +575,62 @@ var Registry = []Capability{
 		},
 	},
 	{
+		// Putting a target on the watch list writes one file under the watch
+		// directory. No privilege is taken and nothing is installed, which is
+		// what separates it from watch_install (#157).
+		Risk:    RiskWrite,
+		Targets: []TargetKind{TargetLocal, TargetServer},
+		HTTP:    HTTP{Absent: AbsentNeedsWriteSurface},
+		Tool: Definition{
+			Name:        "watch_add",
+			Description: "Add a Docker container, systemd unit, or PM2 app to the watch list",
+			InputSchema: Schema{
+				Type: "object",
+				Properties: map[string]Property{
+					"container": {Type: "string", Description: "Container, unit, or app name to watch"},
+					"kind":      {Type: "string", Description: "What it is: docker, systemd, or pm2 (default docker)", Enum: []string{"docker", "systemd", "pm2"}},
+					"unit":      {Type: "string", Description: "Actual unit or app name when it differs from the name above (optional)"},
+					"server":    {Type: "string", Description: "Remote server name from config (optional, runs locally if omitted)"},
+				},
+				Required: []string{"container"},
+			},
+		},
+	},
+	{
+		// Removing a target stops future checks. Recorded incidents are left
+		// alone, so nothing already observed is lost.
+		Risk:    RiskWrite,
+		Targets: []TargetKind{TargetLocal, TargetServer},
+		HTTP:    HTTP{Absent: AbsentNeedsWriteSurface},
+		Tool: Definition{
+			Name:        "watch_remove",
+			Description: "Remove a target from the watch list, leaving its recorded incidents in place",
+			InputSchema: Schema{
+				Type: "object",
+				Properties: map[string]Property{
+					"container": {Type: "string", Description: "Name to stop watching"},
+					"server":    {Type: "string", Description: "Remote server name from config (optional, runs locally if omitted)"},
+				},
+				Required: []string{"container"},
+			},
+		},
+	},
+	{
+		Risk:    RiskRead,
+		Targets: []TargetKind{TargetLocal, TargetServer},
+		HTTP:    HTTP{Absent: AbsentNoViewYet},
+		Tool: Definition{
+			Name:        "alerts_history",
+			Description: "Show recorded alert and remediation history",
+			InputSchema: Schema{
+				Type: "object",
+				Properties: map[string]Property{
+					"server": {Type: "string", Description: "Remote server name from config (optional, runs locally if omitted)"},
+				},
+			},
+		},
+	},
+	{
 		Risk:    RiskWrite,
 		Targets: []TargetKind{TargetLocal, TargetServer},
 		HTTP:    HTTP{Absent: AbsentNeedsWriteSurface},

@@ -149,44 +149,13 @@ Examples:
 				return err
 			}
 
-			targets, err := watch.LoadTargets(dir)
+			added, err := watch.AddTarget(dir, watch.Target{Container: name, Kind: kind})
 			if err != nil {
 				return err
 			}
-
-			for _, t := range targets {
-				if t.Container == name && t.EffectiveKind() == kind {
-					fmt.Printf("%s %q is already being watched.\n", kind, name)
-					return nil
-				}
-			}
-
-			targets = append(targets, watch.Target{
-				Container: name,
-				Kind:      kind,
-				Unit:      name,
-				AddedAt:   time.Now(),
-			})
-			if err := watch.SaveTargets(dir, targets); err != nil {
-				return err
-			}
-
-			// Seed initial state for docker targets
-			if kind == "docker" {
-				result, inspErr := watch.InspectContainer(name)
-				if inspErr == nil {
-					states, _ := watch.LoadState(dir)
-					if states == nil {
-						states = make(map[string]*watch.ContainerState)
-					}
-					states[name] = &watch.ContainerState{
-						Container:    name,
-						RestartCount: result.RestartCount,
-						StartedAt:    result.StartedAt,
-						LastChecked:  time.Now(),
-					}
-					_ = watch.SaveState(dir, states)
-				}
+			if !added {
+				fmt.Printf("%s %q is already being watched.\n", kind, name)
+				return nil
 			}
 
 			fmt.Printf("Added %s %q to watch list.\n", kind, name)
@@ -249,26 +218,12 @@ func newWatchRemoveCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			targets, err := watch.LoadTargets(dir)
+			removed, err := watch.RemoveTarget(dir, name)
 			if err != nil {
 				return err
 			}
-
-			found := false
-			var filtered []watch.Target
-			for _, t := range targets {
-				if t.Container == name {
-					found = true
-					continue
-				}
-				filtered = append(filtered, t)
-			}
-			if !found {
+			if !removed {
 				return fmt.Errorf("container %q is not in the watch list", name)
-			}
-
-			if err := watch.SaveTargets(dir, filtered); err != nil {
-				return err
 			}
 			fmt.Printf("Removed %q from watch list.\n", name)
 			if cmdline := service.RestartNote(); cmdline != "" {
