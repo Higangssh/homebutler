@@ -429,3 +429,79 @@ func GenerateIncidentID(container string, t time.Time) string {
 	suffix := hex.EncodeToString(b)
 	return container + "-" + ts + "-" + suffix
 }
+
+// AddTarget puts one target on the watch list and reports whether it was new.
+//
+// Docker state is seeded here rather than by the caller: the first check
+// compares a container's restart count against what was recorded last time, so
+// a target added without a baseline reports its whole history as one incident
+// the moment anything polls it. The CLI and the MCP tool both go through here
+// so that only has to be true in one place.
+func AddTarget(dir string, target Target) (bool, error) {
+	targets, err := LoadTargets(dir)
+	if err != nil {
+		return false, err
+	}
+
+	kind := target.EffectiveKind()
+	for _, t := range targets {
+		if t.Container == target.Container && t.EffectiveKind() == kind {
+			return false, nil
+		}
+	}
+
+	if target.Unit == "" {
+		target.Unit = target.Container
+	}
+	if target.AddedAt.IsZero() {
+		target.AddedAt = time.Now()
+	}
+	target.Kind = kind
+
+	if err := SaveTargets(dir, append(targets, target)); err != nil {
+		return false, err
+	}
+
+	if kind == KindDocker {
+		// A container that cannot be inspected is still watched: it may not be
+		// running yet, and the next check will record the baseline instead.
+		if result, err := InspectContainer(target.Container); err == nil {
+			states, _ := LoadState(dir)
+			if states == nil {
+				states = make(map[string]*ContainerState)
+			}
+			states[target.Container] = &ContainerState{
+				Container:    target.Container,
+				RestartCount: result.RestartCount,
+				StartedAt:    result.StartedAt,
+				LastChecked:  time.Now(),
+			}
+			_ = SaveState(dir, states)
+		}
+	}
+	return true, nil
+}
+
+// RemoveTarget takes one off the watch list by container name and reports
+// whether it was there. Recorded incidents are left alone: they are what
+// happened, and removing the target does not unhappen it.
+func RemoveTarget(dir string, container string) (bool, error) {
+	targets, err := LoadTargets(dir)
+	if err != nil {
+		return false, err
+	}
+
+	remaining := make([]Target, 0, len(targets))
+	found := false
+	for _, t := range targets {
+		if t.Container == container {
+			found = true
+			continue
+		}
+		remaining = append(remaining, t)
+	}
+	if !found {
+		return false, nil
+	}
+	return true, SaveTargets(dir, remaining)
+}

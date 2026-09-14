@@ -27,6 +27,90 @@ const (
 	SeverityFail = "fail"
 )
 
+// Runner says who can carry a finding's Command out.
+//
+// #157 is the reason this exists: doctor hands an agent a command in a field
+// named command, and for two of them no MCP tool can run it — so the agent's
+// only honest move was to ask the operator to open a terminal, which is the
+// situation homebutler exists to remove. Naming the runner lets it branch
+// without reading the prose, and lets the one case that genuinely needs a
+// human say so.
+const (
+	// RunnerMCP: an MCP tool runs this, and Tool names it.
+	RunnerMCP = "mcp"
+	// RunnerCLI: homebutler can do it, and no tool exposes it.
+	RunnerCLI = "cli"
+	// RunnerShell: not a homebutler command at all.
+	RunnerShell = "shell"
+)
+
+// commandTools maps each command doctor prints to the MCP tool that runs it.
+// Keys are the fixed part of the command; anything the finding appends, such
+// as a container or endpoint name, follows.
+var commandTools = map[string]string{
+	"homebutler backup":                    "backup_create",
+	"homebutler backup list":               "backup_list",
+	"homebutler doctor":                    "doctor",
+	"homebutler docker inspect":            "docker_inspect",
+	"homebutler docker logs":               "docker_logs",
+	"homebutler inventory scan":            "inventory_scan",
+	"homebutler proxmox status --endpoint": "proxmox_status",
+	"homebutler ps --sort cpu":             "processes",
+	"homebutler ps --sort mem":             "processes",
+	"homebutler report":                    "report",
+	"homebutler status":                    "system_status",
+	"homebutler watch history":             "watch_history",
+}
+
+// cliOnly are homebutler commands that no tool runs, each with the reason.
+// A command here is a decision; a command in neither map is an oversight, and
+// TestEveryDoctorCommandIsClassified is what turns that into a failure.
+var cliOnly = map[string]string{
+	// The unit records the path of the binary that installed it, so installing
+	// through an agent running homebutler via npx or a container writes a unit
+	// pointing at a cache path that later disappears. The service then dies
+	// quietly and doctor reports the same finding again, with nothing to show
+	// that anything was installed (#157).
+	"homebutler watch install": "installs a service whose unit would record the wrong binary path when run through anything but the installed binary",
+	// Waits on #177: SendAll reports failures as one error, so a tool could not
+	// say which channel failed without matching on strings.
+	"homebutler notify test": "waits on per-channel results from #177",
+}
+
+// classifyCommand reports who can run command, and the tool when one can.
+func classifyCommand(command string) (runner, tool string) {
+	if command == "" {
+		return "", ""
+	}
+	if !strings.HasPrefix(command, "homebutler ") {
+		return RunnerShell, ""
+	}
+	// Longest key first, so "homebutler backup list" is not answered by
+	// "homebutler backup".
+	best := ""
+	for prefix := range commandTools {
+		if commandMatches(command, prefix) && len(prefix) > len(best) {
+			best = prefix
+		}
+	}
+	if best != "" {
+		return RunnerMCP, commandTools[best]
+	}
+	for prefix := range cliOnly {
+		if commandMatches(command, prefix) {
+			return RunnerCLI, ""
+		}
+	}
+	return "", ""
+}
+
+// commandMatches reports whether command is prefix, or prefix followed by an
+// argument. It is not a plain HasPrefix so that a future "homebutler reporting"
+// is not answered by the entry for "homebutler report".
+func commandMatches(command, prefix string) bool {
+	return command == prefix || strings.HasPrefix(command, prefix+" ")
+}
+
 // Finding is one actionable doctor result.
 type Finding struct {
 	Severity string `json:"severity"`
@@ -35,6 +119,12 @@ type Finding struct {
 	Detail   string `json:"detail,omitempty"`
 	Action   string `json:"action,omitempty"`
 	Command  string `json:"command,omitempty"`
+	// Runner and Tool say how Command can be carried out. Runner is always set
+	// when Command is, so a caller never has to read an empty Tool as either
+	// "no tool" or "not classified" — the ambiguity #108 settled for exit
+	// codes, in a different field.
+	Runner string `json:"runner,omitempty"`
+	Tool   string `json:"tool,omitempty"`
 }
 
 // Result is the structured output of a doctor run.
@@ -623,7 +713,11 @@ func proxmoxFailureAction(err error) string {
 }
 
 func (r *Result) add(severity, category, title, detail, action, command string) {
-	r.Findings = append(r.Findings, Finding{Severity: severity, Category: category, Title: title, Detail: detail, Action: action, Command: command})
+	runner, tool := classifyCommand(command)
+	r.Findings = append(r.Findings, Finding{
+		Severity: severity, Category: category, Title: title, Detail: detail,
+		Action: action, Command: command, Runner: runner, Tool: tool,
+	})
 }
 
 func summarize(findings []Finding) Summary {

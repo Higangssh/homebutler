@@ -307,6 +307,8 @@ func TestToolDefinitionsHaveRequiredFields(t *testing.T) {
 		"proxmox_guest_shutdown": {"endpoint", "node", "type", "vmid", "confirm"},
 		"proxmox_task_status":    {"endpoint", "node", "upid"},
 		"proxmox_script_command": {"slug"},
+		"watch_add":              {"container"},
+		"watch_remove":           {"container"},
 	}
 
 	for _, tool := range tools {
