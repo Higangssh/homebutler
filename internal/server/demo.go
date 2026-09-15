@@ -312,7 +312,7 @@ func (s *Server) demoConfig(w http.ResponseWriter, r *http.Request) {
 		"wake": []map[string]string{
 			{"name": "gaming-pc", "mac": "AA:BB:CC:DD:EE:FF", "broadcast": "192.168.1.255"},
 		},
-		"notify":   s.notifySettings(),
+		"notify":   s.notifySettings(s.config()),
 		"revision": demoRevision,
 		// Demo mode is started with a token by the end-to-end run, so the
 		// editing surface is the one being exercised.

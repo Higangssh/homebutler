@@ -1,6 +1,10 @@
 package server
 
 import (
+	"crypto/hmac"
+	"crypto/rand"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -15,6 +19,67 @@ import (
 // read the same revision, and the second would be refused as stale for a
 // reason the person could do nothing about.
 var saveMu sync.Mutex
+
+// maxSaveRequest caps what a save may send. The forms behind these endpoints
+// change a handful of fields, so anything larger is a mistake or an attempt to
+// make the process hold a body it was never going to use.
+const maxSaveRequest = 1 << 20
+
+// decodeSave reads a save request without letting the caller decide how much
+// memory it costs.
+func decodeSave(w http.ResponseWriter, r *http.Request, dst any) bool {
+	r.Body = http.MaxBytesReader(w, r.Body, maxSaveRequest)
+	if err := json.NewDecoder(r.Body).Decode(dst); err != nil {
+		var tooLarge *http.MaxBytesError
+		if errors.As(err, &tooLarge) {
+			writeError(w, http.StatusRequestEntityTooLarge, "that is larger than a settings change should ever be")
+			return false
+		}
+		writeError(w, http.StatusBadRequest, "could not read the request")
+		return false
+	}
+	return true
+}
+
+// newRevisionKey is made once per serve. It is what makes a revision token
+// meaningless outside the process that issued it.
+func newRevisionKey() []byte {
+	key := make([]byte, 32)
+	if _, err := rand.Read(key); err != nil {
+		// Carrying on would mean issuing tokens anyone could compute, which
+		// is worse than refusing to start.
+		panic("homebutler: could not read random bytes for the revision key: " + err.Error())
+	}
+	return key
+}
+
+// revisionToken is what the dashboard holds between loading a page and saving
+// it. It is an HMAC of the file's digest rather than the digest itself, so the
+// value handed to the browser says nothing about what is in the file and stops
+// meaning anything once serve exits.
+func (s *Server) revisionToken(rev config.Revision) string {
+	if !rev.Exists() {
+		return ""
+	}
+	mac := hmac.New(sha256.New, s.revisionKey)
+	mac.Write([]byte(rev.String()))
+	return hex.EncodeToString(mac.Sum(nil))
+}
+
+// matchRevision resolves the token a save carried back to the revision on disk
+// now. The token never has to be reversed, because only equality is ever
+// asked: if it still matches what the file hashes to, nothing changed
+// underneath the page that sent it.
+func (s *Server) matchRevision(path, token string) (config.Revision, error) {
+	current, err := config.ReadRevision(path)
+	if err != nil {
+		return config.Revision{}, err
+	}
+	if !hmac.Equal([]byte(s.revisionToken(current)), []byte(token)) {
+		return config.Revision{}, config.ErrStale
+	}
+	return current, nil
+}
 
 // configSecret says whether a credential is set, and never what it is.
 //
@@ -35,10 +100,10 @@ type channelSettings struct {
 // notifySettings reports every channel homebutler has, whether or not it is
 // configured, so the dashboard can offer one that has never been set up
 // without carrying its own list.
-func (s *Server) notifySettings() []channelSettings {
+func (s *Server) notifySettings(cfg *config.Config) []channelSettings {
 	out := make([]channelSettings, 0, len(notify.Channels()))
 	enabled := map[notify.Channel]bool{}
-	for _, c := range s.cfg.Notify.EnabledChannels() {
+	for _, c := range cfg.Notify.EnabledChannels() {
 		enabled[c] = true
 	}
 
@@ -51,7 +116,7 @@ func (s *Server) notifySettings() []channelSettings {
 			Secrets:    map[string]configSecret{},
 		}
 		for _, f := range fields {
-			value, set := s.cfg.Notify.Setting(channel, f.Name)
+			value, set := cfg.Notify.Setting(channel, f.Name)
 			if f.Secret {
 				settings.Secrets[f.Name] = configSecret{Set: set && value != ""}
 				continue
@@ -103,8 +168,7 @@ type saveResponse struct {
 
 func (s *Server) handleSaveAlerts(w http.ResponseWriter, r *http.Request) {
 	var req alertsRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeError(w, http.StatusBadRequest, "could not read the request")
+	if !decodeSave(w, r, &req) {
 		return
 	}
 	if req.CPU == nil && req.Memory == nil && req.Disk == nil {
@@ -118,8 +182,7 @@ func (s *Server) handleSaveAlerts(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleSaveNotify(w http.ResponseWriter, r *http.Request) {
 	var req notifyRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeError(w, http.StatusBadRequest, "could not read the request")
+	if !decodeSave(w, r, &req) {
 		return
 	}
 	if len(req.Channels) == 0 {
@@ -150,25 +213,37 @@ func (s *Server) handleSaveNotify(w http.ResponseWriter, r *http.Request) {
 // applySave is the one place a write reaches the file, so the staleness check,
 // the reload and the answer are decided once rather than per endpoint.
 func (s *Server) applySave(w http.ResponseWriter, revision string, patch config.Patch, restart []string) {
-	if s.cfg.Path == "" {
+	path := s.config().Path
+	if path == "" {
 		writeError(w, http.StatusConflict, "there is no config file to write; run homebutler init first")
+		return
+	}
+	if revision == "" {
+		writeError(w, http.StatusBadRequest, "the request did not carry the revision it was made against")
 		return
 	}
 
 	saveMu.Lock()
 	defer saveMu.Unlock()
 
-	rev, err := config.ParseRevision(revision)
-	if err != nil {
-		writeError(w, http.StatusBadRequest, "the request did not carry the revision it was made against")
-		return
-	}
-
-	switch err := config.Save(s.cfg.Path, rev, patch); {
+	rev, err := s.matchRevision(path, revision)
+	switch {
 	case err == nil:
 	case errors.Is(err, config.ErrStale):
 		// 409 rather than 400: nothing about the request was wrong, and the
 		// dashboard's answer is to reload rather than to change what it sent.
+		// A token from a previous serve lands here too, which is the same
+		// answer — that page cannot know what the file holds now.
+		writeError(w, http.StatusConflict, "the config file changed on disk since this page loaded it; reload before saving")
+		return
+	default:
+		writeError(w, http.StatusInternalServerError, "the config file could not be read")
+		return
+	}
+
+	switch err := config.Save(path, rev, patch); {
+	case err == nil:
+	case errors.Is(err, config.ErrStale):
 		writeError(w, http.StatusConflict, "the config file changed on disk since this page loaded it; reload before saving")
 		return
 	case errors.Is(err, config.ErrFlowStyle):
@@ -181,20 +256,20 @@ func (s *Server) applySave(w http.ResponseWriter, revision string, patch config.
 
 	// serve owns the file it just wrote, so it reads it back rather than
 	// carrying a copy that no longer matches.
-	reloaded, err := config.Load(s.cfg.Path)
+	reloaded, err := config.Load(path)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "saved, but the file could not be read back")
 		return
 	}
-	s.cfg = reloaded
+	s.cfg.Store(reloaded)
 
-	next, err := config.ReadRevision(s.cfg.Path)
+	next, err := config.ReadRevision(path)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "saved, but the file could not be read back")
 		return
 	}
 
-	writeJSON(w, saveResponse{Saved: true, Revision: next.String(), RestartNeeded: restart})
+	writeJSON(w, saveResponse{Saved: true, Revision: s.revisionToken(next), RestartNeeded: restart})
 }
 
 // transportWarning is shown on the settings screen when the token that unlocks

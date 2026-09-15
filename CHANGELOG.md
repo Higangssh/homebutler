@@ -14,7 +14,7 @@ All notable changes to this project will be documented in this file.
 
 ### ⚠️ Behavior changes
 
-- **The dashboard's wake button needs `--token`.** Sending a magic packet is a write, and #154 settled that every write on the dashboard requires one: `POST /api/wake/{name}` is not registered at all when `serve` runs without a token, along with the new settings endpoints. A dashboard started without a token is read-only, which it effectively was already — except that the wake button now says so instead of working.
+- **The dashboard's wake button needs `--token`.** Sending a magic packet is a write, and #154 settled that every write on the dashboard requires one: `POST /api/wake/{name}` is not registered at all when `serve` runs without a token, along with the new settings endpoints. A dashboard started without a token is read-only, which it effectively was already — except that the wake button now says so instead of working. Start `serve` with `--token` and it comes back, along with the settings that can now be edited.
 - **`/api/config` returns `password_set` instead of `password`.** Anything reading the old field, which held `••••••` when a password was configured, needs the boolean instead.
 
 ## [0.32.0](https://github.com/Higangssh/homebutler/compare/v0.31.0...v0.32.0) - 2026-09-15

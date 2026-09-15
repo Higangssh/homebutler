@@ -61,20 +61,21 @@ func (s *Server) handleOverview(w http.ResponseWriter, r *http.Request) {
 		index   int
 		reading serverReading
 	}
-	results := make(chan result, len(s.cfg.Servers))
+	cfg := s.config()
+	results := make(chan result, len(cfg.Servers))
 
-	for i := range s.cfg.Servers {
+	for i := range cfg.Servers {
 		go func(i int, srv config.ServerConfig) {
 			results <- result{index: i, reading: s.readServer(&srv)}
-		}(i, s.cfg.Servers[i])
+		}(i, cfg.Servers[i])
 	}
 
-	readings := make([]serverReading, len(s.cfg.Servers))
-	answered := make([]bool, len(s.cfg.Servers))
+	readings := make([]serverReading, len(cfg.Servers))
+	answered := make([]bool, len(cfg.Servers))
 	deadline := time.After(overviewDeadline)
 
 collect:
-	for range s.cfg.Servers {
+	for range cfg.Servers {
 		select {
 		case got := <-results:
 			readings[got.index] = got.reading
@@ -86,7 +87,7 @@ collect:
 		}
 	}
 
-	for i, srv := range s.cfg.Servers {
+	for i, srv := range cfg.Servers {
 		if !answered[i] {
 			readings[i] = s.snapshotReading(&srv, "", "Still collecting. The last reading is shown.")
 		}
