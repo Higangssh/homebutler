@@ -2,6 +2,7 @@
   import { onMount } from 'svelte';
   import { getConfig, saveAlerts, StaleConfigError } from './api.js';
   import NotifyCard from './NotifyCard.svelte';
+  import WakeDevicesCard from './WakeDevicesCard.svelte';
 
   let data = $state(null);
   let error = $state('');
@@ -75,9 +76,19 @@
   // is refreshed: reloading everything would throw away a threshold someone
   // was halfway through typing.
   async function notifySaved() {
+    await refreshSection('notify');
+  }
+
+  async function wakeSaved() {
+    await refreshSection('wake');
+  }
+
+  // One section is refreshed at a time. Reloading everything would throw away
+  // a threshold someone is halfway through typing on the same screen.
+  async function refreshSection(name) {
     try {
       const fresh = await getConfig();
-      data = { ...data, notify: fresh.notify, revision: fresh.revision ?? data.revision };
+      data = { ...data, [name]: fresh[name], revision: fresh.revision ?? data.revision };
     } catch (err) {
       saveError = err.message;
     }
@@ -224,31 +235,13 @@
       onreload={reload}
     />
 
-    <!-- Wake-on-LAN -->
-    <div class="section">
-      <div class="section-header">
-        <h2>Wake-on-LAN Devices</h2>
-        <span class="badge">{data.wake.length}</span>
-      </div>
-      {#if data.wake.length === 0}
-        <p class="empty">No WoL targets configured</p>
-      {:else}
-        <div class="wake-list">
-          {#each data.wake as w}
-            <div class="wake-item">
-              <span class="wake-name">{w.name}</span>
-              <div class="wake-details">
-                <code class="value">{w.mac}</code>
-                {#if w.broadcast}
-                  <span class="wake-sep">·</span>
-                  <code class="value">{w.broadcast}</code>
-                {/if}
-              </div>
-            </div>
-          {/each}
-        </div>
-      {/if}
-    </div>
+    <WakeDevicesCard
+      targets={data.wake ?? []}
+      revision={data.revision ?? ''}
+      editable={data.editable}
+      onsaved={wakeSaved}
+      onreload={reload}
+    />
 
     <div class="hint">
       Edit via CLI: <code>homebutler init</code>
@@ -481,40 +474,11 @@
     gap: 0.5rem;
   }
 
-  .wake-list {
-    display: flex;
-    flex-direction: column;
-    gap: 0.5rem;
-  }
 
-  .wake-item {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 0.4rem 0;
-    border-bottom: 1px solid var(--border);
-  }
 
-  .wake-item:last-child {
-    border-bottom: none;
-  }
 
-  .wake-name {
-    font-size: 0.8rem;
-    font-weight: 500;
-    color: var(--text-heading);
-  }
 
-  .wake-details {
-    display: flex;
-    align-items: center;
-    gap: 0.4rem;
-  }
 
-  .wake-sep {
-    color: var(--text-secondary);
-    font-size: 0.75rem;
-  }
 
   .hint {
     text-align: center;
@@ -538,10 +502,6 @@
     font-size: 0.875rem;
   }
 
-  .empty {
-    color: var(--text-secondary);
-    font-size: 0.875rem;
-  }
 
   @media (max-width: 640px) {
     .server-grid {
@@ -558,12 +518,6 @@
        that is where the thresholds sat on a phone. */
     .thresholds.editable {
       align-items: stretch;
-    }
-
-    .wake-item {
-      flex-direction: column;
-      align-items: flex-start;
-      gap: 0.25rem;
     }
   }
 </style>

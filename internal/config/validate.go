@@ -598,13 +598,27 @@ func (r *ValidationResult) checkWake(cfg *Config) {
 		if t.Name == "" {
 			r.add(SeverityError, field+".name", "Wake target name is required.", "")
 		}
-		if t.MAC == "" {
-			r.add(SeverityError, field+".mac", "MAC address is required.", "")
-		} else if _, err := net.ParseMAC(t.MAC); err != nil {
-			r.add(SeverityError, field+".mac",
-				fmt.Sprintf("Invalid MAC address %q.", t.MAC), "Expected format: AA:BB:CC:DD:EE:FF")
+		if message, hint := macProblem(t.MAC); message != "" {
+			r.add(SeverityError, field+".mac", message, hint)
 		}
 	}
+}
+
+// macProblem reports what is wrong with a MAC address, in the words the rest
+// of homebutler uses for it, or empty strings when there is nothing wrong.
+//
+// A save and `config validate` that disagreed about what a MAC looks like
+// would be two answers to one question, and the disagreement would surface
+// after the packet had already gone nowhere: Wake-on-LAN is fire and forget,
+// so a typed address fails by the machine simply not waking.
+func macProblem(mac string) (message, hint string) {
+	if mac == "" {
+		return "MAC address is required.", ""
+	}
+	if _, err := net.ParseMAC(mac); err != nil {
+		return fmt.Sprintf("Invalid MAC address %q.", mac), "Expected format: AA:BB:CC:DD:EE:FF"
+	}
+	return "", ""
 }
 
 func (r *ValidationResult) checkAlerts(cfg *Config) {

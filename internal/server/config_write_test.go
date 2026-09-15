@@ -336,3 +336,109 @@ func TestNotifyTestIsAbsentWithoutAToken(t *testing.T) {
 		t.Fatalf("expected the route not to exist, got %d", w.Code)
 	}
 }
+
+const wakeConfigFile = `servers:
+  - name: local
+    host: 127.0.0.1
+    local: true
+wake:
+  - name: gaming-pc
+    mac: AA:BB:CC:DD:EE:FF
+`
+
+func wakeServer(t *testing.T) (*Server, string) {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), "config.yaml")
+	if err := os.WriteFile(path, []byte(wakeConfigFile), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := config.Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	srv := New(cfg, "127.0.0.1", 8080)
+	srv.SetToken("test-token")
+	return srv, path
+}
+
+func wakeTargets(t *testing.T, srv *Server) []map[string]string {
+	t.Helper()
+	var body struct {
+		Wake []map[string]string `json:"wake"`
+	}
+	if err := json.Unmarshal(do(t, srv, "GET", "/api/config", "").Body.Bytes(), &body); err != nil {
+		t.Fatal(err)
+	}
+	return body.Wake
+}
+
+func TestSaveAddsAWakeTarget(t *testing.T) {
+	srv, path := wakeServer(t)
+
+	body := fmt.Sprintf(`{"revision":%q,"targets":[{"name":"nas","mac":"11:22:33:44:55:66","broadcast":"192.168.1.255"}]}`, currentRevision(t, srv))
+	w := do(t, srv, "PUT", "/api/config/wake", body)
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body)
+	}
+	// A wake target works as soon as it is written: serve reads the file back
+	// and the CLI reads it every run, so nothing is waiting on a restart.
+	if strings.Contains(w.Body.String(), "restart_needed") {
+		t.Fatalf("a wake save asked for a restart: %s", w.Body)
+	}
+
+	targets := wakeTargets(t, srv)
+	if len(targets) != 2 {
+		t.Fatalf("expected two targets, got %v", targets)
+	}
+	if targets[1]["name"] != "nas" || targets[1]["broadcast"] != "192.168.1.255" {
+		t.Fatalf("the new target came back wrong: %v", targets[1])
+	}
+
+	// The file says `ip`, whatever the JSON calls it.
+	saved, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(saved), "ip: 192.168.1.255") {
+		t.Fatalf("the broadcast address is not under the key the file uses:\n%s", saved)
+	}
+}
+
+// Nothing answers a magic packet, so a typed address is only ever discovered
+// as a machine that did not turn on. It is refused at the save instead.
+func TestSaveRefusesAWakeTargetWithABadMAC(t *testing.T) {
+	srv, path := wakeServer(t)
+	before, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	body := fmt.Sprintf(`{"revision":%q,"targets":[{"name":"nas","mac":"11:22:33:44:55"}]}`, currentRevision(t, srv))
+	w := do(t, srv, "PUT", "/api/config/wake", body)
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d: %s", w.Code, w.Body)
+	}
+	if !strings.Contains(w.Body.String(), "AA:BB:CC:DD:EE:FF") {
+		t.Fatalf("the refusal does not say what a MAC looks like: %s", w.Body)
+	}
+
+	after, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(after) != string(before) {
+		t.Fatal("the file was written anyway")
+	}
+}
+
+func TestSaveRemovesAWakeTarget(t *testing.T) {
+	srv, _ := wakeServer(t)
+
+	body := fmt.Sprintf(`{"revision":%q,"targets":[{"name":"gaming-pc","remove":true}]}`, currentRevision(t, srv))
+	if w := do(t, srv, "PUT", "/api/config/wake", body); w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body)
+	}
+	if targets := wakeTargets(t, srv); len(targets) != 0 {
+		t.Fatalf("the target is still there: %v", targets)
+	}
+}
