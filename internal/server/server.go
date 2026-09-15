@@ -235,10 +235,14 @@ func (s *Server) routes() {
 			s.mux.HandleFunc("PUT /api/config/alerts", api(s.demoSaveAlerts))
 			s.mux.HandleFunc("PUT /api/config/notify", api(s.demoSaveNotify))
 			s.mux.HandleFunc("PUT /api/config/wake", api(s.demoSaveWake))
+			s.mux.HandleFunc("PUT /api/config/servers", api(s.demoSaveServers))
+			s.mux.HandleFunc("PUT /api/config/proxmox", api(s.demoSaveProxmox))
 		} else {
 			s.mux.HandleFunc("PUT /api/config/alerts", api(s.handleSaveAlerts))
 			s.mux.HandleFunc("PUT /api/config/notify", api(s.handleSaveNotify))
 			s.mux.HandleFunc("PUT /api/config/wake", api(s.handleSaveWake))
+			s.mux.HandleFunc("PUT /api/config/servers", api(s.handleSaveServers))
+			s.mux.HandleFunc("PUT /api/config/proxmox", api(s.handleSaveProxmox))
 		}
 	}
 
@@ -616,9 +620,29 @@ func (s *Server) handleConfig(w http.ResponseWriter, r *http.Request) {
 
 	editable := s.token != ""
 
+	// Proxmox endpoints, as a form needs them: the token ids are not secret —
+	// they name a user, not a credential — and whether each token is set is a
+	// flag, never the token. An endpoint that keeps its token in a file says
+	// so, because that is the one the dashboard cannot change the address of.
+	endpoints := make([]map[string]any, len(cfg.Proxmox))
+	for i, endpoint := range cfg.Proxmox {
+		endpoints[i] = map[string]any{
+			"name":                 endpoint.Name,
+			"host":                 endpoint.Host,
+			"port":                 endpoint.Port,
+			"token_id":             endpoint.TokenID,
+			"token_set":            endpoint.Token != "" || endpoint.TokenFile != "",
+			"token_in_file":        endpoint.TokenFile != "",
+			"action_token_id":      endpoint.ActionTokenID,
+			"action_token_set":     endpoint.ActionToken != "" || endpoint.ActionTokenFile != "",
+			"action_token_in_file": endpoint.ActionTokenFile != "",
+		}
+	}
+
 	body := map[string]any{
 		"path":    cfgPath,
 		"servers": servers,
+		"proxmox": endpoints,
 		"alerts": map[string]any{
 			"cpu":    cfg.Alerts.CPU,
 			"memory": cfg.Alerts.Memory,

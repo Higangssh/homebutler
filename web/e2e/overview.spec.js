@@ -40,4 +40,12 @@ test('a host key failure says so in its own words', async ({ page }) => {
   const hostKey = page.locator('.server-item').filter({ hasText: 'vpn-gateway' });
   await expect(hostKey).toContainText('host_key');
   await expect(hostKey).toContainText('does not match the one homebutler trusts');
+
+  // Since #194 a server that signs in with a password stops here the first
+  // time on purpose, and a server added from the settings screen is exactly
+  // the case that hits it. The card says where to go — the fingerprint has to
+  // be checked somewhere other than this page for checking it to mean
+  // anything, so there is no button here that would trust whatever answered.
+  await expect(hostKey).toContainText('homebutler trust vpn-gateway');
+  await expect(hostKey.getByRole('button', { name: /trust/i })).toHaveCount(0);
 });

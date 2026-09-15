@@ -154,7 +154,7 @@ func TestConfigWriteEndpointsNeedAToken(t *testing.T) {
 		Alerts:  config.AlertConfig{CPU: 90, Memory: 85, Disk: 90},
 	}
 
-	for _, path := range []string{"/api/config/alerts", "/api/config/notify", "/api/config/wake"} {
+	for _, path := range []string{"/api/config/alerts", "/api/config/notify", "/api/config/wake", "/api/config/servers", "/api/config/proxmox"} {
 		srv := New(cfg, "127.0.0.1", 8080)
 		req := httptest.NewRequest("PUT", path, strings.NewReader(`{"cpu":80}`))
 		w := httptest.NewRecorder()

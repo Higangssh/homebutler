@@ -108,11 +108,46 @@ type WakePatch struct {
 	Remove    bool
 }
 
+// ServerPatch changes one server, addressed by the name it has now. A field
+// left nil is not written, so a save about the port cannot disturb the user.
+//
+// KeyFile is deliberately absent. It names a path on the machine homebutler
+// runs on, and a browser is the wrong place to be choosing one; the CLI still
+// edits it.
+type ServerPatch struct {
+	Name     string
+	Rename   string
+	Host     *string
+	Port     *int
+	User     *string
+	AuthMode *string
+	Password *Secret
+	Remove   bool
+}
+
+// ProxmoxPatch changes one Proxmox endpoint. The read credential and the one
+// that performs guest actions are separate on purpose, and stay separate here.
+//
+// The *_file paths are absent for the same reason KeyFile is.
+type ProxmoxPatch struct {
+	Name          string
+	Rename        string
+	Host          *string
+	Port          *int
+	TokenID       *string
+	Token         *Secret
+	ActionTokenID *string
+	ActionToken   *Secret
+	Remove        bool
+}
+
 type Patch struct {
 	Alerts *AlertsPatch
 	// Notify is keyed by channel name, as internal/notify spells it.
-	Notify map[string]*NotifyPatch
-	Wake   []WakePatch
+	Notify  map[string]*NotifyPatch
+	Wake    []WakePatch
+	Servers []ServerPatch
+	Proxmox []ProxmoxPatch
 }
 
 // IsEmpty reports whether the patch would change nothing.
@@ -120,7 +155,7 @@ func (p Patch) IsEmpty() bool {
 	if p.Alerts != nil && (p.Alerts.CPU != nil || p.Alerts.Memory != nil || p.Alerts.Disk != nil) {
 		return false
 	}
-	return len(p.Notify) == 0 && len(p.Wake) == 0
+	return len(p.Notify) == 0 && len(p.Wake) == 0 && len(p.Servers) == 0 && len(p.Proxmox) == 0
 }
 
 // Validate reports what is wrong with the patch itself, before any file is
@@ -170,6 +205,27 @@ func (p Patch) Validate() error {
 		}
 		if err := CheckWakeTarget(target.Name, target.MAC); err != nil {
 			return err
+		}
+	}
+
+	for _, server := range p.Servers {
+		if server.Name == "" {
+			return errors.New("a server needs a name")
+		}
+		if server.AuthMode != nil && *server.AuthMode != "key" && *server.AuthMode != "password" {
+			return fmt.Errorf("%q is not a way to sign in; it is either key or password", *server.AuthMode)
+		}
+		if server.Port != nil && (*server.Port < 1 || *server.Port > 65535) {
+			return fmt.Errorf("%d is not a port", *server.Port)
+		}
+	}
+
+	for _, endpoint := range p.Proxmox {
+		if endpoint.Name == "" {
+			return errors.New("a Proxmox endpoint needs a name")
+		}
+		if endpoint.Port != nil && (*endpoint.Port < 1 || *endpoint.Port > 65535) {
+			return fmt.Errorf("%d is not a port", *endpoint.Port)
 		}
 	}
 	return nil
@@ -249,6 +305,19 @@ func Save(path string, rev Revision, patch Patch) error {
 
 	if currentRev != rev {
 		return ErrStale
+	}
+
+	// Whether a change moves a credential depends on where the item points
+	// now, so this is checked against the file as it is rather than against
+	// the patch alone.
+	if len(patch.Servers) > 0 || len(patch.Proxmox) > 0 {
+		var onDisk Config
+		if err := yaml.Unmarshal(current, &onDisk); err != nil {
+			return fmt.Errorf("failed to parse config: %w", err)
+		}
+		if err := checkDestinations(&onDisk, patch); err != nil {
+			return err
+		}
 	}
 
 	edited, err := applyPatch(current, patch)
@@ -383,6 +452,72 @@ func collectEdits(patch Patch) ([]edit, []removal) {
 				path:  []step{mapKey("wake"), seqItem(target.Name), mapKey(kv.key)},
 				value: quoteIfNeeded(kv.value),
 			})
+		}
+	}
+
+	for _, server := range patch.Servers {
+		if server.Remove {
+			removals = append(removals, removal{path: []step{mapKey("servers"), seqItem(server.Name)}})
+			continue
+		}
+
+		// The item is addressed by the name it has in the file, and renaming is
+		// writing that one key: a rename is an edit rather than a delete and an
+		// add, so everything else about the server stays where it is, comments
+		// included. A server that is not being renamed does not have its name
+		// rewritten — that would requote a name somebody wrote their own way.
+		item := func(key, value string) edit {
+			return edit{path: []step{mapKey("servers"), seqItem(server.Name), mapKey(key)}, value: value}
+		}
+		if server.Rename != "" {
+			edits = append(edits, item("name", quoteIfNeeded(server.Rename)))
+		}
+		if server.Host != nil {
+			edits = append(edits, item("host", quoteIfNeeded(*server.Host)))
+		}
+		if server.Port != nil {
+			edits = append(edits, item("port", strconv.Itoa(*server.Port)))
+		}
+		if server.User != nil {
+			edits = append(edits, item("user", quoteIfNeeded(*server.User)))
+		}
+		if server.AuthMode != nil {
+			edits = append(edits, item("auth", quoteIfNeeded(*server.AuthMode)))
+		}
+		if value, write := server.Password.resolve(); write {
+			edits = append(edits, item("password", quoteIfNeeded(value)))
+		}
+	}
+
+	for _, endpoint := range patch.Proxmox {
+		if endpoint.Remove {
+			removals = append(removals, removal{path: []step{mapKey("proxmox"), seqItem(endpoint.Name)}})
+			continue
+		}
+
+		item := func(key, value string) edit {
+			return edit{path: []step{mapKey("proxmox"), seqItem(endpoint.Name), mapKey(key)}, value: value}
+		}
+		if endpoint.Rename != "" {
+			edits = append(edits, item("name", quoteIfNeeded(endpoint.Rename)))
+		}
+		if endpoint.Host != nil {
+			edits = append(edits, item("host", quoteIfNeeded(*endpoint.Host)))
+		}
+		if endpoint.Port != nil {
+			edits = append(edits, item("port", strconv.Itoa(*endpoint.Port)))
+		}
+		if endpoint.TokenID != nil {
+			edits = append(edits, item("token_id", quoteIfNeeded(*endpoint.TokenID)))
+		}
+		if value, write := endpoint.Token.resolve(); write {
+			edits = append(edits, item("token", quoteIfNeeded(value)))
+		}
+		if endpoint.ActionTokenID != nil {
+			edits = append(edits, item("action_token_id", quoteIfNeeded(*endpoint.ActionTokenID)))
+		}
+		if value, write := endpoint.ActionToken.resolve(); write {
+			edits = append(edits, item("action_token", quoteIfNeeded(value)))
 		}
 	}
 

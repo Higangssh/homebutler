@@ -3,6 +3,8 @@
   import { getConfig, saveAlerts, StaleConfigError } from './api.js';
   import NotifyCard from './NotifyCard.svelte';
   import WakeDevicesCard from './WakeDevicesCard.svelte';
+  import ServersCard from './ServersCard.svelte';
+  import ProxmoxSettingsCard from './ProxmoxSettingsCard.svelte';
 
   let data = $state(null);
   let error = $state('');
@@ -83,6 +85,14 @@
     await refreshSection('wake');
   }
 
+  async function serversSaved() {
+    await refreshSection('servers');
+  }
+
+  async function proxmoxSaved() {
+    await refreshSection('proxmox');
+  }
+
   // One section is refreshed at a time. Reloading everything would throw away
   // a threshold someone is halfway through typing on the same screen.
   async function refreshSection(name) {
@@ -117,57 +127,13 @@
       <code class="path-value">{data.path}</code>
     </div>
 
-    <!-- Servers -->
-    <div class="section">
-      <div class="section-header">
-        <h2>Servers</h2>
-        <span class="badge">{data.servers.length}</span>
-      </div>
-      <div class="server-grid">
-        {#each data.servers as srv}
-          <div class="mini-card">
-            <div class="mini-card-header">
-              <span class="server-name">{srv.name}</span>
-              {#if srv.local}
-                <span class="local-badge">local</span>
-              {/if}
-            </div>
-            <div class="mini-card-rows">
-              <div class="row">
-                <span class="label">Host</span>
-                <code class="value">{srv.host}</code>
-              </div>
-              {#if !srv.local}
-                <div class="row">
-                  <span class="label">User</span>
-                  <code class="value">{srv.user || '—'}</code>
-                </div>
-                <div class="row">
-                  <span class="label">Port</span>
-                  <code class="value">{srv.port || 22}</code>
-                </div>
-                <div class="row">
-                  <span class="label">Auth</span>
-                  <code class="value">{srv.auth}</code>
-                </div>
-                {#if srv.auth === 'key' && srv.key}
-                  <div class="row">
-                    <span class="label">Key</span>
-                    <code class="value">{srv.key}</code>
-                  </div>
-                {/if}
-                {#if srv.password}
-                  <div class="row">
-                    <span class="label">Password</span>
-                    <code class="value">configured</code>
-                  </div>
-                {/if}
-              {/if}
-            </div>
-          </div>
-        {/each}
-      </div>
-    </div>
+    <ServersCard
+      servers={data.servers ?? []}
+      revision={data.revision ?? ''}
+      editable={data.editable}
+      onsaved={serversSaved}
+      onreload={reload}
+    />
 
     <!-- Alert Thresholds -->
     <div class="section">
@@ -226,6 +192,14 @@
         {/if}
       {/if}
     </div>
+
+    <ProxmoxSettingsCard
+      endpoints={data.proxmox ?? []}
+      revision={data.revision ?? ''}
+      editable={data.editable}
+      onsaved={proxmoxSaved}
+      onreload={reload}
+    />
 
     <NotifyCard
       channels={data.notify ?? []}
@@ -396,60 +370,13 @@
     color: var(--text-heading);
   }
 
-  .badge {
-    font-size: 0.75rem;
-    color: var(--text-secondary);
-    background: var(--bg-primary);
-    padding: 0.15rem 0.5rem;
-    border-radius: 10px;
-  }
 
-  .server-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
-    gap: 0.75rem;
-  }
 
-  .mini-card {
-    background: var(--bg-primary);
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    padding: 0.75rem 1rem;
-  }
 
-  .mini-card-header {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    margin-bottom: 0.5rem;
-  }
 
-  .server-name {
-    font-size: 0.85rem;
-    font-weight: 600;
-    color: var(--text-heading);
-  }
 
-  .local-badge {
-    font-size: 0.65rem;
-    color: var(--green);
-    background: color-mix(in srgb, var(--green) 15%, transparent);
-    padding: 0.1rem 0.4rem;
-    border-radius: 8px;
-    font-weight: 500;
-  }
 
-  .mini-card-rows {
-    display: flex;
-    flex-direction: column;
-    gap: 0.25rem;
-  }
 
-  .row {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-  }
 
   .label {
     font-size: 0.75rem;
@@ -504,9 +431,6 @@
 
 
   @media (max-width: 640px) {
-    .server-grid {
-      grid-template-columns: 1fr;
-    }
 
     .thresholds {
       flex-direction: column;

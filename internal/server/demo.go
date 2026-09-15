@@ -311,6 +311,10 @@ func (s *Server) demoConfig(w http.ResponseWriter, r *http.Request) {
 			// Whether a password is set, never a stand-in for one.
 			{"name": "raspberry-pi", "host": "192.168.1.30", "local": false, "user": "pi", "port": 22, "auth": "password", "key": "", "password_set": true},
 		},
+		"proxmox": []map[string]any{
+			{"name": "pve", "host": "192.168.1.100", "port": 8006, "token_id": "root@pam!homebutler",
+				"token_set": true, "action_token_id": "", "action_token_set": false},
+		},
 		"alerts": map[string]any{"cpu": 90, "memory": 85, "disk": 90},
 		"wake": []map[string]string{
 			{"name": "gaming-pc", "mac": "AA:BB:CC:DD:EE:FF", "broadcast": "192.168.1.255"},
@@ -348,6 +352,42 @@ func (s *Server) demoSaveWake(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	writeJSON(w, saveResponse{Saved: true, Revision: demoRevision})
+}
+
+func (s *Server) demoSaveServers(w http.ResponseWriter, r *http.Request) {
+	var req serversRequest
+	if !decodeSave(w, r, &req) {
+		return
+	}
+	if req.Revision != demoRevision {
+		writeError(w, http.StatusConflict, "the config file changed on disk since this page loaded it; reload before saving")
+		return
+	}
+	// The demo has no file, but the refusal that matters is not about the
+	// file: a saved password does not follow a server to a new address here
+	// either. raspberry-pi is the one with a password.
+	for _, in := range req.Servers {
+		if in.Remove || in.Host == nil || in.Name != "raspberry-pi" {
+			continue
+		}
+		if in.Password == nil {
+			writeError(w, http.StatusBadRequest, "raspberry-pi has a saved password, and this change points it at a different address. Send the password again with the change, or clear it first")
+			return
+		}
+	}
+	writeJSON(w, saveResponse{Saved: true, Revision: demoRevision, RestartNeeded: []string{"watch"}})
+}
+
+func (s *Server) demoSaveProxmox(w http.ResponseWriter, r *http.Request) {
+	var req proxmoxRequest
+	if !decodeSave(w, r, &req) {
+		return
+	}
+	if req.Revision != demoRevision {
+		writeError(w, http.StatusConflict, "the config file changed on disk since this page loaded it; reload before saving")
+		return
+	}
+	writeJSON(w, saveResponse{Saved: true, Revision: demoRevision, RestartNeeded: []string{"watch"}})
 }
 
 // demoNotifyConfig is what the demo dashboard shows on the settings screen.

@@ -4,13 +4,18 @@ import { expect, test } from './fixtures.js';
 // is named by the form it belongs to rather than by being the only one.
 const saveThresholds = page => page.locator('form.thresholds').getByRole('button', { name: 'Save' });
 
+// Named by the form it belongs to for the same reason: the Config screen has
+// number inputs of its own now, and "the first one on the page" is a server's
+// port.
+const threshold = page => page.locator('form.thresholds input[type="number"]').first();
+
 test.beforeEach(async ({ page }) => {
   await page.goto('/');
   await page.getByRole('button', { name: 'Config' }).click();
 });
 
 test('thresholds can be edited when the dashboard has a token', async ({ page }) => {
-  const cpu = page.locator('input[type="number"]').first();
+  const cpu = threshold(page);
   await expect(cpu).toHaveValue('90');
 
   await cpu.fill('75');
@@ -34,7 +39,7 @@ test('a config edited elsewhere is reported, not overwritten', async ({ page }) 
     })
   );
 
-  const cpu = page.locator('input[type="number"]').first();
+  const cpu = threshold(page);
   await cpu.fill('65');
   await saveThresholds(page).click();
 
@@ -58,7 +63,7 @@ test('a failed save does not claim to have saved', async ({ page }) => {
     })
   );
 
-  await page.locator('input[type="number"]').first().fill('65');
+  await threshold(page).fill('65');
   await saveThresholds(page).click();
 
   await expect(page.getByText(/Flapping thresholds cannot be negative/)).toBeVisible();
@@ -74,7 +79,7 @@ test('a threshold outside the range never leaves the page', async ({ page }) => 
     route.fulfill({ status: 200, contentType: 'application/json', body: '{"saved":true}' });
   });
 
-  await page.locator('input[type="number"]').first().fill('500');
+  await threshold(page).fill('500');
   await saveThresholds(page).click();
   await page.waitForTimeout(300);
 
