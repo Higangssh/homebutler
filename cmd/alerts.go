@@ -3,7 +3,6 @@ package cmd
 import (
 	"bufio"
 	"context"
-	"errors"
 	"fmt"
 	"os"
 	"os/signal"
@@ -16,7 +15,6 @@ import (
 	"github.com/Higangssh/homebutler/internal/alerts"
 	"github.com/Higangssh/homebutler/internal/config"
 	"github.com/Higangssh/homebutler/internal/docker"
-	"github.com/Higangssh/homebutler/internal/notify"
 	"github.com/Higangssh/homebutler/internal/watch"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/spf13/cobra"
@@ -182,32 +180,35 @@ This command remains for backward compatibility.`,
 				Time:     time.Now().Format("2006-01-02 15:04:05"),
 			}
 
-			fmt.Println("Sending test notification...")
-			errs := alerts.NotifyAll(notifyCfg, event)
-
-			// Which channel failed comes from the error itself. Searching the
+			// Which channel failed comes from the error's type. Searching the
 			// message for the channel name reported a Discord failure as a
 			// webhook failure too, because the error quotes a URL containing
 			// the word (#177).
-			failed := make(map[notify.Channel]error, len(errs))
-			for _, err := range errs {
-				if channel, ok := notify.FailedChannel(err); ok {
-					failed[channel] = err
-					continue
+			results := alerts.TestNotify(notifyCfg, event)
+
+			if jsonOutput {
+				if err := output(results, true); err != nil {
+					return err
 				}
-				fmt.Printf("  ❌ %s\n", err)
+			} else {
+				fmt.Println("Sending test notification...")
+				for _, r := range results {
+					if r.Sent {
+						fmt.Printf("  ✅ %s: sent\n", r.Channel)
+						continue
+					}
+					fmt.Printf("  ❌ %s: %s\n", r.Channel, r.Error)
+				}
 			}
 
-			for _, channel := range notifyCfg.EnabledChannels() {
-				if err := failed[channel]; err != nil {
-					fmt.Printf("  ❌ %s: %s\n", channel, errors.Unwrap(err))
-					continue
+			failures := 0
+			for _, r := range results {
+				if !r.Sent {
+					failures++
 				}
-				fmt.Printf("  ✅ %s: sent\n", channel)
 			}
-
-			if len(errs) > 0 {
-				return fmt.Errorf("%d provider(s) failed", len(errs))
+			if failures > 0 {
+				return fmt.Errorf("%d provider(s) failed", failures)
 			}
 			return nil
 		},

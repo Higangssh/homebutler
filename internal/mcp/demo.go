@@ -5,6 +5,8 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/Higangssh/homebutler/internal/notify"
+
 	"github.com/Higangssh/homebutler/internal/install"
 	"github.com/Higangssh/homebutler/internal/proxmox"
 )
@@ -207,6 +209,15 @@ func (s *Server) executeDemoTool(name string, args map[string]any) (any, error) 
 		}, nil
 	case "watch_remove":
 		return map[string]any{"container": stringArg(args, "container"), "removed": true}, nil
+	case "notify_test":
+		// One channel that worked and one that did not, so a caller meets the
+		// shape it has to handle rather than an all-green answer that teaches
+		// it nothing.
+		return []notify.TestResult{
+			{Channel: notify.ChannelTelegram, Sent: true},
+			{Channel: notify.ChannelNtfy, Sent: true},
+			{Channel: notify.ChannelGotify, Sent: false, Error: "request to https://gotify.example.com failed: connection refused"},
+		}, nil
 	case "alerts_history":
 		return []map[string]any{
 			{"time": "2026-04-30 03:14:22", "rule": "disk", "server": "homelab-server", "detail": "Disk / at 91%", "action": "docker prune", "outcome": "resolved"},

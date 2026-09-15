@@ -28,8 +28,22 @@ func NotifyAll(cfg *NotifyConfig, event NotifyEvent) []error {
 	if cfg == nil {
 		return nil
 	}
+	return notify.SendAll(cfg, toEvent(event))
+}
+
+// TestNotify sends one event through every configured channel and reports each,
+// so a caller learns which channels work rather than that something failed.
+func TestNotify(cfg *NotifyConfig, event NotifyEvent) []notify.TestResult {
+	if cfg == nil {
+		return nil
+	}
+	return notify.Test(cfg, toEvent(event))
+}
+
+// toEvent is the one place the alerts event shape becomes a notify event.
+func toEvent(event NotifyEvent) notify.Event {
 	t, _ := time.Parse("2006-01-02 15:04:05", event.Time)
-	ne := notify.Event{
+	return notify.Event{
 		Source:  "alerts",
 		Name:    event.RuleName,
 		Status:  event.Status,
@@ -38,5 +52,4 @@ func NotifyAll(cfg *NotifyConfig, event NotifyEvent) []error {
 		Result:  event.Result,
 		Time:    t,
 	}
-	return notify.SendAll(cfg, ne)
 }

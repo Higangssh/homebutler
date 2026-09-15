@@ -616,6 +616,24 @@ var Registry = []Capability{
 		},
 	},
 	{
+		// Sends one real message through every configured channel, which is a
+		// write in the sense that matters: something leaves the machine and
+		// arrives on someone's phone.
+		Risk:    RiskWrite,
+		Targets: []TargetKind{TargetLocal, TargetServer},
+		HTTP:    HTTP{Absent: AbsentNeedsWriteSurface},
+		Tool: Definition{
+			Name:        "notify_test",
+			Description: "Send one test notification through every configured channel and report which ones arrived",
+			InputSchema: Schema{
+				Type: "object",
+				Properties: map[string]Property{
+					"server": {Type: "string", Description: "Remote server name from config (optional, runs locally if omitted)"},
+				},
+			},
+		},
+	},
+	{
 		Risk:    RiskRead,
 		Targets: []TargetKind{TargetLocal, TargetServer},
 		HTTP:    HTTP{Absent: AbsentNoViewYet},

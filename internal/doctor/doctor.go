@@ -60,6 +60,7 @@ var commandTools = map[string]string{
 	"homebutler report":                    "report",
 	"homebutler status":                    "system_status",
 	"homebutler watch history":             "watch_history",
+	"homebutler notify test":               "notify_test",
 }
 
 // cliOnly are homebutler commands that no tool runs, each with the reason.
@@ -72,9 +73,6 @@ var cliOnly = map[string]string{
 	// quietly and doctor reports the same finding again, with nothing to show
 	// that anything was installed (#157).
 	"homebutler watch install": "installs a service whose unit would record the wrong binary path when run through anything but the installed binary",
-	// Waits on #177: SendAll reports failures as one error, so a tool could not
-	// say which channel failed without matching on strings.
-	"homebutler notify test": "waits on per-channel results from #177",
 }
 
 // classifyCommand reports who can run command, and the tool when one can.
