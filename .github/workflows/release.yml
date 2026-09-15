@@ -70,11 +70,22 @@ jobs:
           cd "$RUNNER_TEMP/registry"
           ./mcp-publisher validate
 
+      # The release page is where people who upgrade actually look — the
+      # newsletter links it, so do Homebrew and npm users and everyone watching
+      # releases. Describing it by its commit subjects left the headline and the
+      # ⚠️ Behavior changes in a file they were never going to open. The script
+      # fails when the section is missing, and the release fails with it:
+      # falling back to a commit list would hide this again, quietly.
+      - name: Cut the release notes from the changelog
+        run: |
+          scripts/release-notes.sh "${GITHUB_REF#refs/tags/}" > "$RUNNER_TEMP/release-notes.md"
+          head -1 "$RUNNER_TEMP/release-notes.md"
+
       - name: Run GoReleaser
         uses: goreleaser/goreleaser-action@v6
         with:
           version: latest
-          args: release --clean
+          args: release --clean --release-notes=${{ runner.temp }}/release-notes.md
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 

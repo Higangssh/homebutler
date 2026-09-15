@@ -34,6 +34,29 @@ jobs:
         with:
           version: latest
 
+      # The release body is cut from the changelog at tag time, so a section
+      # that cannot be cut is a release that fails. Finding that out here costs
+      # a pull request; finding it out then costs the release.
+      - name: Check the changelog can be cut into release notes
+        run: |
+          set -euo pipefail
+          versions=$(grep -oE '^## \[[0-9]+\.[0-9]+\.[0-9]+\]' CHANGELOG.md | tr -d '#[] ')
+          for version in $versions; do
+            scripts/release-notes.sh "$version" > /dev/null
+          done
+
+          # Every release opens with one bolded sentence naming the problem it
+          # solves. Only the newest is checked: the convention started partway
+          # through, and the releases before it are already published.
+          newest=$(printf '%s\n' "$versions" | head -1)
+          case "$(scripts/release-notes.sh "$newest" | head -1)" in
+            '**'*) ;;
+            *)
+              echo "$newest does not open with the bolded sentence that names the problem it solves." >&2
+              exit 1
+              ;;
+          esac
+
   e2e:
     name: End-to-end
     runs-on: ubuntu-latest
