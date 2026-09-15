@@ -93,7 +93,26 @@ func connect(server *config.ServerConfig) (*ssh.Client, error) {
 					"  → If you trust this change: homebutler trust %s --reset\n"+
 					"  → If unexpected: do NOT connect and investigate", server.Name, addr, server.Name)
 			}
-			// Unknown host — TOFU: auto-add to known_hosts and retry
+			// Unknown host. Trusting it on sight is a reasonable trade for key
+			// authentication: the private key never leaves this machine, and
+			// the worst a stranger at that address learns is that somebody
+			// tried to reach it.
+			//
+			// A password is not that. Trusting the address and then sending
+			// the password to it hands the credential to whoever answered —
+			// a machine reached by a typo, by a stale DNS record, or by an
+			// address someone with access to the config changed on purpose.
+			// There is no signal afterwards either: the failure looks like a
+			// wrong password. So a password stops here and asks for the host
+			// to be trusted deliberately, which `homebutler trust` does.
+			if !server.UseKeyAuth() {
+				return nil, classified(ClassHostKey, "[%s] this host is not in ~/.ssh/known_hosts, and this server signs in with a password (%s)\n"+
+					"  homebutler will not send a password to a host it has not been told to trust: whatever answers at that\n"+
+					"  address would receive it, and a wrong address looks exactly like a wrong password afterwards.\n"+
+					"  → Check that the address is the machine you mean, then: homebutler trust %s", server.Name, addr, server.Name)
+			}
+
+			// Key authentication: TOFU — record the host key and retry.
 			tofuErr := tofuConnect(addr, cfg)
 			if tofuErr == nil {
 				// Reload known_hosts and retry
@@ -166,22 +185,31 @@ func tofuConnect(addr string, cfg *ssh.ClientConfig) error {
 		return err
 	}
 
-	// Connect with a callback that captures the host key
+	// The probe carries no credentials. A host key arrives during the key
+	// exchange, before authentication, so nothing has to be offered to read
+	// it — and this connection is to a machine homebutler has decided nothing
+	// about yet. Copying the whole config here meant the password was sent to
+	// whatever answered at that address: a config pointed at the wrong host,
+	// by a typo or by someone who could edit it, gave the password away before
+	// the host key was so much as written down.
 	var hostKey ssh.PublicKey
 	captureCfg := *cfg
+	captureCfg.Auth = nil
 	captureCfg.HostKeyCallback = func(hostname string, remote net.Addr, key ssh.PublicKey) error {
 		hostKey = key
 		return nil
 	}
 
 	client, err := ssh.Dial("tcp", addr, &captureCfg)
-	if err != nil {
-		return &tofuDialError{err: err}
+	if err == nil {
+		client.Close()
 	}
-	client.Close()
 
+	// Without credentials the handshake is expected to end at authentication.
+	// The key exchange came first, so the failure says nothing about whether
+	// the host key was read: only whether hostKey is set does.
 	if hostKey == nil {
-		return fmt.Errorf("no host key captured")
+		return &tofuDialError{err: err}
 	}
 
 	fingerprint := ssh.FingerprintSHA256(hostKey)
@@ -204,28 +232,29 @@ func tofuConnect(addr string, cfg *ssh.ClientConfig) error {
 // TrustServer connects to a server, displays its host key fingerprint,
 // and adds it to known_hosts if the user confirms.
 func TrustServer(server *config.ServerConfig, confirm func(fingerprint string) bool) error {
-	var authMethods []ssh.AuthMethod
+	// Said early rather than after a round trip: a server with no usable
+	// credential cannot be connected to once it is trusted, so there is no
+	// point recording its key.
 	if server.UseKeyAuth() {
-		signer, err := loadKey(server.KeyFile)
-		if err != nil {
+		if _, err := loadKey(server.KeyFile); err != nil {
 			return fmt.Errorf("load SSH key: %w", err)
 		}
-		authMethods = append(authMethods, ssh.PublicKeys(signer))
-	} else {
-		if server.Password == "" {
-			return fmt.Errorf("password auth selected but no password configured for %s", server.Name)
-		}
-		authMethods = append(authMethods, ssh.Password(server.Password))
+	} else if server.Password == "" {
+		return fmt.Errorf("password auth selected but no password configured for %s", server.Name)
 	}
 
 	addr := fmt.Sprintf("%s:%d", server.Host, server.SSHPort())
 	var serverKey ssh.PublicKey
 
-	// Connect with a callback that captures the host key but always fails,
-	// so we can show the fingerprint before committing.
+	// Connect with a callback that captures the host key but always fails, so
+	// we can show the fingerprint before committing.
+	//
+	// It carries no credentials. The key exchange comes before authentication
+	// and the callback stops the handshake there, so nothing is offered to a
+	// host that is, by definition, not trusted yet — the checks above are for
+	// saying early that the credential is missing, not for using it here.
 	captureCfg := &ssh.ClientConfig{
 		User: server.SSHUser(),
-		Auth: authMethods,
 		HostKeyCallback: func(hostname string, remote net.Addr, key ssh.PublicKey) error {
 			serverKey = key
 			return fmt.Errorf("key captured") // intentional: we just want the key

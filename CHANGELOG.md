@@ -4,6 +4,16 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### 🔒 Security
+
+- homebutler sent an SSH password to a host it had never seen before. Reaching a server whose host key was not yet in `known_hosts` meant trusting whatever answered at that address and then authenticating to it — twice over, because the connection that reads a new host key copied the client config credentials and all, so the password went out before the key was so much as written down. Whatever was listening received it in the clear: a machine reached by a typo, by a stale DNS record, or at an address changed by anyone who could edit the config file. Nothing afterwards said so, because a wrong address fails in exactly the same words as a wrong password.
+
+  A password now stops at an unknown host and asks for it to be trusted deliberately, and the connection that reads a host key carries no credentials at all. Key authentication still trusts on first use, because the private key never leaves the machine and the worst a stranger learns is that somebody tried to reach them.
+
+### ⚠️ Behavior changes
+
+- **A server that signs in with a password has to be trusted before the first connection.** `homebutler trust <server>` shows the host key's fingerprint and records it, as it always has; what changed is that trust-on-first-use no longer covers password authentication. Servers that authenticate with a key are unaffected, and a server already in `known_hosts` is unaffected either way.
+
 ### ✨ Features
 
 - add and edit Wake-on-LAN devices from the dashboard (#154). The Config tab listed the machines it could wake and could not add one, so putting a new device on the list meant finding the config file — and a magic packet is fire and forget, which makes a mistyped address a machine that simply does not turn on rather than an error anyone sees. A device can now be added, have its address corrected, or be removed with one confirmation, and an address that cannot be a MAC is refused before the file is touched, in the sentence `config validate` uses for the same mistake. Nothing has to be restarted: a target works as soon as it is saved
