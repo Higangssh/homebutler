@@ -215,3 +215,21 @@ export function saveWake(revision, targets) {
     body: JSON.stringify({ revision, targets }),
   });
 }
+
+// Servers and Proxmox endpoints. A password or a token is sent the way a
+// notification credential is: not at all, a new value, or an explicit clear.
+export function saveServers(revision, servers) {
+  return fetchJSON('/api/config/servers', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ revision, servers }),
+  });
+}
+
+export function saveProxmox(revision, endpoints) {
+  return fetchJSON('/api/config/proxmox', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ revision, endpoints }),
+  });
+}

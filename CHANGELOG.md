@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### ✨ Features
+
+- edit servers and Proxmox endpoints from the dashboard (#154). The Config tab listed the machines homebutler talks to and could change none of them, so adding a server meant finding the config file. A server can now be added, renamed, moved, switched between key and password, or removed with one confirmation, and the same for a Proxmox endpoint and its two tokens. Renaming is one operation rather than a delete and an add, so everything else about the machine stays where it is, comments included
+
+- **a saved credential does not follow a server to a new address (#154).** A password is sent to whatever answers at the address in the file, and that address is a one-field edit — so changing it while leaving the password in place would hand the password to a machine it was never given for. Changing where a server or an endpoint points now requires sending its credential again, or clearing it first. The rule is in the config writer rather than in the form, so every caller meets it. A server that signs in with a key is not covered: the private key never leaves the machine, and its new address is trusted the first time homebutler connects, which the dashboard says out loud and `serve` writes to its log
+
+### ⚠️ Behavior changes
+
+- **Changing a server's address, port or user from the dashboard needs its password again when one is saved.** The same applies to a Proxmox endpoint's host and its tokens. An endpoint whose token is read from a file cannot have its address changed from the dashboard at all, because the credential cannot be sent again from there — that one is still an edit to the config file.
+
 ## [0.34.0](https://github.com/Higangssh/homebutler/compare/v0.33.0...v0.34.0) - 2026-09-16
 **homebutler sent an SSH password to a host it had never seen before, and nothing said so — a wrong address failed in exactly the same words as a wrong password.** Reaching a server whose host key was not yet in `known_hosts` meant trusting whatever answered there and then authenticating to it. Upgrade if any server in your config signs in with a password. Wake-on-LAN devices also became editable from the dashboard, on the writer that can now edit lists rather than only settings.
 

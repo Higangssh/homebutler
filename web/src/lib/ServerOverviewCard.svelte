@@ -85,6 +85,18 @@
             {#if srv.message}
               <div class="staleness">{srv.message}</div>
             {/if}
+            {#if srv.failure_class === 'host_key'}
+              <!-- A server added from the settings screen stops here the first
+                   time, by design: homebutler will not send a password to a
+                   host it has not been told to trust. The fingerprint has to be
+                   checked somewhere other than this page for checking it to
+                   mean anything, so this says where to go rather than offering
+                   a button that would trust whatever answered. -->
+              <div class="staleness action">
+                Run <code>homebutler trust {srv.name}</code> where homebutler is installed, after checking the
+                host key's fingerprint against the machine itself.
+              </div>
+            {/if}
           {/if}
         </div>
       {/each}
@@ -93,6 +105,14 @@
 </div>
 
 <style>
+  .staleness.action {
+    color: var(--text-primary);
+  }
+
+  .staleness.action code {
+    color: var(--accent);
+  }
+
   .staleness {
     margin-top: 0.3rem;
     font-size: 0.7rem;

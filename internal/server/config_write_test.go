@@ -442,3 +442,162 @@ func TestSaveRemovesAWakeTarget(t *testing.T) {
 		t.Fatalf("the target is still there: %v", targets)
 	}
 }
+
+const serversConfigFile = `servers:
+  - name: nas
+    host: 192.168.0.9
+    user: admin
+    auth: password
+    password: hunter2
+  - name: pi
+    host: 192.168.0.4
+    user: pi
+proxmox:
+  - name: pve
+    host: 192.168.0.50
+    token_id: root@pam!homebutler
+    token: tok_read
+`
+
+func serversServer(t *testing.T) (*Server, string) {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), "config.yaml")
+	if err := os.WriteFile(path, []byte(serversConfigFile), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := config.Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	srv := New(cfg, "127.0.0.1", 8080)
+	srv.SetToken("test-token")
+	return srv, path
+}
+
+// The rule lives in the writer, so the endpoint's job is to carry the refusal
+// back in words the person reading the form can act on.
+func TestMovingAServerFromTheDashboardNeedsThePasswordAgain(t *testing.T) {
+	srv, path := serversServer(t)
+	before, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	body := fmt.Sprintf(`{"revision":%q,"servers":[{"name":"nas","host":"10.0.0.6"}]}`, currentRevision(t, srv))
+	w := do(t, srv, "PUT", "/api/config/servers", body)
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d: %s", w.Code, w.Body)
+	}
+	if !strings.Contains(w.Body.String(), "Send the password again") {
+		t.Fatalf("the refusal does not say what to do: %s", w.Body)
+	}
+
+	after, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(after) != string(before) {
+		t.Fatal("the file was written anyway")
+	}
+}
+
+func TestMovingAServerWithThePasswordSucceeds(t *testing.T) {
+	srv, _ := serversServer(t)
+
+	body := fmt.Sprintf(`{"revision":%q,"servers":[{"name":"nas","host":"10.0.0.6","password":{"value":"a-new-one"}}]}`, currentRevision(t, srv))
+	if w := do(t, srv, "PUT", "/api/config/servers", body); w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body)
+	}
+	if got := srv.config().FindServer("nas"); got == nil || got.Host != "10.0.0.6" {
+		t.Fatalf("the change did not land: %+v", got)
+	}
+}
+
+// A key server's address can move, and what that means is said rather than
+// refused: the new address is trusted the first time homebutler connects.
+func TestMovingAKeyServerSaysTheNewAddressWillBeTrusted(t *testing.T) {
+	srv, _ := serversServer(t)
+
+	body := fmt.Sprintf(`{"revision":%q,"servers":[{"name":"pi","host":"192.168.0.44"}]}`, currentRevision(t, srv))
+	w := do(t, srv, "PUT", "/api/config/servers", body)
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body)
+	}
+
+	var response saveResponse
+	if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil {
+		t.Fatal(err)
+	}
+	if len(response.Notices) != 1 || !strings.Contains(response.Notices[0], "trusted the first time") {
+		t.Fatalf("the move was not explained: %v", response.Notices)
+	}
+}
+
+func TestAddingAndRemovingAServerFromTheDashboard(t *testing.T) {
+	srv, _ := serversServer(t)
+
+	add := fmt.Sprintf(`{"revision":%q,"servers":[{"name":"media","host":"192.168.0.20","user":"media","auth":"key"}]}`, currentRevision(t, srv))
+	if w := do(t, srv, "PUT", "/api/config/servers", add); w.Code != http.StatusOK {
+		t.Fatalf("adding: expected 200, got %d: %s", w.Code, w.Body)
+	}
+	if got := srv.config().FindServer("media"); got == nil || got.Host != "192.168.0.20" {
+		t.Fatalf("the server was not added: %+v", srv.config().Servers)
+	}
+
+	remove := fmt.Sprintf(`{"revision":%q,"servers":[{"name":"media","remove":true}]}`, currentRevision(t, srv))
+	if w := do(t, srv, "PUT", "/api/config/servers", remove); w.Code != http.StatusOK {
+		t.Fatalf("removing: expected 200, got %d: %s", w.Code, w.Body)
+	}
+	if got := srv.config().FindServer("media"); got != nil {
+		t.Fatalf("the server was not removed: %+v", got)
+	}
+	if got := srv.config().FindServer("nas"); got == nil || got.Password != "hunter2" {
+		t.Fatalf("removing one server disturbed another: %+v", got)
+	}
+}
+
+// A rename keeps everything else about the server, which is the difference
+// between renaming and deleting-then-adding.
+func TestRenamingAServerKeepsTheRest(t *testing.T) {
+	srv, _ := serversServer(t)
+
+	body := fmt.Sprintf(`{"revision":%q,"servers":[{"name":"nas","rename":"storage"}]}`, currentRevision(t, srv))
+	if w := do(t, srv, "PUT", "/api/config/servers", body); w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body)
+	}
+
+	cfg := srv.config()
+	if cfg.FindServer("nas") != nil {
+		t.Fatal("the old name is still there")
+	}
+	got := cfg.FindServer("storage")
+	if got == nil || got.Host != "192.168.0.9" || got.Password != "hunter2" {
+		t.Fatalf("the rename lost something: %+v", got)
+	}
+}
+
+func TestMovingAProxmoxEndpointFromTheDashboardNeedsItsToken(t *testing.T) {
+	srv, _ := serversServer(t)
+
+	body := fmt.Sprintf(`{"revision":%q,"endpoints":[{"name":"pve","host":"10.0.0.50"}]}`, currentRevision(t, srv))
+	w := do(t, srv, "PUT", "/api/config/proxmox", body)
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d: %s", w.Code, w.Body)
+	}
+	if !strings.Contains(w.Body.String(), "token") {
+		t.Fatalf("the refusal does not name the credential: %s", w.Body)
+	}
+}
+
+// No credential is readable from the dashboard, whatever the section.
+func TestServerPasswordsAreNotServed(t *testing.T) {
+	srv, _ := serversServer(t)
+	raw := do(t, srv, "GET", "/api/config", "").Body.String()
+
+	if strings.Contains(raw, "hunter2") || strings.Contains(raw, "tok_read") {
+		t.Fatalf("a credential was served to the dashboard:\n%s", raw)
+	}
+	if !strings.Contains(raw, `"password_set":true`) {
+		t.Fatalf("the dashboard cannot tell that a password is set:\n%s", raw)
+	}
+}

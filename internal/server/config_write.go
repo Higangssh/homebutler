@@ -7,6 +7,8 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"log"
 	"net/http"
 	"strings"
 	"sync"
@@ -177,6 +179,10 @@ type saveResponse struct {
 	Saved         bool     `json:"saved"`
 	Revision      string   `json:"revision"`
 	RestartNeeded []string `json:"restart_needed,omitempty"`
+	// Notices are things that are true about what was just saved rather than
+	// reasons it failed — a new address that will be trusted on first sight,
+	// for instance. Saving and finding out later is the state worth avoiding.
+	Notices []string `json:"notices,omitempty"`
 }
 
 func (s *Server) handleSaveAlerts(w http.ResponseWriter, r *http.Request) {
@@ -266,15 +272,17 @@ func (s *Server) handleSaveWake(w http.ResponseWriter, r *http.Request) {
 
 // applySave is the one place a write reaches the file, so the staleness check,
 // the reload and the answer are decided once rather than per endpoint.
-func (s *Server) applySave(w http.ResponseWriter, revision string, patch config.Patch, restart []string) {
+// applySave reports whether the file was written, so a caller can do the
+// things that are only true afterwards — writing a move to the log, for one.
+func (s *Server) applySave(w http.ResponseWriter, revision string, patch config.Patch, restart []string, notices ...string) bool {
 	path := s.config().Path
 	if path == "" {
 		writeError(w, http.StatusConflict, "there is no config file to write; run homebutler init first")
-		return
+		return false
 	}
 	if revision == "" {
 		writeError(w, http.StatusBadRequest, "the request did not carry the revision it was made against")
-		return
+		return false
 	}
 
 	saveMu.Lock()
@@ -289,23 +297,23 @@ func (s *Server) applySave(w http.ResponseWriter, revision string, patch config.
 		// A token from a previous serve lands here too, which is the same
 		// answer — that page cannot know what the file holds now.
 		writeError(w, http.StatusConflict, "the config file changed on disk since this page loaded it; reload before saving")
-		return
+		return false
 	default:
 		writeError(w, http.StatusInternalServerError, "the config file could not be read")
-		return
+		return false
 	}
 
 	switch err := config.Save(path, rev, patch); {
 	case err == nil:
 	case errors.Is(err, config.ErrStale):
 		writeError(w, http.StatusConflict, "the config file changed on disk since this page loaded it; reload before saving")
-		return
+		return false
 	case errors.Is(err, config.ErrFlowStyle):
 		writeError(w, http.StatusBadRequest, err.Error())
-		return
+		return false
 	default:
 		writeError(w, http.StatusBadRequest, err.Error())
-		return
+		return false
 	}
 
 	// serve owns the file it just wrote, so it reads it back rather than
@@ -313,17 +321,18 @@ func (s *Server) applySave(w http.ResponseWriter, revision string, patch config.
 	reloaded, err := config.Load(path)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "saved, but the file could not be read back")
-		return
+		return false
 	}
 	s.cfg.Store(reloaded)
 
 	next, err := config.ReadRevision(path)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "saved, but the file could not be read back")
-		return
+		return false
 	}
 
-	writeJSON(w, saveResponse{Saved: true, Revision: s.revisionToken(next), RestartNeeded: restart})
+	writeJSON(w, saveResponse{Saved: true, Revision: s.revisionToken(next), RestartNeeded: restart, Notices: notices})
+	return true
 }
 
 // transportWarning is shown on the settings screen when the token that unlocks
@@ -359,4 +368,159 @@ func (s *Server) handleNotifyTest(w http.ResponseWriter, _ *http.Request) {
 		return
 	}
 	writeJSON(w, notifyTestResponse{Results: alerts.TestNotify(&cfg.Notify, alerts.TestEvent())})
+}
+
+type serversRequest struct {
+	Revision string        `json:"revision"`
+	Servers  []serverInput `json:"servers"`
+}
+
+// serverInput is one server as the dashboard sends it back. A field that is
+// not sent is not changed, which is why everything optional is a pointer: an
+// empty string is a value somebody typed, not an absence.
+//
+// There is no key file here on purpose. It names a path on the machine
+// homebutler runs on, and choosing one from a browser is a different thing
+// from choosing a password; the CLI still edits it.
+type serverInput struct {
+	Name     string       `json:"name"`
+	Rename   string       `json:"rename,omitempty"`
+	Host     *string      `json:"host,omitempty"`
+	Port     *int         `json:"port,omitempty"`
+	User     *string      `json:"user,omitempty"`
+	Auth     *string      `json:"auth,omitempty"`
+	Password *secretInput `json:"password,omitempty"`
+	Remove   bool         `json:"remove,omitempty"`
+}
+
+type proxmoxRequest struct {
+	Revision  string                 `json:"revision"`
+	Endpoints []proxmoxEndpointInput `json:"endpoints"`
+}
+
+type proxmoxEndpointInput struct {
+	Name          string       `json:"name"`
+	Rename        string       `json:"rename,omitempty"`
+	Host          *string      `json:"host,omitempty"`
+	Port          *int         `json:"port,omitempty"`
+	TokenID       *string      `json:"token_id,omitempty"`
+	Token         *secretInput `json:"token,omitempty"`
+	ActionTokenID *string      `json:"action_token_id,omitempty"`
+	ActionToken   *secretInput `json:"action_token,omitempty"`
+	Remove        bool         `json:"remove,omitempty"`
+}
+
+// secret turns what the form sent into the three states the writer knows:
+// leave it alone, replace it, or remove it.
+func (in *secretInput) secret() *config.Secret {
+	switch {
+	case in == nil:
+		return nil
+	case in.Clear:
+		return config.ClearSecret()
+	case in.Value != nil:
+		return config.SetSecret(*in.Value)
+	default:
+		return nil
+	}
+}
+
+func (s *Server) handleSaveServers(w http.ResponseWriter, r *http.Request) {
+	var req serversRequest
+	if !decodeSave(w, r, &req) {
+		return
+	}
+	if len(req.Servers) == 0 {
+		writeError(w, http.StatusBadRequest, "nothing to change")
+		return
+	}
+
+	cfg := s.config()
+	patch := config.Patch{Servers: make([]config.ServerPatch, 0, len(req.Servers))}
+	var notices, moves []string
+
+	for _, in := range req.Servers {
+		patch.Servers = append(patch.Servers, config.ServerPatch{
+			Name:     in.Name,
+			Rename:   in.Rename,
+			Host:     in.Host,
+			Port:     in.Port,
+			User:     in.User,
+			AuthMode: in.Auth,
+			Password: in.Password.secret(),
+			Remove:   in.Remove,
+		})
+
+		if move, notice := s.noteMovedServer(cfg, in); move != "" {
+			moves = append(moves, move)
+			if notice != "" {
+				notices = append(notices, notice)
+			}
+		}
+	}
+
+	// watch connects to these machines; it reads the file when it starts.
+	if !s.applySave(w, req.Revision, patch, []string{"watch"}, notices...) {
+		return
+	}
+
+	// Logged after the write rather than before it: a refused save is not a
+	// change, and a log that says otherwise is worse than no log at all.
+	for _, move := range moves {
+		log.Printf("config: %s", move)
+	}
+}
+
+// noteMovedServer says out loud what changing an address means for a server
+// that signs in with a key, and writes the move to the log.
+//
+// The credential rule in internal/config refuses to move a saved password. A
+// key is different — the private half never leaves this machine — but the new
+// address is still trusted on first sight, and from then on it is the machine
+// homebutler reports about. That is a thing to be told, and a thing to be able
+// to find afterwards, rather than a thing to refuse.
+func (s *Server) noteMovedServer(cfg *config.Config, in serverInput) (move, notice string) {
+	current := cfg.FindServer(in.Name)
+	if current == nil || in.Remove {
+		return "", ""
+	}
+	if in.Host == nil || *in.Host == current.Host {
+		return "", ""
+	}
+
+	move = fmt.Sprintf("server %q address changed from %s to %s", in.Name, current.Host, *in.Host)
+	if current.Password != "" {
+		// The writer refuses this unless the password came with it, and a
+		// password that came with it is not being carried anywhere.
+		return move, ""
+	}
+	return move, in.Name + " now points at " + *in.Host + ", and that address is trusted the first time homebutler connects to it. Check it is the machine you mean."
+}
+
+func (s *Server) handleSaveProxmox(w http.ResponseWriter, r *http.Request) {
+	var req proxmoxRequest
+	if !decodeSave(w, r, &req) {
+		return
+	}
+	if len(req.Endpoints) == 0 {
+		writeError(w, http.StatusBadRequest, "nothing to change")
+		return
+	}
+
+	patch := config.Patch{Proxmox: make([]config.ProxmoxPatch, 0, len(req.Endpoints))}
+	for _, in := range req.Endpoints {
+		patch.Proxmox = append(patch.Proxmox, config.ProxmoxPatch{
+			Name:          in.Name,
+			Rename:        in.Rename,
+			Host:          in.Host,
+			Port:          in.Port,
+			TokenID:       in.TokenID,
+			Token:         in.Token.secret(),
+			ActionTokenID: in.ActionTokenID,
+			ActionToken:   in.ActionToken.secret(),
+			Remove:        in.Remove,
+		})
+	}
+
+	s.applySave(w, req.Revision, patch, []string{"watch"})
 }
