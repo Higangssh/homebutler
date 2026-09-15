@@ -31,6 +31,11 @@
   <img src="assets/report-card.svg" alt="homebutler report output: a port answered by a different service flagged under Needs Attention, then what changed since the last report — a container gone, one new, one recreated behind the same name, a process running a different invocation, a port that changed owner — then current status and the command to verify the port" width="620">
 </p>
 
+```bash
+brew install Higangssh/homebutler/homebutler     # or: curl -fsSL https://raw.githubusercontent.com/Higangssh/homebutler/main/install.sh | sh
+homebutler report                                # first run saves a baseline; the second tells you what moved
+```
+
 Section rules, labels, and severities are colour-coded in a terminal. Colour is
 dropped automatically when output is piped, redirected, or run from cron.
 
@@ -78,7 +83,7 @@ HomeButler helps you answer the boring but painful questions every homelab event
 - Can I install this self-hosted app without hand-writing another compose file?
 - Can I let an AI assistant inspect my server without handing it a full SSH shell?
 
-No daemon required. No database. No always-on web service. Just one Go binary you can use from the terminal, scripts, a web dashboard, or AI tools.
+No daemon required, no database. Run it from a terminal, cron, a web dashboard you start when you want one, or an AI agent.
 
 The design goal is simple: give humans and agents a narrow, structured interface to the server. HomeButler returns readable summaries and JSON instead of asking you to trust a black-box shell session.
 
@@ -139,9 +144,14 @@ Self-hosting is not hard because one `docker compose up` is hard. It is hard bec
 
 HomeButler is a small operations toolkit for that messy middle.
 
-### Why not just use Portainer, Netdata, or CasaOS?
+### Alongside what you already run
 
-Those are great dashboards. HomeButler is CLI-first, scriptable, JSON-friendly, air-gap friendly, and safe to copy onto any server. Use it when you want commands you can run from a terminal, cron job, SSH session, CI script, or AI agent — especially when you care more about “what changed?” than another graph.
+Keep Uptime Kuma for *is it up*, Beszel or Netdata for *the graph*, Dozzle for *the logs*.
+HomeButler answers the question none of them ask: **what is different from last time, and does it matter?**
+
+- **Nothing to install on the machines it watches.** One binary where you run it; everything else is reached over SSH.
+- **The judgement is a written rule, not a model.** What earns a line is in [docs/report.md](docs/report.md), and the same input gives the same report — no AI required, no account, no paid tier.
+- **It checks that a backup comes back.** `backup drill` unpacks an archive into an isolated container on a network and port of its own, starts the app on that data, and waits for it to answer an HTTP health check.
 
 ## Core workflows
 
@@ -844,7 +854,7 @@ homebutler upgrade                 # upgrade all servers
 
 ## MCP Server
 
-Built-in [MCP](https://modelcontextprotocol.io/) server — manage your homelab from any AI tool with natural language.
+Built-in [MCP](https://modelcontextprotocol.io/) server — an agent gets the same report as JSON, the same lines in the same order, and every tool is classed read, write or destructive.
 
 ```json
 {
@@ -915,38 +925,21 @@ rm -rf ~/.config/homebutler      # Remove config (optional)
 
 ## Architecture
 
-> **Goal: Engineers manage servers from chat — not SSH.**
+> **The butler watches, decides what is worth saying, and says it — to you or to an agent.**
 >
-> Alert fires → AI diagnoses → AI fixes → you get a summary on your phone.
-
-homebutler is the **tool layer** in an AI ChatOps stack. It doesn't care what's above it — use any chat platform, any AI agent, or just your terminal.
+> Something changes → `report` names it and ranks it → a notification, the dashboard, or an MCP call
+> carries the same answer.
 
 ```
-┌──────────────────────────────────────────────────┐
-│  Layer 3 — Chat Interface                        │
-│  Telegram · Slack · Discord · Terminal · Browser │
-│  (Your choice — homebutler doesn't touch this)   │
-└──────────────────────┬───────────────────────────┘
-                       │
-┌──────────────────────▼───────────────────────────┐
-│  Layer 2 — AI Agent                              │
-│  OpenClaw · LangChain · n8n · Claude Desktop     │
-│  (Understands intent → calls the right tool)     │
-└──────────────────────┬───────────────────────────┘
-                       │  CLI exec or MCP (stdio)
-┌──────────────────────▼───────────────────────────┐
-│  Layer 1 — Tool (homebutler)       ← YOU ARE HERE │
-│                                                   │
-│  ┌─────────┐  ┌─────────┐  ┌─────────┐           │
-│  │   CLI   │  │   MCP   │  │   Web   │           │
-│  │ stdout  │  │  stdio  │  │  :8080  │           │
-│  └────┬────┘  └────┬────┘  └────┬────┘           │
-│       └────────────┼────────────┘                 │
-│                    ▼                              │
-│             internal/*                            │
-│   system · docker · ports · network               │
-│   wake · alerts · remote (SSH)                    │
-└───────────────────────────────────────────────────┘
+        ┌─────────┐  ┌─────────┐  ┌─────────┐
+        │   CLI   │  │   MCP   │  │   Web   │
+        │ stdout  │  │  stdio  │  │  :8080  │
+        └────┬────┘  └────┬────┘  └────┬────┘
+             └────────────┼────────────┘
+                          ▼
+                   internal/*
+         system · docker · ports · network
+         wake · alerts · remote (SSH)
 ```
 
 **Three interfaces, one core:**
@@ -959,19 +952,23 @@ homebutler is the **tool layer** in an AI ChatOps stack. It doesn't care what's 
 
 All three call the same `internal/` packages — no code duplication.
 
-**homebutler is Layer 1.** Swap Layer 2 and 3 to fit your stack:
+An agent reads the same report a person does, and gets the same lines in the same order
+rather than a screen it has to interpret:
 
-- **Terminal only** → `homebutler status` (no agent needed)
-- **Claude Desktop** → MCP server, Claude calls tools directly
-- **OpenClaw + Telegram** → Agent runs CLI commands from chat
-- **Custom Python bot** → `subprocess.run(["homebutler", "status", "--json"])`
-- **n8n / Dify** → Execute node calling homebutler CLI
+```python
+report = json.loads(subprocess.run(
+    ["homebutler", "report", "--json"], capture_output=True, text=True).stdout)
+
+for line in report["needs_attention"]:   # "1 container(s) stopped"
+    alert(line)
+for line in report["notable_changes"]:   # "new: mdworker_shared"
+    log(line)
+```
+
+Nothing above this is homebutler's business: an MCP client, a chat bot, a cron line or a
+person at a terminal all reach the same answer.
 
 **No ports opened by default.** CLI and MCP use stdin/stdout only. The web dashboard is opt-in (`homebutler serve`, binds `127.0.0.1`).
-
-**Now:** CLI + MCP + Web dashboard — you ask, it answers.
-
-**Goal:** Full AI ChatOps — infrastructure that manages itself.
 
 
 
