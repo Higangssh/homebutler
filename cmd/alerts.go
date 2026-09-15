@@ -171,14 +171,7 @@ This command remains for backward compatibility.`,
 				return fmt.Errorf("no notification providers configured")
 			}
 
-			event := alerts.NotifyEvent{
-				RuleName: "test-notification",
-				Status:   "triggered",
-				Details:  "This is a test notification from homebutler",
-				Action:   "notify",
-				Result:   "success",
-				Time:     time.Now().Format("2006-01-02 15:04:05"),
-			}
+			event := alerts.TestEvent()
 
 			// Which channel failed comes from the error's type. Searching the
 			// message for the channel name reported a Discord failure as a

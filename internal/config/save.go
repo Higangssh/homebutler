@@ -382,14 +382,32 @@ func applyPatch(current []byte, patch Patch) ([]byte, error) {
 			continue
 		}
 
-		// The parent does not exist either: write the whole path once, and
-		// gather any other keys for the same parent into the same block.
+		// Part of the path may already be there. Writing all of it again put a
+		// second `notify:` in the file, which is what adding a second
+		// notification channel did: the save was refused because the result no
+		// longer parsed, and the channel could not be added at all. Only the
+		// missing part is written, under the deepest key that does exist.
 		joined := strings.Join(parentPath, ".")
 		if created[joined] {
 			continue
 		}
 		created[joined] = true
-		changes = append(changes, change{at: -1, lines: newBlock(parentPath, key, e, edits, indent)})
+
+		anchor, depth := deepestExisting(root, parentPath)
+		switch {
+		case anchor == nil:
+			// None of it is there: the whole path goes at the end of the file.
+			changes = append(changes, change{at: -1, lines: newBlock(parentPath, parentPath, edits, indent, 0)})
+		case anchor.Kind == yaml.MappingNode:
+			at := sectionEnd(anchor, lines)
+			base := siblingIndent(anchor, depth*indent)
+			changes = append(changes, change{at: at, lines: newBlock(parentPath, parentPath[depth:], edits, indent, base)})
+		default:
+			// The key is there with nothing under it — a `notify:` left behind
+			// when its last channel was removed, or written empty by hand. Its
+			// children belong on the lines after it, one level in.
+			changes = append(changes, change{at: anchor.Line - 1, lines: newBlock(parentPath, parentPath[depth:], edits, indent, depth*indent)})
+		}
 	}
 
 	sort.SliceStable(changes, func(i, j int) bool { return changes[i].at > changes[j].at })
@@ -412,20 +430,36 @@ func applyPatch(current []byte, patch Patch) ([]byte, error) {
 	return []byte(strings.Join(lines, ending) + ending), nil
 }
 
-// newBlock writes a path that does not exist yet, with every key of the patch
-// that belongs under it.
-func newBlock(parentPath []string, _ string, _ edit, all []edit, indent int) []string {
+// newBlock writes the part of a path that is not in the file yet, with every
+// key of the patch that belongs under it.
+//
+// full is the whole path, which is what the other keys of the patch are
+// matched against; missing is the part that has to be created; base is how far
+// the first created level is indented, so a block written under a key that
+// already exists lines up with the keys beside it.
+func newBlock(full, missing []string, all []edit, indent, base int) []string {
 	var block []string
-	for depth, name := range parentPath {
-		block = append(block, strings.Repeat(" ", depth*indent)+name+":")
+	for depth, name := range missing {
+		block = append(block, strings.Repeat(" ", base+depth*indent)+name+":")
 	}
-	leafIndent := strings.Repeat(" ", len(parentPath)*indent)
+	leafIndent := strings.Repeat(" ", base+len(missing)*indent)
 	for _, other := range all {
-		if len(other.path) == len(parentPath)+1 && strings.Join(other.path[:len(parentPath)], ".") == strings.Join(parentPath, ".") {
+		if len(other.path) == len(full)+1 && strings.Join(other.path[:len(full)], ".") == strings.Join(full, ".") {
 			block = append(block, leafIndent+other.path[len(other.path)-1]+": "+other.value)
 		}
 	}
 	return block
+}
+
+// deepestExisting returns the last key along the path that is actually in the
+// file, and how much of the path it covers.
+func deepestExisting(root *yaml.Node, path []string) (*yaml.Node, int) {
+	for depth := len(path); depth > 0; depth-- {
+		if node, _, _ := resolve(root, path[:depth]); node != nil {
+			return node, depth
+		}
+	}
+	return nil, 0
 }
 
 // resolve walks a path and returns the node it names along with its parent
@@ -523,14 +557,25 @@ func sectionEnd(mapping *yaml.Node, lines []string) int {
 			last = line
 		}
 	}
+	// Only lines indented at least as far as this mapping's own keys belong to
+	// it. Extending over anything that merely began with a space swallowed the
+	// key below: removing one notification channel deleted every channel
+	// written after it, and the file was rewritten without them.
+	inner := siblingIndent(mapping, mapping.Column-1)
 	for last+1 < len(lines) {
 		next := lines[last+1]
-		if strings.TrimSpace(next) == "" || !strings.HasPrefix(next, " ") {
+		if strings.TrimSpace(next) == "" || indentWidth(next) < inner {
 			break
 		}
 		last++
 	}
 	return last
+}
+
+// indentWidth is how far a line is pushed in. YAML indents with spaces only,
+// so counting them is the whole of it.
+func indentWidth(line string) int {
+	return len(line) - len(strings.TrimLeft(line, " "))
 }
 
 // replaceValue rewrites the value at col and keeps the rest of the line

@@ -639,7 +639,7 @@ var Registry = []Capability{
 		// arrives on someone's phone.
 		Risk:    RiskWrite,
 		Targets: []TargetKind{TargetLocal, TargetServer},
-		HTTP:    HTTP{Absent: AbsentNeedsWriteSurface},
+		HTTP:    HTTP{Method: "POST", Path: "/api/notify/test", Protection: ProtectionToken},
 		Tool: Definition{
 			Name:        "notify_test",
 			Description: "Send one test notification through every configured channel and report which ones arrived",

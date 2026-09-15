@@ -91,10 +91,27 @@ func TestExposedCapabilitiesCarryTheProtectionTheirRiskNeeds(t *testing.T) {
 
 // wake is the one write a browser could always reach, because it sends a magic
 // packet and changes nothing homebutler stores. It still needs the token.
-func TestWakeIsTheOnlyWriteExposedWithoutASettingsScreen(t *testing.T) {
+// The dashboard's write surface is kept as a list rather than a rule, so that
+// putting something on it is a decision somebody wrote down and defended. A
+// write that becomes reachable without appearing here fails this.
+func TestEveryExposedWriteIsOneWeChose(t *testing.T) {
+	chosen := map[string]string{
+		"wake":        "the wake button; sends a magic packet on the local network",
+		"notify_test": "the settings screen's test button; sends one message through channels the operator configured",
+	}
+
 	for _, c := range Registry {
-		if c.Exposed() && c.Risk == RiskWrite && c.Tool.Name != "wake" {
-			t.Errorf("%s is an exposed write; confirm that %s is meant to be reachable", c.Tool.Name, c.Tool.Name)
+		if !c.Exposed() || c.Risk != RiskWrite {
+			continue
+		}
+		if _, ok := chosen[c.Tool.Name]; !ok {
+			t.Errorf("%s is an exposed write that is not on the list; decide whether the dashboard should reach it", c.Tool.Name)
+			continue
+		}
+		// Every one of them costs a token: a write reachable by anyone who can
+		// load the page is the thing this list exists to prevent.
+		if c.HTTP.Protection == ProtectionNone {
+			t.Errorf("%s is an exposed write with no protection", c.Tool.Name)
 		}
 	}
 }

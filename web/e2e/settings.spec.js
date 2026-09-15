@@ -1,5 +1,9 @@
 import { expect, test } from './fixtures.js';
 
+// The thresholds form is one of several on this screen now, so its Save button
+// is named by the form it belongs to rather than by being the only one.
+const saveThresholds = page => page.locator('form.thresholds').getByRole('button', { name: 'Save' });
+
 test.beforeEach(async ({ page }) => {
   await page.goto('/');
   await page.getByRole('button', { name: 'Config' }).click();
@@ -10,7 +14,7 @@ test('thresholds can be edited when the dashboard has a token', async ({ page })
   await expect(cpu).toHaveValue('90');
 
   await cpu.fill('75');
-  await page.getByRole('button', { name: 'Save' }).click();
+  await saveThresholds(page).click();
 
   // Saving is not the end of it: watch and alerts read the file when they
   // start, so the page says when the change actually takes effect.
@@ -32,7 +36,7 @@ test('a config edited elsewhere is reported, not overwritten', async ({ page }) 
 
   const cpu = page.locator('input[type="number"]').first();
   await cpu.fill('65');
-  await page.getByRole('button', { name: 'Save' }).click();
+  await saveThresholds(page).click();
 
   await expect(page.getByText(/changed on disk since this page loaded it/)).toBeVisible();
   await expect(page.getByRole('button', { name: 'Reload' })).toBeVisible();
@@ -55,7 +59,7 @@ test('a failed save does not claim to have saved', async ({ page }) => {
   );
 
   await page.locator('input[type="number"]').first().fill('65');
-  await page.getByRole('button', { name: 'Save' }).click();
+  await saveThresholds(page).click();
 
   await expect(page.getByText(/Flapping thresholds cannot be negative/)).toBeVisible();
   await expect(page.getByText(/^Saved/)).toHaveCount(0);
@@ -71,7 +75,7 @@ test('a threshold outside the range never leaves the page', async ({ page }) => 
   });
 
   await page.locator('input[type="number"]').first().fill('500');
-  await page.getByRole('button', { name: 'Save' }).click();
+  await saveThresholds(page).click();
   await page.waitForTimeout(300);
 
   expect(requested).toBe(false);
@@ -93,12 +97,7 @@ test('no credential is ever sent to the browser', async ({ page }) => {
     return res.json();
   });
 
-  for (const channel of config.notify) {
-    for (const [, secret] of Object.entries(channel.secrets ?? {})) {
-      expect(Object.keys(secret)).toEqual(['set']);
-      expect(typeof secret.set).toBe('boolean');
-    }
-  }
+  // The notify half of this is in notify.spec.js, field by field.
   for (const server of config.servers) {
     expect(server).not.toHaveProperty('password');
   }

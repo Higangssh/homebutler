@@ -622,14 +622,7 @@ func (s *Server) executeTool(name string, args map[string]any) (any, error) {
 		// Per-channel results rather than one error: the point of a test is to
 		// learn which channels work, and the first failure must not hide the
 		// rest (#177).
-		return alerts.TestNotify(cfg, alerts.NotifyEvent{
-			RuleName: "test-notification",
-			Status:   "test",
-			Details:  "This is a test notification from homebutler",
-			Action:   "notify",
-			Result:   "success",
-			Time:     time.Now().Format("2006-01-02 15:04:05"),
-		}), nil
+		return alerts.TestNotify(cfg, alerts.TestEvent()), nil
 	case "backup_create":
 		backupDir := stringArg(args, "to")
 		if backupDir == "" {
