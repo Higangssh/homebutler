@@ -398,3 +398,149 @@ func TestSaveRefusalNamesTheProblem(t *testing.T) {
 		t.Fatalf("the refusal does not name the field: %v", err)
 	}
 }
+
+func TestSaveWritesANotifyChannelThatWasNotThere(t *testing.T) {
+	path := writeSaveFixture(t, "alerts:\n  cpu: 90\n")
+	saveOne(t, path, Patch{Notify: map[string]*NotifyPatch{
+		"ntfy": {
+			Values:  map[string]string{"url": "https://ntfy.sh"},
+			Secrets: map[string]*Secret{"topic": SetSecret("a-topic-nobody-guesses")},
+		},
+	}})
+
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("the saved file does not load: %v", err)
+	}
+	if cfg.Notify.Ntfy == nil || cfg.Notify.Ntfy.URL != "https://ntfy.sh" || cfg.Notify.Ntfy.Topic != "a-topic-nobody-guesses" {
+		t.Fatalf("the channel did not round-trip: %+v", cfg.Notify.Ntfy)
+	}
+}
+
+// A patch that names one setting of a channel leaves the channel's other
+// settings, including its credential, exactly as they were.
+func TestSaveLeavesTheCredentialsItWasNotGiven(t *testing.T) {
+	path := writeSaveFixture(t, `notify:
+  ntfy:
+    url: https://ntfy.sh
+    topic: the-original-topic
+    token: tk_original
+`)
+	saveOne(t, path, Patch{Notify: map[string]*NotifyPatch{
+		"ntfy": {Values: map[string]string{"url": "https://ntfy.example.com"}},
+	}})
+
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Notify.Ntfy.URL != "https://ntfy.example.com" {
+		t.Fatalf("the url was not changed: %q", cfg.Notify.Ntfy.URL)
+	}
+	if cfg.Notify.Ntfy.Topic != "the-original-topic" || cfg.Notify.Ntfy.Token != "tk_original" {
+		t.Fatalf("a credential nobody sent was changed: %+v", cfg.Notify.Ntfy)
+	}
+}
+
+// An empty input box sends an empty string, and reading that as "delete the
+// token" would destroy a working setup because somebody changed a URL on the
+// same page. Clearing is its own call.
+func TestSaveSeparatesClearingACredentialFromNotSendingOne(t *testing.T) {
+	const fixture = `notify:
+  gotify:
+    url: https://gotify.example.com
+    token: AoriginalToken
+`
+	t.Run("not sent leaves it alone", func(t *testing.T) {
+		path := writeSaveFixture(t, fixture)
+		saveOne(t, path, Patch{Notify: map[string]*NotifyPatch{
+			"gotify": {Values: map[string]string{"url": "https://new.example.com"}},
+		}})
+		cfg, _ := Load(path)
+		if cfg.Notify.Gotify.Token != "AoriginalToken" {
+			t.Fatalf("token changed to %q", cfg.Notify.Gotify.Token)
+		}
+	})
+
+	t.Run("cleared removes it", func(t *testing.T) {
+		path := writeSaveFixture(t, fixture)
+		saveOne(t, path, Patch{Notify: map[string]*NotifyPatch{
+			"gotify": {Secrets: map[string]*Secret{"token": ClearSecret()}},
+		}})
+		cfg, _ := Load(path)
+		if cfg.Notify.Gotify.Token != "" {
+			t.Fatalf("token was not cleared: %q", cfg.Notify.Gotify.Token)
+		}
+	})
+}
+
+func TestSaveRemovesAWholeChannel(t *testing.T) {
+	path := writeSaveFixture(t, `notify:
+  telegram:
+    bot_token: "123:abc"
+    chat_id: "456"
+  gotify:
+    url: https://gotify.example.com
+    token: AToken
+`)
+	saveOne(t, path, Patch{Notify: map[string]*NotifyPatch{"gotify": {Remove: true}}})
+
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Notify.Gotify != nil {
+		t.Fatalf("the channel is still there: %+v", cfg.Notify.Gotify)
+	}
+	if cfg.Notify.Telegram == nil || cfg.Notify.Telegram.ChatID != "456" {
+		t.Fatalf("removing one channel disturbed another: %+v", cfg.Notify.Telegram)
+	}
+}
+
+// A token that starts with digits and holds a colon is not a string unless it
+// is quoted, and a Telegram bot token is exactly that shape.
+func TestSaveQuotesValuesThatWouldNotReadBackAsStrings(t *testing.T) {
+	path := writeSaveFixture(t, "alerts:\n  cpu: 90\n")
+	saveOne(t, path, Patch{Notify: map[string]*NotifyPatch{
+		"telegram": {
+			Values:  map[string]string{"chat_id": "123456789"},
+			Secrets: map[string]*Secret{"bot_token": SetSecret("7654321:AAH-not-a-real-token")},
+		},
+	}})
+
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("the saved file does not load: %v", err)
+	}
+	if cfg.Notify.Telegram.BotToken != "7654321:AAH-not-a-real-token" {
+		t.Fatalf("the token did not round-trip: %q", cfg.Notify.Telegram.BotToken)
+	}
+	if cfg.Notify.Telegram.ChatID != "123456789" {
+		t.Fatalf("the chat id did not round-trip as a string: %q", cfg.Notify.Telegram.ChatID)
+	}
+}
+
+// A caller mistake is caught before the file is read, so it cannot half-apply.
+func TestPatchValidationRejectsWhatIsNotAChannelOrASetting(t *testing.T) {
+	cases := map[string]Patch{
+		"a channel that does not exist": {Notify: map[string]*NotifyPatch{
+			"pushover": {Values: map[string]string{"url": "x"}},
+		}},
+		"a setting the channel does not have": {Notify: map[string]*NotifyPatch{
+			"ntfy": {Values: map[string]string{"chat_id": "x"}},
+		}},
+		"a credential sent as a plain value": {Notify: map[string]*NotifyPatch{
+			"gotify": {Values: map[string]string{"token": "AToken"}},
+		}},
+		"a plain value sent as a credential": {Notify: map[string]*NotifyPatch{
+			"gotify": {Secrets: map[string]*Secret{"url": SetSecret("https://x")}},
+		}},
+	}
+	for name, patch := range cases {
+		t.Run(name, func(t *testing.T) {
+			if err := patch.Validate(); err == nil {
+				t.Fatal("expected the patch to be refused")
+			}
+		})
+	}
+}

@@ -303,15 +303,55 @@ func (s *Server) demoConfig(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, map[string]any{
 		"path": "~/.config/homebutler/config.yaml",
 		"servers": []map[string]any{
-			{"name": "mac-mini", "host": "192.168.1.10", "local": true, "user": "", "port": 0, "auth": "key", "key": "", "password": ""},
-			{"name": "nas-box", "host": "192.168.1.20", "local": false, "user": "admin", "port": 22, "auth": "key", "key": "id_rsa", "password": ""},
-			{"name": "raspberry-pi", "host": "192.168.1.30", "local": false, "user": "pi", "port": 22, "auth": "password", "key": "", "password": "••••••"},
+			{"name": "mac-mini", "host": "192.168.1.10", "local": true, "user": "", "port": 0, "auth": "key", "key": "", "password_set": false},
+			{"name": "nas-box", "host": "192.168.1.20", "local": false, "user": "admin", "port": 22, "auth": "key", "key": "id_rsa", "password_set": false},
+			// Whether a password is set, never a stand-in for one.
+			{"name": "raspberry-pi", "host": "192.168.1.30", "local": false, "user": "pi", "port": 22, "auth": "password", "key": "", "password_set": true},
 		},
 		"alerts": map[string]any{"cpu": 90, "memory": 85, "disk": 90},
 		"wake": []map[string]string{
 			{"name": "gaming-pc", "mac": "AA:BB:CC:DD:EE:FF", "broadcast": "192.168.1.255"},
 		},
+		"notify":   s.notifySettings(),
+		"revision": demoRevision,
+		// Demo mode is started with a token by the end-to-end run, so the
+		// editing surface is the one being exercised.
+		"editable":          s.token != "",
+		"transport_warning": s.transportWarning(),
 	})
+}
+
+// demoRevision stands in for the hash of a file demo mode does not have. It is
+// fixed so the end-to-end suite can send it back.
+const demoRevision = "0000000000000000000000000000000000000000000000000000000000000000"
+
+// demoSaveAlerts accepts a save and reports what a real one reports. Demo mode
+// writes nothing, so the revision it answers with is the one it was given: the
+// page stays consistent with itself across a save.
+func (s *Server) demoSaveAlerts(w http.ResponseWriter, r *http.Request) {
+	var req alertsRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "could not read the request")
+		return
+	}
+	if req.Revision != demoRevision {
+		writeError(w, http.StatusConflict, "the config file changed on disk since this page loaded it; reload before saving")
+		return
+	}
+	writeJSON(w, saveResponse{Saved: true, Revision: demoRevision, RestartNeeded: []string{"watch", "alerts"}})
+}
+
+func (s *Server) demoSaveNotify(w http.ResponseWriter, r *http.Request) {
+	var req notifyRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "could not read the request")
+		return
+	}
+	if req.Revision != demoRevision {
+		writeError(w, http.StatusConflict, "the config file changed on disk since this page loaded it; reload before saving")
+		return
+	}
+	writeJSON(w, saveResponse{Saved: true, Revision: demoRevision, RestartNeeded: []string{"watch", "alerts"}})
 }
 
 // demoServers returns realistic demo server list.

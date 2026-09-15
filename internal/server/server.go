@@ -83,8 +83,15 @@ func New(cfg *config.Config, host string, port int, demo ...bool) *Server {
 }
 
 // SetToken configures bearer token authentication for /api/* endpoints.
+//
+// The routes are rebuilt, because whether a write endpoint exists at all
+// depends on there being a token and New runs before the caller sets one. A
+// token arriving after the mux was built would otherwise leave every protected
+// route unregistered on a dashboard that was started with one.
 func (s *Server) SetToken(t string) {
 	s.token = t
+	s.mux = http.NewServeMux()
+	s.routes()
 }
 
 // SetVersion sets the version string shown in the dashboard.
@@ -172,6 +179,13 @@ func (s *Server) routes() {
 		if !c.Exposed() {
 			continue
 		}
+		// A capability that says it needs a token is not registered without
+		// one. Answering "unauthorized" would leave the surface there to be
+		// reached the moment that check was got wrong; a route that does not
+		// exist cannot be.
+		if c.HTTP.Protection != capability.ProtectionNone && s.token == "" {
+			continue
+		}
 		if h, ok := handlers[c.Tool.Name]; ok {
 			s.mux.HandleFunc(c.HTTP.Method+" "+c.HTTP.Path, api(h))
 		}
@@ -195,6 +209,22 @@ func (s *Server) routes() {
 		s.mux.HandleFunc("GET /api/config", api(s.handleConfig))
 		s.mux.HandleFunc("GET /api/watch/incidents/{id}", api(s.handleWatchIncident))
 	}
+	// Write endpoints exist only when a token does. Registering them behind a
+	// check that says "unauthorized" would still be a write surface on an
+	// unauthenticated dashboard the moment that check was got wrong; a route
+	// that was never registered cannot be reached by getting anything wrong.
+	// #154 decided this: a read-only dashboard on 127.0.0.1 without a token is
+	// defensible, and the same page able to rewrite the config is not.
+	if s.token != "" {
+		if s.demo {
+			s.mux.HandleFunc("PUT /api/config/alerts", api(s.demoSaveAlerts))
+			s.mux.HandleFunc("PUT /api/config/notify", api(s.demoSaveNotify))
+		} else {
+			s.mux.HandleFunc("PUT /api/config/alerts", api(s.handleSaveAlerts))
+			s.mux.HandleFunc("PUT /api/config/notify", api(s.handleSaveNotify))
+		}
+	}
+
 	s.mux.HandleFunc("GET /api/proxmox/endpoints", api(s.handleProxmoxEndpoints))
 	s.mux.HandleFunc("GET /api/capabilities", api(s.handleCapabilities))
 	s.mux.HandleFunc("GET /api/version", api(s.handleVersion))
@@ -525,19 +555,19 @@ func (s *Server) handleConfig(w http.ResponseWriter, r *http.Request) {
 		if srv.KeyFile != "" {
 			key = filepath.Base(srv.KeyFile)
 		}
-		pw := ""
-		if srv.Password != "" {
-			pw = "••••••"
-		}
+		// Whether a password is set, never a stand-in for one. "••••••" is a
+		// value shaped like a credential, and a caller sending it back would
+		// write the bullets into the file as the password.
+		hasPassword := srv.Password != ""
 		servers[i] = map[string]any{
-			"name":     srv.Name,
-			"host":     srv.Host,
-			"local":    srv.Local,
-			"user":     srv.User,
-			"port":     srv.Port,
-			"auth":     auth,
-			"key":      key,
-			"password": pw,
+			"name":         srv.Name,
+			"host":         srv.Host,
+			"local":        srv.Local,
+			"user":         srv.User,
+			"port":         srv.Port,
+			"auth":         auth,
+			"key":          key,
+			"password_set": hasPassword,
 		}
 	}
 
@@ -555,6 +585,8 @@ func (s *Server) handleConfig(w http.ResponseWriter, r *http.Request) {
 		cfgPath = "(defaults)"
 	}
 
+	revision, _ := config.ReadRevision(s.cfg.Path)
+
 	writeJSON(w, map[string]any{
 		"path":    cfgPath,
 		"servers": servers,
@@ -563,7 +595,15 @@ func (s *Server) handleConfig(w http.ResponseWriter, r *http.Request) {
 			"memory": s.cfg.Alerts.Memory,
 			"disk":   s.cfg.Alerts.Disk,
 		},
-		"wake": wakeTargets,
+		"wake":   wakeTargets,
+		"notify": s.notifySettings(),
+		// The revision this page was built from comes back with a save, so an
+		// edit made in an editor meanwhile is not silently overwritten.
+		"revision": revision.String(),
+		// Whether this dashboard can write at all, so the UI offers editing
+		// only where it exists rather than offering it and failing.
+		"editable":          s.token != "",
+		"transport_warning": s.transportWarning(),
 	})
 }
 

@@ -65,7 +65,25 @@ type HTTP struct {
 	Method string // GET or POST; empty when the dashboard cannot reach it
 	Path   string
 	Absent string // why not, when Method is empty
+	// Protection is what a caller has to bring. It is recorded rather than
+	// inferred from Risk so that exposing something and deciding how it is
+	// guarded are the same edit, and so a mismatch between the two is a test
+	// failure rather than a judgement nobody wrote down.
+	Protection Protection
 }
+
+// Protection is what reaching a capability from a browser costs.
+type Protection string
+
+const (
+	// Nothing beyond being able to reach the page.
+	ProtectionNone Protection = ""
+	// A bearer token, and the route is not registered at all without one.
+	ProtectionToken Protection = "token"
+	// A token, plus a confirmation the caller sends deliberately — the same
+	// line --confirm draws for a guest action in the CLI.
+	ProtectionTokenAndConfirm Protection = "token+confirm"
+)
 
 // Exposed reports whether the dashboard can reach this capability.
 func (c Capability) Exposed() bool { return c.HTTP.Method != "" }
@@ -368,7 +386,7 @@ var Registry = []Capability{
 	{
 		Risk:    RiskWrite,
 		Targets: []TargetKind{TargetLocal},
-		HTTP:    HTTP{Method: "POST", Path: "/api/wake/{name}"},
+		HTTP:    HTTP{Method: "POST", Path: "/api/wake/{name}", Protection: ProtectionToken},
 		Tool: Definition{
 			Name:        "wake",
 			Description: "Send a Wake-on-LAN magic packet to wake a machine",

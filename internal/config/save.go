@@ -13,6 +13,8 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/Higangssh/homebutler/internal/notify"
+
 	"gopkg.in/yaml.v3"
 )
 
@@ -32,6 +34,25 @@ type Revision struct {
 
 // Exists reports whether the file was there when the revision was taken.
 func (r Revision) Exists() bool { return r.sum != "" }
+
+// String is the form that crosses to a browser and comes back with the save it
+// was made against.
+func (r Revision) String() string { return r.sum }
+
+// ParseRevision reads back what String wrote. An empty string is the revision
+// of a file that was not there, which is how creating one is expressed.
+func ParseRevision(s string) (Revision, error) {
+	if s == "" {
+		return Revision{}, nil
+	}
+	if len(s) != 64 {
+		return Revision{}, errors.New("not a config revision")
+	}
+	if _, err := hex.DecodeString(s); err != nil {
+		return Revision{}, errors.New("not a config revision")
+	}
+	return Revision{sum: s}, nil
+}
 
 // ReadRevision returns the revision of the file at path. A file that does not
 // exist has a revision too, so that creating one can also be refused if
@@ -67,13 +88,83 @@ type AlertsPatch struct {
 // would write those bullets into the file as the password. A field nobody set
 // is not written, so a secret nobody is changing cannot be damaged by a save
 // that was about something else.
+// NotifyPatch changes one notification channel.
+//
+// Values carries the keys that are not credentials; a key that is absent is
+// left as it is. Secrets carries the ones that are, because those have three
+// states rather than two. Remove deletes the whole block.
+type NotifyPatch struct {
+	Values  map[string]string
+	Secrets map[string]*Secret
+	Remove  bool
+}
+
+// WakePatch adds or removes one Wake-on-LAN target by name.
+type WakePatch struct {
+	Name      string
+	MAC       string
+	Broadcast string
+	Remove    bool
+}
+
 type Patch struct {
 	Alerts *AlertsPatch
+	// Notify is keyed by channel name, as internal/notify spells it.
+	Notify map[string]*NotifyPatch
+	Wake   []WakePatch
 }
 
 // IsEmpty reports whether the patch would change nothing.
 func (p Patch) IsEmpty() bool {
-	return p.Alerts == nil || (p.Alerts.CPU == nil && p.Alerts.Memory == nil && p.Alerts.Disk == nil)
+	if p.Alerts != nil && (p.Alerts.CPU != nil || p.Alerts.Memory != nil || p.Alerts.Disk != nil) {
+		return false
+	}
+	return len(p.Notify) == 0 && len(p.Wake) == 0
+}
+
+// Validate reports what is wrong with the patch itself, before any file is
+// read. A channel or key homebutler does not have is a caller mistake rather
+// than a config problem, and saying so here keeps it out of the file.
+func (p Patch) Validate() error {
+	for name, channel := range p.Notify {
+		fields, ok := notify.FieldsFor(notify.Channel(name))
+		if !ok {
+			return fmt.Errorf("%q is not a notification channel", name)
+		}
+		if channel.Remove {
+			continue
+		}
+		known := map[string]bool{}
+		secret := map[string]bool{}
+		for _, f := range fields {
+			known[f.Name] = true
+			secret[f.Name] = f.Secret
+		}
+		for key := range channel.Values {
+			switch {
+			case !known[key]:
+				return fmt.Errorf("%s has no setting called %q", name, key)
+			case secret[key]:
+				// Sending a credential as a plain value would put it in the
+				// two-state world where an empty box means "clear".
+				return fmt.Errorf("%s.%s is a credential and has to be sent as one", name, key)
+			}
+		}
+		for key := range channel.Secrets {
+			if !known[key] {
+				return fmt.Errorf("%s has no setting called %q", name, key)
+			}
+			if !secret[key] {
+				return fmt.Errorf("%s.%s is not a credential", name, key)
+			}
+		}
+	}
+	for _, target := range p.Wake {
+		if target.Name == "" {
+			return errors.New("a wake target needs a name")
+		}
+	}
+	return nil
 }
 
 // Save applies patch to the config file at path.
@@ -93,6 +184,9 @@ func Save(path string, rev Revision, patch Patch) error {
 	}
 	if patch.IsEmpty() {
 		return errors.New("nothing to change")
+	}
+	if err := patch.Validate(); err != nil {
+		return err
 	}
 
 	// The current revision is computed the way ReadRevision computes it,
@@ -126,19 +220,25 @@ func Save(path string, rev Revision, patch Patch) error {
 // rewriting the line, and rewriting it would lose whatever else it holds.
 var ErrFlowStyle = errors.New("that section is written on one line, which homebutler cannot edit in place")
 
-type keyValue struct{ key, value string }
-
-type sectionEdit struct {
-	name string
-	keys []keyValue
+// edit is one value to write, addressed by its path from the root: ["alerts",
+// "cpu"], or ["notify", "ntfy", "topic"]. A path rather than a section and key
+// because notify nests one level deeper than alerts, and the next thing to be
+// editable will nest somewhere else again.
+type edit struct {
+	path  []string
+	value string
 }
 
-// collectEdits turns a patch into the sections and keys to write, in a fixed
-// order so the same patch always produces the same file.
-func collectEdits(patch Patch) []sectionEdit {
-	var out []sectionEdit
+// removal is a whole mapping to delete, addressed the same way.
+type removal struct{ path []string }
+
+// collectEdits turns a patch into paths and values in a fixed order, so the
+// same patch always produces the same file.
+func collectEdits(patch Patch) ([]edit, []removal) {
+	var edits []edit
+	var removals []removal
+
 	if patch.Alerts != nil {
-		var keys []keyValue
 		for _, kv := range []struct {
 			key   string
 			value *float64
@@ -148,14 +248,63 @@ func collectEdits(patch Patch) []sectionEdit {
 			{"disk", patch.Alerts.Disk},
 		} {
 			if kv.value != nil {
-				keys = append(keys, keyValue{kv.key, formatNumber(*kv.value)})
+				edits = append(edits, edit{path: []string{"alerts", kv.key}, value: formatNumber(*kv.value)})
 			}
 		}
-		if len(keys) > 0 {
-			out = append(out, sectionEdit{name: "alerts", keys: keys})
+	}
+
+	for _, name := range sortedKeys(patch.Notify) {
+		channel := patch.Notify[name]
+		if channel.Remove {
+			removals = append(removals, removal{path: []string{"notify", name}})
+			continue
+		}
+		fields, _ := notify.FieldsFor(notify.Channel(name))
+		// Written in the order the channel declares, so a new block reads the
+		// way the documentation does.
+		for _, f := range fields {
+			if f.Secret {
+				if value, write := channel.Secrets[f.Name].resolve(); write {
+					edits = append(edits, edit{path: []string{"notify", name, f.Name}, value: quoteIfNeeded(value)})
+				}
+				continue
+			}
+			if value, ok := channel.Values[f.Name]; ok {
+				edits = append(edits, edit{path: []string{"notify", name, f.Name}, value: quoteIfNeeded(value)})
+			}
 		}
 	}
+
+	return edits, removals
+}
+
+func sortedKeys(m map[string]*NotifyPatch) []string {
+	out := make([]string, 0, len(m))
+	for k := range m {
+		out = append(out, k)
+	}
+	sort.Strings(out)
 	return out
+}
+
+// quoteIfNeeded writes a value YAML will read back as the same string. A token
+// is the case that matters: one starting with a digit and containing a colon
+// parses as something other than a string if it is left bare.
+func quoteIfNeeded(value string) string {
+	if value == "" {
+		return `""`
+	}
+	if strings.ContainsAny(value, ":#{}[],&*?|>'\"%@`") || strings.TrimSpace(value) != value {
+		return strconv.Quote(value)
+	}
+	if _, err := strconv.ParseFloat(value, 64); err == nil {
+		return strconv.Quote(value)
+	}
+	switch strings.ToLower(value) {
+	case "true", "false", "null", "yes", "no", "on", "off", "~":
+		return strconv.Quote(value)
+	}
+	return value
 }
 
 // applyPatch rewrites only the lines the patch names.
@@ -180,63 +329,142 @@ func applyPatch(current []byte, patch Patch) ([]byte, error) {
 		return nil, ErrFlowStyle
 	}
 
-	// An insertion moves every line below it, so replacements are applied
-	// first and insertions from the bottom up.
-	type insertion struct {
-		after  int // 0-based line to insert after; -1 appends a new section
-		indent int
-		lines  []string
+	edits, removals := collectEdits(patch)
+	indent := indentOf(current)
+
+	// Deletions and insertions both move the lines below them, so everything
+	// is collected first and applied from the bottom up.
+	type change struct {
+		at    int      // 0-based line to act on or insert after; -1 appends
+		drop  int      // lines to remove at `at`
+		lines []string // lines to insert after `at`
 	}
-	var inserts []insertion
+	var changes []change
 
-	for _, section := range collectEdits(patch) {
-		mapping := lookup(root, section.name)
-		if mapping != nil && mapping.Style == yaml.FlowStyle {
-			return nil, fmt.Errorf("%w: %s", ErrFlowStyle, section.name)
+	for _, r := range removals {
+		node, parent, flow := resolve(root, r.path)
+		if flow {
+			return nil, fmt.Errorf("%w: %s", ErrFlowStyle, strings.Join(r.path, "."))
 		}
+		if node == nil {
+			continue // already absent
+		}
+		keyLine := keyLineOf(parent, r.path[len(r.path)-1])
+		last := sectionEnd(node, lines)
+		changes = append(changes, change{at: keyLine, drop: last - keyLine + 1})
+	}
 
-		if mapping == nil {
-			// The whole section is new: written once, however many keys it
-			// carries. Appending per key produced a duplicate mapping, which
-			// Validate then refused.
-			indent := indentOf(current)
-			block := []string{section.name + ":"}
-			for _, kv := range section.keys {
-				block = append(block, strings.Repeat(" ", indent)+kv.key+": "+kv.value)
-			}
-			inserts = append(inserts, insertion{after: -1, lines: block})
+	// Sections created by this patch, so two keys for the same new channel do
+	// not each write the block.
+	created := map[string]bool{}
+
+	for _, e := range edits {
+		node, _, flow := resolve(root, e.path)
+		if flow {
+			return nil, fmt.Errorf("%w: %s", ErrFlowStyle, strings.Join(e.path, "."))
+		}
+		if node != nil {
+			lines[node.Line-1] = replaceValue(lines[node.Line-1], node.Column, e.value)
 			continue
 		}
 
-		indent := siblingIndent(mapping, indentOf(current))
-		var missing []string
-		for _, kv := range section.keys {
-			if node := lookup(mapping, kv.key); node != nil {
-				lines[node.Line-1] = replaceValue(lines[node.Line-1], node.Column, kv.value)
-				continue
-			}
-			missing = append(missing, strings.Repeat(" ", indent)+kv.key+": "+kv.value)
+		parentPath := e.path[:len(e.path)-1]
+		key := e.path[len(e.path)-1]
+		parent, _, parentFlow := resolve(root, parentPath)
+		if parentFlow {
+			return nil, fmt.Errorf("%w: %s", ErrFlowStyle, strings.Join(parentPath, "."))
 		}
-		if len(missing) > 0 {
-			inserts = append(inserts, insertion{after: sectionEnd(mapping, lines), indent: indent, lines: missing})
+
+		if parent != nil && parent.Kind == yaml.MappingNode {
+			at := sectionEnd(parent, lines)
+			col := siblingIndent(parent, len(parentPath)*indent)
+			changes = append(changes, change{at: at, lines: []string{strings.Repeat(" ", col) + key + ": " + e.value}})
+			continue
 		}
+
+		// The parent does not exist either: write the whole path once, and
+		// gather any other keys for the same parent into the same block.
+		joined := strings.Join(parentPath, ".")
+		if created[joined] {
+			continue
+		}
+		created[joined] = true
+		changes = append(changes, change{at: -1, lines: newBlock(parentPath, key, e, edits, indent)})
 	}
 
-	sort.Slice(inserts, func(i, j int) bool { return inserts[i].after > inserts[j].after })
+	sort.SliceStable(changes, func(i, j int) bool { return changes[i].at > changes[j].at })
 
-	for _, ins := range inserts {
-		if ins.after < 0 {
+	for _, c := range changes {
+		switch {
+		case c.drop > 0:
+			lines = append(lines[:c.at], lines[c.at+c.drop:]...)
+		case c.at < 0:
 			if len(lines) > 0 && strings.TrimSpace(lines[len(lines)-1]) != "" {
 				lines = append(lines, "")
 			}
-			lines = append(lines, ins.lines...)
-			continue
+			lines = append(lines, c.lines...)
+		default:
+			lines = append(lines[:c.at+1], append(c.lines, lines[c.at+1:]...)...)
 		}
-		lines = append(lines[:ins.after+1], append(ins.lines, lines[ins.after+1:]...)...)
 	}
 
 	ending := lineEnding(current)
 	return []byte(strings.Join(lines, ending) + ending), nil
+}
+
+// newBlock writes a path that does not exist yet, with every key of the patch
+// that belongs under it.
+func newBlock(parentPath []string, _ string, _ edit, all []edit, indent int) []string {
+	var block []string
+	for depth, name := range parentPath {
+		block = append(block, strings.Repeat(" ", depth*indent)+name+":")
+	}
+	leafIndent := strings.Repeat(" ", len(parentPath)*indent)
+	for _, other := range all {
+		if len(other.path) == len(parentPath)+1 && strings.Join(other.path[:len(parentPath)], ".") == strings.Join(parentPath, ".") {
+			block = append(block, leafIndent+other.path[len(other.path)-1]+": "+other.value)
+		}
+	}
+	return block
+}
+
+// resolve walks a path and returns the node it names along with its parent
+// mapping, or nil when any step is missing.
+//
+// flow reports a mapping written on one line anywhere along the way, not only
+// at the end: a value inside `alerts: {cpu: 90}` has a position, and editing
+// at it produces a broken line. Catching it here means the refusal names the
+// real reason rather than arriving later as a parse error.
+func resolve(root *yaml.Node, path []string) (node, parent *yaml.Node, flow bool) {
+	current := root
+	for i, key := range path {
+		if current == nil || current.Kind != yaml.MappingNode {
+			return nil, nil, false
+		}
+		if current.Style == yaml.FlowStyle {
+			return nil, nil, true
+		}
+		next := lookup(current, key)
+		if next == nil {
+			return nil, nil, false
+		}
+		if i == len(path)-1 {
+			return next, current, next.Kind == yaml.MappingNode && next.Style == yaml.FlowStyle
+		}
+		current = next
+	}
+	return nil, nil, false
+}
+
+// keyLineOf is the line the key itself sits on, which is where a removal
+// starts — the value node's line is the line after it for a nested mapping.
+func keyLineOf(mapping *yaml.Node, key string) int {
+	for i := 0; i+1 < len(mapping.Content); i += 2 {
+		if mapping.Content[i].Value == key {
+			return mapping.Content[i].Line - 1
+		}
+	}
+	return 0
 }
 
 // lineEnding is the one the file already uses. A config edited on Windows and
@@ -426,4 +654,37 @@ func firstError(result *ValidationResult) string {
 		return f.Message
 	}
 	return "the result would be invalid"
+}
+
+// Secret is a credential inside a patch, which has three states rather than
+// two: absent, replaced, or cleared.
+//
+// An empty string cannot mean "clear". A form submitted with the token box
+// left blank sends an empty string, and reading that as "delete the token"
+// destroys a working configuration because someone changed a threshold on the
+// same page. Clearing is its own call.
+type Secret struct {
+	set   bool
+	clear bool
+	value string
+}
+
+// SetSecret replaces the stored value.
+func SetSecret(value string) *Secret { return &Secret{set: true, value: value} }
+
+// ClearSecret removes the stored value. Explicit, and never the result of an
+// empty input.
+func ClearSecret() *Secret { return &Secret{clear: true} }
+
+// resolve reports the text to write and whether to write anything at all.
+func (s *Secret) resolve() (string, bool) {
+	switch {
+	case s == nil:
+		return "", false
+	case s.clear:
+		return "", true
+	case s.set:
+		return s.value, true
+	}
+	return "", false
 }
