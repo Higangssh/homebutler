@@ -11,6 +11,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/Higangssh/homebutler/internal/alerts"
 	"github.com/Higangssh/homebutler/internal/config"
 	"github.com/Higangssh/homebutler/internal/notify"
 )
@@ -81,25 +82,35 @@ func (s *Server) matchRevision(path, token string) (config.Revision, error) {
 	return current, nil
 }
 
-// configSecret says whether a credential is set, and never what it is.
-//
-// The dashboard used to receive "••••••" for a password, which is a value
-// shaped like one that can be sent back — and sending it back would write the
-// bullets into the file. A boolean cannot be mistaken for a credential.
-type configSecret struct {
-	Set bool `json:"set"`
+// channelField is one key of one channel as a form needs it: in the order the
+// provider declares it, with a value when there is one to show and a flag when
+// there is not.
+type channelField struct {
+	Name     string `json:"name"`
+	Secret   bool   `json:"secret,omitempty"`
+	Optional bool   `json:"optional,omitempty"`
+	// Value is the field's contents, and is only ever populated for a field
+	// that is not a credential.
+	Value string `json:"value,omitempty"`
+	// Set says whether a credential has one, and is nil for a field that is
+	// not one. It is never the credential and never a stand-in shaped like
+	// one, so the dashboard has nothing to send back by accident.
+	Set *bool `json:"set,omitempty"`
 }
 
 type channelSettings struct {
-	Channel    string                  `json:"channel"`
-	Configured bool                    `json:"configured"`
-	Values     map[string]string       `json:"values,omitempty"`
-	Secrets    map[string]configSecret `json:"secrets,omitempty"`
+	Channel    string         `json:"channel"`
+	Configured bool           `json:"configured"`
+	Fields     []channelField `json:"fields"`
 }
 
 // notifySettings reports every channel homebutler has, whether or not it is
 // configured, so the dashboard can offer one that has never been set up
-// without carrying its own list.
+// without carrying its own list of channels or of the keys each one takes.
+//
+// The fields are a list rather than a map because a form is laid out in an
+// order: ntfy asks for a server before a topic, and JSON objects do not keep
+// the difference.
 func (s *Server) notifySettings(cfg *config.Config) []channelSettings {
 	out := make([]channelSettings, 0, len(notify.Channels()))
 	enabled := map[notify.Channel]bool{}
@@ -112,16 +123,18 @@ func (s *Server) notifySettings(cfg *config.Config) []channelSettings {
 		settings := channelSettings{
 			Channel:    string(channel),
 			Configured: enabled[channel],
-			Values:     map[string]string{},
-			Secrets:    map[string]configSecret{},
+			Fields:     make([]channelField, 0, len(fields)),
 		}
 		for _, f := range fields {
-			value, set := cfg.Notify.Setting(channel, f.Name)
+			value, present := cfg.Notify.Setting(channel, f.Name)
+			field := channelField{Name: f.Name, Secret: f.Secret, Optional: f.Optional}
 			if f.Secret {
-				settings.Secrets[f.Name] = configSecret{Set: set && value != ""}
-				continue
+				set := present && value != ""
+				field.Set = &set
+			} else {
+				field.Value = value
 			}
-			settings.Values[f.Name] = value
+			settings.Fields = append(settings.Fields, field)
 		}
 		out = append(out, settings)
 	}
@@ -286,4 +299,23 @@ func (s *Server) transportWarning() string {
 func isPublicBind(host string) bool {
 	h := strings.TrimSpace(host)
 	return h != "" && h != "127.0.0.1" && h != "localhost" && h != "::1"
+}
+
+// notifyTestResponse reports one result per configured channel. A channel that
+// fails is a result rather than an error: the question the button asks is
+// which channels work, and stopping at the first failure hides the rest.
+type notifyTestResponse struct {
+	Results []notify.TestResult `json:"results"`
+}
+
+// handleNotifyTest sends one real message. It is a write for the reason that
+// matters — something leaves the machine and arrives on someone's phone — so
+// it lives behind the token like every other write on this dashboard.
+func (s *Server) handleNotifyTest(w http.ResponseWriter, _ *http.Request) {
+	cfg := s.config()
+	if len(cfg.Notify.EnabledChannels()) == 0 {
+		writeError(w, http.StatusBadRequest, "no notification channel is configured yet")
+		return
+	}
+	writeJSON(w, notifyTestResponse{Results: alerts.TestNotify(&cfg.Notify, alerts.TestEvent())})
 }

@@ -544,3 +544,101 @@ func TestPatchValidationRejectsWhatIsNotAChannelOrASetting(t *testing.T) {
 		})
 	}
 }
+
+// The second channel is the ordinary case, and it was the broken one: writing
+// the whole path again put a second `notify:` in the file, the result no
+// longer parsed, and the save was refused. Nothing could be added to a section
+// that already existed.
+func TestSaveAddsAChannelBesideOneThatIsAlreadyThere(t *testing.T) {
+	path := writeSaveFixture(t, `# hand written
+notify:
+  ntfy:
+    url: https://ntfy.sh
+    topic: keep-me
+`)
+	saveOne(t, path, Patch{Notify: map[string]*NotifyPatch{
+		"gotify": {
+			Values:  map[string]string{"url": "https://gotify.example.com"},
+			Secrets: map[string]*Secret{"token": SetSecret("tk_1")},
+		},
+	}})
+
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("the saved file does not load: %v", err)
+	}
+	if cfg.Notify.Gotify == nil || cfg.Notify.Gotify.Token != "tk_1" {
+		t.Fatalf("the new channel is not there: %+v", cfg.Notify.Gotify)
+	}
+	if cfg.Notify.Ntfy == nil || cfg.Notify.Ntfy.Topic != "keep-me" {
+		t.Fatalf("the channel that was already there is gone: %+v", cfg.Notify.Ntfy)
+	}
+
+	saved, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Count(string(saved), "notify:") != 1 {
+		t.Fatalf("the file has more than one notify section:\n%s", saved)
+	}
+}
+
+// Removing one channel removes one channel. The section end was found by
+// running on while lines began with a space, which ran straight through the
+// channel below into the rest of the file.
+func TestSaveRemovesOnlyTheChannelItWasAskedTo(t *testing.T) {
+	path := writeSaveFixture(t, `notify:
+  ntfy:
+    url: https://ntfy.sh
+    topic: keep-me
+  gotify:
+    url: https://gotify.example.com
+    token: tk_1
+
+alerts:
+  cpu: 90
+`)
+	saveOne(t, path, Patch{Notify: map[string]*NotifyPatch{"ntfy": {Remove: true}}})
+
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("the saved file does not load: %v", err)
+	}
+	if cfg.Notify.Ntfy != nil {
+		t.Fatalf("ntfy was not removed: %+v", cfg.Notify.Ntfy)
+	}
+	if cfg.Notify.Gotify == nil || cfg.Notify.Gotify.Token != "tk_1" {
+		t.Fatalf("the channel below it went as well: %+v", cfg.Notify.Gotify)
+	}
+	if cfg.Alerts.CPU != 90 {
+		t.Fatalf("the rest of the file went as well: alerts.cpu is %v", cfg.Alerts.CPU)
+	}
+}
+
+// A section emptied by removing its last channel is still a key in the file,
+// and a channel added afterwards belongs under it rather than under a second
+// copy of it.
+func TestSaveFillsASectionThatWasLeftEmpty(t *testing.T) {
+	path := writeSaveFixture(t, "alerts:\n  cpu: 90\n\nnotify:\n")
+	saveOne(t, path, Patch{Notify: map[string]*NotifyPatch{
+		"gotify": {
+			Values:  map[string]string{"url": "https://gotify.example.com"},
+			Secrets: map[string]*Secret{"token": SetSecret("tk_1")},
+		},
+	}})
+
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("the saved file does not load: %v", err)
+	}
+	if cfg.Notify.Gotify == nil || cfg.Notify.Gotify.URL != "https://gotify.example.com" {
+		t.Fatalf("the channel did not round-trip: %+v", cfg.Notify.Gotify)
+	}
+	saved, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Count(string(saved), "notify:") != 1 {
+		t.Fatalf("the file has more than one notify section:\n%s", saved)
+	}
+}

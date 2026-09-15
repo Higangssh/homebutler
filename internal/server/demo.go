@@ -5,6 +5,8 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/Higangssh/homebutler/internal/config"
+	"github.com/Higangssh/homebutler/internal/notify"
 	"github.com/Higangssh/homebutler/internal/remote"
 	"github.com/Higangssh/homebutler/internal/system"
 	"github.com/Higangssh/homebutler/internal/watch"
@@ -300,7 +302,8 @@ func (s *Server) demoWakeSend(w http.ResponseWriter, r *http.Request) {
 
 // demoConfig returns realistic demo config data.
 func (s *Server) demoConfig(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, map[string]any{
+	editable := s.token != ""
+	body := map[string]any{
 		"path": "~/.config/homebutler/config.yaml",
 		"servers": []map[string]any{
 			{"name": "mac-mini", "host": "192.168.1.10", "local": true, "user": "", "port": 0, "auth": "key", "key": "", "password_set": false},
@@ -312,13 +315,41 @@ func (s *Server) demoConfig(w http.ResponseWriter, r *http.Request) {
 		"wake": []map[string]string{
 			{"name": "gaming-pc", "mac": "AA:BB:CC:DD:EE:FF", "broadcast": "192.168.1.255"},
 		},
-		"notify":   s.notifySettings(s.config()),
-		"revision": demoRevision,
+		"notify": s.notifySettings(demoNotifyConfig()),
 		// Demo mode is started with a token by the end-to-end run, so the
 		// editing surface is the one being exercised.
-		"editable":          s.token != "",
+		"editable":          editable,
 		"transport_warning": s.transportWarning(),
-	})
+	}
+	if editable {
+		body["revision"] = demoRevision
+	}
+	writeJSON(w, body)
+}
+
+// demoNotifyConfig is what the demo dashboard shows on the settings screen.
+//
+// It is made up here rather than read from s.config(), which in demo mode is
+// still the config of whoever started the process: a demo is supposed to show
+// nothing real, and the channel list alone says which services someone uses.
+// The three states a form has to handle are all present — a channel that is
+// set up, one that is set up without its optional credential, and four that
+// have never been touched.
+func demoNotifyConfig() *config.Config {
+	return &config.Config{Notify: notify.ProviderConfig{
+		Ntfy:   &notify.NtfyConfig{URL: "https://ntfy.sh", Topic: "demo-topic", Token: "demo-token"},
+		Gotify: &notify.GotifyConfig{URL: "https://gotify.example.com", Token: "demo-token"},
+	}}
+}
+
+// demoNotifyTest reports what a test would have found without sending
+// anything. One channel fails, because a settings screen that has only ever
+// shown success is one whose failure path nobody has looked at.
+func (s *Server) demoNotifyTest(w http.ResponseWriter, _ *http.Request) {
+	writeJSON(w, notifyTestResponse{Results: []notify.TestResult{
+		{Channel: notify.ChannelNtfy, Sent: true},
+		{Channel: notify.ChannelGotify, Sent: false, Error: "gotify: https://gotify.example.com returned 401 unauthorized"},
+	}})
 }
 
 // demoRevision stands in for the hash of a file demo mode does not have. It is

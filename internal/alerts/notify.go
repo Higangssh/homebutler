@@ -40,6 +40,21 @@ func TestNotify(cfg *NotifyConfig, event NotifyEvent) []notify.TestResult {
 	return notify.Test(cfg, toEvent(event))
 }
 
+// TestEvent is the message a test sends. It lives here because three callers
+// need the same one — the CLI, the MCP tool and the dashboard button — and the
+// first two had each written their own, disagreeing on the status, which is
+// what the delivered priority is derived from.
+func TestEvent() NotifyEvent {
+	return NotifyEvent{
+		RuleName: "test-notification",
+		Status:   "triggered",
+		Details:  "This is a test notification from homebutler",
+		Action:   "notify",
+		Result:   "success",
+		Time:     time.Now().Format("2006-01-02 15:04:05"),
+	}
+}
+
 // toEvent is the one place the alerts event shape becomes a notify event.
 func toEvent(event NotifyEvent) notify.Event {
 	t, _ := time.Parse("2006-01-02 15:04:05", event.Time)

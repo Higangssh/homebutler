@@ -1,6 +1,7 @@
 <script>
   import { onMount } from 'svelte';
-  import { getConfig, saveAlerts, saveNotify, StaleConfigError } from './api.js';
+  import { getConfig, saveAlerts, StaleConfigError } from './api.js';
+  import NotifyCard from './NotifyCard.svelte';
 
   let data = $state(null);
   let error = $state('');
@@ -66,6 +67,19 @@
       }
     } finally {
       saving = false;
+    }
+  }
+
+  // A notify save rewrites the same file the thresholds form holds a revision
+  // for, so the new revision has to reach this component. Only the notify half
+  // is refreshed: reloading everything would throw away a threshold someone
+  // was halfway through typing.
+  async function notifySaved() {
+    try {
+      const fresh = await getConfig();
+      data = { ...data, notify: fresh.notify, revision: fresh.revision ?? data.revision };
+    } catch (err) {
+      saveError = err.message;
     }
   }
 
@@ -202,6 +216,14 @@
       {/if}
     </div>
 
+    <NotifyCard
+      channels={data.notify ?? []}
+      revision={data.revision ?? ''}
+      editable={data.editable}
+      onsaved={notifySaved}
+      onreload={reload}
+    />
+
     <!-- Wake-on-LAN -->
     <div class="section">
       <div class="section-header">
@@ -249,6 +271,10 @@
   .thresholds.editable {
     align-items: flex-end;
     gap: 1rem;
+    /* Three inputs and a button do not fit across a phone. Without wrapping
+       they did not shrink either: they made the whole page wider than the
+       screen, and every card on it scrolled sideways. */
+    flex-wrap: wrap;
   }
 
   .thresholds.editable .threshold-item {
@@ -351,6 +377,10 @@
   .path-value {
     font-size: 0.85rem;
     color: var(--accent);
+    /* A path has no spaces to break at, so on a phone it set the width of the
+       whole screen and every card below it scrolled sideways. */
+    min-width: 0;
+    overflow-wrap: anywhere;
   }
 
   .section {
@@ -521,6 +551,13 @@
     .thresholds {
       flex-direction: column;
       gap: 0.5rem;
+    }
+
+    /* flex-end lines the inputs up with the Save button while this is a row.
+       Once it is a column the same rule means "push it all to the right", and
+       that is where the thresholds sat on a phone. */
+    .thresholds.editable {
+      align-items: stretch;
     }
 
     .wake-item {

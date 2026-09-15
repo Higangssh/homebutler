@@ -268,6 +268,20 @@
     header {
       padding: 0.75rem 1rem;
       gap: 0.75rem;
+      flex-wrap: wrap;
+    }
+
+    /* The server picker is positioned out of the flow so it can sit at the
+       right of a wide header. On a phone there is no room for it beside the
+       tabs, and being out of the flow it did not push them aside — it covered
+       them, so tapping Config opened the picker instead of the settings. */
+    .header-right {
+      position: static;
+      width: 100%;
+    }
+
+    .header-right select {
+      width: 100%;
     }
   }
 </style>

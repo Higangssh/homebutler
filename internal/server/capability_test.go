@@ -130,10 +130,10 @@ func TestProtectedCapabilitiesAreNotRegisteredWithoutAToken(t *testing.T) {
 		w := httptest.NewRecorder()
 		unguarded.Handler().ServeHTTP(w, req)
 
-		// Without a token the route is not there, so the SPA fallback answers
-		// with the page rather than the handler with JSON.
-		if ct := w.Header().Get("Content-Type"); ct == "application/json" {
-			t.Errorf("%s (%s) is reachable on a dashboard with no token", c.Tool.Name, path)
+		// Without a token the route is not there, and an /api/ path that
+		// matches no route answers 404.
+		if w.Code != http.StatusNotFound {
+			t.Errorf("%s (%s) is reachable on a dashboard with no token: %d", c.Tool.Name, path, w.Code)
 		}
 
 		req = httptest.NewRequest(c.HTTP.Method, path, nil)
@@ -160,8 +160,8 @@ func TestConfigWriteEndpointsNeedAToken(t *testing.T) {
 		w := httptest.NewRecorder()
 		srv.Handler().ServeHTTP(w, req)
 
-		if ct := w.Header().Get("Content-Type"); ct == "application/json" {
-			t.Errorf("%s is reachable on a dashboard with no token", path)
+		if w.Code != http.StatusNotFound {
+			t.Errorf("%s is reachable on a dashboard with no token: %d", path, w.Code)
 		}
 	}
 }

@@ -75,6 +75,10 @@ type ProviderConfig struct {
 type Field struct {
 	Name   string
 	Secret bool
+	// Optional marks a key the channel sends without. A form that asks for
+	// every key as though all were required sends people looking for a token
+	// their server does not use.
+	Optional bool
 }
 
 type provider struct {
@@ -131,7 +135,7 @@ var providers = []provider{
 	},
 	{
 		channel: ChannelNtfy,
-		fields:  []Field{{Name: "url"}, {Name: "topic", Secret: true}, {Name: "token", Secret: true}},
+		fields:  []Field{{Name: "url"}, {Name: "topic", Secret: true}, {Name: "token", Secret: true, Optional: true}},
 		present: func(c *ProviderConfig) bool { return c.Ntfy != nil },
 		// A topic without a server, or a server without a topic, addresses
 		// nothing. The token is optional.

@@ -245,6 +245,14 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("GET /api/version", api(s.handleVersion))
 	s.mux.HandleFunc("OPTIONS /api/", s.handleOptions)
 
+	// An /api/ path that matched nothing is a missing endpoint, and saying so
+	// is the whole point of not registering the write routes without a token:
+	// falling through to the single-page app answered 200 with HTML, which a
+	// caller cannot tell from a working endpoint until it tries to parse it.
+	s.mux.HandleFunc("/api/", func(w http.ResponseWriter, r *http.Request) {
+		writeError(w, http.StatusNotFound, "no such endpoint")
+	})
+
 	// Serve frontend static files
 	s.mux.Handle("/", frontendHandler(webFS))
 }
@@ -265,6 +273,7 @@ func (s *Server) capabilityHandlers() map[string]http.HandlerFunc {
 			"proxmox_status": s.handleProxmoxStatus,
 			"watch_list":     s.demoWatch,
 			"watch_history":  s.demoWatchIncidents,
+			"notify_test":    s.demoNotifyTest,
 		}
 	}
 	return map[string]http.HandlerFunc{
@@ -278,6 +287,7 @@ func (s *Server) capabilityHandlers() map[string]http.HandlerFunc {
 		"proxmox_status": s.handleProxmoxStatus,
 		"watch_list":     s.handleWatch,
 		"watch_history":  s.handleWatchIncidents,
+		"notify_test":    s.handleNotifyTest,
 	}
 }
 

@@ -199,3 +199,9 @@ export function saveNotify(revision, channels) {
     body: JSON.stringify({ revision, channels }),
   });
 }
+
+// Sends one real message through every configured channel. It is a write — it
+// leaves the machine — so it needs the token like every other write here.
+export function testNotify() {
+  return fetchJSON('/api/notify/test', { method: 'POST' });
+}
