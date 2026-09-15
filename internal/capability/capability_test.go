@@ -53,20 +53,48 @@ func TestEveryCapabilityDeclaresRiskAndTargets(t *testing.T) {
 	}
 }
 
-// Everything a browser can reach today is a read, apart from wake, which sends
-// a magic packet and changes nothing homebutler stores. The write surface and
-// the token rule behind it are #154; if this starts failing, that decision is
-// being made here by accident.
-func TestNothingDestructiveIsExposedYet(t *testing.T) {
+// A capability may be reachable from a browser only with the protection its
+// risk level calls for. #154 replaced the blanket ban this used to be — the
+// dashboard is meant to manage things now — with the rule that made exposing
+// them acceptable: a read needs nothing, a write needs a token, and something
+// destructive needs a token and a confirmation the caller has to send.
+//
+// The test is here rather than in internal/server because it is a property of
+// the registry: an entry that claims a browser can reach it has to say how it
+// is protected, and the protection has to match what the entry itself says it
+// costs to call.
+func TestExposedCapabilitiesCarryTheProtectionTheirRiskNeeds(t *testing.T) {
 	for _, c := range Registry {
 		if !c.Exposed() {
+			if c.HTTP.Protection != "" {
+				t.Errorf("%s is not exposed and names a protection", c.Tool.Name)
+			}
 			continue
 		}
-		if c.Risk == RiskDestructive {
-			t.Errorf("%s is destructive and reachable from a browser", c.Tool.Name)
+
+		switch c.Risk {
+		case RiskRead:
+			if c.HTTP.Protection != ProtectionNone {
+				t.Errorf("%s is a read and asks for %q", c.Tool.Name, c.HTTP.Protection)
+			}
+		case RiskWrite:
+			if c.HTTP.Protection != ProtectionToken {
+				t.Errorf("%s is a write reachable from a browser and is protected by %q, not a token", c.Tool.Name, c.HTTP.Protection)
+			}
+		case RiskDestructive:
+			if c.HTTP.Protection != ProtectionTokenAndConfirm {
+				t.Errorf("%s is destructive and reachable from a browser without a confirmation", c.Tool.Name)
+			}
 		}
-		if c.Risk == RiskWrite && c.Tool.Name != "wake" {
-			t.Errorf("%s is a write and reachable from a browser before #154 decided how", c.Tool.Name)
+	}
+}
+
+// wake is the one write a browser could always reach, because it sends a magic
+// packet and changes nothing homebutler stores. It still needs the token.
+func TestWakeIsTheOnlyWriteExposedWithoutASettingsScreen(t *testing.T) {
+	for _, c := range Registry {
+		if c.Exposed() && c.Risk == RiskWrite && c.Tool.Name != "wake" {
+			t.Errorf("%s is an exposed write; confirm that %s is meant to be reachable", c.Tool.Name, c.Tool.Name)
 		}
 	}
 }

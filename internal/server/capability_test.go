@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/Higangssh/homebutler/internal/capability"
@@ -102,5 +103,65 @@ func TestCapabilitiesEndpointReportsWhatIsAndIsNotReachable(t *testing.T) {
 	}
 	if exposed == 0 || absent == 0 {
 		t.Fatalf("expected both reachable and unreachable capabilities, got %d and %d", exposed, absent)
+	}
+}
+
+// A capability that says it needs a token is not reachable without one. The
+// route is absent rather than answering 401, so there is no surface to reach
+// by getting an authorization check wrong.
+func TestProtectedCapabilitiesAreNotRegisteredWithoutAToken(t *testing.T) {
+	cfg := &config.Config{
+		Servers: []config.ServerConfig{{Name: "myserver", Host: "192.168.1.10", Local: true}},
+		Alerts:  config.AlertConfig{CPU: 90, Memory: 85, Disk: 90},
+		Wake:    []config.WakeTarget{{Name: "nas", MAC: "aa:bb:cc:dd:ee:ff"}},
+	}
+
+	unguarded := New(cfg, "127.0.0.1", 8080, true)
+	guarded := New(cfg, "127.0.0.1", 8080, true)
+	guarded.SetToken("secret")
+
+	for _, c := range capability.Registry {
+		if !c.Exposed() || c.HTTP.Protection == capability.ProtectionNone {
+			continue
+		}
+
+		path := strings.ReplaceAll(c.HTTP.Path, "{name}", "nas")
+		req := httptest.NewRequest(c.HTTP.Method, path, nil)
+		w := httptest.NewRecorder()
+		unguarded.Handler().ServeHTTP(w, req)
+
+		// Without a token the route is not there, so the SPA fallback answers
+		// with the page rather than the handler with JSON.
+		if ct := w.Header().Get("Content-Type"); ct == "application/json" {
+			t.Errorf("%s (%s) is reachable on a dashboard with no token", c.Tool.Name, path)
+		}
+
+		req = httptest.NewRequest(c.HTTP.Method, path, nil)
+		req.Header.Set("Authorization", "Bearer secret")
+		w = httptest.NewRecorder()
+		guarded.Handler().ServeHTTP(w, req)
+		if w.Code == http.StatusNotFound {
+			t.Errorf("%s (%s) is missing even with a token", c.Tool.Name, path)
+		}
+	}
+}
+
+// The settings write endpoints follow the same rule, and they are not
+// capabilities — they are this server writing its own config file.
+func TestConfigWriteEndpointsNeedAToken(t *testing.T) {
+	cfg := &config.Config{
+		Servers: []config.ServerConfig{{Name: "myserver", Host: "192.168.1.10", Local: true}},
+		Alerts:  config.AlertConfig{CPU: 90, Memory: 85, Disk: 90},
+	}
+
+	for _, path := range []string{"/api/config/alerts", "/api/config/notify"} {
+		srv := New(cfg, "127.0.0.1", 8080)
+		req := httptest.NewRequest("PUT", path, strings.NewReader(`{"cpu":80}`))
+		w := httptest.NewRecorder()
+		srv.Handler().ServeHTTP(w, req)
+
+		if ct := w.Header().Get("Content-Type"); ct == "application/json" {
+			t.Errorf("%s is reachable on a dashboard with no token", path)
+		}
 	}
 }

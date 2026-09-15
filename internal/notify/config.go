@@ -70,8 +70,19 @@ type ProviderConfig struct {
 // adding a channel meant remembering all six and the next provider was going
 // to be forgotten in one of them (#177). A channel is added here and nowhere
 // else.
+// Field is one config key a channel takes. Secret marks the ones that are
+// credentials, which the dashboard may write and may never read back.
+type Field struct {
+	Name   string
+	Secret bool
+}
+
 type provider struct {
 	channel Channel
+	// fields are the config keys this channel takes. A channel is described
+	// once, here, and the config writer and the dashboard both read it rather
+	// than each carrying their own idea of what a channel looks like.
+	fields []Field
 	// present reports whether the block exists at all, however incomplete.
 	present func(*ProviderConfig) bool
 	// enabled reports whether it has what it needs to send.
@@ -86,6 +97,7 @@ type provider struct {
 var providers = []provider{
 	{
 		channel: ChannelTelegram,
+		fields:  []Field{{Name: "bot_token", Secret: true}, {Name: "chat_id"}},
 		present: func(c *ProviderConfig) bool { return c.Telegram != nil },
 		enabled: func(c *ProviderConfig) bool {
 			return c.Telegram != nil && c.Telegram.BotToken != "" && c.Telegram.ChatID != ""
@@ -95,6 +107,7 @@ var providers = []provider{
 	},
 	{
 		channel: ChannelSlack,
+		fields:  []Field{{Name: "webhook_url", Secret: true}},
 		present: func(c *ProviderConfig) bool { return c.Slack != nil },
 		enabled: func(c *ProviderConfig) bool { return c.Slack != nil && c.Slack.WebhookURL != "" },
 		send:    func(c *ProviderConfig, e Event) error { return sendSlack(c.Slack, e) },
@@ -102,6 +115,7 @@ var providers = []provider{
 	},
 	{
 		channel: ChannelDiscord,
+		fields:  []Field{{Name: "webhook_url", Secret: true}},
 		present: func(c *ProviderConfig) bool { return c.Discord != nil },
 		enabled: func(c *ProviderConfig) bool { return c.Discord != nil && c.Discord.WebhookURL != "" },
 		send:    func(c *ProviderConfig, e Event) error { return sendDiscord(c.Discord, e) },
@@ -109,6 +123,7 @@ var providers = []provider{
 	},
 	{
 		channel: ChannelWebhook,
+		fields:  []Field{{Name: "url", Secret: true}},
 		present: func(c *ProviderConfig) bool { return c.Webhook != nil },
 		enabled: func(c *ProviderConfig) bool { return c.Webhook != nil && c.Webhook.URL != "" },
 		send:    func(c *ProviderConfig, e Event) error { return sendWebhook(c.Webhook, e) },
@@ -116,6 +131,7 @@ var providers = []provider{
 	},
 	{
 		channel: ChannelNtfy,
+		fields:  []Field{{Name: "url"}, {Name: "topic", Secret: true}, {Name: "token", Secret: true}},
 		present: func(c *ProviderConfig) bool { return c.Ntfy != nil },
 		// A topic without a server, or a server without a topic, addresses
 		// nothing. The token is optional.
@@ -127,6 +143,7 @@ var providers = []provider{
 	},
 	{
 		channel: ChannelGotify,
+		fields:  []Field{{Name: "url"}, {Name: "token", Secret: true}},
 		present: func(c *ProviderConfig) bool { return c.Gotify != nil },
 		enabled: func(c *ProviderConfig) bool {
 			return c.Gotify != nil && c.Gotify.URL != "" && c.Gotify.Token != ""
@@ -177,4 +194,80 @@ func (pc *ProviderConfig) PresentChannels() []Channel {
 
 func (pc *ProviderConfig) IsEmpty() bool {
 	return len(pc.PresentChannels()) == 0
+}
+
+// FieldsFor returns the config keys a channel takes, or false when the name is
+// not a channel homebutler has.
+func FieldsFor(channel Channel) ([]Field, bool) {
+	for _, p := range providers {
+		if p.channel == channel {
+			return p.fields, true
+		}
+	}
+	return nil, false
+}
+
+// Setting reads one field of one channel by name, so a caller that already
+// knows the field list from FieldsFor does not need a switch of its own.
+// The second return is false when the channel has no such field.
+func (pc *ProviderConfig) Setting(channel Channel, field string) (string, bool) {
+	if pc == nil {
+		return "", false
+	}
+	switch channel {
+	case ChannelTelegram:
+		if pc.Telegram == nil {
+			return "", false
+		}
+		switch field {
+		case "bot_token":
+			return pc.Telegram.BotToken, true
+		case "chat_id":
+			return pc.Telegram.ChatID, true
+		}
+	case ChannelSlack:
+		if pc.Slack == nil {
+			return "", false
+		}
+		if field == "webhook_url" {
+			return pc.Slack.WebhookURL, true
+		}
+	case ChannelDiscord:
+		if pc.Discord == nil {
+			return "", false
+		}
+		if field == "webhook_url" {
+			return pc.Discord.WebhookURL, true
+		}
+	case ChannelWebhook:
+		if pc.Webhook == nil {
+			return "", false
+		}
+		if field == "url" {
+			return pc.Webhook.URL, true
+		}
+	case ChannelNtfy:
+		if pc.Ntfy == nil {
+			return "", false
+		}
+		switch field {
+		case "url":
+			return pc.Ntfy.URL, true
+		case "topic":
+			return pc.Ntfy.Topic, true
+		case "token":
+			return pc.Ntfy.Token, true
+		}
+	case ChannelGotify:
+		if pc.Gotify == nil {
+			return "", false
+		}
+		switch field {
+		case "url":
+			return pc.Gotify.URL, true
+		case "token":
+			return pc.Gotify.Token, true
+		}
+	}
+	return "", false
 }

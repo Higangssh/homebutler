@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"testing/fstest"
 
@@ -525,8 +526,12 @@ func TestDemoWakeEndpoint(t *testing.T) {
 }
 
 func TestDemoWakeSendEndpoint(t *testing.T) {
+	// Sending a packet is a write, and #154 made every write on the dashboard
+	// require a token — the route does not exist without one.
 	srv := testDemoServer()
+	srv.SetToken("secret")
 	req := httptest.NewRequest("POST", "/api/wake/nas-server", nil)
+	req.Header.Set("Authorization", "Bearer secret")
 	w := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(w, req)
 
@@ -983,10 +988,19 @@ func TestConfigEndpoint(t *testing.T) {
 	if len(servers) != 2 {
 		t.Fatalf("expected 2 servers, got %d", len(servers))
 	}
-	// Password should be masked
+	// Whether a password is set, and never a stand-in for one: a value shaped
+	// like a credential can be sent back, and #154 has the dashboard sending
+	// settings back.
 	remote := servers[1].(map[string]any)
-	if remote["password"] != "••••••" {
-		t.Fatalf("expected masked password, got %v", remote["password"])
+	if remote["password_set"] != true {
+		t.Fatalf("expected password_set true, got %v", remote["password_set"])
+	}
+	if _, present := remote["password"]; present {
+		t.Fatalf("the response still carries a password field: %v", remote["password"])
+	}
+	body := w.Body.String()
+	if strings.Contains(body, "••••••") || strings.Contains(body, "secret123") {
+		t.Fatalf("the response carries something shaped like a credential: %s", body)
 	}
 	if remote["auth"] != "password" {
 		t.Fatalf("expected auth 'password', got %v", remote["auth"])
@@ -1025,7 +1039,9 @@ func TestConfigEndpoint_EmptyPath(t *testing.T) {
 
 func TestWakeSendNotFound(t *testing.T) {
 	srv := testServer()
+	srv.SetToken("secret")
 	req := httptest.NewRequest("POST", "/api/wake/nonexistent", nil)
+	req.Header.Set("Authorization", "Bearer secret")
 	w := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(w, req)
 

@@ -15,6 +15,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -42,13 +43,18 @@ type RemoteRunner func(srv *config.ServerConfig, args ...string) ([]byte, error)
 
 // Server is the HTTP server for the homebutler web dashboard.
 type Server struct {
-	cfg          *config.Config
+	// cfg is replaced wholesale when a save reloads the file, while requests
+	// are in flight reading it. The pointer swaps atomically and every handler
+	// takes its own copy, so a reader either sees the config before the save
+	// or the one after it, never a half-updated struct.
+	cfg          atomic.Pointer[config.Config]
 	host         string
 	port         int
 	demo         bool
 	token        string
 	version      string
 	mux          *http.ServeMux
+	revisionKey  []byte
 	remoteRunner RemoteRunner
 	proxmoxMu    sync.RWMutex
 	proxmoxCache map[string]proxmoxSnapshot
@@ -77,14 +83,30 @@ func New(cfg *config.Config, host string, port int, demo ...bool) *Server {
 	if host == "" {
 		host = "127.0.0.1"
 	}
-	s := &Server{cfg: cfg, host: host, port: port, demo: d, version: "dev", mux: http.NewServeMux(), remoteRunner: remote.Run, proxmoxCache: make(map[string]proxmoxSnapshot), serverCache: make(map[string]serverSnapshot)}
+	s := &Server{host: host, port: port, demo: d, version: "dev", mux: http.NewServeMux(), remoteRunner: remote.Run, proxmoxCache: make(map[string]proxmoxSnapshot), serverCache: make(map[string]serverSnapshot)}
+	s.cfg.Store(cfg)
+	s.revisionKey = newRevisionKey()
 	s.routes()
 	return s
 }
 
+// config is the snapshot a request works from. Take it once at the top of a
+// handler and use the local: calling it twice can straddle a save, and a
+// response built from two different configs can disagree with itself.
+func (s *Server) config() *config.Config {
+	return s.cfg.Load()
+}
+
 // SetToken configures bearer token authentication for /api/* endpoints.
+//
+// The routes are rebuilt, because whether a write endpoint exists at all
+// depends on there being a token and New runs before the caller sets one. A
+// token arriving after the mux was built would otherwise leave every protected
+// route unregistered on a dashboard that was started with one.
 func (s *Server) SetToken(t string) {
 	s.token = t
+	s.mux = http.NewServeMux()
+	s.routes()
 }
 
 // SetVersion sets the version string shown in the dashboard.
@@ -172,6 +194,13 @@ func (s *Server) routes() {
 		if !c.Exposed() {
 			continue
 		}
+		// A capability that says it needs a token is not registered without
+		// one. Answering "unauthorized" would leave the surface there to be
+		// reached the moment that check was got wrong; a route that does not
+		// exist cannot be.
+		if c.HTTP.Protection != capability.ProtectionNone && s.token == "" {
+			continue
+		}
 		if h, ok := handlers[c.Tool.Name]; ok {
 			s.mux.HandleFunc(c.HTTP.Method+" "+c.HTTP.Path, api(h))
 		}
@@ -195,6 +224,22 @@ func (s *Server) routes() {
 		s.mux.HandleFunc("GET /api/config", api(s.handleConfig))
 		s.mux.HandleFunc("GET /api/watch/incidents/{id}", api(s.handleWatchIncident))
 	}
+	// Write endpoints exist only when a token does. Registering them behind a
+	// check that says "unauthorized" would still be a write surface on an
+	// unauthenticated dashboard the moment that check was got wrong; a route
+	// that was never registered cannot be reached by getting anything wrong.
+	// #154 decided this: a read-only dashboard on 127.0.0.1 without a token is
+	// defensible, and the same page able to rewrite the config is not.
+	if s.token != "" {
+		if s.demo {
+			s.mux.HandleFunc("PUT /api/config/alerts", api(s.demoSaveAlerts))
+			s.mux.HandleFunc("PUT /api/config/notify", api(s.demoSaveNotify))
+		} else {
+			s.mux.HandleFunc("PUT /api/config/alerts", api(s.handleSaveAlerts))
+			s.mux.HandleFunc("PUT /api/config/notify", api(s.handleSaveNotify))
+		}
+	}
+
 	s.mux.HandleFunc("GET /api/proxmox/endpoints", api(s.handleProxmoxEndpoints))
 	s.mux.HandleFunc("GET /api/capabilities", api(s.handleCapabilities))
 	s.mux.HandleFunc("GET /api/version", api(s.handleVersion))
@@ -311,7 +356,7 @@ func (s *Server) isRemoteRequest(r *http.Request) (*config.ServerConfig, bool) {
 	if name == "" {
 		return nil, false
 	}
-	srv := s.cfg.FindServer(name)
+	srv := s.config().FindServer(name)
 	if srv == nil || srv.Local {
 		return nil, false
 	}
@@ -461,7 +506,7 @@ func (s *Server) handleAlerts(w http.ResponseWriter, r *http.Request) {
 		s.forwardRemote(w, srv, "alerts", "--json")
 		return
 	}
-	result, err := alerts.Check(&s.cfg.Alerts)
+	result, err := alerts.Check(&s.config().Alerts)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -483,8 +528,9 @@ func (s *Server) handlePorts(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleWakeList(w http.ResponseWriter, r *http.Request) {
-	targets := make([]map[string]string, len(s.cfg.Wake))
-	for i, t := range s.cfg.Wake {
+	cfg := s.config()
+	targets := make([]map[string]string, len(cfg.Wake))
+	for i, t := range cfg.Wake {
 		targets[i] = map[string]string{
 			"name": t.Name,
 			"mac":  t.MAC,
@@ -495,7 +541,7 @@ func (s *Server) handleWakeList(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleWakeSend(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("name")
-	target := s.cfg.FindWakeTarget(name)
+	target := s.config().FindWakeTarget(name)
 	if target == nil {
 		writeError(w, http.StatusNotFound, fmt.Sprintf("wake target %q not found", name))
 		return
@@ -515,8 +561,9 @@ func (s *Server) handleWakeSend(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleConfig(w http.ResponseWriter, r *http.Request) {
-	servers := make([]map[string]any, len(s.cfg.Servers))
-	for i, srv := range s.cfg.Servers {
+	cfg := s.config()
+	servers := make([]map[string]any, len(cfg.Servers))
+	for i, srv := range cfg.Servers {
 		auth := srv.AuthMode
 		if auth == "" {
 			auth = "key"
@@ -525,24 +572,24 @@ func (s *Server) handleConfig(w http.ResponseWriter, r *http.Request) {
 		if srv.KeyFile != "" {
 			key = filepath.Base(srv.KeyFile)
 		}
-		pw := ""
-		if srv.Password != "" {
-			pw = "••••••"
-		}
+		// Whether a password is set, never a stand-in for one. "••••••" is a
+		// value shaped like a credential, and a caller sending it back would
+		// write the bullets into the file as the password.
+		hasPassword := srv.Password != ""
 		servers[i] = map[string]any{
-			"name":     srv.Name,
-			"host":     srv.Host,
-			"local":    srv.Local,
-			"user":     srv.User,
-			"port":     srv.Port,
-			"auth":     auth,
-			"key":      key,
-			"password": pw,
+			"name":         srv.Name,
+			"host":         srv.Host,
+			"local":        srv.Local,
+			"user":         srv.User,
+			"port":         srv.Port,
+			"auth":         auth,
+			"key":          key,
+			"password_set": hasPassword,
 		}
 	}
 
-	wakeTargets := make([]map[string]string, len(s.cfg.Wake))
-	for i, t := range s.cfg.Wake {
+	wakeTargets := make([]map[string]string, len(cfg.Wake))
+	for i, t := range cfg.Wake {
 		wakeTargets[i] = map[string]string{
 			"name":      t.Name,
 			"mac":       t.MAC,
@@ -550,21 +597,40 @@ func (s *Server) handleConfig(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	cfgPath := s.cfg.Path
+	cfgPath := cfg.Path
 	if cfgPath == "" {
 		cfgPath = "(defaults)"
 	}
 
-	writeJSON(w, map[string]any{
+	editable := s.token != ""
+
+	body := map[string]any{
 		"path":    cfgPath,
 		"servers": servers,
 		"alerts": map[string]any{
-			"cpu":    s.cfg.Alerts.CPU,
-			"memory": s.cfg.Alerts.Memory,
-			"disk":   s.cfg.Alerts.Disk,
+			"cpu":    cfg.Alerts.CPU,
+			"memory": cfg.Alerts.Memory,
+			"disk":   cfg.Alerts.Disk,
 		},
-		"wake": wakeTargets,
-	})
+		"wake":   wakeTargets,
+		"notify": s.notifySettings(cfg),
+		// Whether this dashboard can write at all, so the UI offers editing
+		// only where it exists rather than offering it and failing.
+		"editable":          editable,
+		"transport_warning": s.transportWarning(),
+	}
+
+	// The revision this page was built from comes back with a save, so an edit
+	// made in an editor meanwhile is not silently overwritten. A dashboard
+	// that cannot write has nothing to send it back with, so it does not get
+	// one — a digest of the file is not something to hand out for no reason.
+	if editable {
+		if rev, err := config.ReadRevision(cfg.Path); err == nil {
+			body["revision"] = s.revisionToken(rev)
+		}
+	}
+
+	writeJSON(w, body)
 }
 
 // watchService is what doctor checks and the dashboard now shows: whether a
@@ -621,7 +687,7 @@ func (s *Server) handleWatch(w http.ResponseWriter, r *http.Request) {
 		Service: watchService{Installed: installed, Unit: unit},
 		Retention: watchRetention{
 			Kept: kept,
-			Max:  s.cfg.Watch.Retention.MaxIncidents,
+			Max:  s.config().Watch.Retention.MaxIncidents,
 		},
 	})
 }
@@ -685,9 +751,10 @@ type proxmoxEndpointInfo struct {
 }
 
 func (s *Server) handleProxmoxEndpoints(w http.ResponseWriter, _ *http.Request) {
-	endpoints := make([]proxmoxEndpointInfo, 0, len(s.cfg.Proxmox))
+	cfg := s.config()
+	endpoints := make([]proxmoxEndpointInfo, 0, len(cfg.Proxmox))
 	if !s.demo {
-		for _, endpoint := range s.cfg.Proxmox {
+		for _, endpoint := range cfg.Proxmox {
 			endpoints = append(endpoints, proxmoxEndpointInfo{Name: endpoint.Name})
 		}
 	}
@@ -700,7 +767,7 @@ func (s *Server) handleProxmoxStatus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	endpoint, err := s.cfg.SelectProxmox(r.URL.Query().Get("endpoint"))
+	endpoint, err := s.config().SelectProxmox(r.URL.Query().Get("endpoint"))
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
@@ -765,8 +832,9 @@ type serverInfo struct {
 }
 
 func (s *Server) handleServers(w http.ResponseWriter, r *http.Request) {
-	servers := make([]serverInfo, len(s.cfg.Servers))
-	for i, srv := range s.cfg.Servers {
+	cfg := s.config()
+	servers := make([]serverInfo, len(cfg.Servers))
+	for i, srv := range cfg.Servers {
 		servers[i] = serverInfo{
 			Name:  srv.Name,
 			Host:  srv.Host,
@@ -778,7 +846,7 @@ func (s *Server) handleServers(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleServerStatus(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("name")
-	srv := s.cfg.FindServer(name)
+	srv := s.config().FindServer(name)
 	if srv == nil {
 		writeError(w, http.StatusNotFound, fmt.Sprintf("server %q not found", name))
 		return

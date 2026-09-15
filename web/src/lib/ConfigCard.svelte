@@ -1,17 +1,80 @@
 <script>
   import { onMount } from 'svelte';
-  import { getConfig } from './api.js';
+  import { getConfig, saveAlerts, saveNotify, StaleConfigError } from './api.js';
 
   let data = $state(null);
   let error = $state('');
 
-  onMount(async () => {
+  // Editing state. Kept beside the loaded data rather than in it, so a failed
+  // save leaves what the person typed on screen instead of reverting it.
+  let draft = $state({ cpu: '', memory: '', disk: '' });
+  let saving = $state(false);
+  let saved = $state('');
+  let saveError = $state('');
+  let stale = $state(false);
+
+  async function load() {
     try {
       data = await getConfig();
+      draft = {
+        cpu: String(data.alerts.cpu ?? ''),
+        memory: String(data.alerts.memory ?? ''),
+        disk: String(data.alerts.disk ?? ''),
+      };
+      error = '';
     } catch (err) {
       error = err.message;
     }
-  });
+  }
+
+  onMount(load);
+
+  function changedThresholds() {
+    const out = {};
+    for (const key of ['cpu', 'memory', 'disk']) {
+      const value = Number(draft[key]);
+      if (draft[key] !== '' && Number.isFinite(value) && value !== data.alerts[key]) {
+        out[key] = value;
+      }
+    }
+    return out;
+  }
+
+  async function submitThresholds(event) {
+    event.preventDefault();
+    const changed = changedThresholds();
+    if (Object.keys(changed).length === 0 || saving) return;
+
+    saving = true;
+    saveError = '';
+    saved = '';
+    stale = false;
+    try {
+      const result = await saveAlerts(data.revision, changed);
+      data = { ...data, alerts: { ...data.alerts, ...changed }, revision: result.revision };
+      saved = result.restart_needed?.length
+        ? `Saved. ${result.restart_needed.join(' and ')} pick this up when they next start.`
+        : 'Saved.';
+    } catch (err) {
+      if (err instanceof StaleConfigError) {
+        // Not a failed request: the file moved on. Reloading is the answer,
+        // and doing it silently would throw away what they typed.
+        stale = true;
+        saveError = err.message;
+      } else {
+        saveError = err.message;
+      }
+    } finally {
+      saving = false;
+    }
+  }
+
+  async function reload() {
+    stale = false;
+    saveError = '';
+    saved = '';
+    await load();
+  }
 </script>
 
 <div class="config-view">
@@ -86,20 +149,57 @@
       <div class="section-header">
         <h2>Alert Thresholds</h2>
       </div>
-      <div class="thresholds">
-        <div class="threshold-item">
-          <span class="label">CPU</span>
-          <code class="value">{data.alerts.cpu}%</code>
+
+      {#if data.transport_warning}
+        <p class="transport">{data.transport_warning}</p>
+      {/if}
+
+      {#if !data.editable}
+        <div class="thresholds">
+          <div class="threshold-item">
+            <span class="label">CPU</span><code class="value">{data.alerts.cpu}%</code>
+          </div>
+          <div class="threshold-item">
+            <span class="label">Memory</span><code class="value">{data.alerts.memory}%</code>
+          </div>
+          <div class="threshold-item">
+            <span class="label">Disk</span><code class="value">{data.alerts.disk}%</code>
+          </div>
         </div>
-        <div class="threshold-item">
-          <span class="label">Memory</span>
-          <code class="value">{data.alerts.memory}%</code>
-        </div>
-        <div class="threshold-item">
-          <span class="label">Disk</span>
-          <code class="value">{data.alerts.disk}%</code>
-        </div>
-      </div>
+        <p class="hint read-only">
+          Read-only: start <code>homebutler serve</code> with <code>--token</code> to edit settings here.
+        </p>
+      {:else}
+        <form class="thresholds editable" onsubmit={submitThresholds}>
+          <label class="threshold-item">
+            <span class="label">CPU</span>
+            <input type="number" min="1" max="100" step="0.5" bind:value={draft.cpu} />
+            <span class="unit">%</span>
+          </label>
+          <label class="threshold-item">
+            <span class="label">Memory</span>
+            <input type="number" min="1" max="100" step="0.5" bind:value={draft.memory} />
+            <span class="unit">%</span>
+          </label>
+          <label class="threshold-item">
+            <span class="label">Disk</span>
+            <input type="number" min="1" max="100" step="0.5" bind:value={draft.disk} />
+            <span class="unit">%</span>
+          </label>
+          <button type="submit" disabled={saving}>{saving ? 'Saving…' : 'Save'}</button>
+        </form>
+
+        {#if stale}
+          <div class="stale">
+            <p>{saveError}</p>
+            <button type="button" onclick={reload}>Reload</button>
+          </div>
+        {:else if saveError}
+          <p class="error">{saveError}</p>
+        {:else if saved}
+          <p class="saved">{saved}</p>
+        {/if}
+      {/if}
     </div>
 
     <!-- Wake-on-LAN -->
@@ -135,6 +235,88 @@
 </div>
 
 <style>
+  .transport {
+    font-size: 0.8rem;
+    line-height: 1.5;
+    color: var(--yellow);
+    border: 1px solid color-mix(in srgb, var(--yellow) 40%, transparent);
+    background: color-mix(in srgb, var(--yellow) 8%, transparent);
+    border-radius: 6px;
+    padding: 0.5rem 0.7rem;
+    margin-bottom: 0.75rem;
+  }
+
+  .thresholds.editable {
+    align-items: flex-end;
+    gap: 1rem;
+  }
+
+  .thresholds.editable .threshold-item {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.25rem;
+  }
+
+  input[type='number'] {
+    width: 6rem;
+    background: var(--bg-primary);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 0.35rem 0.5rem;
+    color: var(--text-primary);
+    font-family: inherit;
+    font-size: 0.85rem;
+  }
+
+  .unit {
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+  }
+
+  button {
+    background: var(--accent);
+    color: var(--bg-primary);
+    border: none;
+    border-radius: 6px;
+    padding: 0.4rem 0.9rem;
+    font-family: inherit;
+    font-size: 0.85rem;
+    font-weight: 600;
+    cursor: pointer;
+  }
+
+  button:disabled {
+    opacity: 0.5;
+    cursor: default;
+  }
+
+  .stale {
+    margin-top: 0.6rem;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    border: 1px solid color-mix(in srgb, var(--yellow) 45%, transparent);
+    background: color-mix(in srgb, var(--yellow) 8%, transparent);
+    border-radius: 6px;
+    padding: 0.5rem 0.7rem;
+  }
+
+  .stale p {
+    font-size: 0.8rem;
+    color: var(--text-primary);
+    margin: 0;
+  }
+
+  .saved {
+    margin-top: 0.6rem;
+    font-size: 0.8rem;
+    color: var(--green);
+  }
+
+  .read-only {
+    text-align: left;
+  }
+
   .config-view {
     max-width: 900px;
     margin: 0 auto;

@@ -296,3 +296,74 @@ func TestTestOnNothingConfiguredReportsNothing(t *testing.T) {
 		t.Fatalf("expected no results, got %+v", results)
 	}
 }
+
+// The fields a channel takes are described once. A channel that gained a
+// setting and did not describe it here would be writable by nothing and
+// readable by nothing, which is the failure the table exists to prevent.
+func TestEveryChannelDescribesItsFields(t *testing.T) {
+	for _, p := range providers {
+		fields, ok := FieldsFor(p.channel)
+		if !ok || len(fields) == 0 {
+			t.Errorf("%s describes no fields", p.channel)
+			continue
+		}
+		seen := map[string]bool{}
+		for _, f := range fields {
+			if f.Name == "" {
+				t.Errorf("%s has a field with no name", p.channel)
+			}
+			if seen[f.Name] {
+				t.Errorf("%s describes %q twice", p.channel, f.Name)
+			}
+			seen[f.Name] = true
+		}
+	}
+}
+
+// Every channel has at least one credential, and it is the thing the dashboard
+// must never read back.
+func TestEveryChannelMarksItsCredential(t *testing.T) {
+	for _, p := range providers {
+		fields, _ := FieldsFor(p.channel)
+		secrets := 0
+		for _, f := range fields {
+			if f.Secret {
+				secrets++
+			}
+		}
+		if secrets == 0 {
+			t.Errorf("%s marks no field as a credential", p.channel)
+		}
+	}
+}
+
+// Setting has to answer for every field the table declares, or the dashboard
+// shows an empty box for a value that is actually set — and saving that box
+// would then wipe it.
+func TestSettingAnswersForEveryDeclaredField(t *testing.T) {
+	full := &ProviderConfig{
+		Telegram: &TelegramConfig{BotToken: "bt", ChatID: "ci"},
+		Slack:    &SlackConfig{WebhookURL: "su"},
+		Discord:  &DiscordConfig{WebhookURL: "du"},
+		Webhook:  &WebhookConfig{URL: "wu"},
+		Ntfy:     &NtfyConfig{URL: "nu", Topic: "nt", Token: "ntok"},
+		Gotify:   &GotifyConfig{URL: "gu", Token: "gtok"},
+	}
+
+	for _, channel := range Channels() {
+		fields, _ := FieldsFor(channel)
+		for _, f := range fields {
+			value, ok := full.Setting(channel, f.Name)
+			if !ok {
+				t.Errorf("%s.%s is declared and Setting does not answer for it", channel, f.Name)
+				continue
+			}
+			if value == "" {
+				t.Errorf("%s.%s read back empty from a config that sets everything", channel, f.Name)
+			}
+		}
+		if _, ok := full.Setting(channel, "not-a-field"); ok {
+			t.Errorf("%s answered for a field it does not have", channel)
+		}
+	}
+}
