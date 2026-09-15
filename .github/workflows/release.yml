@@ -115,7 +115,7 @@ jobs:
           # Generate formula
           cat > homebutler.rb << EOF
           class Homebutler < Formula
-            desc "Homelab butler in a single binary — manage servers from chat"
+            desc "Tells you what changed on your server, and only what is worth telling"
             homepage "https://github.com/${REPO}"
             version "${TAG}"
             license "MIT"

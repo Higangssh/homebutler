@@ -1,6 +1,6 @@
 # homebutler
 
-> Single-binary homelab management CLI for servers, Docker, app installs, backup/restore, Wake-on-LAN, SSH multi-server workflows, and AI/MCP tooling.
+> Single Go binary that remembers what a server looked like and reports only the changes worth mentioning — to a person (CLI, TUI, web dashboard) or an agent (MCP, typed JSON). Also Docker, backup/restore with drill, Proxmox, Wake-on-LAN, and multi-server over SSH.
 
 ## What it does
 - `watch`: restart detection, crash analysis, flapping detection, incident history

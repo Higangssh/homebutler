@@ -1,6 +1,6 @@
 # homebutler-mcp
 
-MCP server for homelab management. Manage servers, Docker containers, ports, alerts, and more — from any AI tool.
+MCP server for HomeButler, which remembers what a server looked like last time and tells an agent what changed as typed JSON — every tool classed read, write or destructive.
 
 This is an npm wrapper for [homebutler](https://github.com/Higangssh/homebutler). It downloads the correct binary for your platform automatically.
 
