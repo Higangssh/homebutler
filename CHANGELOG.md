@@ -63,7 +63,7 @@ $ git diff ~/.config/homebutler/config.yaml
 
 ### 🐛 Fixes
 
-- the dashboard's tabs could not be tapped on a phone (#154). The server picker is positioned out of the flow so it can sit at the right of a wide header. On a narrow one it covered the tabs rather than pushing them aside, so tapping `Config` opened the picker — on a phone, the settings screen could not be opened at all, and had not been since the dashboard shipped in 0.10.0. The config path, which has no spaces to break at, then made that screen wider than the screen it was on
+- the dashboard's tabs could not be tapped on a phone (#154). The server picker is positioned out of the flow so it can sit at the right of a wide header. On a narrow one it covered the tabs rather than pushing them aside, so tapping `Config` opened the picker — on a phone, the settings screen could not be opened at all, and had not been since the dashboard shipped in 0.6.0. The config path, which has no spaces to break at, then made that screen wider than the screen it was on
 
 - an `/api/` path that matched no route answered with the dashboard (#154). Write endpoints are deliberately not registered when `serve` runs without a token, but the single-page fallback replied 200 with HTML to anything under `/api/`, so a caller could not tell a missing endpoint from a working one until it tried to parse the page. Unmatched API paths now answer 404
 
