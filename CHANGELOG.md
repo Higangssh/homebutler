@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### ✨ Features
+
+- add a config writer, so a setting can be changed without rewriting the file (#153). Nothing in `internal/config` could write: the only code that produced a config was `init`, which marshals a fresh struct over the whole path, dropping comments, key order and any key the running binary does not recognise. `config.Save` takes a typed patch of the fields being changed and edits the lines they live on, so a save that changes one threshold produces a one-line diff. It refuses when the file has changed on disk since it was read, so a save from one place cannot discard an edit made in another; it writes through a symlink to the real file, which is how a config kept in a dotfiles repository survives; and it validates the result before replacing anything. No caller yet — the dashboard's editing surface is #154
+
 ## [0.32.0](https://github.com/Higangssh/homebutler/compare/v0.31.0...v0.32.0) - 2026-09-15
 **The two push servers homebutler's own audience already runs were the two it could not send to, and the command for checking notifications never read the file the documentation puts them in.** ntfy and Gotify each take their own shape rather than a webhook payload, so reaching a phone that already had one meant writing a translator. Meanwhile `notify test` fell through to the deprecated `alerts.yaml` and answered `no notification providers configured` for a `config.yaml` that was correct.
 
