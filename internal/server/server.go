@@ -234,9 +234,11 @@ func (s *Server) routes() {
 		if s.demo {
 			s.mux.HandleFunc("PUT /api/config/alerts", api(s.demoSaveAlerts))
 			s.mux.HandleFunc("PUT /api/config/notify", api(s.demoSaveNotify))
+			s.mux.HandleFunc("PUT /api/config/wake", api(s.demoSaveWake))
 		} else {
 			s.mux.HandleFunc("PUT /api/config/alerts", api(s.handleSaveAlerts))
 			s.mux.HandleFunc("PUT /api/config/notify", api(s.handleSaveNotify))
+			s.mux.HandleFunc("PUT /api/config/wake", api(s.handleSaveWake))
 		}
 	}
 

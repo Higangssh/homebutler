@@ -223,6 +223,47 @@ func (s *Server) handleSaveNotify(w http.ResponseWriter, r *http.Request) {
 	s.applySave(w, req.Revision, patch, []string{"watch", "alerts"})
 }
 
+type wakeRequest struct {
+	Revision string       `json:"revision"`
+	Targets  []wakeTarget `json:"targets"`
+}
+
+// wakeTarget is one machine as the dashboard sends it back. Nothing here is a
+// credential — a MAC address is on the network already — so it travels in both
+// directions, unlike a notification token.
+type wakeTarget struct {
+	Name      string `json:"name"`
+	MAC       string `json:"mac,omitempty"`
+	Broadcast string `json:"broadcast,omitempty"`
+	Remove    bool   `json:"remove,omitempty"`
+}
+
+func (s *Server) handleSaveWake(w http.ResponseWriter, r *http.Request) {
+	var req wakeRequest
+	if !decodeSave(w, r, &req) {
+		return
+	}
+	if len(req.Targets) == 0 {
+		writeError(w, http.StatusBadRequest, "nothing to change")
+		return
+	}
+
+	patch := config.Patch{Wake: make([]config.WakePatch, 0, len(req.Targets))}
+	for _, target := range req.Targets {
+		patch.Wake = append(patch.Wake, config.WakePatch{
+			Name:      target.Name,
+			MAC:       target.MAC,
+			Broadcast: target.Broadcast,
+			Remove:    target.Remove,
+		})
+	}
+
+	// Nothing has to be restarted: serve reads the file back after it writes,
+	// and the CLI reads it on every run. A wake target is usable the moment it
+	// is saved.
+	s.applySave(w, req.Revision, patch, nil)
+}
+
 // applySave is the one place a write reaches the file, so the staleness check,
 // the reload and the answer are decided once rather than per endpoint.
 func (s *Server) applySave(w http.ResponseWriter, revision string, patch config.Patch, restart []string) {

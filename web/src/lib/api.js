@@ -205,3 +205,13 @@ export function saveNotify(revision, channels) {
 export function testNotify() {
   return fetchJSON('/api/notify/test', { method: 'POST' });
 }
+
+// Wake targets travel in both directions: a MAC address is on the network
+// already, so unlike a notification token there is nothing here to withhold.
+export function saveWake(revision, targets) {
+  return fetchJSON('/api/config/wake', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ revision, targets }),
+  });
+}

@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### ✨ Features
+
+- add and edit Wake-on-LAN devices from the dashboard (#154). The Config tab listed the machines it could wake and could not add one, so putting a new device on the list meant finding the config file — and a magic packet is fire and forget, which makes a mistyped address a machine that simply does not turn on rather than an error anyone sees. A device can now be added, have its address corrected, or be removed with one confirmation, and an address that cannot be a MAC is refused before the file is touched, in the sentence `config validate` uses for the same mistake. Nothing has to be restarted: a target works as soon as it is saved
+
+- the config writer can edit lists, not only settings (#154). Everything it could reach until now was a key under a key — a threshold, a notification channel. The machines, the wake targets and the Proxmox endpoints are lists, which is where the rest of the config lives, and an item in one is addressed by the name its owner gave it rather than by its position, so reordering the file in an editor does not point a save at the wrong machine
+
 ## [0.33.0](https://github.com/Higangssh/homebutler/compare/v0.32.0...v0.33.0) - 2026-09-15
 **The dashboard could show every setting and change none of them — and on a phone it could not even open the screen they were on.** Someone reading an alert on their phone had to get to a terminal to change the threshold that sent it, or to fix the notification channel that did not. `serve --token` now makes that screen editable: thresholds, every notification channel, and a `Send test` that sends one real message and reports each channel separately, so a setup is confirmed working rather than assumed. Saves go through a writer that edits the lines it was asked to and leaves the rest of the file — comments, key order, and keys this version does not recognise — exactly where they were.
 

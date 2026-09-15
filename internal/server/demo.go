@@ -327,6 +327,29 @@ func (s *Server) demoConfig(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, body)
 }
 
+func (s *Server) demoSaveWake(w http.ResponseWriter, r *http.Request) {
+	var req wakeRequest
+	if !decodeSave(w, r, &req) {
+		return
+	}
+	if req.Revision != demoRevision {
+		writeError(w, http.StatusConflict, "the config file changed on disk since this page loaded it; reload before saving")
+		return
+	}
+	// The demo has no file, but it does have the refusal that matters: an
+	// address that is not one never reaches a save here either.
+	for _, target := range req.Targets {
+		if target.Remove {
+			continue
+		}
+		if err := config.CheckWakeTarget(target.Name, target.MAC); err != nil {
+			writeError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+	}
+	writeJSON(w, saveResponse{Saved: true, Revision: demoRevision})
+}
+
 // demoNotifyConfig is what the demo dashboard shows on the settings screen.
 //
 // It is made up here rather than read from s.config(), which in demo mode is

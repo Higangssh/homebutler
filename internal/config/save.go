@@ -12,6 +12,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"unicode"
 
 	"github.com/Higangssh/homebutler/internal/notify"
 
@@ -163,8 +164,51 @@ func (p Patch) Validate() error {
 		if target.Name == "" {
 			return errors.New("a wake target needs a name")
 		}
+
+		if target.Remove {
+			continue
+		}
+		if err := CheckWakeTarget(target.Name, target.MAC); err != nil {
+			return err
+		}
 	}
 	return nil
+}
+
+// CheckWakeTarget reports why a target cannot be saved, in the words config
+// validate uses for the same mistake.
+//
+// It is one function rather than a rule written twice because a save and a
+// `config validate` that disagreed about what a MAC looks like would be two
+// answers to one question — and the disagreement would only surface after the
+// packet had gone nowhere. Wake-on-LAN is fire and forget: nothing replies, so
+// a typed address shows up as a machine that simply did not turn on, which is
+// exactly the case a form has to catch before it writes.
+func CheckWakeTarget(name, mac string) error {
+	if name == "" {
+		return errors.New("a wake target needs a name")
+	}
+	message, hint := macProblem(mac)
+	switch {
+	case message == "":
+		return nil
+	case hint == "":
+		return errors.New(lowerFirst(message))
+	default:
+		return errors.New(lowerFirst(message) + " " + hint)
+	}
+}
+
+// lowerFirst starts a sentence the way an error is expected to: Go's errors
+// are lowercase because they are wrapped into longer ones, and config
+// validate's findings are sentences on their own.
+func lowerFirst(s string) string {
+	if s == "" {
+		return s
+	}
+	r := []rune(s)
+	r[0] = unicode.ToLower(r[0])
+	return strings.TrimSuffix(string(r), ".")
 }
 
 // Save applies patch to the config file at path.
@@ -220,17 +264,58 @@ func Save(path string, rev Revision, patch Patch) error {
 // rewriting the line, and rewriting it would lose whatever else it holds.
 var ErrFlowStyle = errors.New("that section is written on one line, which homebutler cannot edit in place")
 
-// edit is one value to write, addressed by its path from the root: ["alerts",
-// "cpu"], or ["notify", "ntfy", "topic"]. A path rather than a section and key
-// because notify nests one level deeper than alerts, and the next thing to be
-// editable will nest somewhere else again.
+// step is one move along a path: into a key of a mapping, or into the item of
+// a sequence. Both are needed because homebutler's config is both — `alerts`
+// is a mapping of thresholds, `wake` is a list of machines — and an editor
+// that could only walk mappings could reach a threshold but not a target.
+//
+// A sequence item is addressed by the name its owner gave it rather than by
+// its position. Every list in this config is a list of named things, it is how
+// the CLI and the dashboard already refer to them, and a save that meant "the
+// second one" would rewrite the wrong machine after somebody reordered the
+// file in an editor.
+type step struct {
+	key  string // a key of a mapping
+	name string // the item of a sequence whose name field holds this
+}
+
+func mapKey(key string) step   { return step{key: key} }
+func seqItem(name string) step { return step{name: name} }
+
+func (s step) isItem() bool { return s.key == "" }
+
+func (s step) String() string {
+	if s.isItem() {
+		return "[" + s.name + "]"
+	}
+	return s.key
+}
+
+// pathString names a path in a message someone has to act on.
+func pathString(path []step) string {
+	var b strings.Builder
+	for i, s := range path {
+		if i > 0 && !s.isItem() {
+			b.WriteString(".")
+		}
+		b.WriteString(s.String())
+	}
+	return b.String()
+}
+
+// edit is one value to write, addressed by its path from the root:
+// ["alerts", "cpu"], ["notify", "ntfy", "topic"], or ["wake", [nas], "mac"].
+// A path rather than a section and key because notify nests one level deeper
+// than alerts, and the next thing to be editable will nest somewhere else
+// again.
 type edit struct {
-	path  []string
+	path  []step
 	value string
 }
 
-// removal is a whole mapping to delete, addressed the same way.
-type removal struct{ path []string }
+// removal is a whole mapping — a notification channel, a wake target — to
+// delete, addressed the same way.
+type removal struct{ path []step }
 
 // collectEdits turns a patch into paths and values in a fixed order, so the
 // same patch always produces the same file.
@@ -248,7 +333,7 @@ func collectEdits(patch Patch) ([]edit, []removal) {
 			{"disk", patch.Alerts.Disk},
 		} {
 			if kv.value != nil {
-				edits = append(edits, edit{path: []string{"alerts", kv.key}, value: formatNumber(*kv.value)})
+				edits = append(edits, edit{path: []step{mapKey("alerts"), mapKey(kv.key)}, value: formatNumber(*kv.value)})
 			}
 		}
 	}
@@ -256,7 +341,7 @@ func collectEdits(patch Patch) ([]edit, []removal) {
 	for _, name := range sortedKeys(patch.Notify) {
 		channel := patch.Notify[name]
 		if channel.Remove {
-			removals = append(removals, removal{path: []string{"notify", name}})
+			removals = append(removals, removal{path: []step{mapKey("notify"), mapKey(name)}})
 			continue
 		}
 		fields, _ := notify.FieldsFor(notify.Channel(name))
@@ -265,13 +350,39 @@ func collectEdits(patch Patch) ([]edit, []removal) {
 		for _, f := range fields {
 			if f.Secret {
 				if value, write := channel.Secrets[f.Name].resolve(); write {
-					edits = append(edits, edit{path: []string{"notify", name, f.Name}, value: quoteIfNeeded(value)})
+					edits = append(edits, edit{path: []step{mapKey("notify"), mapKey(name), mapKey(f.Name)}, value: quoteIfNeeded(value)})
 				}
 				continue
 			}
 			if value, ok := channel.Values[f.Name]; ok {
-				edits = append(edits, edit{path: []string{"notify", name, f.Name}, value: quoteIfNeeded(value)})
+				edits = append(edits, edit{path: []step{mapKey("notify"), mapKey(name), mapKey(f.Name)}, value: quoteIfNeeded(value)})
 			}
+		}
+	}
+
+	for _, target := range patch.Wake {
+		if target.Remove {
+			removals = append(removals, removal{path: []step{mapKey("wake"), seqItem(target.Name)}})
+			continue
+		}
+		// name comes first, because it is what the item is addressed by and a
+		// new target reads as a list of machines rather than of addresses.
+		// The broadcast address is written under `ip`, which is what the key
+		// is called in the file. The dashboard and the JSON call it broadcast,
+		// because that is what it is, and the writer has to speak the file's
+		// spelling rather than the API's.
+		for _, kv := range []struct{ key, value string }{
+			{"name", target.Name},
+			{"mac", target.MAC},
+			{"ip", target.Broadcast},
+		} {
+			if kv.value == "" && kv.key != "name" {
+				continue
+			}
+			edits = append(edits, edit{
+				path:  []step{mapKey("wake"), seqItem(target.Name), mapKey(kv.key)},
+				value: quoteIfNeeded(kv.value),
+			})
 		}
 	}
 
@@ -316,6 +427,17 @@ func quoteIfNeeded(value string) string {
 // one threshold arrives as a diff touching the whole file. A person wrote this
 // file; a save should read like something they did.
 func applyPatch(current []byte, patch Patch) ([]byte, error) {
+	edits, removals := collectEdits(patch)
+	return applyEdits(current, edits, removals)
+}
+
+// applyEdits is the editor itself, with nothing in it that knows what a wake
+// target or a notification channel is: it writes values at paths and deletes
+// what paths name. Keeping it separate from collectEdits is what lets a
+// section become editable by describing it rather than by teaching this code
+// about it, and it is how the machine is tested against shapes no Patch can
+// build yet.
+func applyEdits(current []byte, edits []edit, removals []removal) ([]byte, error) {
 	var doc yaml.Node
 	if len(bytes.TrimSpace(current)) > 0 {
 		if err := yaml.Unmarshal(current, &doc); err != nil {
@@ -329,7 +451,6 @@ func applyPatch(current []byte, patch Patch) ([]byte, error) {
 		return nil, ErrFlowStyle
 	}
 
-	edits, removals := collectEdits(patch)
 	indent := indentOf(current)
 
 	// Deletions and insertions both move the lines below them, so everything
@@ -344,14 +465,18 @@ func applyPatch(current []byte, patch Patch) ([]byte, error) {
 	for _, r := range removals {
 		node, parent, flow := resolve(root, r.path)
 		if flow {
-			return nil, fmt.Errorf("%w: %s", ErrFlowStyle, strings.Join(r.path, "."))
+			return nil, fmt.Errorf("%w: %s", ErrFlowStyle, pathString(r.path))
 		}
 		if node == nil {
 			continue // already absent
 		}
-		keyLine := keyLineOf(parent, r.path[len(r.path)-1])
-		last := sectionEnd(node, lines)
-		changes = append(changes, change{at: keyLine, drop: last - keyLine + 1})
+		// A key is deleted from the line its key is on; a sequence item from
+		// the line its dash is on, which is the line its first key shares.
+		first := node.Line - 1
+		if last := r.path[len(r.path)-1]; !last.isItem() {
+			first = keyLineOf(parent, last.key)
+		}
+		changes = append(changes, change{at: first, drop: sectionEnd(node, lines) - first + 1})
 	}
 
 	// Sections created by this patch, so two keys for the same new channel do
@@ -361,7 +486,7 @@ func applyPatch(current []byte, patch Patch) ([]byte, error) {
 	for _, e := range edits {
 		node, _, flow := resolve(root, e.path)
 		if flow {
-			return nil, fmt.Errorf("%w: %s", ErrFlowStyle, strings.Join(e.path, "."))
+			return nil, fmt.Errorf("%w: %s", ErrFlowStyle, pathString(e.path))
 		}
 		if node != nil {
 			lines[node.Line-1] = replaceValue(lines[node.Line-1], node.Column, e.value)
@@ -372,13 +497,13 @@ func applyPatch(current []byte, patch Patch) ([]byte, error) {
 		key := e.path[len(e.path)-1]
 		parent, _, parentFlow := resolve(root, parentPath)
 		if parentFlow {
-			return nil, fmt.Errorf("%w: %s", ErrFlowStyle, strings.Join(parentPath, "."))
+			return nil, fmt.Errorf("%w: %s", ErrFlowStyle, pathString(parentPath))
 		}
 
 		if parent != nil && parent.Kind == yaml.MappingNode {
 			at := sectionEnd(parent, lines)
-			col := siblingIndent(parent, len(parentPath)*indent)
-			changes = append(changes, change{at: at, lines: []string{strings.Repeat(" ", col) + key + ": " + e.value}})
+			col := containerIndent(parent, lines, len(parentPath)*indent)
+			changes = append(changes, change{at: at, lines: []string{strings.Repeat(" ", col) + key.key + ": " + e.value}})
 			continue
 		}
 
@@ -387,7 +512,7 @@ func applyPatch(current []byte, patch Patch) ([]byte, error) {
 		// notification channel did: the save was refused because the result no
 		// longer parsed, and the channel could not be added at all. Only the
 		// missing part is written, under the deepest key that does exist.
-		joined := strings.Join(parentPath, ".")
+		joined := pathString(parentPath)
 		if created[joined] {
 			continue
 		}
@@ -398,9 +523,9 @@ func applyPatch(current []byte, patch Patch) ([]byte, error) {
 		case anchor == nil:
 			// None of it is there: the whole path goes at the end of the file.
 			changes = append(changes, change{at: -1, lines: newBlock(parentPath, parentPath, edits, indent, 0)})
-		case anchor.Kind == yaml.MappingNode:
+		case anchor.Kind == yaml.MappingNode || anchor.Kind == yaml.SequenceNode:
 			at := sectionEnd(anchor, lines)
-			base := siblingIndent(anchor, depth*indent)
+			base := containerIndent(anchor, lines, depth*indent)
 			changes = append(changes, change{at: at, lines: newBlock(parentPath, parentPath[depth:], edits, indent, base)})
 		default:
 			// The key is there with nothing under it — a `notify:` left behind
@@ -433,27 +558,43 @@ func applyPatch(current []byte, patch Patch) ([]byte, error) {
 // newBlock writes the part of a path that is not in the file yet, with every
 // key of the patch that belongs under it.
 //
-// full is the whole path, which is what the other keys of the patch are
-// matched against; missing is the part that has to be created; base is how far
-// the first created level is indented, so a block written under a key that
-// already exists lines up with the keys beside it.
-func newBlock(full, missing []string, all []edit, indent, base int) []string {
+// full is the whole path, which is what the other keys of the patch are matched
+// against; missing is the part that has to be created; base is how far the
+// first created level is indented, so a block written under a key that already
+// exists lines up with the keys beside it.
+func newBlock(full, missing []step, all []edit, indent, base int) []string {
 	var block []string
-	for depth, name := range missing {
-		block = append(block, strings.Repeat(" ", base+depth*indent)+name+":")
-	}
-	leafIndent := strings.Repeat(" ", base+len(missing)*indent)
-	for _, other := range all {
-		if len(other.path) == len(full)+1 && strings.Join(other.path[:len(full)], ".") == strings.Join(full, ".") {
-			block = append(block, leafIndent+other.path[len(other.path)-1]+": "+other.value)
+	col := base
+
+	for _, s := range missing {
+		if !s.isItem() {
+			block = append(block, strings.Repeat(" ", col)+s.key+":")
+			col += indent
+			continue
 		}
+		// A sequence item opens with a dash, and its keys line up after it.
+		// The name is written here rather than left to the loop below, because
+		// it is the key the dash has to share a line with.
+		block = append(block, strings.Repeat(" ", col)+"- name: "+quoteIfNeeded(s.name))
+		col += 2
+	}
+
+	for _, other := range all {
+		if len(other.path) != len(full)+1 || pathString(other.path[:len(full)]) != pathString(full) {
+			continue
+		}
+		key := other.path[len(other.path)-1]
+		if key.key == "name" {
+			continue // already on the dash line
+		}
+		block = append(block, strings.Repeat(" ", col)+key.key+": "+other.value)
 	}
 	return block
 }
 
-// deepestExisting returns the last key along the path that is actually in the
+// deepestExisting returns the last step along the path that is actually in the
 // file, and how much of the path it covers.
-func deepestExisting(root *yaml.Node, path []string) (*yaml.Node, int) {
+func deepestExisting(root *yaml.Node, path []step) (*yaml.Node, int) {
 	for depth := len(path); depth > 0; depth-- {
 		if node, _, _ := resolve(root, path[:depth]); node != nil {
 			return node, depth
@@ -462,36 +603,62 @@ func deepestExisting(root *yaml.Node, path []string) (*yaml.Node, int) {
 	return nil, 0
 }
 
-// resolve walks a path and returns the node it names along with its parent
-// mapping, or nil when any step is missing.
+// resolve walks a path and returns the node it names along with the mapping or
+// sequence that holds it, or nil when any step is missing.
 //
-// flow reports a mapping written on one line anywhere along the way, not only
-// at the end: a value inside `alerts: {cpu: 90}` has a position, and editing
-// at it produces a broken line. Catching it here means the refusal names the
-// real reason rather than arriving later as a parse error.
-func resolve(root *yaml.Node, path []string) (node, parent *yaml.Node, flow bool) {
+// flow reports a mapping or a list written on one line anywhere along the way,
+// not only at the end: a value inside `alerts: {cpu: 90}` has a position, and
+// editing at it produces a broken line. Catching it here means the refusal
+// names the real reason rather than arriving later as a parse error.
+func resolve(root *yaml.Node, path []step) (node, parent *yaml.Node, flow bool) {
 	current := root
-	for i, key := range path {
-		if current == nil || current.Kind != yaml.MappingNode {
+	for i, s := range path {
+		if current == nil {
 			return nil, nil, false
 		}
 		if current.Style == yaml.FlowStyle {
 			return nil, nil, true
 		}
-		next := lookup(current, key)
+
+		var next *yaml.Node
+		switch {
+		case s.isItem():
+			if current.Kind != yaml.SequenceNode {
+				return nil, nil, false
+			}
+			next = itemNamed(current, s.name)
+		default:
+			if current.Kind != yaml.MappingNode {
+				return nil, nil, false
+			}
+			next = lookup(current, s.key)
+		}
 		if next == nil {
 			return nil, nil, false
 		}
 		if i == len(path)-1 {
-			return next, current, next.Kind == yaml.MappingNode && next.Style == yaml.FlowStyle
+			return next, current, next.Kind != yaml.ScalarNode && next.Style == yaml.FlowStyle
 		}
 		current = next
 	}
 	return nil, nil, false
 }
 
-// keyLineOf is the line the key itself sits on, which is where a removal
-// starts — the value node's line is the line after it for a nested mapping.
+// itemNamed finds the item of a sequence whose name field holds name. An item
+// that is not a mapping, or has no name, is not addressable and is skipped
+// rather than refused: it is somebody else's key in their file.
+func itemNamed(sequence *yaml.Node, name string) *yaml.Node {
+	for _, item := range sequence.Content {
+		if item.Kind != yaml.MappingNode {
+			continue
+		}
+		if value := lookup(item, "name"); value != nil && value.Value == name {
+			return item
+		}
+	}
+	return nil
+}
+
 func keyLineOf(mapping *yaml.Node, key string) int {
 	for i := 0; i+1 < len(mapping.Content); i += 2 {
 		if mapping.Content[i].Value == key {
@@ -514,11 +681,24 @@ func lineEnding(current []byte) string {
 // siblingIndent is the column the section's own keys sit at, so an added key
 // lines up with them rather than with whatever the first indented line in the
 // file happens to use.
-func siblingIndent(mapping *yaml.Node, fallback int) int {
-	if len(mapping.Content) > 0 {
-		if col := mapping.Content[0].Column - 1; col > 0 {
-			return col
+// containerIndent is how far the children of a node are pushed in.
+//
+// A mapping is measured by the column of its first key. A sequence is measured
+// by the line its first item starts on instead: the item's first key sits
+// after the dash, and the dash is where the item begins.
+func containerIndent(node *yaml.Node, lines []string, fallback int) int {
+	if len(node.Content) == 0 {
+		return fallback
+	}
+	first := node.Content[0]
+	if node.Kind == yaml.SequenceNode {
+		if line := first.Line - 1; line >= 0 && line < len(lines) {
+			return indentWidth(lines[line])
 		}
+		return fallback
+	}
+	if col := first.Column - 1; col > 0 {
+		return col
 	}
 	return fallback
 }
@@ -550,18 +730,27 @@ func rootMapping(doc *yaml.Node) *yaml.Node {
 
 // sectionEnd is the last line the mapping occupies, so a new key lands inside
 // it rather than after whatever follows.
-func sectionEnd(mapping *yaml.Node, lines []string) int {
-	last := mapping.Line - 1
-	for i := 0; i+1 < len(mapping.Content); i += 2 {
-		if line := mapping.Content[i+1].Line - 1; line > last {
-			last = line
+func sectionEnd(node *yaml.Node, lines []string) int {
+	last := node.Line - 1
+	if node.Kind == yaml.SequenceNode {
+		for _, item := range node.Content {
+			if line := item.Line - 1; line > last {
+				last = line
+			}
+		}
+	} else {
+		for i := 0; i+1 < len(node.Content); i += 2 {
+			if line := node.Content[i+1].Line - 1; line > last {
+				last = line
+			}
 		}
 	}
-	// Only lines indented at least as far as this mapping's own keys belong to
-	// it. Extending over anything that merely began with a space swallowed the
-	// key below: removing one notification channel deleted every channel
+
+	// Only lines indented at least as far as this node's own children belong
+	// to it. Extending over anything that merely began with a space swallowed
+	// the key below: removing one notification channel deleted every channel
 	// written after it, and the file was rewritten without them.
-	inner := siblingIndent(mapping, mapping.Column-1)
+	inner := containerIndent(node, lines, node.Column-1)
 	for last+1 < len(lines) {
 		next := lines[last+1]
 		if strings.TrimSpace(next) == "" || indentWidth(next) < inner {
