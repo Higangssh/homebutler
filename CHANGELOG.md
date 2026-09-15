@@ -2,7 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
-## [Unreleased]
+## [0.32.0](https://github.com/Higangssh/homebutler/compare/v0.31.0...v0.32.0) - 2026-09-15
+**The two push servers homebutler's own audience already runs were the two it could not send to, and the command for checking notifications never read the file the documentation puts them in.** ntfy and Gotify each take their own shape rather than a webhook payload, so reaching a phone that already had one meant writing a translator. Meanwhile `notify test` fell through to the deprecated `alerts.yaml` and answered `no notification providers configured` for a `config.yaml` that was correct.
+
+```
+$ homebutler notify test
+  ✅ ntfy: sent
+  ❌ discord: request to http://127.0.0.1:1 failed: dial tcp 127.0.0.1:1: connect: connection refused
+  ✅ webhook: sent
+```
+
 
 ### ✨ Features
 
