@@ -20,14 +20,14 @@ All notable changes to this project will be documented in this file.
 
 - removing a notification channel took the ones below it with it (#154). The end of a section was found by running on while lines began with a space, which ran straight through the next channel and into the rest of the file. A removal now stops where the indentation says the section does
 
-- the dashboard could not be reached from a phone (#154). The server picker is positioned out of the flow so it can sit at the right of a wide header; on a narrow one it covered the tabs instead of pushing them aside, so tapping `Config` opened the picker. The config path, which has no spaces to break at, then made the settings screen wider than the screen it was on
+- the dashboard's tabs could not be tapped on a phone (#154). The server picker is positioned out of the flow so it can sit at the right of a wide header. On a narrow one it covered the tabs rather than pushing them aside, so tapping `Config` opened the picker — on a phone, the settings screen could not be opened at all, and had not been since the dashboard shipped in 0.10.0. The config path, which has no spaces to break at, then made that screen wider than the screen it was on
 
 - an `/api/` path that matched no route answered with the dashboard (#154). Write endpoints are deliberately not registered when `serve` runs without a token, but the single-page fallback replied 200 with HTML to anything under `/api/`, so a caller could not tell a missing endpoint from a working one until it tried to parse the page. Unmatched API paths now answer 404
 
 ### ⚠️ Behavior changes
 
 - **The dashboard's wake button needs `--token`.** Sending a magic packet is a write, and #154 settled that every write on the dashboard requires one: `POST /api/wake/{name}` is not registered at all when `serve` runs without a token, along with the new settings endpoints. A dashboard started without a token is read-only, which it effectively was already — except that the wake button now says so instead of working. Start `serve` with `--token` and it comes back, along with the settings that can now be edited.
-- **`notify test` and the `notify_test` tool send the same event.** The MCP tool built its own, with a status of `test` where the command sends `triggered`, and the delivered priority is derived from that — so the same test arrived on a phone at two different priorities depending on which one ran it. Both now send the command's event.
+- **A test notification now arrives at high priority, through both the command and the `notify_test` tool.** The two built their own events, differing in the status the priority is derived from, so the same test reached a phone quietly or loudly depending on which one sent it. They now send one event, the one a triggered alert sends: checking a channel is checking the path a real alert takes, and whether it gets through quiet hours is part of that path. Anyone who tested through the MCP tool will see the priority go up.
 - **`/api/config` returns `password_set` instead of `password`.** Anything reading the old field, which held `••••••` when a password was configured, needs the boolean instead.
 
 ## [0.32.0](https://github.com/Higangssh/homebutler/compare/v0.31.0...v0.32.0) - 2026-09-15

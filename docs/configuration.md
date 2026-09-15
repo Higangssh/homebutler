@@ -124,9 +124,14 @@ is why pointing `notify.webhook` at one does not work without something in
 between.
 
 Messages arrive with a priority derived from the event rather than configured:
-an alert that has **triggered** arrives high (ntfy `4`, Gotify `8`), and
-everything else — a recovery, a test — arrives at the default. That is so the
-one that should get through a phone's quiet hours does, and the rest does not.
+an alert that has **triggered** arrives high (ntfy `4`, Gotify `8`), and a
+recovery arrives at the default. That is so the one that should get through a
+phone's quiet hours does, and the rest does not.
+
+A test sends the event a triggered alert sends, so it arrives high as well.
+Checking a channel is checking the path a real alert takes, and getting through
+quiet hours is part of that path — a test that arrived quietly would have told
+you nothing about the message you actually care about.
 
 Tokens travel in a header, never in the URL, so a failed request cannot put one
 into an error message or a log.
