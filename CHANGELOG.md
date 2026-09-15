@@ -31,6 +31,8 @@ error: [nas] this host is not in ~/.ssh/known_hosts, and this server signs in wi
 
   A password now stops at an unknown host and asks for it to be trusted deliberately, and the connection that reads a host key carries no credentials at all. Key authentication still trusts on first use, because the private key never leaves the machine and the worst a stranger learns is that somebody tried to reach them.
 
+  Every release from 0.2.0 is affected, and the earliest ones more so: 0.2.0 to 0.5.0 did not verify host keys at all. [GHSA-9m45-9jjx-ph5c](https://github.com/Higangssh/homebutler/security/advisories/GHSA-9m45-9jjx-ph5c)
+
 ### ⚠️ Behavior changes
 
 - **A server that signs in with a password has to be trusted before the first connection.** `homebutler trust <server>` shows the host key's fingerprint and records it, as it always has; what changed is that trust-on-first-use no longer covers password authentication. Servers that authenticate with a key are unaffected, and a server already in `known_hosts` is unaffected either way.

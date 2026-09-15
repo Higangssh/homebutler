@@ -9,6 +9,9 @@ maintainer.
 Please do not open a public issue for a suspected vulnerability. Public issues
 are how everyone else finds out before there is a fix.
 
+Published advisories are listed on the
+[Security tab](https://github.com/Higangssh/homebutler/security/advisories).
+
 ## What to expect
 
 You will get a first response **within seven days**. That is a deliberate number:
