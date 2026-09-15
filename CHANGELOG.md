@@ -2,7 +2,15 @@
 
 All notable changes to this project will be documented in this file.
 
-## [Unreleased]
+## [0.33.0](https://github.com/Higangssh/homebutler/compare/v0.32.0...v0.33.0) - 2026-09-15
+**The dashboard could show every setting and change none of them — and on a phone it could not even open the screen they were on.** Someone reading an alert on their phone had to get to a terminal to change the threshold that sent it, or to fix the notification channel that did not. `serve --token` now makes that screen editable: thresholds, every notification channel, and a `Send test` that sends one real message and reports each channel separately, so a setup is confirmed working rather than assumed. Saves go through a writer that edits the lines it was asked to and leaves the rest of the file — comments, key order, and keys this version does not recognise — exactly where they were.
+
+```
+$ git diff ~/.config/homebutler/config.yaml
+-  cpu: 90       # deliberately high
++  cpu: 75       # deliberately high
+```
+
 
 ### ✨ Features
 
