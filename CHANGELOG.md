@@ -2,7 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
-## [Unreleased]
+## [0.34.0](https://github.com/Higangssh/homebutler/compare/v0.33.0...v0.34.0) - 2026-09-16
+**homebutler sent an SSH password to a host it had never seen before, and nothing said so — a wrong address failed in exactly the same words as a wrong password.** Reaching a server whose host key was not yet in `known_hosts` meant trusting whatever answered there and then authenticating to it. Upgrade if any server in your config signs in with a password. Wake-on-LAN devices also became editable from the dashboard, on the writer that can now edit lists rather than only settings.
+
+```
+$ homebutler status --server nas
+error: [nas] this host is not in ~/.ssh/known_hosts, and this server signs in with a password (192.168.1.20:22)
+  homebutler will not send a password to a host it has not been told to trust: whatever answers at that
+  address would receive it, and a wrong address looks exactly like a wrong password afterwards.
+  → Check that the address is the machine you mean, then: homebutler trust nas
+```
 
 ### 🔒 Security
 
