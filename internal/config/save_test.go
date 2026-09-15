@@ -280,7 +280,7 @@ watch:
 	if err == nil {
 		t.Fatal("expected the save to be refused")
 	}
-	if !strings.Contains(err.Error(), "invalid") {
+	if !strings.Contains(err.Error(), "refusing to save") {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
@@ -290,5 +290,111 @@ watch:
 	}
 	if string(after) != string(before) {
 		t.Fatal("the file was changed by a save that was refused")
+	}
+}
+
+// A section that does not exist yet is written once, however many keys the
+// patch carries. Appending per key produced two `alerts:` mappings, and the
+// duplicate was only caught by the validation at the end — so the save was
+// refused and a perfectly ordinary dashboard action failed.
+func TestSaveWritesANewSectionOnceForSeveralKeys(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		existing string
+	}{
+		{"a file without the section", "servers: []\n"},
+		{"a file that is empty", ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			path := writeSaveFixture(t, tc.existing)
+			saveOne(t, path, Patch{Alerts: &AlertsPatch{CPU: f64(75), Memory: f64(60)}})
+
+			after, err := os.ReadFile(path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got := strings.Count(string(after), "alerts:"); got != 1 {
+				t.Fatalf("expected one alerts section, got %d:\n%s", got, after)
+			}
+
+			cfg, err := Load(path)
+			if err != nil {
+				t.Fatalf("the saved file does not load: %v", err)
+			}
+			if cfg.Alerts.CPU != 75 || cfg.Alerts.Memory != 60 {
+				t.Fatalf("values did not round-trip: %+v", cfg.Alerts)
+			}
+		})
+	}
+}
+
+// An added key lines up with the keys already in that section, not with
+// whatever indentation the first indented line of the file happens to use.
+func TestSaveIndentsANewKeyLikeItsSiblings(t *testing.T) {
+	path := writeSaveFixture(t, "servers:\n  - name: a\n    host: 10.0.0.2\nalerts:\n    cpu: 90\n")
+	saveOne(t, path, Patch{Alerts: &AlertsPatch{Memory: f64(60)}})
+
+	after, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(after), "\n    memory: 60") {
+		t.Fatalf("the new key does not match its siblings' indent:\n%s", after)
+	}
+}
+
+// A config written on Windows and copied to a Pi carries CRLF. Mixing the two
+// in one file shows up much later as a diff nobody can explain.
+func TestSaveKeepsCarriageReturns(t *testing.T) {
+	path := writeSaveFixture(t, "alerts:\r\n  cpu: 90\r\n  disk: 90\r\n")
+	saveOne(t, path, Patch{Alerts: &AlertsPatch{CPU: f64(75), Memory: f64(60)}})
+
+	after, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(after)
+
+	if strings.Contains(strings.ReplaceAll(text, "\r\n", ""), "\n") {
+		t.Fatalf("the file has mixed line endings:\n%q", text)
+	}
+	if !strings.Contains(text, "cpu: 75\r\n") {
+		t.Fatalf("the edited line lost its carriage return:\n%q", text)
+	}
+	if !strings.Contains(text, "memory: 60\r\n") {
+		t.Fatalf("the inserted line has no carriage return:\n%q", text)
+	}
+}
+
+// A section on one line cannot be edited at a position without rewriting the
+// line, so it is refused by name rather than failing later as "invalid".
+func TestSaveRefusesASectionWrittenOnOneLine(t *testing.T) {
+	path := writeSaveFixture(t, "alerts: {cpu: 90, memory: 85}\n")
+	rev, err := ReadRevision(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	err = Save(path, rev, Patch{Alerts: &AlertsPatch{CPU: f64(75)}})
+	if !errors.Is(err, ErrFlowStyle) {
+		t.Fatalf("expected ErrFlowStyle, got %v", err)
+	}
+}
+
+// A refusal has to say what is wrong, because #154 puts it in front of a
+// person who has to decide what to do about it.
+func TestSaveRefusalNamesTheProblem(t *testing.T) {
+	path := writeSaveFixture(t, "alerts:\n  cpu: 90\nwatch:\n  flapping:\n    short_threshold: -3\n")
+	rev, err := ReadRevision(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	err = Save(path, rev, Patch{Alerts: &AlertsPatch{CPU: f64(75)}})
+	if err == nil {
+		t.Fatal("expected a refusal")
+	}
+	if !strings.Contains(err.Error(), "flapping") {
+		t.Fatalf("the refusal does not name the field: %v", err)
 	}
 }

@@ -121,6 +121,43 @@ func Save(path string, rev Revision, patch Patch) error {
 	return writeAtomic(path, edited)
 }
 
+// ErrFlowStyle is returned for a section written on one line. Editing text at
+// a position cannot change one value inside `alerts: {cpu: 90}` without
+// rewriting the line, and rewriting it would lose whatever else it holds.
+var ErrFlowStyle = errors.New("that section is written on one line, which homebutler cannot edit in place")
+
+type keyValue struct{ key, value string }
+
+type sectionEdit struct {
+	name string
+	keys []keyValue
+}
+
+// collectEdits turns a patch into the sections and keys to write, in a fixed
+// order so the same patch always produces the same file.
+func collectEdits(patch Patch) []sectionEdit {
+	var out []sectionEdit
+	if patch.Alerts != nil {
+		var keys []keyValue
+		for _, kv := range []struct {
+			key   string
+			value *float64
+		}{
+			{"cpu", patch.Alerts.CPU},
+			{"memory", patch.Alerts.Memory},
+			{"disk", patch.Alerts.Disk},
+		} {
+			if kv.value != nil {
+				keys = append(keys, keyValue{kv.key, formatNumber(*kv.value)})
+			}
+		}
+		if len(keys) > 0 {
+			out = append(out, sectionEdit{name: "alerts", keys: keys})
+		}
+	}
+	return out
+}
+
 // applyPatch rewrites only the lines the patch names.
 //
 // The document is parsed to find where each value lives and then the original
@@ -137,89 +174,109 @@ func applyPatch(current []byte, patch Patch) ([]byte, error) {
 		}
 	}
 
-	edits := map[string]string{}
-	if patch.Alerts != nil {
-		for key, value := range map[string]*float64{
-			"cpu":    patch.Alerts.CPU,
-			"memory": patch.Alerts.Memory,
-			"disk":   patch.Alerts.Disk,
-		} {
-			if value != nil {
-				edits["alerts."+key] = formatNumber(*value)
-			}
-		}
-	}
-
 	lines := splitLines(current)
 	root := rootMapping(&doc)
-
-	// Applied deepest line first so that an insertion does not move the line
-	// another edit was found at.
-	type placement struct {
-		line  int // 0-based; -1 means append a new section
-		col   int // 1-based column of the value, 0 when inserting
-		text  string
-		key   string
-		under string
+	if root != nil && root.Style == yaml.FlowStyle {
+		return nil, ErrFlowStyle
 	}
-	var work []placement
 
-	for dotted, value := range edits {
-		section, key := splitKey(dotted)
-		mapping := lookup(root, section)
+	// An insertion moves every line below it, so replacements are applied
+	// first and insertions from the bottom up.
+	type insertion struct {
+		after  int // 0-based line to insert after; -1 appends a new section
+		indent int
+		lines  []string
+	}
+	var inserts []insertion
 
-		switch {
-		case mapping != nil && lookup(mapping, key) != nil:
-			node := lookup(mapping, key)
-			work = append(work, placement{line: node.Line - 1, col: node.Column, text: value})
-		case mapping != nil:
-			// The section exists and the key does not: put it at the end of
-			// that section, indented like its siblings.
-			work = append(work, placement{line: sectionEnd(mapping, lines), col: 0, text: value, key: key, under: section})
-		default:
-			work = append(work, placement{line: -1, col: 0, text: value, key: key, under: section})
+	for _, section := range collectEdits(patch) {
+		mapping := lookup(root, section.name)
+		if mapping != nil && mapping.Style == yaml.FlowStyle {
+			return nil, fmt.Errorf("%w: %s", ErrFlowStyle, section.name)
+		}
+
+		if mapping == nil {
+			// The whole section is new: written once, however many keys it
+			// carries. Appending per key produced a duplicate mapping, which
+			// Validate then refused.
+			indent := indentOf(current)
+			block := []string{section.name + ":"}
+			for _, kv := range section.keys {
+				block = append(block, strings.Repeat(" ", indent)+kv.key+": "+kv.value)
+			}
+			inserts = append(inserts, insertion{after: -1, lines: block})
+			continue
+		}
+
+		indent := siblingIndent(mapping, indentOf(current))
+		var missing []string
+		for _, kv := range section.keys {
+			if node := lookup(mapping, kv.key); node != nil {
+				lines[node.Line-1] = replaceValue(lines[node.Line-1], node.Column, kv.value)
+				continue
+			}
+			missing = append(missing, strings.Repeat(" ", indent)+kv.key+": "+kv.value)
+		}
+		if len(missing) > 0 {
+			inserts = append(inserts, insertion{after: sectionEnd(mapping, lines), indent: indent, lines: missing})
 		}
 	}
 
-	sort.Slice(work, func(i, j int) bool { return work[i].line > work[j].line })
+	sort.Slice(inserts, func(i, j int) bool { return inserts[i].after > inserts[j].after })
 
-	indent := indentOf(current)
-	for _, w := range work {
-		switch {
-		case w.col > 0:
-			lines[w.line] = replaceValue(lines[w.line], w.col, w.text)
-		case w.line >= 0:
-			entry := strings.Repeat(" ", indent) + w.key + ": " + w.text
-			lines = append(lines[:w.line+1], append([]string{entry}, lines[w.line+1:]...)...)
-		default:
+	for _, ins := range inserts {
+		if ins.after < 0 {
 			if len(lines) > 0 && strings.TrimSpace(lines[len(lines)-1]) != "" {
 				lines = append(lines, "")
 			}
-			lines = append(lines, w.under+":", strings.Repeat(" ", indent)+w.key+": "+w.text)
+			lines = append(lines, ins.lines...)
+			continue
 		}
+		lines = append(lines[:ins.after+1], append(ins.lines, lines[ins.after+1:]...)...)
 	}
 
-	out := strings.Join(lines, "\n")
-	if !strings.HasSuffix(out, "\n") {
-		out += "\n"
-	}
-	return []byte(out), nil
+	ending := lineEnding(current)
+	return []byte(strings.Join(lines, ending) + ending), nil
 }
 
-// splitLines keeps the file's line structure without inventing a trailing
-// empty element for the final newline.
+// lineEnding is the one the file already uses. A config edited on Windows and
+// copied to a Pi carries CRLF, and mixing the two in one file is the kind of
+// thing that shows up as an unexplained diff much later.
+func lineEnding(current []byte) string {
+	if bytes.Contains(current, []byte("\r\n")) {
+		return "\r\n"
+	}
+	return "\n"
+}
+
+// siblingIndent is the column the section's own keys sit at, so an added key
+// lines up with them rather than with whatever the first indented line in the
+// file happens to use.
+func siblingIndent(mapping *yaml.Node, fallback int) int {
+	if len(mapping.Content) > 0 {
+		if col := mapping.Content[0].Column - 1; col > 0 {
+			return col
+		}
+	}
+	return fallback
+}
+
+// splitLines returns the file's lines with their endings removed, so that
+// every line is handled the same way whether it came from a CRLF file or not
+// and the ending is applied once, on the way out. Keeping the carriage returns
+// on the lines meant the last line had none — it had been part of the final
+// terminator — and inserting after it produced a file with both kinds.
 func splitLines(data []byte) []string {
-	text := string(data)
-	text = strings.TrimSuffix(text, "\n")
+	text := strings.TrimSuffix(string(data), "\n")
+	text = strings.TrimSuffix(text, "\r")
 	if text == "" {
 		return nil
 	}
-	return strings.Split(text, "\n")
-}
-
-func splitKey(dotted string) (section, key string) {
-	i := strings.Index(dotted, ".")
-	return dotted[:i], dotted[i+1:]
+	lines := strings.Split(text, "\n")
+	for i := range lines {
+		lines[i] = strings.TrimSuffix(lines[i], "\r")
+	}
+	return lines
 }
 
 func rootMapping(doc *yaml.Node) *yaml.Node {
@@ -238,8 +295,6 @@ func sectionEnd(mapping *yaml.Node, lines []string) int {
 			last = line
 		}
 	}
-	// A value spanning several lines ends where the next non-indented line
-	// begins; walking forward over indented lines finds it without reparsing.
 	for last+1 < len(lines) {
 		next := lines[last+1]
 		if strings.TrimSpace(next) == "" || !strings.HasPrefix(next, " ") {
@@ -250,24 +305,23 @@ func sectionEnd(mapping *yaml.Node, lines []string) int {
 	return last
 }
 
-// replaceValue rewrites the value at col, keeping anything the line carries
-// after it. The values written here are numbers, so a # can only be the start
-// of a comment.
+// replaceValue rewrites the value at col and keeps the rest of the line
+// exactly: an inline comment, trailing spaces, and the carriage return of a
+// CRLF file.
 func replaceValue(line string, col int, value string) string {
 	if col-1 > len(line) {
 		return line
 	}
-	prefix := line[:col-1]
-	rest := line[col-1:]
+	prefix, rest := line[:col-1], line[col-1:]
 
-	trailer := ""
-	if i := strings.Index(rest, "#"); i >= 0 {
-		trailer = rest[i:]
-		spacing := rest[:i]
-		gap := len(spacing) - len(strings.TrimRight(spacing, " "))
-		trailer = strings.Repeat(" ", gap) + trailer
+	end := len(rest)
+	for i, r := range rest {
+		if r == ' ' || r == '\t' || r == '#' || r == '\r' {
+			end = i
+			break
+		}
 	}
-	return prefix + value + trailer
+	return prefix + value + rest[end:]
 }
 
 func lookup(mapping *yaml.Node, key string) *yaml.Node {
@@ -340,6 +394,12 @@ func writeAtomic(path string, data []byte) error {
 		tmp.Close()
 		return fmt.Errorf("failed to write config: %w", err)
 	}
+	// Flushed before the rename: on the SD card in a Pi, a rename that lands
+	// before the data does leaves an empty config after a power cut.
+	if err := tmp.Sync(); err != nil {
+		tmp.Close()
+		return fmt.Errorf("failed to write config: %w", err)
+	}
 	if err := tmp.Close(); err != nil {
 		return fmt.Errorf("failed to write config: %w", err)
 	}
@@ -347,8 +407,23 @@ func writeAtomic(path string, data []byte) error {
 	// The new file has to be one homebutler would accept, or a save could
 	// produce something config validate then rejects.
 	if result := Validate(tmpName); result.Errors() > 0 {
-		return fmt.Errorf("refusing to save: the result would be invalid (%d error(s))", result.Errors())
+		return fmt.Errorf("refusing to save: %s", firstError(result))
 	}
 
 	return os.Rename(tmpName, target)
+}
+
+// firstError names what is wrong rather than counting, so #154 has something
+// to put in front of a person.
+func firstError(result *ValidationResult) string {
+	for _, f := range result.Findings {
+		if f.Severity != SeverityError {
+			continue
+		}
+		if f.Field != "" {
+			return f.Field + ": " + f.Message
+		}
+		return f.Message
+	}
+	return "the result would be invalid"
 }
