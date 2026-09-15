@@ -25,7 +25,7 @@ release:
   header: |
     ## HomeButler {{ .Tag }}
 
-    **Manage your homelab from any AI — one binary, zero dependencies.**
+    **Tells you what changed on your server — only what's worth telling.** One binary, no daemon, no database, MCP server built in.
 
     ### Install / Upgrade
 
