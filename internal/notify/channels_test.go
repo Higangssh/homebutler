@@ -242,3 +242,57 @@ func TestPresentIsNotTheSameAsEnabled(t *testing.T) {
 		t.Error("an incomplete block is not enabled")
 	}
 }
+
+// A test reports every channel, because the point is learning which ones work.
+// Stopping at the first failure, or returning one error for all of them, is
+// what #177 replaced.
+func TestTestReportsEveryEnabledChannel(t *testing.T) {
+	up := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
+	defer up.Close()
+
+	down := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
+	downURL := down.URL
+	down.Close()
+
+	cfg := &ProviderConfig{
+		Slack:   &SlackConfig{WebhookURL: up.URL + "/ok"},
+		Discord: &DiscordConfig{WebhookURL: downURL + "/api/webhooks/1/x"},
+		Webhook: &WebhookConfig{URL: up.URL + "/hook"},
+		// Present but incomplete: not enabled, so it is not reported at all.
+		Gotify: &GotifyConfig{URL: "https://gotify.example.com"},
+	}
+
+	results := Test(cfg, event("test"))
+	if len(results) != 3 {
+		t.Fatalf("expected one result per enabled channel, got %d: %+v", len(results), results)
+	}
+
+	byChannel := map[Channel]TestResult{}
+	for _, r := range results {
+		byChannel[r.Channel] = r
+	}
+
+	if !byChannel[ChannelSlack].Sent || !byChannel[ChannelWebhook].Sent {
+		t.Errorf("a channel that worked was reported as failed: %+v", results)
+	}
+	discord := byChannel[ChannelDiscord]
+	if discord.Sent {
+		t.Error("a channel that could not connect was reported as sent")
+	}
+	if discord.Error == "" {
+		t.Error("a failure with no reason is not actionable")
+	}
+	// The channel is a field; repeating it in the message reads as two failures.
+	if strings.HasPrefix(discord.Error, string(ChannelDiscord)+":") {
+		t.Errorf("the message repeats the channel: %q", discord.Error)
+	}
+	if _, reported := byChannel[ChannelGotify]; reported {
+		t.Error("an incomplete channel was tested")
+	}
+}
+
+func TestTestOnNothingConfiguredReportsNothing(t *testing.T) {
+	if results := Test(&ProviderConfig{}, event("test")); len(results) != 0 {
+		t.Fatalf("expected no results, got %+v", results)
+	}
+}

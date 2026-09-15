@@ -227,3 +227,41 @@ func postJSON(endpoint string, payload interface{}) error {
 
 	return nil
 }
+
+// TestResult is what one channel did when a test message was sent through it.
+// The channel comes from the error's type rather than its text, which is the
+// distinction #177 drew, and this is the shape both the CLI and the MCP tool
+// report so neither has to rebuild it.
+type TestResult struct {
+	Channel Channel `json:"channel"`
+	Sent    bool    `json:"sent"`
+	Error   string  `json:"error,omitempty"`
+}
+
+// Test sends event through every enabled channel and reports each one.
+//
+// A channel that is configured and fails is a result, not an error: the point
+// of a test is to find out which ones work, and stopping at the first failure
+// would hide the rest.
+func Test(cfg *ProviderConfig, event Event) []TestResult {
+	failed := map[Channel]error{}
+	for _, err := range SendAll(cfg, event) {
+		if channel, ok := FailedChannel(err); ok {
+			failed[channel] = err
+		}
+	}
+
+	enabled := cfg.EnabledChannels()
+	results := make([]TestResult, 0, len(enabled))
+	for _, channel := range enabled {
+		result := TestResult{Channel: channel, Sent: true}
+		if err := failed[channel]; err != nil {
+			result.Sent = false
+			// The wrapped cause, not the ChannelError: the channel is already
+			// a field, and repeating it in the message reads as two failures.
+			result.Error = errors.Unwrap(err).Error()
+		}
+		results = append(results, result)
+	}
+	return results
+}
