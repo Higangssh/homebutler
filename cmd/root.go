@@ -103,5 +103,8 @@ func maybeRouteRemote() (bool, error) {
 func Execute(version, buildDate string) error {
 	Version = version
 	BuildDate = buildDate
+	// So a remote command that fails for being older than this one can say
+	// which two versions are involved.
+	remote.LocalVersion = version
 	return formatCommandError(rootCmd.Execute())
 }
