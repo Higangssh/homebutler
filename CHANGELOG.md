@@ -2,13 +2,23 @@
 
 All notable changes to this project will be documented in this file.
 
-## [Unreleased]
+## [0.35.2](https://github.com/Higangssh/homebutler/compare/v0.35.1...v0.35.2) - 2026-09-16
+
+**The README said nothing had to be installed on the machines homebutler watches, and that was not true.** A remote command runs the remote binary, and when that binary is older than the command being asked for, the failure now says so instead of sending you to check an install that is already there. What is true is the stronger claim anyway: nothing runs on those machines between commands — no daemon, no open port, nothing listening.
+
+```
+$ homebutler report --server pi
+error: [pi] the homebutler on pi is 0.8.0, and does not have `report`
+  → This one is 0.35.2. Bring them level: homebutler upgrade
+```
 
 ### 🐛 Fixes
 
 - a remote running an older homebutler said only "unknown command" (#212). A remote command runs the remote binary, and when that binary predates the command being asked for, the hint sent you to check an install that is already there while the thing that was actually wrong — four releases behind — went unmentioned. It is easy to walk into, because the commands that existed back then still work: the setup looks correct until the first one that did not. The failure now names both versions and the command that fixes it. Nothing installed at all is a different problem and keeps its own answer, `deploy`, and the version is only asked for after a command has already failed — on the connection that is already open — so nothing is added to the path where things work
 
 ### 📚 Documentation
+
+- the skill told an agent that reads were safe to call unattended, and stopped there (#218). A read changes nothing on the machine, which is what the class means and all the file said. What comes back is hostnames, internal addresses, what is listening, what is running and log contents — so a blanket "call these whenever" is permission to sweep every machine in the config and pull the result into whatever conversation is being answered. The file now says when a read is appropriate: the machine being asked about rather than all of them, `--all` and `inventory_scan` as answers rather than openings, and a summary rather than raw logs and port tables. It also says the two things easy to miss — a remote read is an SSH round trip to somebody's server every time, and "what changed" is what `report` answers without a sweep
 
 - the published skill installed an unpinned executable and never told the agent when to stop (#213). ClawHub's scanner marked the listing *suspicious*, on a page whose whole argument is that an agent should get a classified interface rather than a shell — a verdict that argues against the thing it is listing. The install block names a version instead of `latest`, with the release checksums and how to check them, and the file now states what the classification means for the agent rather than only that it exists: read unattended, write when it follows from the request and say what changed, destructive never on its own initiative. A test keeps the pinned version equal to the newest release and fails if it goes back to a moving tag
 

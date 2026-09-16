@@ -35,7 +35,7 @@ homebutler mcp
 
 ### The tools
 
-**Read (27)** — safe to call unattended.
+**Read (27)** — nothing changes; see what a read still exposes, below.
 
 - `system_status`, `processes`, `open_ports`, `alerts`, `alerts_history`
 - `doctor` — health, exposure, backup age and readiness, as findings
@@ -63,7 +63,13 @@ homebutler mcp
 
 ### What the classes mean for you
 
-- **read** — call it unattended. Nothing changes and nothing leaves the machine.
+- **read** — changes nothing on the machine, so running one needs no
+  confirmation. What comes back is another matter: hostnames, internal
+  addresses, what is listening, what is running, log contents. So read the
+  machine the operator is asking about rather than every machine in the config;
+  `--all` and `inventory_scan` are answers to a question somebody asked, not a
+  way to begin. Summarise what matters instead of returning raw logs, port
+  tables or JSON into a conversation other people can read.
 - **write** — something changes on the machine, or a message leaves it. Do it when
   it follows from what was asked, and say afterwards what changed.
 - **destructive** — **never on your own initiative.** Only when the operator asked
@@ -79,6 +85,14 @@ not the rule — the rule is that the operator asked.
 When an action is refused for lack of confirmation, say what would be destroyed
 and let the operator decide. Do not re-send the same call with the confirmation
 set.
+
+Two things about reads that are easy to miss:
+
+- **A remote read is not free.** It is an SSH round trip to somebody's server,
+  every time. Polling in a loop is a cost they pay.
+- **"What changed?" does not need a sweep.** `report` already answers it by
+  comparing against the last snapshot, which is why it is the first thing to
+  reach for rather than a tour of every tool.
 
 ## Start here: what changed?
 
@@ -239,21 +253,21 @@ agent that installs an unpinned executable cannot say what it ran.
 
 ```bash
 brew install Higangssh/homebutler/homebutler       # pinned formula, our own tap
-go install github.com/Higangssh/homebutler@v0.35.1
+go install github.com/Higangssh/homebutler@v0.35.2
 ```
 
 Taking a release archive instead means checking it against the checksums the
 release publishes:
 
 ```bash
-V=0.35.1
+V=0.35.2
 BASE=https://github.com/Higangssh/homebutler/releases/download/v$V
 curl -fsSLO $BASE/homebutler_${V}_linux_amd64.tar.gz
 curl -fsSLO $BASE/checksums.txt
 sha256sum --check --ignore-missing checksums.txt   # macOS: shasum -a 256 --check …
-# must print: homebutler_0.35.1_linux_amd64.tar.gz: OK
+# must print: homebutler_0.35.2_linux_amd64.tar.gz: OK
 tar xzf homebutler_${V}_linux_amd64.tar.gz
 ```
 
-There is a container image, `ghcr.io/higangssh/homebutler:0.35.1`, pinned the
+There is a container image, `ghcr.io/higangssh/homebutler:0.35.2`, pinned the
 same way.
