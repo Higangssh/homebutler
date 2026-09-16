@@ -233,3 +233,19 @@ export function saveProxmox(revision, endpoints) {
     body: JSON.stringify({ revision, endpoints }),
   });
 }
+
+// The comparison, without saving one: a dashboard that polls must not turn
+// into a snapshot every fifteen seconds and prune the baseline somebody
+// wanted.
+export function getReport() {
+  return fetchJSON('/api/report');
+}
+
+// Saving is its own request, and a write like any other.
+export function saveSnapshot() {
+  return fetchJSON('/api/report/snapshot', { method: 'POST' });
+}
+
+export function getDoctor() {
+  return fetchJSON('/api/doctor');
+}

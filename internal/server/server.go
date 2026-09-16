@@ -216,6 +216,7 @@ func (s *Server) routes() {
 		s.mux.HandleFunc("GET /api/servers/{name}/status", api(s.demoServerStatus))
 		s.mux.HandleFunc("GET /api/config", api(s.demoConfig))
 		s.mux.HandleFunc("GET /api/watch/incidents/{id}", api(s.demoWatchIncident))
+		s.mux.HandleFunc("GET /api/report", api(s.demoReport))
 	} else {
 		s.mux.HandleFunc("GET /api/wake", api(s.handleWakeList))
 		s.mux.HandleFunc("GET /api/overview", api(s.handleOverview))
@@ -223,6 +224,7 @@ func (s *Server) routes() {
 		s.mux.HandleFunc("GET /api/servers/{name}/status", api(s.handleServerStatus))
 		s.mux.HandleFunc("GET /api/config", api(s.handleConfig))
 		s.mux.HandleFunc("GET /api/watch/incidents/{id}", api(s.handleWatchIncident))
+		s.mux.HandleFunc("GET /api/report", api(s.handleReport))
 	}
 	// Write endpoints exist only when a token does. Registering them behind a
 	// check that says "unauthorized" would still be a write surface on an
@@ -280,6 +282,8 @@ func (s *Server) capabilityHandlers() map[string]http.HandlerFunc {
 			"watch_list":     s.demoWatch,
 			"watch_history":  s.demoWatchIncidents,
 			"notify_test":    s.demoNotifyTest,
+			"report":         s.demoReportSnapshot,
+			"doctor":         s.demoDoctor,
 		}
 	}
 	return map[string]http.HandlerFunc{
@@ -294,6 +298,8 @@ func (s *Server) capabilityHandlers() map[string]http.HandlerFunc {
 		"watch_list":     s.handleWatch,
 		"watch_history":  s.handleWatchIncidents,
 		"notify_test":    s.handleNotifyTest,
+		"report":         s.handleReportSnapshot,
+		"doctor":         s.handleDoctor,
 	}
 }
 

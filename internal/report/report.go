@@ -143,6 +143,13 @@ func note(text string) ChangeLine {
 	return ChangeLine{Kind: kindSkipped, Text: text}
 }
 
+// DefaultKeep is how many snapshots a save leaves behind. It lives here rather
+// than only in the command's flag because every caller that saves has to agree
+// on it: Options.Keep of zero means "keep one", so a caller that forgets to
+// set it saves a snapshot and prunes the baseline it was about to be compared
+// against — which is the opposite of what saving one is for.
+const DefaultKeep = 30
+
 // Options controls report behavior.
 type Options struct {
 	SnapshotDir string // Override snapshot directory (for testing)

@@ -98,6 +98,7 @@ func TestEveryExposedWriteIsOneWeChose(t *testing.T) {
 	chosen := map[string]string{
 		"wake":        "the wake button; sends a magic packet on the local network",
 		"notify_test": "the settings screen's test button; sends one message through channels the operator configured",
+		"report":      "the Report tab's save button; writes a snapshot, which moves the window the next comparison covers. Reading the comparison is GET /api/report, which saves nothing",
 	}
 
 	for _, c := range Registry {

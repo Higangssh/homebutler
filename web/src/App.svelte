@@ -18,6 +18,7 @@
   import PortsCard from './lib/PortsCard.svelte';
   import WakeCard from './lib/WakeCard.svelte';
   import ConfigCard from './lib/ConfigCard.svelte';
+  import ReportCard from './lib/ReportCard.svelte';
   import WatchCard from './lib/WatchCard.svelte';
   import ProxmoxCard from './lib/ProxmoxCard.svelte';
 
@@ -101,6 +102,11 @@
       >Dashboard</button>
       <button
         class="tab"
+        class:active={activeTab === 'report'}
+        onclick={() => activeTab = 'report'}
+      >Report</button>
+      <button
+        class="tab"
         class:active={activeTab === 'watch'}
         onclick={() => activeTab = 'watch'}
       >Watch</button>
@@ -136,6 +142,8 @@
         <PortsCard server={selectedServer} />
         <WakeCard />
       </div>
+    {:else if activeTab === 'report'}
+      <ReportCard />
     {:else if activeTab === 'watch'}
       <WatchCard />
     {:else}

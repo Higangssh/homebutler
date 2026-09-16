@@ -854,7 +854,7 @@ homebutler upgrade                 # upgrade all servers
 
 ## MCP Server
 
-Built-in [MCP](https://modelcontextprotocol.io/) server — an agent gets the same report as JSON, the same lines in the same order, and every tool is classed read, write or destructive.
+Built-in [MCP](https://modelcontextprotocol.io/) server — an agent gets the same report as typed JSON, kind, target and detail rather than a sentence to parse, and every tool is classed read, write or destructive.
 
 ```json
 {

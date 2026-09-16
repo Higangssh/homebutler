@@ -474,9 +474,13 @@ var Registry = []Capability{
 		},
 	},
 	{
+		// Reading the comparison and saving a snapshot are separate over HTTP:
+		// GET /api/report compares without saving, so a dashboard polling it
+		// cannot prune the baseline somebody wanted. This entry is the write —
+		// the one that saves.
 		Risk:    RiskWrite,
 		Targets: []TargetKind{TargetLocal, TargetServer},
-		HTTP:    HTTP{Absent: AbsentNeedsWriteSurface},
+		HTTP:    HTTP{Method: "POST", Path: "/api/report/snapshot", Protection: ProtectionToken},
 		Tool: Definition{
 			Name:        "report",
 			Description: "Generate a butler-style health report with snapshot comparison, warnings, notable changes, and suggested actions",
@@ -493,7 +497,7 @@ var Registry = []Capability{
 	{
 		Risk:    RiskRead,
 		Targets: []TargetKind{TargetLocal, TargetServer},
-		HTTP:    HTTP{Absent: AbsentNoViewYet},
+		HTTP:    HTTP{Method: "GET", Path: "/api/doctor"},
 		Tool: Definition{
 			Name:        "doctor",
 			Description: "Run a read-only diagnosis for resource pressure, stopped containers, public ports, backup hygiene, notifications, and report baseline readiness",
