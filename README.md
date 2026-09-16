@@ -156,7 +156,7 @@ HomeButler is a small operations toolkit for that messy middle.
 Keep Uptime Kuma for *is it up*, Beszel or Netdata for *the graph*, Dozzle for *the logs*.
 HomeButler answers the question none of them ask: **what is different from last time, and does it matter?**
 
-- **Nothing to install on the machines it watches.** One binary where you run it; everything else is reached over SSH.
+- **No agent on the machines it watches.** The binary is put there once with `homebutler deploy` and runs only when asked, over SSH — no daemon, no open port, nothing listening between runs.
 - **The judgement is a written rule, not a model.** What earns a line is in [docs/report.md](docs/report.md), and the same input gives the same report — no AI required, no account, no paid tier.
 - **It checks that a backup comes back.** `backup drill` unpacks an archive into an isolated container on a network and port of its own, starts the app on that data, and waits for it to answer an HTTP health check.
 
