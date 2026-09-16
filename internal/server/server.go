@@ -25,6 +25,7 @@ import (
 	"github.com/Higangssh/homebutler/internal/capability"
 	"github.com/Higangssh/homebutler/internal/config"
 	"github.com/Higangssh/homebutler/internal/docker"
+	"github.com/Higangssh/homebutler/internal/inventory"
 	"github.com/Higangssh/homebutler/internal/ports"
 	"github.com/Higangssh/homebutler/internal/proxmox"
 	"github.com/Higangssh/homebutler/internal/remote"
@@ -551,6 +552,11 @@ func (s *Server) handlePorts(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		writeJSON(w, []any{})
 		return
+	}
+	// The same correlation report makes, so the dashboard does not call a port
+	// anonymous that the Report tab names two panels away.
+	if containers, dockerErr := docker.List(); dockerErr == nil {
+		openPorts.Ports = inventory.AttributePorts(openPorts.Ports, containers)
 	}
 	writeJSON(w, openPorts)
 }
