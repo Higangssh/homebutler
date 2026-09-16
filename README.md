@@ -952,18 +952,22 @@ rm -rf ~/.config/homebutler      # Remove config (optional)
 
 All three call the same `internal/` packages — no code duplication.
 
-An agent reads the same report a person does, and gets the same lines in the same order
+An agent reads the same report a person does, and gets the parts it has to branch on
 rather than a screen it has to interpret:
 
 ```python
 report = json.loads(subprocess.run(
     ["homebutler", "report", "--json"], capture_output=True, text=True).stdout)
 
-for line in report["needs_attention"]:   # "1 container(s) stopped"
-    alert(line)
-for line in report["notable_changes"]:   # "new: mdworker_shared"
-    log(line)
+for change in report["notable_changes"]:
+    if change["kind"] == "replaced":         # the container came back as something else
+        redeploy(change["target"])
+    else:
+        log(change["text"])                  # "port: :8080/tcp — nginx → caddy"
 ```
+
+Every line carries `text` as well, so a caller that only wants to print it does not have
+to put the sentence back together.
 
 Nothing above this is homebutler's business: an MCP client, a chat bot, a cron line or a
 person at a terminal all reach the same answer.
