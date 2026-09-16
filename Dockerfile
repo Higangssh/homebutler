@@ -13,7 +13,13 @@ RUN apk add --no-cache ca-certificates openssh-client tzdata
 # The binary comes from the release build, which has the dashboard assets
 # embedded. Building from source here would produce an image whose web
 # dashboard is an empty directory.
-COPY homebutler /usr/local/bin/homebutler
+#
+# The path is TARGETPLATFORM because the build context holds one binary per
+# platform — linux/amd64/homebutler, linux/arm64/homebutler — and buildx sets
+# that arg to the platform being built. A bare `COPY homebutler` finds nothing
+# and fails the release.
+ARG TARGETPLATFORM
+COPY ${TARGETPLATFORM}/homebutler /usr/local/bin/homebutler
 
 # Config is mounted read-write: the settings screen writes to it. State —
 # snapshots and incidents — belongs on a volume, or a restart turns "what
