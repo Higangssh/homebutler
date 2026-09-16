@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/Higangssh/homebutler/internal/config"
@@ -396,6 +397,18 @@ func tofuFailureError(server *config.ServerConfig, addr string, tofuErr error) e
 		// being unreachable rather than a trust problem.
 		return classified(ClassUnreachable, "[%s] SSH connection failed while registering a new host key (%s): %w\n  %s",
 			server.Name, addr, tofuErr, connHint)
+	}
+
+	// known_hosts could not be written because the filesystem holding it is
+	// read-only — which is how the container image mounts ~/.ssh, on purpose.
+	// "Register manually" is not something that can be done from in there: the
+	// same command hits the same read-only file. The way out is to trust the
+	// host where the key lives and restart the container, which is what
+	// docs/docker.md says.
+	if errors.Is(tofuErr, syscall.EROFS) {
+		return classified(ClassHostKey, "[%s] the host key for %s is new, and ~/.ssh/known_hosts is read-only here: %w\n"+
+			"  → Trust it where the key lives, then restart this container: homebutler trust %s",
+			server.Name, addr, tofuErr, server.Name)
 	}
 
 	return classified(ClassHostKey, "[%s] failed to auto-register host key for %s: %w\n  → Register manually: homebutler trust %s\n  %s",
