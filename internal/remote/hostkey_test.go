@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"syscall"
 	"testing"
 
 	"golang.org/x/crypto/ssh"
@@ -197,5 +198,48 @@ func TestAPasswordIsSentToAHostThatWasTrusted(t *testing.T) {
 	}
 	if offered := server.offered(); len(offered) != 1 || offered[0] != target.Password {
 		t.Fatalf("the password did not reach the trusted host: %v", offered)
+	}
+}
+
+// The container image mounts ~/.ssh read-only on purpose, so a host key that
+// is new cannot be recorded from inside it. "Register manually: homebutler
+// trust x" cannot be done from in there either — the same command hits the
+// same read-only file — so the way out has to be the one docs/docker.md
+// gives: trust it where the key lives, then restart the container.
+//
+// The condition is EROFS specifically rather than any write failure. A
+// known_hosts that cannot be written for another reason — owned by somebody
+// else, say — is not fixed by restarting a container, and telling someone to
+// is worse than the generic hint.
+func TestAReadOnlyKnownHostsSaysWhatCanActuallyBeDone(t *testing.T) {
+	server := &config.ServerConfig{Name: "pi-over-ssh", Host: "192.168.0.4", User: "sanghee"}
+	readOnly := fmt.Errorf("cannot write known_hosts: %w",
+		&os.PathError{Op: "open", Path: "/root/.ssh/known_hosts", Err: syscall.EROFS})
+
+	err := tofuFailureError(server, "192.168.0.4:22", readOnly)
+
+	if strings.Contains(err.Error(), "Register manually") {
+		t.Fatalf("the hint cannot be followed from where the error happens: %v", err)
+	}
+	for _, want := range []string{"read-only", "restart this container", "homebutler trust pi-over-ssh"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Fatalf("the refusal does not mention %q: %v", want, err)
+		}
+	}
+	if class := Classify(err); class != ClassHostKey {
+		t.Fatalf("classed %q, want %q", class, ClassHostKey)
+	}
+}
+
+// Any other write failure keeps the hint it had: restarting a container does
+// not fix a known_hosts somebody else owns.
+func TestAnotherWriteFailureKeepsTheGenericHint(t *testing.T) {
+	server := &config.ServerConfig{Name: "pi", Host: "192.168.0.4"}
+	denied := fmt.Errorf("cannot write known_hosts: %w",
+		&os.PathError{Op: "open", Path: "/root/.ssh/known_hosts", Err: syscall.EACCES})
+
+	err := tofuFailureError(server, "192.168.0.4:22", denied)
+	if !strings.Contains(err.Error(), "Register manually") {
+		t.Fatalf("the generic hint is gone: %v", err)
 	}
 }
