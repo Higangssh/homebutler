@@ -101,7 +101,9 @@ func Collect(cfg *config.Config, fns CollectFuncs) (*Inventory, error) {
 		inv.Warnings = append(inv.Warnings, CollectorPorts+": "+err.Error())
 		inv.Failed = append(inv.Failed, CollectorPorts)
 	} else {
-		inv.Ports = result.Ports
+		// Attributed here, where both halves are in hand, so every consumer
+		// of an inventory sees the same owner for a port.
+		inv.Ports = AttributePorts(result.Ports, inv.Containers)
 	}
 
 	// Processes: best-effort, and optional so existing callers that build

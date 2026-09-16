@@ -14,6 +14,14 @@ type PortInfo struct {
 	Port     string `json:"port"`
 	PID      string `json:"pid,omitempty"`
 	Process  string `json:"process,omitempty"`
+	// Container is the container publishing this port, when one does.
+	//
+	// It is separate from Process rather than filled into it because they are
+	// different facts: Process is what the operating system said is holding
+	// the socket, and on Linux a published port is held by root's
+	// docker-proxy — so an ordinary user is told nothing. The container that
+	// published it is known anyway, from the same collection run.
+	Container string `json:"container,omitempty"`
 }
 
 // IsPublicBind reports whether a listener's bind address covers every

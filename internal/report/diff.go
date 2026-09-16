@@ -325,8 +325,19 @@ func portSubject(p ports.PortInfo) string {
 // user — and the renderer leaves the detail column blank rather than
 // claiming the owner changed to "unknown".
 func owner(p ports.PortInfo) string {
-	return p.Process
+	if p.Process != "" {
+		return p.Process
+	}
+	// On Linux an ordinary user is told nothing about a port published by
+	// Docker, because root's docker-proxy holds it. The container that
+	// published it was collected in the same run.
+	return p.Container
 }
+
+// unidentified is what to say when neither the operating system nor the
+// container list could name what is answering. It names the one thing that
+// would answer it rather than leaving a reader with nowhere to go.
+const unidentified = "an unidentified process (sudo ss -tlnp names it)"
 
 // stateSuffix names a state transition that happened alongside a replacement
 // or an image change. The switch above is exclusive, so without this a
@@ -582,7 +593,7 @@ func attentionFromChanges(prev, snap *Snapshot) []Finding {
 	for _, p := range newlyPublicListeners(prev.Ports, snap.Ports) {
 		who := owner(p)
 		if who == "" {
-			who = "an unidentified process"
+			who = unidentified
 		}
 		out = append(out, Finding{
 			Kind:   kindPort,
@@ -681,7 +692,7 @@ func actionsFromChanges(prev, snap *Snapshot) []Action {
 	for _, p := range newlyPublicListeners(prev.Ports, snap.Ports) {
 		who := owner(p)
 		if who == "" {
-			who = "whatever is answering"
+			who = unidentified
 		}
 		out = append(out, action(fmt.Sprintf("Verify %s should be reachable from every interface, answered by %s.",
 			":"+p.Port+"/"+p.Protocol, who)))

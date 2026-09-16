@@ -666,3 +666,63 @@ func TestManyStoppedContainersCollapse(t *testing.T) {
 		t.Errorf("thirty stopped containers produced %d actions", len(r.SuggestedActions))
 	}
 }
+
+// The Needs Attention line and the action under it come from the same owner
+// lookup, so a port named in one is named in the other. On Linux, as an
+// ordinary user, that name can only come from the container list: the socket
+// is held by root's docker-proxy and `ss -tlnp` reports no owner at all.
+func TestANewlyPublicContainerPortIsNamedInBothPlaces(t *testing.T) {
+	published := docker.Container{
+		ID: "ccc", Name: "pm-probe-c", Image: "traefik:v3.1", State: "running",
+		Ports: "0.0.0.0:18083->80/tcp",
+	}
+	// As the collector leaves it on Linux: an address on every interface, and
+	// nothing in the process column.
+	listener := ports.PortInfo{Protocol: "tcp", Address: "0.0.0.0", Port: "18083", Container: published.Describe()}
+
+	prev := snapshotWith(nil, nil)
+	curr := snapshotWith([]docker.Container{published}, []ports.PortInfo{listener})
+
+	r := buildReport(curr, prev)
+
+	var attention string
+	for _, f := range r.NeedsAttention {
+		if strings.Contains(f.Text, "18083") {
+			attention = f.Text
+		}
+	}
+	if !strings.Contains(attention, "pm-probe-c (traefik:v3.1)") {
+		t.Fatalf("the finding does not name the container: %q", attention)
+	}
+
+	var action string
+	for _, a := range r.SuggestedActions {
+		if strings.Contains(a.Text, "18083") {
+			action = a.Text
+		}
+	}
+	if !strings.Contains(action, "pm-probe-c (traefik:v3.1)") {
+		t.Fatalf("the action does not name the container: %q", action)
+	}
+}
+
+// A port nothing claims still produces a finding, and it names what would
+// answer the question rather than leaving a reader with nowhere to go.
+func TestAPortNoContainerClaimsSaysWhatWouldNameIt(t *testing.T) {
+	listener := ports.PortInfo{Protocol: "tcp", Address: "0.0.0.0", Port: "9999"}
+
+	r := buildReport(snapshotWith(nil, []ports.PortInfo{listener}), snapshotWith(nil, nil))
+
+	var attention string
+	for _, f := range r.NeedsAttention {
+		if strings.Contains(f.Text, "9999") {
+			attention = f.Text
+		}
+	}
+	if attention == "" {
+		t.Fatal("a port opened to every interface produced no finding")
+	}
+	if !strings.Contains(attention, "ss -tlnp") {
+		t.Fatalf("the finding does not say what would identify it: %q", attention)
+	}
+}
