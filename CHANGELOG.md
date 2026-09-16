@@ -2,7 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
-## [Unreleased]
+## [0.35.2](https://github.com/Higangssh/homebutler/compare/v0.35.1...v0.35.2) - 2026-09-16
+
+**The README said nothing had to be installed on the machines homebutler watches, and that was not true.** A remote command runs the remote binary, and when that binary is older than the command being asked for, the failure now says so instead of sending you to check an install that is already there. What is true is the stronger claim anyway: nothing runs on those machines between commands — no daemon, no open port, nothing listening.
+
+```
+$ homebutler report --server pi
+error: [pi] the homebutler on pi is 0.8.0, and does not have `report`
+  → This one is 0.35.2. Bring them level: homebutler upgrade
+```
+
 
 ### 🐛 Fixes
 
