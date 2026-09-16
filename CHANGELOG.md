@@ -2,7 +2,19 @@
 
 All notable changes to this project will be documented in this file.
 
-## [Unreleased]
+## [0.35.0](https://github.com/Higangssh/homebutler/compare/v0.34.0...v0.35.0) - 2026-09-16
+
+**The dashboard showed what every other tool already shows, and not the one thing homebutler is for.** The Report tab answers what changed since the last snapshot — what needs attention first, then the changes with the kind word each one carries, then the snapshot being compared against and how old it is — with `doctor` below it. An agent gets the same thing as typed JSON rather than sentences to parse, and there is a container image now, which reaches the machines in `servers:` over SSH and says plainly that it cannot see the host it runs on.
+
+```
+── Needs Attention ───────────────────────────────────────────
+   ⚠️  Port :18078/tcp is now reachable from every interface, answered by vaultwarden (vaultwarden/server:latest)
+
+── Notable Changes ───────────────────────────────────────────
+   replaced  vaultwarden  recreated, 4f2a1c → 9b7e03, vaultwarden:1.32 → vaultwarden:1.33
+   skipped   processes    not compared — the process collector did not answer
+```
+
 
 ### ✨ Features
 
