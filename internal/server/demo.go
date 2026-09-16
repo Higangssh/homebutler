@@ -615,3 +615,72 @@ func (s *Server) demoOverview(w http.ResponseWriter, r *http.Request) {
 		},
 	})
 }
+
+// demoReport is the comparison the Report tab renders: one of each kind that
+// matters, including the one this whole feature exists for — a container back
+// under the same name as something else — and a skipped comparison, because a
+// screen that has only ever shown certainty is one whose uncertain state
+// nobody has looked at.
+func demoReportResult(saved bool) map[string]any {
+	return map[string]any{
+		"timestamp":      time.Now().UTC().Format(time.RFC3339),
+		"server_name":    "homelab-server",
+		"is_baseline":    false,
+		"snapshot_saved": saved,
+		"compared_to":    time.Now().Add(-6 * time.Hour).UTC().Format(time.RFC3339),
+		"status": []string{
+			"Host          homelab-server (linux/amd64), uptime 4d 12h",
+			"Containers: 5 running, 1 stopped",
+			"Public ports: 7",
+		},
+		"needs_attention": []map[string]any{
+			{"kind": "container", "target": "backup", "text": "backup was recreated and is exited, not running — the deploy did not come back"},
+			{"kind": "port", "target": ":8080/tcp", "text": "Port :8080/tcp is answered by caddy now, and was not at the last report"},
+		},
+		"notable_changes": []map[string]any{
+			{"kind": "replaced", "target": "vaultwarden", "detail": "recreated, 4f2a1c → 9b7e03, vaultwarden:1.32 → vaultwarden:1.33, running → running",
+				"text": "replaced: vaultwarden — recreated, 4f2a1c → 9b7e03, vaultwarden:1.32 → vaultwarden:1.33, running → running"},
+			{"kind": "port", "target": ":8080/tcp", "detail": "nginx → caddy", "text": "port: :8080/tcp — nginx → caddy"},
+			{"kind": "gone", "target": "redis", "text": "gone: redis"},
+			{"kind": "new", "target": "valkey", "text": "new: valkey"},
+			{"kind": "disk", "target": "/mnt/data", "detail": "1.6 GB → 1.7 TB", "text": "disk: /mnt/data — 1.6 GB → 1.7 TB"},
+			{"kind": "skipped", "target": "processes", "detail": "not compared — the process collector did not answer",
+				"text": "skipped: processes — not compared — the process collector did not answer"},
+		},
+		"summary": map[string]int{"needs_attention": 2, "notable_changes": 6},
+		"suggested_actions": []map[string]any{
+			{"text": "Check why backup is not running: homebutler docker logs backup",
+				"command": "homebutler docker logs backup", "runner": "mcp", "tool": "docker_logs"},
+			{"text": "Verify :8080/tcp should be answering from caddy."},
+		},
+	}
+}
+
+func (s *Server) demoReport(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, demoReportResult(false))
+}
+
+func (s *Server) demoReportSnapshot(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, demoReportResult(true))
+}
+
+func (s *Server) demoDoctor(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, map[string]any{
+		"timestamp":   time.Now().UTC().Format(time.RFC3339),
+		"server_name": "homelab-server",
+		"status":      "warn",
+		"summary":     map[string]int{"pass": 9, "warn": 2, "fail": 1},
+		"findings": []map[string]any{
+			{"severity": "fail", "category": "backup", "title": "No backup in the last 7 days",
+				"detail": "The most recent archive is 11 days old.", "action": "Take one now",
+				"command": "homebutler backup create", "runner": "mcp", "tool": "backup_create"},
+			{"severity": "warn", "category": "watch", "title": "watch is configured but no service runs it",
+				"detail": "Three targets are listed and nothing polls them.", "action": "Install the service",
+				"command": "homebutler watch install", "runner": "cli"},
+			{"severity": "warn", "category": "notify", "title": "Notifications have never been tested",
+				"action":  "Send one through every configured channel",
+				"command": "homebutler notify test", "runner": "mcp", "tool": "notify_test"},
+			{"severity": "pass", "category": "config", "title": "Config file permissions are 0600"},
+		},
+	})
+}

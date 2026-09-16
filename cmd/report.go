@@ -43,7 +43,7 @@ the most recent --keep entries (default 30).`,
 		},
 	}
 
-	cmd.Flags().IntVar(&keep, "keep", 30, "Number of daily snapshots to retain (minimum 1)")
+	cmd.Flags().IntVar(&keep, "keep", report.DefaultKeep, "Number of daily snapshots to retain (minimum 1)")
 	cmd.Flags().BoolVar(&noSave, "no-save", false, "Print report without writing a snapshot")
 
 	return cmd
