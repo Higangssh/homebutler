@@ -15,7 +15,8 @@ metadata:
 
 [homebutler](https://github.com/Higangssh/homebutler) remembers what a server
 looked like last time and reports only the changes worth mentioning. One Go
-binary: no daemon, no database, nothing installed on the machines it watches.
+binary: no daemon, no database, no agent on the machines it watches — the
+binary is deployed there once and runs only when asked, over SSH.
 
 > This file is published to ClawHub as `@higangssh/homebutler`. The copy that
 > matters lives in the repository at `skills/SKILL.md`, and a test in `cmd/`

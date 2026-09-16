@@ -5,9 +5,25 @@ The image is the hub, not the probe.
 A container cannot see the machine it runs on: `status` would read the
 container's own `/proc`, `ports` its own sockets. So the image runs `serve` and
 reaches the machines in `servers:` over SSH — the path multi-server already
-uses, which needs nothing installed on the machines being watched. A server
-marked `local: true` is reported as not visible from a container rather than
-answered with the container's numbers.
+uses. A server marked `local: true` is reported as not visible from a container
+rather than answered with the container's numbers.
+
+**homebutler has to be on the machines it reaches.** A remote command runs the
+remote binary: `report --server pi` runs `homebutler report` on the Pi. Nothing
+runs there between commands — no daemon, no open port — but the binary has to
+be installed, and it has to be new enough for the command being asked for. Put
+it there with `homebutler deploy` from a machine that has your key:
+
+```bash
+homebutler deploy --server pi     # or --all
+```
+
+An older binary on the far side fails with `unknown command`, which is what an
+upgrade fixes:
+
+```bash
+homebutler upgrade                # local, then every server in servers:
+```
 
 ```bash
 docker run -d --name homebutler -p 8080:8080 \
