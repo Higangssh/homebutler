@@ -36,6 +36,25 @@ type Change struct {
 	noun string
 }
 
+// line is the change as --json carries it: the parts a caller branches on,
+// plus the sentence String produces for a terminal.
+func (c Change) line() ChangeLine {
+	return ChangeLine{
+		Kind:   c.Kind,
+		Target: c.Subject,
+		Detail: c.Detail,
+		Text:   c.String(),
+	}
+}
+
+// Kinds is every word that can appear as a change's kind. The README
+// documents these eight and promises an agent can branch on them; a ninth
+// added without a line in that table would be a promise quietly broken, which
+// is what TestKindsMatchTheReadme watches for.
+func Kinds() []string {
+	return []string{kindGone, kindNew, kindReplaced, kindImage, kindState, kindPort, kindDisk, kindSkipped}
+}
+
 // Change kinds, ordered by how much an operator can act on them.
 const (
 	kindGone     = "gone"
@@ -557,23 +576,31 @@ func sameHashes(a, b map[string]bool) bool {
 // computed from the snapshots rather than from the rendered change strings —
 // parsing our own prose to decide what matters would make the detail column
 // load-bearing, which is exactly what the column rule says it must not be.
-func attentionFromChanges(prev, snap *Snapshot) []string {
-	var out []string
+func attentionFromChanges(prev, snap *Snapshot) []Finding {
+	var out []Finding
 
 	for _, p := range newlyPublicListeners(prev.Ports, snap.Ports) {
 		who := owner(p)
 		if who == "" {
 			who = "an unidentified process"
 		}
-		out = append(out, fmt.Sprintf(
-			"Port %s is now reachable from every interface, answered by %s — it was not before",
-			":"+p.Port+"/"+p.Protocol, who))
+		out = append(out, Finding{
+			Kind:   kindPort,
+			Target: ":" + p.Port + "/" + p.Protocol,
+			Text: fmt.Sprintf(
+				"Port %s is now reachable from every interface, answered by %s — it was not before",
+				":"+p.Port+"/"+p.Protocol, who),
+		})
 	}
 
 	for _, p := range publicPortsChangedHands(prev.Ports, snap.Ports) {
-		out = append(out, fmt.Sprintf(
-			"Port %s is answered by %s now, and was not at the last report",
-			":"+p.Port+"/"+p.Protocol, owner(p)))
+		out = append(out, Finding{
+			Kind:   kindPort,
+			Target: ":" + p.Port + "/" + p.Protocol,
+			Text: fmt.Sprintf(
+				"Port %s is answered by %s now, and was not at the last report",
+				":"+p.Port+"/"+p.Protocol, owner(p)),
+		})
 	}
 
 	var stopped []string
@@ -581,11 +608,18 @@ func attentionFromChanges(prev, snap *Snapshot) []string {
 		p := indexContainers(prev.Containers)[c.Name]
 		switch {
 		case p.ID != c.ID:
-			out = append(out, fmt.Sprintf(
-				"%s was recreated and is %s, not running — the deploy did not come back", c.Name, c.State))
+			out = append(out, Finding{
+				Kind:   "container",
+				Target: c.Name,
+				Text: fmt.Sprintf(
+					"%s was recreated and is %s, not running — the deploy did not come back", c.Name, c.State),
+			})
 		case p.Image != c.Image:
-			out = append(out, fmt.Sprintf(
-				"%s took a new image and is %s, not running", c.Name, c.State))
+			out = append(out, Finding{
+				Kind:   "container",
+				Target: c.Name,
+				Text:   fmt.Sprintf("%s took a new image and is %s, not running", c.Name, c.State),
+			})
 		default:
 			stopped = append(stopped, c.Name)
 		}
@@ -595,15 +629,27 @@ func attentionFromChanges(prev, snap *Snapshot) []string {
 	// line turns the section a person reads first into the longest one on the
 	// page, which is the failure this whole feature is trying to avoid.
 	if len(stopped) > groupThreshold {
-		out = append(out, fmt.Sprintf("%d containers stopped since the last report: %s, +%d",
-			len(stopped), strings.Join(stopped[:groupNamed], ", "), len(stopped)-groupNamed))
+		// The collapsed line is about all of them, so it names none of them
+		// as its target: a caller that acted on the first name would act on
+		// an arbitrary one.
+		out = append(out, Finding{
+			Kind: "container",
+			Text: fmt.Sprintf("%d containers stopped since the last report: %s, +%d",
+				len(stopped), strings.Join(stopped[:groupNamed], ", "), len(stopped)-groupNamed),
+		})
 	} else {
 		for _, name := range stopped {
-			out = append(out, name+" stopped since the last report")
+			out = append(out, Finding{
+				Kind:   "container",
+				Target: name,
+				Text:   name + " stopped since the last report",
+			})
 		}
 	}
 
-	sort.Strings(out)
+	// Sorted by the sentence, which is the order this section has always been
+	// printed in.
+	sort.Slice(out, func(i, j int) bool { return out[i].Text < out[j].Text })
 	return out
 }
 
@@ -629,21 +675,21 @@ func containersNeedingAttention(prev, snap *Snapshot) []docker.Container {
 // container, and a port that changed hands without changing the count
 // produced no action at all — the same blind spot #58 closed one section
 // above, still sitting here.
-func actionsFromChanges(prev, snap *Snapshot) []string {
-	var out []string
+func actionsFromChanges(prev, snap *Snapshot) []Action {
+	var out []Action
 
 	for _, p := range newlyPublicListeners(prev.Ports, snap.Ports) {
 		who := owner(p)
 		if who == "" {
 			who = "whatever is answering"
 		}
-		out = append(out, fmt.Sprintf("Verify %s should be reachable from every interface, answered by %s.",
-			":"+p.Port+"/"+p.Protocol, who))
+		out = append(out, action(fmt.Sprintf("Verify %s should be reachable from every interface, answered by %s.",
+			":"+p.Port+"/"+p.Protocol, who)))
 	}
 
 	for _, p := range publicPortsChangedHands(prev.Ports, snap.Ports) {
-		out = append(out, fmt.Sprintf("Verify %s should be answering from %s.",
-			":"+p.Port+"/"+p.Protocol, owner(p)))
+		out = append(out, action(fmt.Sprintf("Verify %s should be answering from %s.",
+			":"+p.Port+"/"+p.Protocol, owner(p))))
 	}
 
 	stopped := containersNeedingAttention(prev, snap)
@@ -651,7 +697,7 @@ func actionsFromChanges(prev, snap *Snapshot) []string {
 		stopped = stopped[:groupNamed]
 	}
 	for _, c := range stopped {
-		out = append(out, fmt.Sprintf("Check why %s is not running: homebutler docker logs %s", c.Name, c.Name))
+		out = append(out, action(fmt.Sprintf("Check why %s is not running: homebutler docker logs %s", c.Name, c.Name)))
 	}
 
 	return out

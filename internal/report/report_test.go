@@ -126,7 +126,7 @@ func TestDiffReport(t *testing.T) {
 		t.Error("expected IsBaseline=false on second run")
 	}
 
-	changes := join(r.NotableChanges)
+	changes := join(changeTexts(r.NotableChanges))
 	if !containsStr(changes, "new: db — now running") {
 		t.Errorf("expected the new container named, got: %s", changes)
 	}

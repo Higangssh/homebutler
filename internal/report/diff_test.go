@@ -48,7 +48,7 @@ func TestSwapWithUnchangedCountIsReported(t *testing.T) {
 	}
 
 	r := buildReport(curr, prev)
-	got := strings.Join(r.NotableChanges, " | ")
+	got := strings.Join(changeTexts(r.NotableChanges), " | ")
 
 	if !strings.Contains(got, "gone: vaultwarden") {
 		t.Errorf("the departed container was not named: %s", got)
@@ -70,7 +70,7 @@ func TestSameNameDifferentContainerIsReplaced(t *testing.T) {
 	}, nil)
 
 	r := buildReport(curr, prev)
-	got := strings.Join(r.NotableChanges, " | ")
+	got := strings.Join(changeTexts(r.NotableChanges), " | ")
 	if !strings.Contains(got, "replaced: nginx — recreated, 7d4a91f0aa11 → 91be0322bb22") {
 		t.Errorf("a replaced container was not reported: %s", got)
 	}
@@ -85,7 +85,7 @@ func TestImageChangeIsReported(t *testing.T) {
 	}, nil)
 
 	r := buildReport(curr, prev)
-	got := strings.Join(r.NotableChanges, " | ")
+	got := strings.Join(changeTexts(r.NotableChanges), " | ")
 	if !strings.Contains(got, "image: jellyfin — jellyfin:10.9.11 → jellyfin:10.10.0") {
 		t.Errorf("an image change was not reported: %s", got)
 	}
@@ -100,7 +100,7 @@ func TestPortOwnerChangeIsReported(t *testing.T) {
 	})
 
 	r := buildReport(curr, prev)
-	got := strings.Join(r.NotableChanges, " | ")
+	got := strings.Join(changeTexts(r.NotableChanges), " | ")
 	if !strings.Contains(got, "port: :8080/tcp — vaultwarden → gitea") {
 		t.Errorf("a port that changed owner was not reported: %s", got)
 	}
@@ -117,7 +117,7 @@ func TestVolatileStatusIsSuppressed(t *testing.T) {
 	}, nil)
 
 	r := buildReport(curr, prev)
-	got := strings.Join(r.NotableChanges, " | ")
+	got := strings.Join(changeTexts(r.NotableChanges), " | ")
 	if !strings.Contains(got, "No significant changes") {
 		t.Errorf("an uptime string change earned a line: %s", got)
 	}
@@ -133,7 +133,7 @@ func TestFailedCollectorSkipsTheDiff(t *testing.T) {
 	curr.Failed = []string{inventory.CollectorDocker}
 
 	r := buildReport(curr, prev)
-	got := strings.Join(r.NotableChanges, " | ")
+	got := strings.Join(changeTexts(r.NotableChanges), " | ")
 	if strings.Contains(got, "gone: vaultwarden") {
 		t.Errorf("a container was reported gone because docker was down: %s", got)
 	}
@@ -241,7 +241,7 @@ func TestLoopbackToWildcardIsReported(t *testing.T) {
 	})
 
 	r := buildReport(curr, prev)
-	got := strings.Join(r.NotableChanges, " | ")
+	got := strings.Join(changeTexts(r.NotableChanges), " | ")
 	if strings.Contains(got, "No significant changes") {
 		t.Fatalf("a port that became public was reported as no change: %s", got)
 	}
@@ -261,7 +261,7 @@ func TestSamePortDifferentAddressesDoNotCollide(t *testing.T) {
 	reordered := []ports.PortInfo{listeners[1], listeners[0]}
 
 	r := buildReport(snapshotWith(nil, reordered), snapshotWith(nil, listeners))
-	got := strings.Join(r.NotableChanges, " | ")
+	got := strings.Join(changeTexts(r.NotableChanges), " | ")
 	if !strings.Contains(got, "No significant changes") {
 		t.Errorf("reordering the collector's output invented a change: %s", got)
 	}
@@ -278,7 +278,7 @@ func TestReplacedContainerAlsoNamesItsState(t *testing.T) {
 	}, nil)
 
 	r := buildReport(curr, prev)
-	got := strings.Join(r.NotableChanges, " | ")
+	got := strings.Join(changeTexts(r.NotableChanges), " | ")
 	if !strings.Contains(got, "running → exited") {
 		t.Errorf("a redeploy that came back down did not say so: %s", got)
 	}
@@ -300,7 +300,7 @@ func TestDuplicateMountReportsOnce(t *testing.T) {
 	r := buildReport(curr, prev)
 	var diskLines int
 	for _, c := range r.NotableChanges {
-		if strings.HasPrefix(c, "disk: /") {
+		if strings.HasPrefix(c.Text, "disk: /") {
 			diskLines++
 		}
 	}
@@ -338,7 +338,7 @@ func TestOneOfSeveralInvocationsLeaving(t *testing.T) {
 	))
 
 	r := buildReport(curr, prev)
-	got := strings.Join(r.NotableChanges, " | ")
+	got := strings.Join(changeTexts(r.NotableChanges), " | ")
 	if strings.Contains(got, "replaced: python3") {
 		t.Errorf("one of two invocations exiting was called a replacement: %s", got)
 	}
@@ -358,7 +358,7 @@ func TestPreviousSnapshotWithoutProcessesIsNotAnEmptyMachine(t *testing.T) {
 	))
 
 	r := buildReport(curr, prev)
-	got := strings.Join(r.NotableChanges, " | ")
+	got := strings.Join(changeTexts(r.NotableChanges), " | ")
 	if strings.Contains(got, "new: nginx") || strings.Contains(got, "new: postgres") {
 		t.Errorf("the first run after upgrading reported every process as new: %s", got)
 	}
@@ -388,7 +388,7 @@ func TestProcessAppearedAndDisappeared(t *testing.T) {
 	))
 
 	r := buildReport(curr, prev)
-	got := strings.Join(r.NotableChanges, " | ")
+	got := strings.Join(changeTexts(r.NotableChanges), " | ")
 	if !strings.Contains(got, "gone: nginx") {
 		t.Errorf("a process that exited was not named: %s", got)
 	}
@@ -408,7 +408,7 @@ func TestProcessInvocationChangeIsReplaced(t *testing.T) {
 	))
 
 	r := buildReport(curr, prev)
-	got := strings.Join(r.NotableChanges, " | ")
+	got := strings.Join(changeTexts(r.NotableChanges), " | ")
 	if !strings.Contains(got, "replaced: python3 — same name, different invocation") {
 		t.Errorf("an invocation change was not reported: %s", got)
 	}
@@ -424,7 +424,7 @@ func TestShortLivedProcessesAreNotReported(t *testing.T) {
 	})
 
 	r := buildReport(curr, prev)
-	got := strings.Join(r.NotableChanges, " | ")
+	got := strings.Join(changeTexts(r.NotableChanges), " | ")
 	if strings.Contains(got, "sed") || strings.Contains(got, "head") {
 		t.Errorf("a process that lived for a moment earned a line: %s", got)
 	}
@@ -473,7 +473,7 @@ func TestFailedProcessCollectorDoesNotEmptyTheMachine(t *testing.T) {
 	curr.Failed = []string{inventory.CollectorProcesses}
 
 	r := buildReport(curr, prev)
-	got := strings.Join(r.NotableChanges, " | ")
+	got := strings.Join(changeTexts(r.NotableChanges), " | ")
 	if strings.Contains(got, "gone: nginx") || strings.Contains(got, "gone: postgres") {
 		t.Errorf("a failed collector reported every process as gone: %s", got)
 	}
@@ -494,7 +494,7 @@ func TestOnePortOpeningIsOneLine(t *testing.T) {
 	r := buildReport(curr, snapshotWith(nil, nil))
 	var lines int
 	for _, c := range r.NotableChanges {
-		if strings.Contains(c, ":8099") {
+		if strings.Contains(c.Text, ":8099") {
 			lines++
 		}
 	}
@@ -515,7 +515,7 @@ func TestPortBecomingPublicNeedsAttention(t *testing.T) {
 	})
 
 	r := buildReport(curr, prev)
-	got := strings.Join(r.NeedsAttention, " | ")
+	got := strings.Join(findingTexts(r.NeedsAttention), " | ")
 	if !strings.Contains(got, ":8080/tcp is now reachable from every interface") {
 		t.Errorf("a port that became public did not need attention: %v", r.NeedsAttention)
 	}
@@ -544,7 +544,7 @@ func TestRedeployThatDidNotComeBackNeedsAttention(t *testing.T) {
 	}, nil)
 
 	r := buildReport(curr, prev)
-	got := strings.Join(r.NeedsAttention, " | ")
+	got := strings.Join(findingTexts(r.NeedsAttention), " | ")
 	if !strings.Contains(got, "gitea was recreated and is exited, not running") {
 		t.Errorf("a failed redeploy did not need attention: %v", r.NeedsAttention)
 	}
@@ -559,7 +559,7 @@ func TestContainerStoppedSinceLastReportIsNamed(t *testing.T) {
 	}, nil)
 
 	r := buildReport(curr, prev)
-	got := strings.Join(r.NeedsAttention, " | ")
+	got := strings.Join(findingTexts(r.NeedsAttention), " | ")
 	if !strings.Contains(got, "postgres stopped since the last report") {
 		t.Errorf("the stopped container was not named: %v", r.NeedsAttention)
 	}
@@ -598,7 +598,7 @@ func TestActionNamesThePortAndTheProcess(t *testing.T) {
 	})
 
 	r := buildReport(curr, prev)
-	got := strings.Join(r.SuggestedActions, " | ")
+	got := strings.Join(actionTexts(r.SuggestedActions), " | ")
 	if !strings.Contains(got, ":8080/tcp") || !strings.Contains(got, "gitea") {
 		t.Errorf("the action names neither the port nor the process: %v", r.SuggestedActions)
 	}
@@ -632,7 +632,7 @@ func TestActionNamesTheContainerAndTheCommand(t *testing.T) {
 	}, nil)
 
 	r := buildReport(curr, prev)
-	got := strings.Join(r.SuggestedActions, " | ")
+	got := strings.Join(actionTexts(r.SuggestedActions), " | ")
 	if !strings.Contains(got, "homebutler docker logs postgres") {
 		t.Errorf("the action does not name the command to run: %v", r.SuggestedActions)
 	}
@@ -652,14 +652,14 @@ func TestManyStoppedContainersCollapse(t *testing.T) {
 
 	var stoppedLines int
 	for _, a := range r.NeedsAttention {
-		if strings.Contains(a, "stopped since the last report") {
+		if strings.Contains(a.Text, "stopped since the last report") {
 			stoppedLines++
 		}
 	}
 	if stoppedLines != 1 {
 		t.Errorf("thirty stopped containers produced %d attention lines: %v", stoppedLines, r.NeedsAttention)
 	}
-	if !strings.Contains(strings.Join(r.NeedsAttention, " "), "30 containers stopped") {
+	if !strings.Contains(strings.Join(findingTexts(r.NeedsAttention), " "), "30 containers stopped") {
 		t.Errorf("the collapsed line does not count what it collapsed: %v", r.NeedsAttention)
 	}
 	if len(r.SuggestedActions) > groupNamed {

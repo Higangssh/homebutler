@@ -76,6 +76,14 @@ var cliOnly = map[string]string{
 }
 
 // classifyCommand reports who can run command, and the tool when one can.
+// ClassifyCommand says who can run a command: an MCP tool (and which), the
+// CLI only, or a shell. Exported because report suggests commands too, and a
+// second opinion about which tool runs `homebutler docker logs` is how the two
+// start disagreeing in front of an agent.
+func ClassifyCommand(command string) (runner, tool string) {
+	return classifyCommand(command)
+}
+
 func classifyCommand(command string) (runner, tool string) {
 	if command == "" {
 		return "", ""

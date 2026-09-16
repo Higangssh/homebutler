@@ -6,12 +6,15 @@ All notable changes to this project will be documented in this file.
 
 ### ✨ Features
 
+- `report --json` gives an agent the parts of a change rather than a sentence about it (#199). The README told an agent that the kind is one of eight words and that it is the same word in `--json`, so it could branch without reading prose. It was the same word, inside a sentence: acting on a `replaced` differently from a `disk` meant splitting on `": "`, and finding the container name meant hunting through prose that also held an em dash, an address and a port. Each entry now carries `kind`, `target` and `detail` alongside the `text` the terminal prints, `needs_attention` carries what it is about, and `suggested_actions` carry the command and the `runner`/`tool` classification from #157 — so an agent knows whether it can run the fix or has to ask a person. What a person sees is unchanged, byte for byte
+
 - edit servers and Proxmox endpoints from the dashboard (#154). The Config tab listed the machines homebutler talks to and could change none of them, so adding a server meant finding the config file. A server can now be added, renamed, moved, switched between key and password, or removed with one confirmation, and the same for a Proxmox endpoint and its two tokens. Renaming is one operation rather than a delete and an add, so everything else about the machine stays where it is, comments included
 
 - **a saved credential does not follow a server to a new address (#154).** A password is sent to whatever answers at the address in the file, and that address is a one-field edit — so changing it while leaving the password in place would hand the password to a machine it was never given for. Changing where a server or an endpoint points now requires sending its credential again, or clearing it first. The rule is in the config writer rather than in the form, so every caller meets it. A server that signs in with a key is not covered: the private key never leaves the machine, and its new address is trusted the first time homebutler connects, which the dashboard says out loud and `serve` writes to its log
 
 ### ⚠️ Behavior changes
 
+- **`report --json` returns objects where it returned strings.** `notable_changes`, `needs_attention` and `suggested_actions` were arrays of sentences; each is now an array of objects, and the sentence is the `text` field of each one. Anything reading `report --json` needs `.text` where it read the string. This lands before 1.0 on purpose: after 1.0 the shape is one every consumer would be entitled to keep.
 - **Changing a server's address, port or user from the dashboard needs its password again when one is saved.** The same applies to a Proxmox endpoint's host and its tokens. An endpoint whose token is read from a file cannot have its address changed from the dashboard at all, because the credential cannot be sent again from there — that one is still an edit to the config file.
 
 ## [0.34.0](https://github.com/Higangssh/homebutler/compare/v0.33.0...v0.34.0) - 2026-09-16
