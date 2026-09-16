@@ -282,7 +282,21 @@ graph TD
   <img src="assets/web-dashboard.png" alt="homebutler web dashboard" width="900">
 </p>
 
-> **`homebutler serve`** — A real-time web dashboard embedded in the single binary via `go:embed`. Monitor all your servers, Docker containers, open ports, alerts, and Wake-on-LAN devices from any browser. Dark theme, auto-refresh every 5 seconds, fully responsive.
+> **`homebutler serve`** — A web dashboard embedded in the single binary via `go:embed`. Servers, Docker containers, open ports, alerts and Wake-on-LAN from any browser. With `--token` it also edits the config: thresholds, notification channels, servers, Proxmox endpoints and wake devices.
+
+### The Report tab, where you actually read it
+
+<p align="center">
+  <img src="assets/report-tab.png" alt="the Report tab on a phone: what needs attention first — a container recreated and not running, a port answered by something new — then the changes with their kind word, including a container replaced behind the same name and a comparison that could not be made, then doctor's findings ordered by severity with the command to run for each" width="380">
+</p>
+
+The screen somebody opens after a notification. What needs attention first, then
+what moved with the kind word each change carries, then the snapshot being
+compared against and how old it is. A comparison that could not be made says so
+rather than reading as an all-clear.
+
+Loading it saves nothing — a page that took a snapshot every time it was opened
+would prune the baseline you wanted to compare against. Saving one is a button.
 
 <details>
 <summary>✨ Web Dashboard Highlights</summary>
