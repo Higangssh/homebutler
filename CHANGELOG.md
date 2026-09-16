@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### 🐛 Fixes
+
+- a remote running an older homebutler said only "unknown command" (#212). A remote command runs the remote binary, and when that binary predates the command being asked for, the hint sent you to check an install that is already there while the thing that was actually wrong — four releases behind — went unmentioned. It is easy to walk into, because the commands that existed back then still work: the setup looks correct until the first one that did not. The failure now names both versions and the command that fixes it. Nothing installed at all is a different problem and keeps its own answer, `deploy`, and the version is only asked for after a command has already failed — on the connection that is already open — so nothing is added to the path where things work
+
 ### 📚 Documentation
 
 - the published skill installed an unpinned executable and never told the agent when to stop (#213). ClawHub's scanner marked the listing *suspicious*, on a page whose whole argument is that an agent should get a classified interface rather than a shell — a verdict that argues against the thing it is listing. The install block names a version instead of `latest`, with the release checksums and how to check them, and the file now states what the classification means for the agent rather than only that it exists: read unattended, write when it follows from the request and say what changed, destructive never on its own initiative. A test keeps the pinned version equal to the newest release and fails if it goes back to a moving tag

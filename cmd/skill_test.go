@@ -198,7 +198,8 @@ func TestTheSkillInstallsTheCurrentVersion(t *testing.T) {
 	}
 	for _, match := range found {
 		if match[1] != current {
-			t.Errorf("the install section pins %s and the current release is %s", match[1], current)
+			t.Errorf("the install section pins %s and the current release is %s — update the pin in skills/SKILL.md, which is part of cutting a release",
+				match[1], current)
 		}
 	}
 }

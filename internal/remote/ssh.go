@@ -41,7 +41,7 @@ func Run(server *config.ServerConfig, args ...string) ([]byte, error) {
 	cmd := fmt.Sprintf("export PATH=$HOME/.local/bin:$HOME/bin:$HOME/go/bin:/opt/homebrew/bin:/usr/local/bin:/usr/local/sbin:/snap/bin:$PATH; %s %s", util.ShellQuote(binPath), util.ShellQuoteArgs(args))
 	out, err := session.CombinedOutput(cmd)
 	if err != nil {
-		return nil, classified(ClassRemote, "[%s] remote command failed: %w\n  → Output: %s\n  → Check if homebutler is installed on the remote server: homebutler deploy %s", server.Name, err, strings.TrimSpace(string(out)), server.Name)
+		return nil, remoteCommandError(server, remoteVersionVia(client), args, out, err)
 	}
 
 	return out, nil
@@ -142,6 +142,50 @@ func connect(server *config.ServerConfig) (*ssh.Client, error) {
 	}
 
 	return client, nil
+}
+
+// LocalVersion is the version of the binary doing the asking, set by cmd at
+// startup. It is only used to explain a version mismatch, so an empty value
+// makes the explanation shorter rather than breaking anything.
+var LocalVersion string
+
+// remoteVersionVia asks the far side what it is running, on the connection that
+// is already open. It is called only when a command has already failed, so it
+// adds a round trip to the failure path and to nothing else.
+func remoteVersionVia(client *ssh.Client) string {
+	version, err := remoteGetVersion(client)
+	if err != nil {
+		return ""
+	}
+	return version
+}
+
+// remoteCommandError explains a command the far side refused.
+//
+// "unknown command" almost always means the homebutler over there is older
+// than the one asking. Saying "check if homebutler is installed" sends someone
+// to verify a thing that is already true, while the thing that is not — that
+// it is four releases behind — goes unmentioned. This is easy to walk into:
+// the commands that existed back then still work, so the setup looks correct
+// until the first one that did not.
+func remoteCommandError(server *config.ServerConfig, remoteVersion string, args []string, out []byte, err error) error {
+	text := strings.TrimSpace(string(out))
+
+	if strings.Contains(text, "unknown command") && remoteVersion != "" {
+		command := "that command"
+		if len(args) > 0 {
+			command = "`" + strings.Join(args[:1], " ") + "`"
+		}
+		hint := "  → Bring them level: homebutler upgrade"
+		if LocalVersion != "" {
+			hint = fmt.Sprintf("  → This one is %s. Bring them level: homebutler upgrade", LocalVersion)
+		}
+		return classified(ClassRemote, "[%s] the homebutler on %s is %s, and does not have %s\n%s",
+			server.Name, server.Name, remoteVersion, command, hint)
+	}
+
+	return classified(ClassRemote, "[%s] remote command failed: %w\n  → Output: %s\n  → Check if homebutler is installed on the remote server: homebutler deploy %s",
+		server.Name, err, text, server.Name)
 }
 
 // knownHostsPath returns the path to ~/.ssh/known_hosts.

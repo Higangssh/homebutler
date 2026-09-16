@@ -117,6 +117,14 @@ work and now does not goes under `⚠️ Behavior changes`, which is the section
 people read before upgrading. An internal change with no user-visible effect
 does not need one. If you are unsure, write the line and let the review decide.
 
+### Cutting a release
+
+The version in `skills/SKILL.md` is pinned, because a skill that tells an agent
+to install whatever is newest gives it something it cannot account for
+afterwards. So the release PR that moves `## [Unreleased]` to a version number
+also updates that pin — a test compares the two and fails the build if they
+drift apart, which is the reminder.
+
 ## Code style
 
 - Follow standard Go conventions
