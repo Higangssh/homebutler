@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"os"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -153,4 +154,60 @@ func TestTheSkillNamesEveryTool(t *testing.T) {
 	if missing == 0 && len(named) == 0 {
 		t.Fatal("nothing backticked in the skill; if the format changed, this test has to change with it")
 	}
+}
+
+// A pinned version is the right answer to "do not install an unpinned
+// executable", and it is wrong the moment it is left behind. The versions in
+// the install section have to be the newest release the changelog names.
+//
+// Versions elsewhere in the file are deliberate history — "since 0.34.0, a
+// password server must be trusted" — so only the install section is checked.
+func TestTheSkillInstallsTheCurrentVersion(t *testing.T) {
+	skill, err := os.ReadFile("../skills/SKILL.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	changelog, err := os.ReadFile("../CHANGELOG.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	released := regexp.MustCompile(`(?m)^## \[(\d+\.\d+\.\d+)\]`).FindStringSubmatch(string(changelog))
+	if released == nil {
+		t.Fatal("no released version found in the changelog")
+	}
+	current := released[1]
+
+	section := string(skill)
+	if start := strings.Index(section, "## Prerequisites"); start >= 0 {
+		section = section[start:]
+	} else {
+		t.Fatal("the skill has no Prerequisites section; if it moved, this test has to move with it")
+	}
+
+	// The finding this pinning answers is "unpinned executable dependency", so
+	// a version that went back to a moving tag has to fail even though nothing
+	// in the section is then out of date.
+	if strings.Contains(section, "latest") {
+		t.Errorf("the install section names a moving tag:\n%s", firstLineWith(section, "latest"))
+	}
+
+	found := regexp.MustCompile(`v?(\d+\.\d+\.\d+)`).FindAllStringSubmatch(section, -1)
+	if len(found) == 0 {
+		t.Fatal("the install section pins nothing; an agent installing an unpinned executable cannot say what it ran")
+	}
+	for _, match := range found {
+		if match[1] != current {
+			t.Errorf("the install section pins %s and the current release is %s", match[1], current)
+		}
+	}
+}
+
+func firstLineWith(text, needle string) string {
+	for _, line := range strings.Split(text, "\n") {
+		if strings.Contains(line, needle) {
+			return strings.TrimSpace(line)
+		}
+	}
+	return ""
 }

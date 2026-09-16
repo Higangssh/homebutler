@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### 📚 Documentation
+
+- the published skill installed an unpinned executable and never told the agent when to stop (#213). ClawHub's scanner marked the listing *suspicious*, on a page whose whole argument is that an agent should get a classified interface rather than a shell — a verdict that argues against the thing it is listing. The install block names a version instead of `latest`, with the release checksums and how to check them, and the file now states what the classification means for the agent rather than only that it exists: read unattended, write when it follows from the request and say what changed, destructive never on its own initiative. A test keeps the pinned version equal to the newest release and fails if it goes back to a moving tag
+
 ## [0.35.1](https://github.com/Higangssh/homebutler/compare/v0.34.0...v0.35.1) - 2026-09-16
 
 **The dashboard showed what every other tool already shows, and not the one thing homebutler is for.** The Report tab answers what changed since the last snapshot — what needs attention first, then the changes with the kind word each one carries, then the snapshot being compared against and how old it is — with `doctor` below it. An agent gets the same thing as typed JSON rather than sentences to parse, and there is a container image now, which reaches the machines in `servers:` over SSH and says plainly that it cannot see the host it runs on.

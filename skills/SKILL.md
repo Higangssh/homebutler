@@ -61,6 +61,25 @@ homebutler mcp
 - `docker_stop`, `install_purge` — stops a service, deletes its data
 - `proxmox_guest_shutdown`
 
+### What the classes mean for you
+
+- **read** — call it unattended. Nothing changes and nothing leaves the machine.
+- **write** — something changes on the machine, or a message leaves it. Do it when
+  it follows from what was asked, and say afterwards what changed.
+- **destructive** — **never on your own initiative.** Only when the operator asked
+  for that specific action on that specific target, in the turn you are answering.
+  Do not infer one from a goal: "free up space" is not permission to run
+  `install_purge`, and "make it match production" is not permission to run
+  `backup_restore`.
+
+`backup_restore` and the Proxmox power tools take an explicit confirmation
+argument, so a call without it fails rather than proceeding. That is a backstop,
+not the rule — the rule is that the operator asked.
+
+When an action is refused for lack of confirmation, say what would be destroyed
+and let the operator decide. Do not re-send the same call with the confirmation
+set.
+
 ## Start here: what changed?
 
 `report` is the answer to "how is my server doing?" — it compares the machine
@@ -215,7 +234,26 @@ homebutler config validate
 
 ## Prerequisites
 
+Install a version, not whatever is newest at the moment the command runs. An
+agent that installs an unpinned executable cannot say what it ran.
+
 ```bash
-brew install Higangssh/homebutler/homebutler
-go install github.com/Higangssh/homebutler@latest
+brew install Higangssh/homebutler/homebutler       # pinned formula, our own tap
+go install github.com/Higangssh/homebutler@v0.35.1
 ```
+
+Taking a release archive instead means checking it against the checksums the
+release publishes:
+
+```bash
+V=0.35.1
+BASE=https://github.com/Higangssh/homebutler/releases/download/v$V
+curl -fsSLO $BASE/homebutler_${V}_linux_amd64.tar.gz
+curl -fsSLO $BASE/checksums.txt
+sha256sum --check --ignore-missing checksums.txt   # macOS: shasum -a 256 --check …
+# must print: homebutler_0.35.1_linux_amd64.tar.gz: OK
+tar xzf homebutler_${V}_linux_amd64.tar.gz
+```
+
+There is a container image, `ghcr.io/higangssh/homebutler:0.35.1`, pinned the
+same way.
