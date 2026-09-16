@@ -1,0 +1,156 @@
+package cmd
+
+import (
+	"os"
+	"strings"
+	"testing"
+
+	"github.com/spf13/cobra"
+
+	"github.com/Higangssh/homebutler/internal/capability"
+)
+
+// skills/SKILL.md is published to ClawHub, where it is what an agent reads
+// before running anything. It had drifted eight releases: it described `watch`
+// as a terminal dashboard, `serve` as read-only, and `trust` as always
+// required. An agent following it would run commands that do not do what it
+// was told, or do not exist.
+//
+// So every command in it is resolved against the binary's own command tree.
+// The tree is the source of truth, and a skill naming something that is not in
+// it fails the build rather than an agent's afternoon.
+func TestEveryCommandInTheSkillExists(t *testing.T) {
+	skill, err := os.ReadFile("../skills/SKILL.md")
+	if err != nil {
+		t.Fatalf("the skill is part of what ships: %v", err)
+	}
+
+	lines := commandLines(string(skill))
+	if len(lines) == 0 {
+		t.Fatal("no homebutler commands found in the skill; if the format changed, this test has to change with it")
+	}
+
+	for _, line := range lines {
+		command, flags := resolve(rootCmd, line)
+		if command == nil {
+			t.Errorf("%q names a subcommand that does not exist", line)
+			continue
+		}
+		if command == rootCmd && len(strings.Fields(line)) > 1 && !strings.HasPrefix(strings.Fields(line)[1], "--") {
+			// The root takes no arguments, so a first word that did not
+			// resolve is a command that is not there.
+			t.Errorf("%q starts with %q, which is not a homebutler command", line, strings.Fields(line)[1])
+			continue
+		}
+		for _, flag := range flags {
+			if command.Flag(flag) == nil {
+				t.Errorf("%q passes --%s, which %q does not take", line, flag, command.CommandPath())
+			}
+		}
+	}
+}
+
+// commandLines pulls every `homebutler …` line out of the fenced blocks. Prose
+// mentioning a command in backticks is not run by anybody; a line in a block is.
+func commandLines(markdown string) []string {
+	var out []string
+	inBlock := false
+	for _, line := range strings.Split(markdown, "\n") {
+		if strings.HasPrefix(strings.TrimSpace(line), "```") {
+			inBlock = !inBlock
+			continue
+		}
+		if !inBlock {
+			continue
+		}
+		line = strings.TrimSpace(line)
+		if comment := strings.Index(line, " #"); comment >= 0 {
+			line = strings.TrimSpace(line[:comment])
+		}
+		if strings.HasPrefix(line, "homebutler ") || line == "homebutler" {
+			out = append(out, line)
+		}
+	}
+	return out
+}
+
+// resolve walks the command tree the way cobra would, and collects the long
+// flags the line passes. A token in angle brackets is a placeholder for the
+// reader, and anything else that is not a subcommand is an argument.
+func resolve(root *cobra.Command, line string) (*cobra.Command, []string) {
+	fields := strings.Fields(line)
+	current := root
+	var flags []string
+	walking := true
+
+	for _, token := range fields[1:] {
+		switch {
+		case strings.HasPrefix(token, "--"):
+			walking = false
+			name := strings.TrimPrefix(token, "--")
+			if equals := strings.Index(name, "="); equals >= 0 {
+				name = name[:equals]
+			}
+			flags = append(flags, name)
+		case !walking || strings.HasPrefix(token, "<") || strings.HasPrefix(token, "./") || strings.HasPrefix(token, "$"):
+			walking = false
+		default:
+			if child := skillChild(current, token); child != nil {
+				current = child
+				continue
+			}
+			// A command that only dispatches — `watch`, `backup list`'s parent
+			// — takes no arguments of its own, so a word that is not one of its
+			// subcommands is a subcommand that does not exist.
+			if current.HasSubCommands() && !current.Runnable() {
+				return nil, nil
+			}
+			// Otherwise the rest is arguments.
+			walking = false
+		}
+	}
+	return current, flags
+}
+
+func skillChild(parent *cobra.Command, name string) *cobra.Command {
+	for _, child := range parent.Commands() {
+		if child.Name() == name {
+			return child
+		}
+	}
+	return nil
+}
+
+// The skill lists the MCP tools an agent can call, and that list is the half
+// that actually drifted: ten were missing, including doctor and notify_test —
+// the two an agent most needs to know it has. The registry is where tools are
+// declared, so the list is checked against it rather than against a count
+// somebody remembered to update.
+//
+// Only one direction is checked. A tool the registry has and the skill does
+// not name is a capability an agent does not know about; a backticked word
+// that is not a tool is just a word.
+func TestTheSkillNamesEveryTool(t *testing.T) {
+	skill, err := os.ReadFile("../skills/SKILL.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	named := map[string]bool{}
+	for i, field := range strings.Split(string(skill), "`") {
+		if i%2 == 1 {
+			named[strings.TrimSpace(field)] = true
+		}
+	}
+
+	missing := 0
+	for _, c := range capability.Registry {
+		if !named[c.Tool.Name] {
+			t.Errorf("the registry has %q and the skill never names it; an agent reading this does not know it exists", c.Tool.Name)
+			missing++
+		}
+	}
+	if missing == 0 && len(named) == 0 {
+		t.Fatal("nothing backticked in the skill; if the format changed, this test has to change with it")
+	}
+}

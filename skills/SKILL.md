@@ -1,6 +1,6 @@
 ---
 name: homebutler
-description: Homelab server operations via homebutler CLI/MCP. Check system status, generate butler reports, scan inventory/topology, manage Docker containers, install self-hosted apps, verify backup drills, Wake-on-LAN, port scanning, alerts, backup/restore, and multi-server SSH.
+description: Tells an agent what changed on a server since it last looked - plus status, Docker, backups, Proxmox. 44 MCP tools, each classed read, write or destructive.
 metadata:
   {
     "openclaw": {
@@ -13,287 +13,208 @@ metadata:
 
 # Homebutler
 
-Manage homelab servers using the [`homebutler`](https://github.com/Higangssh/homebutler) CLI. Single binary, no daemon/database required, JSON output, MCP-friendly.
+[homebutler](https://github.com/Higangssh/homebutler) remembers what a server
+looked like last time and reports only the changes worth mentioning. One Go
+binary: no daemon, no database, nothing installed on the machines it watches.
+
+> This file is published to ClawHub as `@higangssh/homebutler`. The copy that
+> matters lives in the repository at `skills/SKILL.md`, and a test in `cmd/`
+> fails the build when a command or a tool named here stops existing.
+
+## Use the MCP server, not the shell
+
+Start `homebutler mcp` and call tools. Every tool is classed **read**, **write**
+or **destructive**, and that classification is what lets an agent decide what it
+may do unattended. Shell commands are for the handful of things no tool exposes,
+and for anything the operator has to run themselves.
+
+```bash
+homebutler mcp
+```
+
+### The tools
+
+**Read (27)** — safe to call unattended.
+
+- `system_status`, `processes`, `open_ports`, `alerts`, `alerts_history`
+- `doctor` — health, exposure, backup age and readiness, as findings
+- `inventory_scan`, `inventory_export`, `network_scan`, `config_validate`
+- `docker_list`, `docker_logs`, `docker_stats`, `docker_top`, `docker_inspect`
+- `backup_list`, `install_list`, `install_status`
+- `watch_list`, `watch_history`
+- `proxmox_status`, `proxmox_guests`, `proxmox_node`, `proxmox_tasks`,
+  `proxmox_task_status`, `proxmox_script_list`, `proxmox_script_command`
+
+**Write (13)** — something changes, or something leaves the machine.
+
+- `report` — the comparison, and it saves a snapshot
+- `docker_restart`, `wake`, `notify_test`
+- `backup_create`, `backup_drill`
+- `install_app`, `install_uninstall`
+- `watch_add`, `watch_check`, `watch_remove`
+- `proxmox_guest_start`, `proxmox_guest_reboot`
+
+**Destructive (4)** — ask first.
+
+- `backup_restore` — overwrites volumes with an archive
+- `docker_stop`, `install_purge` — stops a service, deletes its data
+- `proxmox_guest_shutdown`
+
+## Start here: what changed?
+
+`report` is the answer to "how is my server doing?" — it compares the machine
+against the last snapshot rather than describing the present.
+
+Each change carries a **kind**, and `--json` carries the same word, so branch on
+it rather than reading the sentence:
+
+| Kind | Means |
+| --- | --- |
+| `gone` | it was there last time and is not now |
+| `new` | it was not there last time and is now |
+| `replaced` | same name, different thing underneath — a recreated container |
+| `image` | same container, different image |
+| `state` | running where it was stopped, or the reverse |
+| `port` | same port, a different process answering on it |
+| `disk` | a mount moved by more than half a gigabyte |
+| `skipped` | the comparison could not be made — not an all-clear |
+
+```json
+{"kind": "replaced", "target": "vaultwarden",
+ "detail": "recreated, 4f2a1c → 9b7e03, vaultwarden:1.32 → vaultwarden:1.33",
+ "text": "replaced: vaultwarden — recreated, …"}
+```
+
+`needs_attention` and `suggested_actions` have the same shape. An action carries
+`command`, plus `runner` and `tool`:
+
+- `runner: mcp` — call `tool` and carry it out
+- `runner: cli` — homebutler can do it, no tool exposes it; the operator runs it
+- `runner: shell` — not a homebutler command at all
+
+`doctor` findings carry the same three fields. **Check `runner` before offering
+to fix something.**
+
+## What needs a shell
+
+```bash
+homebutler init
+homebutler trust <server>
+homebutler watch install
+homebutler watch tui
+homebutler serve --token <token>
+homebutler deploy --server <name>
+homebutler upgrade
+homebutler notify test
+homebutler restore <archive>
+```
+
+### `trust`, and when it is required
+
+```bash
+homebutler trust <server>
+homebutler trust <server> --reset
+```
+
+Since **0.34.0**, a server that signs in with a **password** must be trusted
+before the first connection: homebutler will not send a password to a host it
+has not been told to trust, because whatever answers at that address would
+receive it. **Key authentication still trusts on first use** — the private key
+never leaves the machine.
+
+### `watch` supervises, `watch tui` displays
+
+```bash
+homebutler watch add <container>
+homebutler watch install
+homebutler watch tui
+```
+
+`watch` is a restart tracker: it records incidents, captures the logs from the
+moment a container went down, and notifies. It is not a live dashboard — that is
+`watch tui`, and it is for a person rather than an agent.
+
+### `serve` edits, with a token
+
+```bash
+homebutler serve
+homebutler serve --token <token>
+homebutler serve --host 0.0.0.0 --token <token>
+```
+
+Since **0.33.0** the dashboard edits the config file: alert thresholds,
+notification channels, Wake-on-LAN devices, servers and Proxmox endpoints.
+Without `--token` it is read-only and the write routes do not exist at all. The
+Report tab shows what `report` reports. There is a container image,
+`ghcr.io/higangssh/homebutler`, which reaches the machines in `servers:` over
+SSH — a container cannot see the host it runs on, and says so rather than
+answering with its own numbers.
+
+## Notifications
+
+Channels: **telegram**, **slack**, **discord**, **webhook**, **ntfy**, **gotify**.
+ntfy and Gotify are the two self-hosted push servers, and each takes its own
+shape rather than a webhook payload. Tokens travel in a header, never in a URL,
+so a failed request cannot put one in a log.
+
+```bash
+homebutler notify test
+```
+
+`notify_test` reports each channel separately, so a failure names the channel
+that failed rather than all of them.
+
+## Proxmox
+
+Configured under `proxmox:` with an API token. The read credential and the one
+that performs guest actions are separate: without an action token, start, reboot
+and shutdown are unavailable rather than falling back to the read credential.
+
+```bash
+homebutler proxmox status
+```
+
+## Backups, and proving one comes back
+
+```bash
+homebutler backup
+homebutler backup list
+homebutler backup drill <app>
+homebutler backup drill --all
+homebutler restore <archive>
+```
+
+`backup drill` is the one to reach for when somebody asks whether backups are
+trustworthy: it unpacks the archive into a container with a network and port of
+its own, starts the app on that data, and requires an HTTP health check to
+answer.
+
+## Installing apps
+
+```bash
+homebutler install list
+homebutler install <app>
+homebutler install status <app>
+homebutler install uninstall <app>
+homebutler install purge <app>
+```
+
+## Output and config
+
+Every command takes `--json`. Commands that can reach another machine take
+`--server <name>` and `--all`.
+
+Config is found in this order: `--config <path>`, `$HOMEBUTLER_CONFIG`,
+`~/.config/homebutler/config.yaml`, `./homebutler.yaml`. Sections: `servers`,
+`wake`, `alerts`, `notify`, `proxmox`, `watch`, `backup`.
+
+```bash
+homebutler config validate
+```
 
 ## Prerequisites
 
-`homebutler` must be installed and available in PATH.
-
 ```bash
-# Check if installed
-which homebutler
-
-# Option 1: Install via Homebrew (macOS/Linux)
 brew install Higangssh/homebutler/homebutler
-
-# Option 2: Install via Go
 go install github.com/Higangssh/homebutler@latest
-
-# Option 3: Build from source
-git clone https://github.com/Higangssh/homebutler.git
-cd homebutler && make build && sudo mv homebutler /usr/local/bin/
 ```
-
-## Commands
-
-### Setup Wizard
-```bash
-homebutler init                      # Interactive config setup
-```
-Creates a config file at `~/.config/homebutler/config.yaml` with guided prompts.
-
-### System Status
-```bash
-homebutler status                    # Local server
-homebutler status --server rpi       # Specific remote server
-homebutler status --all              # All servers in parallel
-```
-Returns: hostname, OS, arch, uptime, CPU (usage%, cores), memory (total/used/%), disks (mount/total/used/%)
-
-### Butler Report
-```bash
-homebutler report                    # Health, warnings, changes, suggested actions
-homebutler report --no-save          # Preview without writing a snapshot
-homebutler report --keep 7           # Retain latest 7 snapshots
-homebutler report --json             # Structured output for automation/MCP
-```
-Use this first when the user asks “how is my homelab/server doing?” and wants a concise operational summary. It snapshots current system/container/port state and compares it with the previous run.
-
-### Inventory & Topology
-```bash
-homebutler inventory scan                     # Tree view of system, containers, ports
-homebutler inventory scan --json              # Structured inventory
-homebutler inventory export --format mermaid  # Mermaid topology diagram
-```
-Use this when the user asks what is running, which container owns a port, or wants topology/context for docs or AI analysis.
-
-### Docker Management
-```bash
-homebutler docker list               # List all containers
-homebutler docker list --server rpi  # List on remote server
-homebutler docker list --all         # List on all servers
-homebutler docker restart <name>     # Restart a container
-homebutler docker stop <name>        # Stop a container
-homebutler docker logs <name>        # Last 50 lines of logs
-homebutler docker logs <name> 200    # Last 200 lines
-```
-
-### Wake-on-LAN
-```bash
-homebutler wake <mac-address>           # Wake by MAC
-homebutler wake <name>                   # Wake by config name
-homebutler wake <mac> 192.168.1.255     # Custom broadcast
-```
-Config names are defined in config under `wake` targets.
-
-### Open Ports
-```bash
-homebutler ports                     # Local
-homebutler ports --server rpi        # Remote
-homebutler ports --all               # All servers
-```
-Returns: protocol, address, port, PID, process name
-
-### Network Scan
-```bash
-homebutler network scan
-```
-Discovers devices on the local LAN via ping sweep + ARP table. Returns: IP, MAC, hostname, status.
-Note: May take up to 30 seconds. Some devices may not appear if they don't respond to ping.
-
-### TUI Dashboard
-```bash
-homebutler watch                     # Live terminal dashboard for all servers
-```
-Real-time monitoring of all configured servers with auto-refresh. Shows CPU, memory, disk, docker containers in a terminal UI.
-
-### Web Dashboard
-```bash
-homebutler serve                     # Start web dashboard on port 8080
-homebutler serve --port 3000         # Custom port
-homebutler serve --demo              # Demo mode with fake data (no real system calls)
-```
-Browser-based dashboard at `http://localhost:8080`. Read-only view of all servers, docker containers, alerts.
-
-### SSH Host Key Trust
-```bash
-homebutler trust <server>            # Trust remote server's SSH host key
-homebutler trust <server> --reset    # Remove old key and re-trust
-```
-TOFU (Trust On First Use) model. Required before first SSH connection to a new server.
-
-### Upgrade
-```bash
-homebutler upgrade                   # Upgrade local + all remote servers
-homebutler upgrade --local           # Upgrade only local binary
-```
-Downloads latest release from GitHub and installs it. For remote servers, uses SSH to upgrade.
-
-### Resource Alerts
-```bash
-homebutler alerts                    # Local
-homebutler alerts --server rpi       # Remote
-homebutler alerts --all              # All servers
-```
-Checks CPU/memory/disk against thresholds in config. Returns status (ok/warning/critical) per resource.
-
-### Deploy (Remote Installation)
-```bash
-homebutler deploy --server rpi                          # Download from GitHub Releases
-homebutler deploy --server rpi --local ./homebutler     # Air-gapped: copy local binary
-homebutler deploy --all                                 # Deploy to all remote servers
-```
-Installs homebutler on remote servers via SSH. Auto-detects remote OS/architecture.
-Install path priority: `/usr/local/bin` → `sudo /usr/local/bin` → `~/.local/bin` (with PATH auto-registration in .profile/.bashrc/.zshrc).
-
-### App Install
-```bash
-homebutler install list              # List available apps
-homebutler install <app>             # Install an app (docker compose)
-homebutler install <app> --port 9090 # Custom port
-homebutler install status <app>      # Check app status
-homebutler install uninstall <app>   # Stop app, keep data
-homebutler install purge <app>       # Stop + delete all data
-```
-Deploys self-hosted apps via docker compose. Each app gets its own directory at `~/.homebutler/apps/<app>/` with auto-generated `docker-compose.yml` and persistent data. Pre-checks docker availability, port conflicts, and duplicates. Available apps include uptime-kuma, plex, vaultwarden, filebrowser, it-tools, gitea, jellyfin, homepage, stirling-pdf, speedtest-tracker, mealie, pi-hole, adguard-home, portainer, and nginx-proxy-manager.
-
-### Backup, Restore & Backup Drill
-```bash
-homebutler backup                          # Back up Docker compose volumes/files
-homebutler backup --service uptime-kuma    # Back up one service
-homebutler backup list                     # List backup archives
-homebutler backup drill uptime-kuma        # Boot backup in isolation and verify HTTP health
-homebutler backup drill --all              # Drill every supported app in backup
-homebutler backup drill --archive ./file   # Drill a specific archive
-homebutler restore ./backup.tar.gz         # Restore volumes from archive
-```
-Prefer `backup drill` when the user asks whether backups are trustworthy: it validates the archive, boots the app in an isolated Docker environment, health-checks it, and cleans up.
-
-### MCP Server
-```bash
-homebutler mcp                       # Start MCP server (JSON-RPC over stdio)
-```
-Starts a built-in MCP (Model Context Protocol) server for use with Claude Desktop, ChatGPT, Cursor, and other MCP clients. No network ports opened — uses stdio only.
-
-Current MCP tools:
-- `system_status`
-- `report`
-- `inventory_scan`, `inventory_export`
-- `docker_list`, `docker_restart`, `docker_stop`, `docker_logs`, `docker_stats`, `docker_top`, `docker_inspect`
-- `wake`, `open_ports`, `network_scan`, `alerts`
-- `backup_create`, `backup_list`, `backup_drill`, `backup_restore`
-- `install_list`, `install_app`, `install_status`, `install_uninstall`, `install_purge`
-- `proxmox_status`, `proxmox_guests`, `proxmox_node`, `proxmox_tasks`, `proxmox_guest_start`, `proxmox_guest_reboot`, `proxmox_guest_shutdown`, `proxmox_task_status`, `proxmox_script_list`, `proxmox_script_command`
-
-### Version
-```bash
-homebutler version
-```
-
-## Output Format
-
-All commands output human-readable text by default. Use `--json` flag for machine-parseable JSON output (recommended for AI/script integration).
-
-## Config File
-
-Config file is auto-discovered in order:
-1. `--config <path>` — Explicit flag
-2. `$HOMEBUTLER_CONFIG` — Environment variable
-3. `~/.config/homebutler/config.yaml` — XDG standard (recommended)
-4. `./homebutler.yaml` — Current directory
-
-If no config found, sensible defaults are used.
-
-### Config Options
-- `servers` — Server list with SSH connection details
-- `wake` — Named WOL targets with MAC + broadcast
-- `alerts.cpu/memory/disk` — Threshold percentages
-- `output` — Default output format
-
-### Multi-Server Config Example
-```yaml
-servers:
-  - name: main-server
-    host: 192.168.1.10
-    local: true
-
-  - name: rpi
-    host: 192.168.1.20
-    user: pi
-    auth: key                # "key" (default, recommended) or "password"
-    key: ~/.ssh/id_ed25519   # optional, auto-detects
-
-  - name: vps
-    host: example.com
-    user: deploy
-    port: 2222
-    auth: key
-    key: ~/.ssh/id_ed25519
-```
-
-## Usage Guidelines
-
-1. **Always run commands, don't guess** — execute `homebutler status` to get real data
-2. **Interpret results for the user** — don't dump raw JSON, summarize in natural language
-3. **Warn on alerts** — if any resource shows "warning" or "critical", highlight it
-4. **Use --all for overview** — when user asks about "all servers" or "everything", use `--all`
-5. **Use --server for specific** — when user mentions a server by name, use `--server <name>`
-6. **Docker errors** — if docker is not installed or daemon not running, explain clearly
-7. **Network scan** — warn user it may take ~30 seconds
-8. **Security** — never expose raw JSON with hostnames/IPs in group chats, summarize instead
-9. **Deploy** — suggest `--local` for air-gapped environments
-
-## Security Notes
-
-- **SSH authentication**: Always prefer key-based auth over passwords. Never store plaintext passwords in config.
-- **Network scans**: Only run on your own local network. Warn user before scanning.
-- **Deploy**: Only deploy to servers you own. Confirm with user before remote installations.
-- **Config file permissions**: Keep config files readable only by owner (`chmod 600`).
-- **No telemetry**: homebutler sends zero data externally. All operations are local or to user-configured hosts only.
-
-## Error Handling
-
-- **SSH connection failed** → Check host/port/user in config, verify SSH key is registered on remote
-- **homebutler not found on remote** → Run `homebutler deploy --server <name>` first
-- **docker not installed** → Tell user docker is not available on that server
-- **docker daemon not running** → Suggest `sudo systemctl start docker`
-- **network scan timeout** → Normal on large subnets, suggest retrying
-- **permission denied** → May need sudo for ports/docker commands on some systems
-
-## Example Interactions
-
-User: "How's the server doing?"
-→ Prefer `homebutler report`, summarize health, warnings, notable changes, and suggested actions. Use `homebutler status` only for a raw point-in-time status.
-
-User: "What changed / what owns this port / map my homelab"
-→ Run `homebutler inventory scan` or `homebutler inventory export --format mermaid`.
-
-User: "Check all servers"
-→ Run `homebutler status --all`, summarize each server's status
-
-User: "How's the Raspberry Pi?"
-→ Run `homebutler status --server rpi`, summarize
-
-User: "What docker containers are running?"
-→ Run `homebutler docker list`, list container names and states
-
-User: "Wake up the NAS"
-→ Run `homebutler wake nas` (if configured) or ask for MAC address
-
-User: "Any alerts across all servers?"
-→ Run `homebutler alerts --all`, report any warnings/critical
-
-User: "Deploy homebutler to the new server"
-→ Run `homebutler deploy --server <name>`, report result
-
-User: "Install uptime-kuma"
-→ Run `homebutler install uptime-kuma`, report URL and status
-
-User: "What apps are available?"
-→ Run `homebutler install list`, show available apps
-
-User: "Remove vaultwarden completely"
-→ Run `homebutler install purge vaultwarden`, confirm deletion
-
-User: "Can I trust my backup?"
-→ Run `homebutler backup drill <app>` or `homebutler backup drill --all`, report pass/fail and health status
