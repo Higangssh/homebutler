@@ -2,6 +2,7 @@ package server
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"time"
 
@@ -100,6 +101,12 @@ collect:
 // the last one that did when it does not.
 func (s *Server) readServer(srv *config.ServerConfig) serverReading {
 	status, err := s.collect(srv)
+	if errors.Is(err, ErrContainerCannotSeeHost) {
+		// Not a failure to reach anything: there is nothing at this address to
+		// reach from in here, and saying which two things would fix it is more
+		// use than a class.
+		return s.snapshotReading(srv, "", system.ContainerCannotSeeHost)
+	}
 	if err != nil {
 		return s.snapshotReading(srv, remote.Classify(err), "")
 	}
@@ -115,8 +122,20 @@ func (s *Server) readServer(srv *config.ServerConfig) serverReading {
 	}
 }
 
+// ErrContainerCannotSeeHost is returned instead of the container's own
+// readings for a server marked local.
+//
+// Answering with them would be worse than failing: the numbers look right,
+// they update, and they describe a machine nobody asked about.
+// The sentence a person reads is system.ContainerCannotSeeHost; this is the
+// value the code branches on, in the shape Go errors are written in.
+var ErrContainerCannotSeeHost = errors.New("a container cannot see the machine it runs on")
+
 func (s *Server) collect(srv *config.ServerConfig) (*system.StatusInfo, error) {
 	if srv.Local {
+		if system.InContainer() {
+			return nil, ErrContainerCannotSeeHost
+		}
 		return system.Status()
 	}
 	out, err := s.remoteRunner(srv, "status", "--json")

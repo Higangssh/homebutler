@@ -419,6 +419,12 @@ func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request) {
 		s.forwardRemote(w, srv, "status", "--json")
 		return
 	}
+	// Inside a container this would be the container's own /proc, which is a
+	// convincing answer about the wrong machine.
+	if system.InContainer() {
+		writeError(w, http.StatusNotImplemented, system.ContainerCannotSeeHost)
+		return
+	}
 	info, err := system.Status()
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
