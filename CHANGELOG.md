@@ -2,9 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
-## [0.35.0](https://github.com/Higangssh/homebutler/compare/v0.34.0...v0.35.0) - 2026-09-16
+## [0.35.1](https://github.com/Higangssh/homebutler/compare/v0.34.0...v0.35.1) - 2026-09-16
 
 **The dashboard showed what every other tool already shows, and not the one thing homebutler is for.** The Report tab answers what changed since the last snapshot — what needs attention first, then the changes with the kind word each one carries, then the snapshot being compared against and how old it is — with `doctor` below it. An agent gets the same thing as typed JSON rather than sentences to parse, and there is a container image now, which reaches the machines in `servers:` over SSH and says plainly that it cannot see the host it runs on.
+
+> v0.35.0 was tagged and published nowhere: the release failed while building the container image, before anything reached GitHub, npm, Homebrew or ghcr. The tag stays where it is — the Go module proxy had already fetched it, and moving a tag it has recorded breaks `go install` at that version for good. 0.35.1 is that release, with the image build fixed.
 
 ```
 ── Needs Attention ───────────────────────────────────────────
