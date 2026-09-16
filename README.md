@@ -36,6 +36,9 @@ brew install Higangssh/homebutler/homebutler     # or: curl -fsSL https://raw.gi
 homebutler report                                # first run saves a baseline; the second tells you what moved
 ```
 
+Or as a container, reaching your machines over SSH — [docs/docker.md](docs/docker.md):
+`docker run -v ~/.config/homebutler:/config -v ~/.ssh:/root/.ssh:ro ghcr.io/higangssh/homebutler`
+
 Section rules, labels, and severities are colour-coded in a terminal. Colour is
 dropped automatically when output is piped, redirected, or run from cron.
 
@@ -102,6 +105,10 @@ curl -fsSL https://raw.githubusercontent.com/Higangssh/homebutler/main/install.s
 
 # Or via Homebrew
 brew install Higangssh/homebutler/homebutler
+
+# Or as a container — the hub that reaches your machines over SSH
+docker run -d -p 8080:8080 -v ~/.config/homebutler:/config -v ~/.ssh:/root/.ssh:ro \
+  ghcr.io/higangssh/homebutler serve --host 0.0.0.0 --token "$(openssl rand -hex 16)"
 
 # Interactive setup — add your servers in seconds
 homebutler init

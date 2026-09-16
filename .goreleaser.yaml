@@ -15,41 +15,31 @@ builds:
       - -s -w -X main.version={{.Version}} -X main.buildDate={{.Date}}
 
 archives:
-  - format: tar.gz
+  - formats: [tar.gz]
     name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
 
 checksum:
   name_template: checksums.txt
 
-release:
-  header: |
-    ## HomeButler {{ .Tag }}
-
-    **Tells you what changed on your server — only what's worth telling.** One binary, no daemon, no database, MCP server built in.
-
-    ### Install / Upgrade
-
-    ```bash
-    # Already installed? Just run:
-    homebutler upgrade
-
-    # Fresh install
-    brew install Higangssh/homebutler/homebutler
-    # or
-    curl -fsSL https://raw.githubusercontent.com/Higangssh/homebutler/main/install.sh | sh
-    # or
-    npm install -g homebutler
-    ```
-
-    ### MCP (Claude Desktop / Cursor / Claude Code)
-    ```json
-    { "mcpServers": { "homebutler": { "command": "npx", "args": ["-y", "homebutler@latest"] } } }
-    ```
-  footer: |
-    ---
-    **Full Changelog**: https://github.com/Higangssh/homebutler/compare/{{ .PreviousTag }}...{{ .Tag }}
-
-    **All install methods**: See [README](https://github.com/Higangssh/homebutler#installation)
+# The image is built from the binary above rather than from source, so the
+# dashboard assets embedded by `make build-web` are in it. A Dockerfile that
+# ran `go build` itself would produce an image whose web dashboard is an empty
+# directory, and nothing would notice until somebody opened it.
+dockers_v2:
+  - images:
+      - "ghcr.io/higangssh/homebutler"
+    tags:
+      - "{{ .Version }}"
+      - "latest"
+    platforms:
+      - "linux/amd64"
+      - "linux/arm64"
+    dockerfile: Dockerfile
+    labels:
+      org.opencontainers.image.source: "https://github.com/Higangssh/homebutler"
+      org.opencontainers.image.version: "{{ .Version }}"
+      org.opencontainers.image.licenses: "MIT"
+      org.opencontainers.image.description: "Tells you what changed on your server, and only what is worth telling"
 
 changelog:
   sort: asc
