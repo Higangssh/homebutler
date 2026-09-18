@@ -1,0 +1,33 @@
+version: 2
+
+updates:
+  # The actions themselves. This does not cover the tool versions those actions
+  # are given — `version: v2.13.2` for golangci-lint and `version: v2.18.1` for
+  # goreleaser are inputs, not action references, and have to be raised by hand.
+  # CONTRIBUTING says where.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    commit-message:
+      prefix: "chore"
+
+  - package-ecosystem: gomod
+    directory: /
+    schedule:
+      interval: monthly
+    commit-message:
+      prefix: "chore"
+    groups:
+      go-dependencies:
+        patterns: ["*"]
+
+  - package-ecosystem: npm
+    directory: /web
+    schedule:
+      interval: monthly
+    commit-message:
+      prefix: "chore"
+    groups:
+      web-dependencies:
+        patterns: ["*"]
