@@ -1,0 +1,162 @@
+# The surface homebutler freezes at 1.0.
+# Regenerate with: go test ./internal/contract -update
+# What this covers, and what it deliberately does not, is in docs/compatibility.md.
+
+## tools
+alerts risk=read args=[server:string]
+alerts_history risk=read args=[server:string]
+backup_create risk=write args=[server:string service:string to:string]
+backup_drill risk=write args=[all:boolean app:string archive:string server:string]
+backup_list risk=read args=[server:string]
+backup_restore risk=destructive args=[archive:string server:string service:string] required=[archive]
+config_validate risk=read args=[strict:boolean]
+docker_inspect risk=read args=[name:string server:string] required=[name]
+docker_list risk=read args=[server:string]
+docker_logs risk=read args=[lines:string name:string server:string] required=[name]
+docker_restart risk=write args=[name:string server:string] required=[name]
+docker_stats risk=read args=[server:string]
+docker_stop risk=destructive args=[name:string server:string] required=[name]
+docker_top risk=read args=[name:string server:string] required=[name]
+doctor risk=read args=[backup_max_age_hours:number server:string]
+install_app risk=write args=[app:string port:string] required=[app]
+install_list risk=read args=[]
+install_purge risk=destructive args=[app:string] required=[app]
+install_status risk=read args=[app:string] required=[app]
+install_uninstall risk=write args=[app:string] required=[app]
+inventory_export risk=read args=[format:string server:string]
+inventory_scan risk=read args=[server:string]
+network_scan risk=read args=[]
+notify_test risk=write args=[server:string]
+open_ports risk=read args=[server:string]
+processes risk=read args=[limit:string server:string sort_by:string]
+proxmox_guest_reboot risk=write args=[confirm:boolean endpoint:string node:string type:string vmid:integer] required=[confirm endpoint node type vmid]
+proxmox_guest_shutdown risk=destructive args=[confirm:boolean endpoint:string node:string type:string vmid:integer] required=[confirm endpoint node type vmid]
+proxmox_guest_start risk=write args=[confirm:boolean endpoint:string node:string type:string vmid:integer] required=[confirm endpoint node type vmid]
+proxmox_guests risk=read args=[endpoint:string node:string status:string type:string]
+proxmox_node risk=read args=[endpoint:string node:string] required=[node]
+proxmox_script_command risk=read args=[slug:string] required=[slug]
+proxmox_script_list risk=read args=[]
+proxmox_status risk=read args=[endpoint:string]
+proxmox_task_status risk=read args=[endpoint:string node:string upid:string] required=[endpoint node upid]
+proxmox_tasks risk=read args=[endpoint:string node:string] required=[node]
+report risk=write args=[keep:number no_save:boolean server:string]
+system_status risk=read args=[server:string]
+wake risk=write args=[broadcast:string target:string] required=[target]
+watch_add risk=write args=[container:string kind:string server:string unit:string] required=[container]
+watch_check risk=write args=[server:string]
+watch_history risk=read args=[container:string include_logs:boolean limit:string server:string]
+watch_list risk=read args=[server:string]
+watch_remove risk=write args=[container:string server:string] required=[container]
+
+## routes
+GET /api/alerts protection=none
+GET /api/capabilities protection=none
+GET /api/config protection=none
+GET /api/docker protection=none
+GET /api/docker/stats protection=none
+GET /api/doctor protection=none
+GET /api/overview protection=none
+GET /api/ports protection=none
+GET /api/processes protection=none
+GET /api/proxmox/endpoints protection=none
+GET /api/proxmox/status protection=none
+GET /api/report protection=none
+GET /api/servers protection=none
+GET /api/servers/{name}/status protection=none
+GET /api/status protection=none
+GET /api/version protection=none
+GET /api/wake protection=none
+GET /api/watch protection=none
+GET /api/watch/incidents protection=none
+GET /api/watch/incidents/{id} protection=none
+OPTIONS /api/ protection=none
+POST /api/notify/test protection=token
+POST /api/report/snapshot protection=token
+POST /api/wake/{name} protection=token
+PUT /api/config/alerts protection=token
+PUT /api/config/notify protection=token
+PUT /api/config/proxmox protection=token
+PUT /api/config/servers protection=token
+PUT /api/config/wake protection=token
+
+## json
+report.Report.compared_to:string
+report.Report.is_baseline:bool
+report.Report.needs_attention.kind:string
+report.Report.needs_attention.target:string
+report.Report.needs_attention.text:string
+report.Report.needs_attention:[]Finding
+report.Report.notable_changes.detail:string
+report.Report.notable_changes.kind:string
+report.Report.notable_changes.target:string
+report.Report.notable_changes.text:string
+report.Report.notable_changes:[]ChangeLine
+report.Report.server_name:string
+report.Report.snapshot_saved:bool
+report.Report.status:[]string
+report.Report.suggested_actions.command:string
+report.Report.suggested_actions.runner:string
+report.Report.suggested_actions.text:string
+report.Report.suggested_actions.tool:string
+report.Report.suggested_actions:[]Action
+report.Report.timestamp:string
+report.Report.warnings:[]string
+report.ChangeLine.detail:string
+report.ChangeLine.kind:string
+report.ChangeLine.target:string
+report.ChangeLine.text:string
+report.Finding.kind:string
+report.Finding.target:string
+report.Finding.text:string
+report.Action.command:string
+report.Action.runner:string
+report.Action.text:string
+report.Action.tool:string
+doctor.Result.findings.action:string
+doctor.Result.findings.category:string
+doctor.Result.findings.command:string
+doctor.Result.findings.detail:string
+doctor.Result.findings.runner:string
+doctor.Result.findings.severity:string
+doctor.Result.findings.title:string
+doctor.Result.findings.tool:string
+doctor.Result.findings:[]Finding
+doctor.Result.server_name:string
+doctor.Result.status:string
+doctor.Result.summary.fail:int
+doctor.Result.summary.pass:int
+doctor.Result.summary.warn:int
+doctor.Result.summary:Summary
+doctor.Result.timestamp:string
+doctor.Finding.action:string
+doctor.Finding.category:string
+doctor.Finding.command:string
+doctor.Finding.detail:string
+doctor.Finding.runner:string
+doctor.Finding.severity:string
+doctor.Finding.title:string
+doctor.Finding.tool:string
+doctor.Summary.fail:int
+doctor.Summary.pass:int
+doctor.Summary.warn:int
+system.StatusInfo.arch:string
+system.StatusInfo.cpu.cores:int
+system.StatusInfo.cpu.usage_percent:float64
+system.StatusInfo.cpu:CPUInfo
+system.StatusInfo.disks.mount:string
+system.StatusInfo.disks.total_gb:float64
+system.StatusInfo.disks.usage_percent:float64
+system.StatusInfo.disks.used_gb:float64
+system.StatusInfo.disks:[]DiskInfo
+system.StatusInfo.hostname:string
+system.StatusInfo.memory.total_gb:float64
+system.StatusInfo.memory.usage_percent:float64
+system.StatusInfo.memory.used_gb:float64
+system.StatusInfo.memory:MemInfo
+system.StatusInfo.os:string
+system.StatusInfo.time:string
+system.StatusInfo.uptime:string
+
+## vocabularies
+report.kind: gone new replaced image state port disk skipped
+doctor.runner: mcp cli shell

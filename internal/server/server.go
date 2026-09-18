@@ -55,6 +55,7 @@ type Server struct {
 	token        string
 	version      string
 	mux          *http.ServeMux
+	registered   []string
 	revisionKey  []byte
 	remoteRunner RemoteRunner
 	proxmoxMu    sync.RWMutex
@@ -179,7 +180,27 @@ func (s *Server) Run() error {
 	return nil
 }
 
+// Routes reports every pattern this server registers, and whether reaching it
+// costs a token.
+//
+// The mux cannot be asked what is in it, and the contract test needs to know:
+// a route the dashboard or a documented widget depends on is part of what 1.0
+// freezes, and half of them are registered here rather than declared in the
+// capability registry. A second list written by hand would drift from this one
+// — which is the whole failure being guarded against.
+func (s *Server) Routes() []string {
+	return append([]string(nil), s.registered...)
+}
+
+// record notes a pattern as it is registered, so Routes reflects what the mux
+// actually has rather than what somebody remembered to add.
+func (s *Server) record(pattern string, handler http.HandlerFunc) {
+	s.registered = append(s.registered, pattern)
+	s.mux.HandleFunc(pattern, handler)
+}
+
 func (s *Server) routes() {
+	s.registered = nil
 	// api wraps handlers with CORS and optional bearer token auth.
 	api := func(h http.HandlerFunc) http.HandlerFunc {
 		return s.requireAuth(s.cors(h))
@@ -203,7 +224,7 @@ func (s *Server) routes() {
 			continue
 		}
 		if h, ok := handlers[c.Tool.Name]; ok {
-			s.mux.HandleFunc(c.HTTP.Method+" "+c.HTTP.Path, api(h))
+			s.record(c.HTTP.Method+" "+c.HTTP.Path, api(h))
 		}
 	}
 
@@ -211,21 +232,21 @@ func (s *Server) routes() {
 	// than something homebutler can do to a machine, so the registry has
 	// nothing to say about them.
 	if s.demo {
-		s.mux.HandleFunc("GET /api/wake", api(s.demoWake))
-		s.mux.HandleFunc("GET /api/overview", api(s.demoOverview))
-		s.mux.HandleFunc("GET /api/servers", api(s.demoServers))
-		s.mux.HandleFunc("GET /api/servers/{name}/status", api(s.demoServerStatus))
-		s.mux.HandleFunc("GET /api/config", api(s.demoConfig))
-		s.mux.HandleFunc("GET /api/watch/incidents/{id}", api(s.demoWatchIncident))
-		s.mux.HandleFunc("GET /api/report", api(s.demoReport))
+		s.record("GET /api/wake", api(s.demoWake))
+		s.record("GET /api/overview", api(s.demoOverview))
+		s.record("GET /api/servers", api(s.demoServers))
+		s.record("GET /api/servers/{name}/status", api(s.demoServerStatus))
+		s.record("GET /api/config", api(s.demoConfig))
+		s.record("GET /api/watch/incidents/{id}", api(s.demoWatchIncident))
+		s.record("GET /api/report", api(s.demoReport))
 	} else {
-		s.mux.HandleFunc("GET /api/wake", api(s.handleWakeList))
-		s.mux.HandleFunc("GET /api/overview", api(s.handleOverview))
-		s.mux.HandleFunc("GET /api/servers", api(s.handleServers))
-		s.mux.HandleFunc("GET /api/servers/{name}/status", api(s.handleServerStatus))
-		s.mux.HandleFunc("GET /api/config", api(s.handleConfig))
-		s.mux.HandleFunc("GET /api/watch/incidents/{id}", api(s.handleWatchIncident))
-		s.mux.HandleFunc("GET /api/report", api(s.handleReport))
+		s.record("GET /api/wake", api(s.handleWakeList))
+		s.record("GET /api/overview", api(s.handleOverview))
+		s.record("GET /api/servers", api(s.handleServers))
+		s.record("GET /api/servers/{name}/status", api(s.handleServerStatus))
+		s.record("GET /api/config", api(s.handleConfig))
+		s.record("GET /api/watch/incidents/{id}", api(s.handleWatchIncident))
+		s.record("GET /api/report", api(s.handleReport))
 	}
 	// Write endpoints exist only when a token does. Registering them behind a
 	// check that says "unauthorized" would still be a write surface on an
@@ -235,24 +256,24 @@ func (s *Server) routes() {
 	// defensible, and the same page able to rewrite the config is not.
 	if s.token != "" {
 		if s.demo {
-			s.mux.HandleFunc("PUT /api/config/alerts", api(s.demoSaveAlerts))
-			s.mux.HandleFunc("PUT /api/config/notify", api(s.demoSaveNotify))
-			s.mux.HandleFunc("PUT /api/config/wake", api(s.demoSaveWake))
-			s.mux.HandleFunc("PUT /api/config/servers", api(s.demoSaveServers))
-			s.mux.HandleFunc("PUT /api/config/proxmox", api(s.demoSaveProxmox))
+			s.record("PUT /api/config/alerts", api(s.demoSaveAlerts))
+			s.record("PUT /api/config/notify", api(s.demoSaveNotify))
+			s.record("PUT /api/config/wake", api(s.demoSaveWake))
+			s.record("PUT /api/config/servers", api(s.demoSaveServers))
+			s.record("PUT /api/config/proxmox", api(s.demoSaveProxmox))
 		} else {
-			s.mux.HandleFunc("PUT /api/config/alerts", api(s.handleSaveAlerts))
-			s.mux.HandleFunc("PUT /api/config/notify", api(s.handleSaveNotify))
-			s.mux.HandleFunc("PUT /api/config/wake", api(s.handleSaveWake))
-			s.mux.HandleFunc("PUT /api/config/servers", api(s.handleSaveServers))
-			s.mux.HandleFunc("PUT /api/config/proxmox", api(s.handleSaveProxmox))
+			s.record("PUT /api/config/alerts", api(s.handleSaveAlerts))
+			s.record("PUT /api/config/notify", api(s.handleSaveNotify))
+			s.record("PUT /api/config/wake", api(s.handleSaveWake))
+			s.record("PUT /api/config/servers", api(s.handleSaveServers))
+			s.record("PUT /api/config/proxmox", api(s.handleSaveProxmox))
 		}
 	}
 
-	s.mux.HandleFunc("GET /api/proxmox/endpoints", api(s.handleProxmoxEndpoints))
-	s.mux.HandleFunc("GET /api/capabilities", api(s.handleCapabilities))
-	s.mux.HandleFunc("GET /api/version", api(s.handleVersion))
-	s.mux.HandleFunc("OPTIONS /api/", s.handleOptions)
+	s.record("GET /api/proxmox/endpoints", api(s.handleProxmoxEndpoints))
+	s.record("GET /api/capabilities", api(s.handleCapabilities))
+	s.record("GET /api/version", api(s.handleVersion))
+	s.record("OPTIONS /api/", s.handleOptions)
 
 	// An /api/ path that matched nothing is a missing endpoint, and saying so
 	// is the whole point of not registering the write routes without a token:
