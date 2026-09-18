@@ -29,10 +29,25 @@ jobs:
       - name: Verify go.mod is tidy
         run: go mod tidy -diff
 
+      # Pinned, not latest. A linter that upgrades itself means the build can
+      # break on a day nobody touched the repository — and it did: a vet check
+      # added in 2.12 rejected reflect.Ptr, which passed on the maintainer's
+      # older local copy and failed here. Upgrading is a pull request, where
+      # the new findings are somebody's decision rather than a surprise.
       - name: golangci-lint
         uses: golangci/golangci-lint-action@v7
         with:
-          version: latest
+          version: v2.13.2
+
+      # goreleaser's config is checked here rather than only at tag time. It
+      # was already failing `check` on deprecated properties once, and nothing
+      # said so until somebody ran it by hand — with `version: latest` on the
+      # release job, that is a release breaking on a day we changed nothing.
+      - name: Check the release config
+        uses: goreleaser/goreleaser-action@v6
+        with:
+          version: v2.18.1
+          args: check
 
       # The release body is cut from the changelog at tag time, so a section
       # that cannot be cut is a release that fails. Finding that out here costs

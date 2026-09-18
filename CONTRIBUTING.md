@@ -117,6 +117,22 @@ work and now does not goes under `⚠️ Behavior changes`, which is the section
 people read before upgrading. An internal change with no user-visible effect
 does not need one. If you are unsure, write the line and let the review decide.
 
+### Linting with what CI lints with
+
+CI pins golangci-lint rather than taking the newest, because a linter that
+upgrades itself breaks the build on a day nobody touched the repository. Match
+it locally or you will pass here and fail there:
+
+```bash
+golangci-lint --version                                  # compare with .github/workflows/ci.yml
+go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.13.2
+```
+
+Dependabot raises the actions and the dependencies, not those pinned tool
+versions — they are inputs to an action rather than a version of one. Raising
+them is a pull request of its own, which is the point: CI runs the new linter
+against the whole tree before it can fail a release.
+
 ### Changing something other people build on
 
 Tool names, JSON fields, risk classes, `doctor`'s exit codes, documented config
