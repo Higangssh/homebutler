@@ -57,6 +57,7 @@ func Surface() string {
 	b.WriteString("\n## vocabularies\n")
 	b.WriteString("report.kind: " + strings.Join(report.Kinds(), " ") + "\n")
 	b.WriteString("doctor.runner: " + strings.Join([]string{doctor.RunnerMCP, doctor.RunnerCLI, doctor.RunnerShell}, " ") + "\n")
+	b.WriteString("doctor.category: " + strings.Join(doctor.Categories(), " ") + "\n")
 
 	return b.String()
 }

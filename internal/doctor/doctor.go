@@ -203,6 +203,19 @@ func openProxmoxEndpoint(endpoint config.ProxmoxConfig) (*proxmox.Client, error)
 	})
 }
 
+// Categories is every word a finding's Category can hold.
+//
+// A caller filtering on `category == "backup"` needs to know what else can
+// arrive, and a vocabulary nobody wrote down is a set of strings that grows.
+// The README documents these in the same shape as report's eight kinds, and
+// TestCategoriesMatchTheReadme reads that table rather than a copy kept here.
+func Categories() []string {
+	return []string{
+		"backup", "config", "docker", "exposure", "incomplete",
+		"notifications", "overall", "proxmox", "report", "system", "watch",
+	}
+}
+
 // Run performs a read-only health and readiness diagnosis.
 func Run(cfg *config.Config, fns CollectFuncs, opts Options) (*Result, error) {
 	if opts.BackupMaxAge == 0 {
@@ -266,7 +279,7 @@ func Run(cfg *config.Config, fns CollectFuncs, opts Options) (*Result, error) {
 
 func checkCollectionWarnings(r *Result, inv *inventory.Inventory) {
 	for _, w := range inv.Warnings {
-		r.add(SeverityWarn, "collection", "Doctor could not check everything", w, "Fix this first so doctor can give a complete answer.", "homebutler doctor")
+		r.add(SeverityWarn, "incomplete", "Doctor could not check everything", w, "Fix this first so doctor can give a complete answer.", "homebutler doctor")
 	}
 }
 

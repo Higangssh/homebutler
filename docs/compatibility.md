@@ -19,6 +19,7 @@ promise — the golden file there fails the build when any of it moves.
 | **JSON field names and types** | What `report --json`, `doctor --json` and `status --json` return. A field that changes from a string to an object breaks a caller as thoroughly as one that disappears |
 | **The `kind` vocabulary** | The eight words a change can carry, and what each means |
 | **The `runner` vocabulary** | `mcp`, `cli`, `shell` |
+| **The `category` vocabulary** | The eleven words a `doctor` finding can carry, documented in the README |
 | **`doctor` exit codes** | Including under `--strict` |
 | **Documented config keys** | Everything in [configuration.md](configuration.md) keeps its name and meaning |
 | **HTTP routes and their protection** | The path, the method, and whether a token is required. A route that quietly stops needing one is the change nobody sees |

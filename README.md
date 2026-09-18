@@ -186,6 +186,26 @@ homebutler doctor --json            # automation / MCP friendly
 
 `doctor` is a read-only preflight for the problems homelab users usually discover too late: high disk or memory usage, stopped containers, public bind ports, stale or missing backups, missing notifications, whether `report` has a baseline for change detection, and whether each configured Proxmox endpoint is reachable with the token it has. Every finding names the next command to run, so `--strict` makes it usable from cron or CI — including a Proxmox host that is unreachable or rebooting.
 
+Every finding carries a `category`, and `--json` carries the same word, so a
+caller filters on it without reading the title:
+
+| Category | What it is about |
+| --- | --- |
+| `system` | CPU, memory, disk |
+| `docker` | containers that are stopped or unhealthy |
+| `exposure` | ports listening on every interface |
+| `backup` | backups missing, stale, or never drilled |
+| `report` | whether there is a baseline to compare against |
+| `watch` | targets listed with nothing polling them |
+| `notifications` | channels configured, or never tested |
+| `proxmox` | an endpoint that cannot be reached with the token it has |
+| `config` | the config file itself — permissions, keys homebutler does not know |
+| `incomplete` | a collector did not answer, so this diagnosis is partial |
+| `overall` | nothing specific: the all-clear |
+
+`incomplete` is the one worth handling. It means the answer you are reading is
+missing a section, which is different from that section being fine.
+
 ### 🗂 Config Validation
 
 ```bash

@@ -181,3 +181,4 @@ system.StatusInfo.uptime:string
 ## vocabularies
 report.kind: gone new replaced image state port disk skipped
 doctor.runner: mcp cli shell
+doctor.category: backup config docker exposure incomplete notifications overall proxmox report system watch
