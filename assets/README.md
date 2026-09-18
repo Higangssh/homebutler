@@ -53,6 +53,18 @@ harder to notice.
 So when the report format changes, re-capture and re-render. Do not edit the
 image.
 
+The video it links to is the same frames with crossfades and **no audio track**,
+so do not describe it as something to listen to. The link is there because it
+plays larger than a GIF in a README column.
+
+`install-demo.gif` and `demo-thumbnail.png` were deleted in #219 and are still
+reachable through the raw URL of the commit that held them, which is how git
+works. That was left alone deliberately: what the install recording exposed was
+a macOS home path containing the maintainer's name, and the same name is the
+author of every commit in the repository, so rewriting public history buys
+nothing. An image carrying a token or a key would be a different decision, and
+the first move there is rotating the credential rather than rewriting history.
+
 Two things to fix at the next re-capture, left as they are because they are
 real output rather than invented:
 
