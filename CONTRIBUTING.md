@@ -117,6 +117,16 @@ work and now does not goes under `⚠️ Behavior changes`, which is the section
 people read before upgrading. An internal change with no user-visible effect
 does not need one. If you are unsure, write the line and let the review decide.
 
+### Changing something other people build on
+
+Tool names, JSON fields, risk classes, `doctor`'s exit codes, documented config
+keys and the HTTP routes are frozen at 1.0, and
+[docs/compatibility.md](docs/compatibility.md) says exactly which of them and
+what is still allowed to change. `go test ./internal/contract` fails when any
+of it moves, with the diff and the command to regenerate the golden file. If
+the change is deliberate, regenerate, commit the golden file alongside it, and
+write the ⚠️ Behavior changes line.
+
 ### Cutting a release
 
 The version in `skills/SKILL.md` is pinned, because a skill that tells an agent
