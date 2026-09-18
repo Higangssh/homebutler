@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### 📚 Documentation
+
+- replace the demo at the top of the README . The old one was a thumbnail linking to a 34-second video from before the dashboard could edit anything. The new run-through shows what changed, the same answer as JSON with the kind as a field, doctor, a backup drill, and the report on a phone — and its text is captured output rather than transcribed: the generator reads the real `report`, `doctor` and `backup drill` from a demo host and only colours them
+- drop the install demo, which showed `homebutler logs`, a command that does not exist, and five available apps where there are fifteen. Real `install list` output takes its place
+
 ## [0.35.2](https://github.com/Higangssh/homebutler/compare/v0.35.1...v0.35.2) - 2026-09-16
 
 **The README said nothing had to be installed on the machines homebutler watches, and that was not true.** A remote command runs the remote binary, and when that binary is older than the command being asked for, the failure now says so instead of sending you to check an install that is already there. What is true is the stronger claim anyway: nothing runs on those machines between commands — no daemon, no open port, nothing listening.

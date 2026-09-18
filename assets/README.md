@@ -35,6 +35,34 @@ suggested action — so a format change fails a test rather than quietly dating
 the image. It pinned only the change block once, and the card spent a release
 showing a sentence the binary no longer printed.
 
+## demo.gif
+
+The run-through at the top of the README, and the same frames as the video it
+links to. 820px wide, 1.6MB — the README's ceiling is 2MB, and a phone loads
+this before it loads anything else on the page.
+
+**The text in it is captured output, not typed.** The generator reads
+`captures/*.txt` — the real `report`, `report --json`, `doctor` and
+`backup drill` from a demo host — and only colours and lays them out; no scene
+carries a text literal. That order matters: an earlier version was transcribed
+by hand and showed `report --json` objects without their `text` field, which is
+a field the command always emits. A picture of output the binary does not
+produce is the same mistake as a sentence about behaviour it does not have, and
+harder to notice.
+
+So when the report format changes, re-capture and re-render. Do not edit the
+image.
+
+Two things to fix at the next re-capture, left as they are because they are
+real output rather than invented:
+
+- The demo home is `/tmp/homelab`, so the backup paths read
+  `/tmp/homelab/.homebutler/backups/…`. `/tmp` is where the operating system
+  throws things away, which is the wrong impression for the one feature about
+  keeping them. Capture with the demo home at `/home/demo`.
+- The exposed ports are `18091-18093`, which read as a test rig. Familiar
+  numbers — 8080, 8096, 3000 — read as somebody's actual machine.
+
 ## social-preview.html / social-preview.png
 
 The card GitHub serves as `og:image`, so it is what Reddit, X, Discord, and
