@@ -191,7 +191,7 @@ func jsonFields(t reflect.Type, seen map[reflect.Type]bool) []string {
 // slices, or nil when the field is not made of one. time.Time is left alone:
 // it marshals as a string, and its internals are not anybody's contract.
 func structUnder(t reflect.Type) reflect.Type {
-	for t.Kind() == reflect.Ptr || t.Kind() == reflect.Slice {
+	for t.Kind() == reflect.Pointer || t.Kind() == reflect.Slice {
 		t = t.Elem()
 	}
 	if t.Kind() != reflect.Struct || t.PkgPath() == "time" {
@@ -202,7 +202,7 @@ func structUnder(t reflect.Type) reflect.Type {
 
 func typeName(t reflect.Type) string {
 	switch t.Kind() {
-	case reflect.Ptr:
+	case reflect.Pointer:
 		return typeName(t.Elem())
 	case reflect.Slice:
 		return "[]" + typeName(t.Elem())
