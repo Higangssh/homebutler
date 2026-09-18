@@ -91,11 +91,11 @@ No daemon required, no database. Run it from a terminal, cron, a web dashboard y
 The design goal is simple: give humans and agents a narrow, structured interface to the server. HomeButler returns readable summaries and JSON instead of asking you to trust a black-box shell session.
 
 <p align="center">
-  <a href="https://www.youtube.com/watch?v=MFoDiYRH_nE">
-    <img src="assets/demo-thumbnail.png" alt="homebutler demo" width="800" />
-  </a>
+  <img src="assets/demo.gif" alt="a run through homebutler: report naming what moved since the last snapshot — a container gone, a port answered by something new, one recreated behind the same name — then the same answer as JSON with the kind as a field, then doctor listing what is exposed and what has never been backed up with the command for each, then a backup drill booting the archive in its own container and requiring an HTTP health check, then the same report on a phone, then the settings screen editing notification channels" width="820" />
 </p>
-<p align="center"><em>▶️ 34s demo — monitor, diagnose, and manage your homelab</em></p>
+<p align="center">
+  <em>The whole thing in half a minute · <a href="https://www.youtube.com/watch?v=jwRuFoxNWOY">watch with sound</a></em>
+</p>
 
 ## Quick Start
 
@@ -214,9 +214,16 @@ Findings
 
 ### 📦 One-Command App Install
 
-<p align="center">
-  <img src="assets/install-demo.gif" alt="homebutler install demo" width="900">
-</p>
+```
+$ homebutler install list
+📦 Available apps (15):
+
+  uptime-kuma          A self-hosted monitoring tool
+  vaultwarden          Lightweight Bitwarden-compatible password manager
+  jellyfin             Free software media system for streaming movies, TV, and music
+  pi-hole              Network-wide ad blocking via DNS filtering
+  …
+```
 
 > **`homebutler install uptime-kuma`** — Deploy self-hosted apps in seconds. Pre-checks Docker, ports, and duplicates. Generates `docker-compose.yml` automatically. [See all available apps →](#app-install)
 
