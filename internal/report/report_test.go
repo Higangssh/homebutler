@@ -354,3 +354,37 @@ func TestReportAndSnapshotLeakNoCredentials(t *testing.T) {
 		}
 	}
 }
+
+// The values behind the Status sentences are emitted as fields, so an agent
+// that wants the memory percentage reads it instead of splitting
+// "CPU: 4.0% (4 cores), Memory: 1.2/8.0 GB (15%)".
+//
+// They are the snapshot's own values passed through, not a second description
+// of the machine: the test compares them with the snapshot rather than with
+// numbers written here, because two copies of the same fact is the thing being
+// avoided.
+func TestTheReportEmitsTheValuesItsSentencesAreMadeOf(t *testing.T) {
+	snap := snapshotWith([]docker.Container{
+		{ID: "aaa", Name: "web", Image: "nginx:1.27", State: "running"},
+		{ID: "bbb", Name: "db", Image: "postgres:16", State: "exited"},
+	}, nil)
+	snap.PublicPortCount = 4
+
+	r := buildReport(snap, nil)
+
+	if r.Running != snap.RunningCount || r.Stopped != snap.StoppedCount {
+		t.Fatalf("counts do not match the snapshot: report %d/%d, snapshot %d/%d",
+			r.Running, r.Stopped, snap.RunningCount, snap.StoppedCount)
+	}
+	if r.PublicPorts != snap.PublicPortCount {
+		t.Fatalf("public ports: report %d, snapshot %d", r.PublicPorts, snap.PublicPortCount)
+	}
+	if r.System != snap.System {
+		t.Fatal("the report carries a different system status than the snapshot it was built from")
+	}
+
+	// And the sentences are still there for the person reading them.
+	if len(r.Status) == 0 {
+		t.Fatal("the status lines are gone")
+	}
+}

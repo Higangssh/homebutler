@@ -76,10 +76,26 @@ type Action struct {
 // held an em dash, an address and a port — which is reading prose with extra
 // steps, and the kind column exists to avoid exactly that.
 type Report struct {
-	Timestamp      string       `json:"timestamp"`
-	ServerName     string       `json:"server_name"`
-	IsBaseline     bool         `json:"is_baseline"`
-	SnapshotSaved  bool         `json:"snapshot_saved"`
+	Timestamp     string `json:"timestamp"`
+	ServerName    string `json:"server_name"`
+	IsBaseline    bool   `json:"is_baseline"`
+	SnapshotSaved bool   `json:"snapshot_saved"`
+
+	// System, Running, Stopped and PublicPorts are the values Status is
+	// rendered from. Status is the same information written for a person —
+	// "CPU: 4.0% (4 cores), Memory: 1.2/8.0 GB (15%)" — and an agent wanting
+	// the memory percentage had to split that string, which is the thing #199
+	// removed one field over.
+	//
+	// They are not a new vocabulary. They are the snapshot's own fields,
+	// passed through: a second description of a machine's state beside
+	// system.StatusInfo would be two things to keep in agreement, and one day
+	// they would not be.
+	System      *system.StatusInfo `json:"system,omitempty"`
+	Running     int                `json:"running_count"`
+	Stopped     int                `json:"stopped_count"`
+	PublicPorts int                `json:"public_port_count"`
+
 	Status         []string     `json:"status"`
 	NeedsAttention []Finding    `json:"needs_attention"`
 	NotableChanges []ChangeLine `json:"notable_changes"`
@@ -259,6 +275,13 @@ func buildReport(snap *Snapshot, prev *Snapshot) *Report {
 	if prev != nil {
 		r.ComparedTo = prev.Timestamp
 	}
+
+	// The same values the Status lines below are rendered from, passed through
+	// so a caller does not have to read them back out of a sentence.
+	r.System = snap.System
+	r.Running = snap.RunningCount
+	r.Stopped = snap.StoppedCount
+	r.PublicPorts = snap.PublicPortCount
 
 	// Status section
 	if snap.System != nil {
