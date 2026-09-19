@@ -1,5 +1,9 @@
 version: 2
 
+# Minor and patch updates arrive grouped, one PR per ecosystem: they are read
+# together and merged together. A major stays on its own PR, because a major is
+# a behaviour change somebody has to read the release notes for, and a group
+# that carries one cannot be judged as a whole.
 updates:
   # The actions themselves. This does not cover the tool versions those actions
   # are given — `version: v2.13.2` for golangci-lint and `version: v2.18.1` for
@@ -9,25 +13,34 @@ updates:
     directory: /
     schedule:
       interval: monthly
+    open-pull-requests-limit: 3
     commit-message:
       prefix: "chore"
+    groups:
+      actions:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
 
   - package-ecosystem: gomod
     directory: /
     schedule:
       interval: monthly
+    open-pull-requests-limit: 3
     commit-message:
       prefix: "chore"
     groups:
       go-dependencies:
         patterns: ["*"]
+        update-types: ["minor", "patch"]
 
   - package-ecosystem: npm
     directory: /web
     schedule:
       interval: monthly
+    open-pull-requests-limit: 3
     commit-message:
       prefix: "chore"
     groups:
       web-dependencies:
         patterns: ["*"]
+        update-types: ["minor", "patch"]
