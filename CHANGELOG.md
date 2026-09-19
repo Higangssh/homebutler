@@ -6,9 +6,15 @@ All notable changes to this project will be documented in this file.
 
 ### ✨ Features
 
+- write down the words a `doctor` finding can carry (#232). Every finding has a `category` and a caller is invited to filter on it, with no list to filter against — so an agent matching `backup` could not know whether `storage` would appear next release. The eleven are now a table in the README beside the eight change kinds, a test reads that table rather than a copy of it, and `docs/compatibility.md` freezes the vocabulary. One was renamed on the way: `collection` described homebutler's own collectors rather than anything about the machine being diagnosed
+
 - `report --json` carries the values its status lines are written from (#222). `status` is an array of sentences — `CPU: 4.0% (4 cores), Memory: 1.2/8.0 GB (15%)` — so an agent that wanted the memory percentage had to split a string, which is the thing #199 removed one field over. The report now emits the system status and the container and port counts as fields. They are the snapshot's own values passed through rather than a new vocabulary: a second description of a machine's state beside `system.StatusInfo` would be two things to keep in agreement. `status` is unchanged and so is the report a person reads, byte for byte
 
 - say what 1.0 freezes, in a form that can be checked (#216). `CONTRIBUTING.md` promised that 1.0 freezes the MCP tool surface and the JSON schema without saying which bytes, and the only way to learn a field had been renamed was to notice. [docs/compatibility.md](docs/compatibility.md) now says what is frozen, what is not, what additive change stays allowed, and the four steps for changing something frozen. `internal/contract` holds the same answer as a golden file, so a renamed tool, a retyped field, a moved risk class or a route that stopped requiring a token fails the build with the lines that moved
+
+### ⚠️ Behavior changes
+
+- **A `doctor` finding's `category` of `collection` is now `incomplete`.** Anything filtering on the old word needs the new one. It is the finding that says a collector did not answer, so the diagnosis is partial; the old name described the part of homebutler that failed rather than what it means for the answer.
 
 ### 📚 Documentation
 
