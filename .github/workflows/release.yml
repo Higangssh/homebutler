@@ -29,6 +29,18 @@ jobs:
       - name: Build web frontend
         run: make build-web
 
+      # GoReleaser refuses to build from a dirty tree, and its error names the
+      # file without saying which step wrote it. v0.36.0 was spent finding that
+      # out: `make build-web` ran `npm install`, which rewrote the lockfile.
+      - name: The build must not have written to the tree
+        run: |
+          if [ -n "$(git status --porcelain)" ]; then
+            echo "::error::building the frontend modified the working tree:"
+            git status --short
+            git diff
+            exit 1
+          fi
+
       - name: Run tests
         run: go test ./...
 
