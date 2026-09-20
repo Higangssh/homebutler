@@ -4,6 +4,11 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### 📚 Documentation
+
+- `failed_collectors` was documented as one list when it is one per surface (#250). The compatibility table named `docker`, `ports` and `processes` without saying where those apply, and `proxmox_status` reports `version`, `cluster` and `resources` in the same field — so a caller that believed the table and met `version` was given a value the table said could not arrive. The row now says the set is per surface and names both, and notes that the dashboard's own refresh uses a different key entirely. The table also says plainly that the Proxmox reads return Proxmox's shape, which is not ours to freeze, while the envelope `proxmox_status` wraps them in is
+
+
 ### 🐛 Fixes
 
 - `install_app` answered with two different shapes (#248). A refusal returned `{status, issues}` and a success returned `{status, app, port, path, state}`, so an agent reading `app` got nothing on the branch where something went wrong — the branch it most needs to report. Every install outcome names the app it is about now, and `data_preserved` says which of uninstall and purge happened rather than being present on one and absent on the other
