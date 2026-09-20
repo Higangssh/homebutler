@@ -9,6 +9,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/Higangssh/homebutler/internal/capability"
+	"github.com/Higangssh/homebutler/internal/doctor"
 )
 
 // skills/SKILL.md is published to ClawHub, where it is what an agent reads
@@ -211,4 +212,42 @@ func firstLineWith(text, needle string) string {
 		}
 	}
 	return ""
+}
+
+// "What needs a shell" is a claim about the registry, not a preference: the
+// skill says shell commands are for the things no tool exposes. `homebutler
+// notify test` sat in that list while `notify_test` was both an MCP tool and a
+// dashboard button, so an agent was sent to a shell for something it could
+// call. The claim is checkable, so it is checked — reading the list against
+// the classifier rather than against a copy of it.
+func TestTheShellListNamesNothingAToolExposes(t *testing.T) {
+	skill, err := os.ReadFile("../skills/SKILL.md")
+	if err != nil {
+		t.Fatalf("the skill is part of what ships: %v", err)
+	}
+
+	lines := commandLines(sectionOf(string(skill), "## What needs a shell"))
+	if len(lines) == 0 {
+		t.Fatal("no commands found under 'What needs a shell'; if the heading moved, this test has to move with it")
+	}
+
+	for _, line := range lines {
+		if runner, tool := doctor.ClassifyCommand(line); runner == doctor.RunnerMCP {
+			t.Errorf("%q is listed as needing a shell, and %s exposes it", line, tool)
+		}
+	}
+}
+
+// sectionOf returns the markdown from heading up to the next heading of the
+// same level, so a list is read with the sentence that introduced it.
+func sectionOf(markdown, heading string) string {
+	start := strings.Index(markdown, heading)
+	if start < 0 {
+		return ""
+	}
+	rest := markdown[start+len(heading):]
+	if end := strings.Index(rest, "\n## "); end >= 0 {
+		return rest[:end]
+	}
+	return rest
 }

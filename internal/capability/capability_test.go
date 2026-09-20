@@ -116,3 +116,50 @@ func TestEveryExposedWriteIsOneWeChose(t *testing.T) {
 		}
 	}
 }
+
+// The reason an absence gives goes out of `GET /api/capabilities`, so it is a
+// sentence said to whoever asks what the dashboard can do. A reason written at
+// the call site would be prose nobody could count, and the question this
+// registry exists to answer — how much is the HTTP surface still going to
+// grow — cannot be answered by prose.
+func TestAbsentReasonsAreFromTheClosedSet(t *testing.T) {
+	for _, c := range Registry {
+		if c.Exposed() {
+			continue
+		}
+		if c.HTTP.Absent == "" {
+			t.Errorf("%s is not exposed and does not say why", c.Tool.Name)
+			continue
+		}
+		if !absentReasons[c.HTTP.Absent] {
+			t.Errorf("%s gives a reason that is not one of the constants: %q", c.Tool.Name, c.HTTP.Absent)
+		}
+	}
+}
+
+// A destructive capability and a write one are absent for different reasons
+// and are waiting on different decisions. Letting them share a reason is how
+// "the dashboard can restart a container" and "the dashboard can delete an
+// app's data" become one question, which is the question #242 exists to keep
+// apart.
+func TestDestructiveAbsencesNameTheDestructiveDecision(t *testing.T) {
+	for _, c := range Registry {
+		if c.Exposed() {
+			continue
+		}
+		switch c.Risk {
+		case RiskDestructive:
+			if c.HTTP.Absent != AbsentNoDestructiveRuleYet {
+				t.Errorf("%s is destructive and waits on %q", c.Tool.Name, c.HTTP.Absent)
+			}
+		case RiskRead:
+			if c.HTTP.Absent != AbsentNoViewYet {
+				t.Errorf("%s is a read and waits on %q", c.Tool.Name, c.HTTP.Absent)
+			}
+		case RiskWrite:
+			if c.HTTP.Absent != AbsentNoActionRuleYet {
+				t.Errorf("%s is a write and waits on %q", c.Tool.Name, c.HTTP.Absent)
+			}
+		}
+	}
+}

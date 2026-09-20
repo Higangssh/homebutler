@@ -79,6 +79,39 @@ PUT /api/config/proxmox protection=token
 PUT /api/config/servers protection=token
 PUT /api/config/wake protection=token
 
+## absent
+alerts_history: no-view-yet
+backup_create: no-action-rule-yet
+backup_drill: no-action-rule-yet
+backup_list: no-view-yet
+backup_restore: no-destructive-rule-yet
+config_validate: no-view-yet
+docker_inspect: no-view-yet
+docker_logs: no-view-yet
+docker_restart: no-action-rule-yet
+docker_stop: no-destructive-rule-yet
+docker_top: no-view-yet
+install_app: no-action-rule-yet
+install_list: no-view-yet
+install_purge: no-destructive-rule-yet
+install_status: no-view-yet
+install_uninstall: no-action-rule-yet
+inventory_export: no-view-yet
+inventory_scan: no-view-yet
+network_scan: no-view-yet
+proxmox_guest_reboot: no-action-rule-yet
+proxmox_guest_shutdown: no-destructive-rule-yet
+proxmox_guest_start: no-action-rule-yet
+proxmox_guests: no-view-yet
+proxmox_node: no-view-yet
+proxmox_script_command: no-view-yet
+proxmox_script_list: no-view-yet
+proxmox_task_status: no-view-yet
+proxmox_tasks: no-view-yet
+watch_add: no-action-rule-yet
+watch_check: no-action-rule-yet
+watch_remove: no-action-rule-yet
+
 ## json
 report.Report.compared_to?:string
 report.Report.failed_collectors?:[]string

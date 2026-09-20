@@ -24,6 +24,7 @@ promise — the golden file there fails the build when any of it moves.
 | **`doctor` exit codes** | Including under `--strict` |
 | **Documented config keys** | Everything in [configuration.md](configuration.md) keeps its name and meaning |
 | **HTTP routes and their protection** | The path, the method, and whether a token is required. A route that quietly stops needing one is the change nobody sees |
+| **Which decision an absence waits on** | A capability the dashboard cannot reach records why. The sentence is prose and improves; the decision it names is frozen, so a tool quietly moving from "waiting on a rule" to "never" is a diff. Additive change after 1.0 is allowed — [the registry](../internal/capability/capability.go) is what says how much is still coming |
 
 A field whose value is a sentence — `report --json`'s `status` and `warnings`,
 `doctor`'s `title`, `detail` and `action` — is frozen as a field: it keeps its
@@ -103,3 +104,11 @@ this one has been wrong are worth writing down rather than discovering twice.
 
 Each of these was a real defect, not a hypothetical. They are listed because
 knowing what is not guaranteed is worth as much as the list of what is.
+
+Prose is not checkable, but a claim inside prose often is. The skill says shell
+commands are for the things no tool exposes, and it listed `homebutler notify
+test`, which is a tool and a dashboard button — so that sentence is now read
+against the registry rather than believed. Generating the prose from the code
+would close the gap by deleting the promise; extracting the claim keeps the
+promise and tests it. That is the route out of the first item above, when
+somebody takes it.
