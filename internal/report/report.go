@@ -105,6 +105,12 @@ type Report struct {
 	ComparedTo       string   `json:"compared_to,omitempty"`
 	SuggestedActions []Action `json:"suggested_actions"`
 	Warnings         []string `json:"warnings,omitempty"`
+	// Failed names the collectors that did not answer on this run, so a
+	// caller can tell an absent count from a real zero. Without it
+	// `running_count: 0` on a machine whose Docker was down reads as "no
+	// containers", and the only thing saying otherwise is a sentence in
+	// Warnings — which nothing should be parsing.
+	Failed []string `json:"failed_collectors,omitempty"`
 
 	// changes is the same set as NotableChanges, kept as the diff produced it
 	// so the human renderer can group and align it. NotableChanges stays
@@ -256,6 +262,17 @@ func buildSnapshot(inv *inventory.Inventory) *Snapshot {
 	return snap
 }
 
+// collectorFailed reports whether the named collector did not answer when this
+// snapshot was taken.
+func (s *Snapshot) collectorFailed(name string) bool {
+	for _, f := range s.Failed {
+		if f == name {
+			return true
+		}
+	}
+	return false
+}
+
 func countPublicPorts(pp []ports.PortInfo) int {
 	count := 0
 	for _, p := range pp {
@@ -282,6 +299,7 @@ func buildReport(snap *Snapshot, prev *Snapshot) *Report {
 	r.Running = snap.RunningCount
 	r.Stopped = snap.StoppedCount
 	r.PublicPorts = snap.PublicPortCount
+	r.Failed = snap.Failed
 
 	// Status section
 	if snap.System != nil {
@@ -299,12 +317,23 @@ func buildReport(snap *Snapshot, prev *Snapshot) *Report {
 			)
 		}
 	}
-	r.Status = append(r.Status,
-		fmt.Sprintf("Containers: %d running, %d stopped", snap.RunningCount, snap.StoppedCount),
-	)
-	r.Status = append(r.Status,
-		fmt.Sprintf("Public ports: %d", snap.PublicPortCount),
-	)
+	// A count nobody collected is not zero. The comparison above already
+	// refuses to call an uncollected section unchanged; the status lines have
+	// to refuse to call it empty for the same reason.
+	if snap.collectorFailed(inventory.CollectorDocker) {
+		r.Status = append(r.Status, "Containers: not collected — Docker did not answer")
+	} else {
+		r.Status = append(r.Status,
+			fmt.Sprintf("Containers: %d running, %d stopped", snap.RunningCount, snap.StoppedCount),
+		)
+	}
+	if snap.collectorFailed(inventory.CollectorPorts) {
+		r.Status = append(r.Status, "Public ports: not collected — the port collector did not answer")
+	} else {
+		r.Status = append(r.Status,
+			fmt.Sprintf("Public ports: %d", snap.PublicPortCount),
+		)
+	}
 
 	// Needs attention
 	if snap.System != nil {
@@ -324,7 +353,7 @@ func buildReport(snap *Snapshot, prev *Snapshot) *Report {
 			}
 		}
 	}
-	if snap.StoppedCount > 0 {
+	if snap.StoppedCount > 0 && !snap.collectorFailed(inventory.CollectorDocker) {
 		r.NeedsAttention = append(r.NeedsAttention, Finding{
 			Kind: "container",
 			Text: fmt.Sprintf("%d container(s) stopped", snap.StoppedCount),

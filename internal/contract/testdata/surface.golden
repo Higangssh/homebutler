@@ -81,6 +81,7 @@ PUT /api/config/wake protection=token
 
 ## json
 report.Report.compared_to:string
+report.Report.failed_collectors:[]string
 report.Report.is_baseline:bool
 report.Report.needs_attention.kind:string
 report.Report.needs_attention.target:string
