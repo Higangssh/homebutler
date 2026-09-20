@@ -169,12 +169,21 @@ func jsonFields(t reflect.Type, seen map[reflect.Type]bool) []string {
 		}
 
 		tag := field.Tag.Get("json")
-		name, _, _ := strings.Cut(tag, ",")
+		name, opts, _ := strings.Cut(tag, ",")
 		switch name {
 		case "-":
 			continue
 		case "":
 			name = field.Name
+		}
+
+		// A key that may be absent and a key whose value may be null are two
+		// different things to a caller, and dropping `omitempty` here meant a
+		// field becoming optional was invisible to the golden. The two marks
+		// sit in the two positions they describe: `name?` is the key that can
+		// go missing, `?type` is the value that can be null.
+		if hasOption(opts, "omitempty") {
+			name += "?"
 		}
 
 		out = append(out, name+":"+typeName(field.Type))
@@ -186,6 +195,17 @@ func jsonFields(t reflect.Type, seen map[reflect.Type]bool) []string {
 	}
 	sort.Strings(out)
 	return out
+}
+
+func hasOption(opts, want string) bool {
+	for opts != "" {
+		var opt string
+		opt, opts, _ = strings.Cut(opts, ",")
+		if opt == want {
+			return true
+		}
+	}
+	return false
 }
 
 // structUnder finds the struct a field is made of, through pointers and

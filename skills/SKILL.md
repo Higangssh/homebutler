@@ -119,12 +119,16 @@ it rather than reading the sentence:
  "text": "replaced: vaultwarden — recreated, …"}
 ```
 
-`needs_attention` and `suggested_actions` have the same shape. An action carries
-`command`, plus `runner` and `tool`:
+`needs_attention` and `suggested_actions` have the same shape. An action may
+carry a `command`, and when it does it also carries `runner` and `tool`:
 
 - `runner: mcp` — call `tool` and carry it out
 - `runner: cli` — homebutler can do it, no tool exposes it; the operator runs it
 - `runner: shell` — not a homebutler command at all
+
+An action with nothing to run — "address the items above" — has no `command`,
+and then no `runner` either. All three are omitted rather than sent empty, so
+absence means there is nothing to offer rather than something unclassified.
 
 `doctor` findings carry the same three fields. **Check `runner` before offering
 to fix something.**

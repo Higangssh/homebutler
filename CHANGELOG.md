@@ -10,6 +10,8 @@ All notable changes to this project will be documented in this file.
 
 ### 🐛 Fixes
 
+- the contract golden could not see a field becoming optional (#241). It read the json tag's name and discarded the rest, so `omitempty` never reached the frozen surface — a field that stopped always being sent looked identical to one that had not changed, while [docs/compatibility.md](docs/compatibility.md) froze "field names and types". Recording it named **41 fields that were already optional and had never been written down**. A line now reads `name?:type` for a key that may be absent and `name:?type` for a value that may be `null`, which are different things to a caller
+
 - `report` said a machine had no containers when it had failed to count them (#240). The comparison was careful about this — a section whose collector did not answer is reported as `skipped` rather than called unchanged — but the status lines were rendered from the same absent collection and stated it as a number. `report --json` returned `running_count: 0` for a machine with containers running, and the only thing saying otherwise was a sentence in `warnings`, which the compatibility contract tells callers not to parse. The status line now reads `Containers: not collected — Docker did not answer`, `failed_collectors` carries the same thing as a typed field, and a "containers stopped" finding is no longer raised from a collection that did not happen. A machine that really has nothing running still gets the zero
 
 ### ⚠️ Behavior changes
@@ -19,6 +21,8 @@ All notable changes to this project will be documented in this file.
 - **`backup drill` exits non-zero when a drill fails.** It exited 0 whatever the verdict, so a cron entry or a CI step reading the exit status was told a backup that does not restore had restored. If you have the drill on a schedule and have been ignoring its exit code, you will start seeing failures — that is the point of the change, and the failures were already there. With `--all`, any single app failing fails the run. `--json` is unchanged and still prints to stdout, so a caller reading `passed` is unaffected. `doctor` exit codes are untouched.
 
 ### 📚 Documentation
+
+- [docs/compatibility.md](docs/compatibility.md) says what the golden file does **not** check (#241). Descriptions beside a frozen vocabulary, the values inside a frozen type, a field that keeps its shape and changes meaning, and behaviour at the edges such as exit codes — each one listed because it was a real defect found by a person rather than by the mechanism. A mechanism running is not the same as a mechanism being enough, and 1.0 is easier to trust with the gaps written down than with them implied
 
 - `backup drill` had no page (#238). It is the command that separates having a backup from being able to restore one, and [docs/backup.md](docs/backup.md) — the page about backups — never mentioned it. It now has the run, what each step actually does, that the cleanup happens whether the drill passed or failed, the cron entry that makes a failure visible, and what a passing drill does **not** prove: the app answering a health check on restored data is not every row being there
 
