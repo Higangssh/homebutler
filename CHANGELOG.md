@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### 📚 Documentation
+
+- the config page never mentioned the legacy `alerts.yaml` (#245). `alerts` warns that the file is deprecated and says to move `rules`/`notify` into `config.yaml` — and the page a reader then opens listed four search paths, none of them that file, and said nothing about where the settings should go. It now says what the fallback is, quotes the warning, and names the two sections to move into
+
+- the Proxmox page said the dashboard was read-only, and it edits the `proxmox:` endpoints (#245). Those carry an API token, so the page where somebody decides how much privilege to give one is the worst place for that sentence to be wrong. It now says what the dashboard can edit and what it still cannot: no guest action is on the HTTP surface, and the registry records which decision that is waiting on
+
+- running homebutler inside an LXC or a VM reports on the guest, not the node (#245). [docs/docker.md](docs/docker.md) has said the equivalent about containers since the image shipped, and somebody arriving through Proxmox does not read the Docker page. The Proxmox page now says it in three sentences and links there rather than repeating it — to see the node, attach it under `proxmox:` as an API endpoint; to see other machines, `servers:` over SSH
+
 ## [0.37.0](https://github.com/Higangssh/homebutler/compare/v0.36.1...v0.37.0) - 2026-09-20
 
 **A failed backup drill told cron the backup was fine.** `backup drill` exists to answer one question — does this archive come back? — and the answer left only through the screen: the command exited `0` whatever the verdict. Anyone running it on a schedule was being told a backup that does not restore had restored. The same shape turned up in `report`, which called a machine empty when it had failed to count it, and the reason both survived this long is that nothing in the build was looking at either. Three of the mechanisms that were supposed to be looking have been widened.
