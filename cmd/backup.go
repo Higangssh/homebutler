@@ -70,6 +70,24 @@ func newBackupListCmd() *cobra.Command {
 	}
 }
 
+// drillVerdict is the drill's answer as an exit status. A drill exists to say
+// whether a backup comes back, so a failure has to leave through the exit code
+// too — a cron job or a CI step is where this is most likely to run and least
+// likely to be read.
+func drillVerdict(app string, result *backup.DrillResult) error {
+	if result.Passed {
+		return nil
+	}
+	return fmt.Errorf("%s did not come back from the backup", app)
+}
+
+func drillAllVerdict(report *backup.DrillReport) error {
+	if report.Failed == 0 {
+		return nil
+	}
+	return fmt.Errorf("%d of %d apps did not come back from the backup", report.Failed, report.Total)
+}
+
 func newDrillCmd() *cobra.Command {
 	var archive string
 	var all bool
@@ -106,19 +124,30 @@ Use --archive to drill a specific archive, or --all to verify every supported ap
 				Archive:   archive,
 			}
 
+			// A drill that fails is the answer the command exists to give, so
+			// it leaves through the exit code as well as the page. Reporting
+			// "this backup does not come back" with a successful exit hides it
+			// from the cron job and the CI step, which is where a drill is
+			// most likely to be run and least likely to be read.
 			if all {
 				report, err := backup.RunDrillAll(opts)
 				if err != nil {
 					return err
 				}
-				return output(report, jsonOutput)
+				if err := output(report, jsonOutput); err != nil {
+					return err
+				}
+				return drillAllVerdict(report)
 			}
 
 			result, err := backup.RunDrill(args[0], opts)
 			if err != nil {
 				return err
 			}
-			return output(result, jsonOutput)
+			if err := output(result, jsonOutput); err != nil {
+				return err
+			}
+			return drillVerdict(args[0], result)
 		},
 	}
 

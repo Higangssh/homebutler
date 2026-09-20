@@ -1,6 +1,7 @@
 # Backup & Restore
 
-Back up all your Docker service volumes, compose files, and environment variables in one command.
+Back up all your Docker service volumes, compose files, and environment
+variables in one command — and then prove the result comes back.
 
 ## Quick Start
 
@@ -9,6 +10,7 @@ homebutler backup                          # backup everything
 homebutler backup --service jellyfin       # backup a specific service
 homebutler backup --to /mnt/nas/backups/   # custom destination
 homebutler backup list                     # list existing backups
+homebutler backup drill uptime-kuma        # boot the backup and check it answers
 ```
 
 **Restore from a backup:**
@@ -97,6 +99,99 @@ backup_2026-03-11_1830.tar.gz
     ├── postgres_data.tar.gz
     └── jellyfin_config.tar.gz
 ```
+
+## Drill: proving the backup comes back
+
+A backup you have never restored is a folder. `backup drill` is the command
+that turns it into a backup: it takes an archive and boots the app from it, on
+a network and a port of its own, and requires the app to answer over HTTP
+before it will say the archive is good.
+
+```bash
+homebutler backup drill uptime-kuma        # the latest archive
+homebutler backup drill --all              # every app the archive holds
+homebutler backup drill --archive ./old.tar.gz uptime-kuma
+homebutler backup drill uptime-kuma --json
+```
+
+```
+🔍 Backup Drill — uptime-kuma
+
+  📦 Backup: /Users/you/.homebutler/backups/backup_2026-04-04_1711.tar.gz
+  📏 Size: 18.6 MB
+  🔐 Integrity: ✅ tar valid (8 files)
+
+  🚀 Boot: ✅ container started in 0s
+  🌐 Health: ✅ HTTP 200 on port 60405
+  ⏱️  Total: 2s
+
+  ✅ DRILL PASSED
+```
+
+### What it actually does
+
+1. Picks the latest archive in the backup directory, or the one `--archive` names
+2. Checks the archive is readable as a `tar` and counts what is inside
+3. Creates a Docker network and picks a free port, both used by this drill only
+4. Unpacks the app's volumes into fresh volumes and starts the app on them
+5. Waits for an HTTP health check to answer
+6. Removes the container, the network and the volumes it made
+
+Step 6 runs whether the drill passed or failed. Nothing it creates outlives it,
+and it never touches the running copy of the app: the drill boots a second copy
+beside it, on its own port, from the archive's data.
+
+### A failed drill exits non-zero
+
+The verdict leaves through the exit code as well as the screen, so the command
+is usable from cron or CI without parsing anything:
+
+```
+🚀 Boot: ❌ container failed to start
+⏱️  Total: 0s
+
+❌ DRILL FAILED
+💡 Run: homebutler backup --service vaultwarden
+error: vaultwarden did not come back from the backup
+```
+
+```bash
+homebutler backup drill --all || notify-send "a backup did not come back"
+```
+
+With `--all`, any single app failing makes the run fail — `--all` is not a
+vote. `--json` still prints the full result to stdout, so the exit code and the
+report are both available:
+
+```json
+{
+  "app": "uptime-kuma",
+  "archive": "/Users/you/.homebutler/backups/backup_2026-04-04_1711.tar.gz",
+  "size": "18.6 MB",
+  "file_count": 8,
+  "integrity": true,
+  "booted": true,
+  "boot_seconds": 0,
+  "health_status": 200,
+  "health_port": "60405",
+  "passed": true,
+  "total_seconds": 2
+}
+```
+
+### What a drill does not prove
+
+It proves the archive unpacks and the app starts on that data and answers a
+health check. It does not read your data back: an app that boots with an empty
+database answers its health check too. Treat a passing drill as "this archive
+is not corrupt and this app runs on it", which is the part that silently stops
+being true, and not as "every row is there".
+
+Nothing tracks whether an app has ever been drilled. `doctor` tells you when
+there is no backup, when the latest one is stale, and when the directory is
+growing without a retention limit — but "this archive has never been booted" is
+not a state homebutler remembers. That is what putting `backup drill --all` in
+the same cron entry as `backup` is for.
 
 ## Restore
 
@@ -190,6 +285,16 @@ Combine with cron for automated backups:
 
 # Weekly on Sunday at 2 AM, keep only the latest
 0 2 * * 0 homebutler backup --to /mnt/nas/weekly/
+```
+
+A backup on a schedule and nothing checking it is the arrangement that fails
+quietly, so drill on a schedule too. A failed drill exits non-zero, which is
+what makes the `||` below fire:
+
+```bash
+# Back up at 3, then prove it comes back
+0 3 * * * homebutler backup --to /mnt/nas/backups/
+30 3 * * * homebutler backup drill --all || homebutler notify test
 ```
 
 ## JSON Output
