@@ -5,6 +5,18 @@ against one or more Proxmox VE API endpoints without installing an agent on a
 Proxmox node. Read operations report cluster resources, guests, nodes, recent
 tasks, and the status of one asynchronous task.
 
+## Running homebutler inside a guest
+
+A homebutler in an LXC or a VM reports on that guest, not on the node
+underneath it — the same limit a container has, and for the same reason:
+[docs/docker.md](docker.md#what-the-container-cannot-do) has it in full.
+
+So to see the node, add it under `proxmox:` as an API endpoint, which is what
+the rest of this page is about; installing homebutler on the node is not how
+that works. To see other machines, add them under `servers:` and reach them
+over SSH. Without one of those, a homebutler in a guest has almost nothing to
+report, and that is the arrangement working as intended rather than a fault.
+
 ## Setup
 
 ### Create least-privilege API tokens
@@ -282,6 +294,9 @@ contacts Proxmox:
 HomeButler does not expose Proxmox hard stop, guest creation or deletion,
 migration, reset, suspend or resume, snapshots, task polling, automatic POST
 retries, arbitrary API actions, or root-only action overrides. The web
-dashboard remains read-only and does not expose guest actions. HomeButler
-prints Community Script install commands for a human to review and run; it
-never fetches or executes them.
+dashboard can edit the `proxmox:` endpoints themselves, behind a token, but it
+exposes no guest action: starting, rebooting and shutting down a guest are
+available over MCP and the CLI only, and
+[the registry](../internal/capability/capability.go) records which decision
+that is waiting on. HomeButler prints Community Script install commands for a
+human to review and run; it never fetches or executes them.
