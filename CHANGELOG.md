@@ -2,11 +2,26 @@
 
 All notable changes to this project will be documented in this file.
 
-## [Unreleased]
+## [0.37.0](https://github.com/Higangssh/homebutler/compare/v0.36.1...v0.37.0) - 2026-09-20
+
+**A failed backup drill told cron the backup was fine.** `backup drill` exists to answer one question — does this archive come back? — and the answer left only through the screen: the command exited `0` whatever the verdict. Anyone running it on a schedule was being told a backup that does not restore had restored. The same shape turned up in `report`, which called a machine empty when it had failed to count it, and the reason both survived this long is that nothing in the build was looking at either. Three of the mechanisms that were supposed to be looking have been widened.
+
+```
+$ homebutler backup drill vaultwarden; echo "exit=$?"
+  🚀 Boot: ❌ container failed to start
+  ❌ DRILL FAILED
+exit=1
+```
 
 ### ✨ Features
 
 - `report --json` says which collectors did not answer (#240). `failed_collectors` is an array of the collectors that failed on this run — `docker`, `ports`, `processes`. The snapshot already recorded this and the report never carried it
+
+### ⚠️ Behavior changes
+
+- **`running_count`, `stopped_count` and `public_port_count` are `null` when the collector behind them did not answer.** They were `0`, which meant both "none" and "not counted" — so `report --json` reported a machine with containers running as having none, and the only thing saying otherwise was a sentence in `warnings`. A consumer reading these as numbers can now meet `null`: it means the count was not taken, and `failed_collectors` names which collector. A machine that really has nothing running still gets `0`. Terminal output is unchanged.
+
+- **`backup drill` exits non-zero when a drill fails.** It exited 0 whatever the verdict, so a cron entry or a CI step reading the exit status was told a backup that does not restore had restored. If you have the drill on a schedule and have been ignoring its exit code, you will start seeing failures — that is the point of the change, and the failures were already there. With `--all`, any single app failing fails the run. `--json` is unchanged and still prints to stdout, so a caller reading `passed` is unaffected. `doctor` exit codes are untouched.
 
 ### 🐛 Fixes
 
@@ -17,12 +32,6 @@ All notable changes to this project will be documented in this file.
 - the contract golden could not see a field becoming optional (#241). It read the json tag's name and discarded the rest, so `omitempty` never reached the frozen surface — a field that stopped always being sent looked identical to one that had not changed, while [docs/compatibility.md](docs/compatibility.md) froze "field names and types". Recording it named **41 fields that were already optional and had never been written down**. A line now reads `name?:type` for a key that may be absent and `name:?type` for a value that may be `null`, which are different things to a caller
 
 - `report` said a machine had no containers when it had failed to count them (#240). The comparison was careful about this — a section whose collector did not answer is reported as `skipped` rather than called unchanged — but the status lines were rendered from the same absent collection and stated it as a number. `report --json` returned `running_count: 0` for a machine with containers running, and the only thing saying otherwise was a sentence in `warnings`, which the compatibility contract tells callers not to parse. The status line now reads `Containers: not collected — Docker did not answer`, `failed_collectors` carries the same thing as a typed field, and a "containers stopped" finding is no longer raised from a collection that did not happen. A machine that really has nothing running still gets the zero
-
-### ⚠️ Behavior changes
-
-- **`running_count`, `stopped_count` and `public_port_count` are `null` when the collector behind them did not answer.** They were `0`, which meant both "none" and "not counted" — so `report --json` reported a machine with containers running as having none, and the only thing saying otherwise was a sentence in `warnings`. A consumer reading these as numbers can now meet `null`: it means the count was not taken, and `failed_collectors` names which collector. A machine that really has nothing running still gets `0`. Terminal output is unchanged.
-
-- **`backup drill` exits non-zero when a drill fails.** It exited 0 whatever the verdict, so a cron entry or a CI step reading the exit status was told a backup that does not restore had restored. If you have the drill on a schedule and have been ignoring its exit code, you will start seeing failures — that is the point of the change, and the failures were already there. With `--all`, any single app failing fails the run. `--json` is unchanged and still prints to stdout, so a caller reading `passed` is unaffected. `doctor` exit codes are untouched.
 
 ### 📚 Documentation
 
