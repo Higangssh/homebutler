@@ -202,7 +202,7 @@ caller filters on it without reading the title:
 | `system` | CPU, memory, disk |
 | `docker` | containers that are stopped or unhealthy |
 | `exposure` | ports listening on every interface |
-| `backup` | backups missing, stale, or growing without a retention limit |
+| `backup` | backups missing, stale, never drilled, or growing without a retention limit |
 | `report` | whether there is a baseline to compare against |
 | `watch` | targets listed with nothing polling them |
 | `notifications` | channels configured, or never tested |

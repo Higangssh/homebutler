@@ -49,6 +49,7 @@ const (
 // as a container or endpoint name, follows.
 var commandTools = map[string]string{
 	"homebutler backup":                    "backup_create",
+	"homebutler backup drill":              "backup_drill",
 	"homebutler backup list":               "backup_list",
 	"homebutler doctor":                    "doctor",
 	"homebutler docker inspect":            "docker_inspect",
@@ -159,6 +160,16 @@ type Options struct {
 
 	Strict bool
 	Now    time.Time
+
+	// DrillRecordsFn reads the drill history. Empty takes the real one.
+	DrillRecordsFn func(string) ([]backup.DrillRecord, error)
+}
+
+func (o Options) drillRecords(backupDir string) ([]backup.DrillRecord, error) {
+	if o.DrillRecordsFn != nil {
+		return o.DrillRecordsFn(backupDir)
+	}
+	return backup.ListDrillRecords(backupDir)
 }
 
 // CollectFuncs allows tests to inject data sources.
@@ -383,7 +394,56 @@ func checkBackups(r *Result, cfg *config.Config, listFn func(string) ([]backup.L
 		r.add(SeverityWarn, "backup", "Latest backup is older than expected", fmt.Sprintf("Latest backup is %s old; expected within %s.", roundDuration(age), roundDuration(opts.BackupMaxAge)), "Run a fresh backup. If this app matters, follow up with a backup drill.", "homebutler backup")
 	}
 
+	checkDrills(r, backupDir, latest, opts)
 	checkBackupSize(r, cfg, backupDir, len(entries), opts)
+}
+
+// checkDrills asks the one backup question the rest of this file cannot: has
+// any of this ever been restored. Three of the findings above end by telling
+// the operator to run a drill, and until now nothing looked at whether the
+// advice was taken — a backup nobody has ever drilled looked exactly like one
+// that passed an hour ago.
+//
+// Both findings are warnings. Never having drilled is the state every install
+// starts in, and `--strict` in a cron job should not go red on day one for it.
+func checkDrills(r *Result, backupDir string, latestArchive time.Time, opts Options) {
+	records, err := opts.drillRecords(backupDir)
+	if err != nil {
+		r.add(SeverityWarn, "backup", "Could not check drill history", err.Error(),
+			"Fix access to the backup directory, then run doctor again.", "homebutler backup list")
+		return
+	}
+
+	latest, ok := backup.LatestDrill(records)
+	if !ok {
+		r.add(SeverityWarn, "backup", "No backup has ever been drilled",
+			"Backups exist and none has been restored to see whether it comes back.",
+			"Drill one app to find out whether the archive is worth having.", "homebutler backup drill --all")
+		return
+	}
+
+	drilledAt, ok := backup.ParseDrillTime(latest)
+	if !ok {
+		r.add(SeverityWarn, "backup", "Could not read the drill history",
+			"Drill records exist, but none had a valid timestamp.",
+			"Run a drill to write a fresh record.", "homebutler backup drill --all")
+		return
+	}
+
+	// The sharper of the two: what passed is not what you would restore.
+	if drilledAt.Before(latestArchive) {
+		r.add(SeverityWarn, "backup", "The newest backup has never been drilled",
+			fmt.Sprintf("The last drill was %s before the newest archive was taken, so what passed is not what you would restore from.",
+				roundDuration(latestArchive.Sub(drilledAt))),
+			"Drill again so the verdict is about the archive you actually have.", "homebutler backup drill --all")
+		return
+	}
+
+	if !latest.Passed {
+		r.add(SeverityWarn, "backup", "The last drill did not come back",
+			fmt.Sprintf("%s failed its drill %s ago.", latest.App, roundDuration(opts.Now.Sub(drilledAt))),
+			"Take a fresh backup of that app and drill it again.", "homebutler backup")
+	}
 }
 
 // checkBackupSize warns when the backup directory has no bound and has grown.

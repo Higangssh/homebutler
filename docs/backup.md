@@ -187,11 +187,24 @@ database answers its health check too. Treat a passing drill as "this archive
 is not corrupt and this app runs on it", which is the part that silently stops
 being true, and not as "every row is there".
 
-Nothing tracks whether an app has ever been drilled. `doctor` tells you when
-there is no backup, when the latest one is stale, and when the directory is
-growing without a retention limit — but "this archive has never been booted" is
-not a state homebutler remembers. That is what putting `backup drill --all` in
-the same cron entry as `backup` is for.
+### The drill leaves a record, and `doctor` reads it
+
+Each drill writes a small record — the app, the archive, the verdict, and when
+— into `.drills/` beside the backups, capped at the most recent 50 the way
+`watch` caps incidents. `backup drill --json` carries the same timestamp as
+`drilled_at`.
+
+`doctor` asks two questions of it, both as warnings rather than failures,
+because never having drilled is where every install starts:
+
+- **No backup has ever been drilled.** Archives exist and none has been
+  restored to see whether it comes back.
+- **The newest backup has never been drilled.** There is a drill, and it is
+  older than the newest archive — so what passed is not what you would restore
+  from. This is the sharper of the two.
+
+A failed drill is recorded too, and `doctor` says so: the archive you would
+have restored from is the one that did not come back.
 
 ## Restore
 

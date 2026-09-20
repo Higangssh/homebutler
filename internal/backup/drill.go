@@ -37,6 +37,10 @@ type DrillResult struct {
 	Error        string `json:"error,omitempty"`
 	Logs         string `json:"logs,omitempty"`
 	TotalSeconds int    `json:"total_seconds"`
+	// DrilledAt is when this drill ran, RFC3339 in UTC. It is the same value
+	// the record on disk carries, so an agent can answer "how long since this
+	// was verified" from the result it already has.
+	DrilledAt string `json:"drilled_at"`
 }
 
 // DrillReport holds the aggregated results of drilling multiple apps.
@@ -73,6 +77,23 @@ func RunDrill(appName string, opts DrillOptions) (result *DrillResult, err error
 		if r := recover(); r != nil {
 			result.Passed = false
 			result.Error = fmt.Sprintf("panic: %v", r)
+		}
+		result.DrilledAt = start.UTC().Format(time.RFC3339)
+
+		// Recorded whatever the verdict, and after the recover above, so a
+		// drill that panicked still counts as having been attempted. A failed
+		// drill is the one worth remembering: it is the archive you would have
+		// restored from.
+		if dir := opts.BackupDir; dir != "" {
+			rec := DrillRecord{
+				App:     result.App,
+				Archive: result.Archive,
+				Passed:  result.Passed,
+				At:      result.DrilledAt,
+			}
+			if err := SaveDrillRecord(dir, rec, DefaultDrillKeep); err != nil {
+				fmt.Fprintf(os.Stderr, "warning: record drill: %v\n", err)
+			}
 		}
 	}()
 
