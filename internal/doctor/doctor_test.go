@@ -69,7 +69,17 @@ func TestRunPassesWhenNoFindings(t *testing.T) {
 	cfg := &config.Config{}
 	cfg.Notify.Webhook = &notify.WebhookConfig{URL: "https://example.test/webhook"}
 
-	r, err := Run(cfg, fns, Options{Now: fixedNow})
+	// A clean machine is one where the backup has been drilled since it was
+	// taken. Before this finding existed, "no findings" meant an archive
+	// nobody had ever restored counted as fine.
+	drilled := backup.DrillRecord{
+		App:     "uptime-kuma",
+		Archive: "backup.tar.gz",
+		Passed:  true,
+		At:      fixedNow.Add(-30 * time.Minute).UTC().Format(time.RFC3339),
+	}
+
+	r, err := Run(cfg, fns, Options{Now: fixedNow, DrillRecordsFn: staticDrills(drilled)})
 	if err != nil {
 		t.Fatalf("Run failed: %v", err)
 	}
@@ -264,4 +274,9 @@ func TestCheckBackupSize_SilentOnceRetentionIsConfigured(t *testing.T) {
 	if len(r.Findings) != 0 {
 		t.Errorf("warned about a directory the operator has already bounded: %+v", r.Findings)
 	}
+}
+
+// staticDrills injects a drill history without touching a directory.
+func staticDrills(records ...backup.DrillRecord) func(string) ([]backup.DrillRecord, error) {
+	return func(string) ([]backup.DrillRecord, error) { return records, nil }
 }

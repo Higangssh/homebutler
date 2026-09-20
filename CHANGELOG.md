@@ -4,6 +4,15 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### ✨ Features
+
+- `doctor` can finally ask the one backup question nobody else answers (#239). Its five `backup` findings were all about the archive file — readable, present, parseable, fresh, bounded — and none knew whether any of it had ever been restored. Three of them already ended by telling the operator to run a drill, and nothing checked whether the advice was taken, so a backup nobody had ever drilled looked exactly like one that passed an hour ago. A drill now leaves a record beside the backups, capped at 50 the way `watch` caps incidents, and `doctor` reads it: **no backup has ever been drilled**, and the sharper one, **the newest backup has never been drilled** — there is a drill and it predates the newest archive, so what passed is not what you would restore from. Both are warnings: never having drilled is where every install starts, and `--strict` in cron should not go red on day one for it. `backup drill --json` carries the same timestamp as `drilled_at`
+
+### 🐛 Fixes
+
+- a `doctor` finding that said to drill would have sent an agent to take another backup (#239). `homebutler backup drill` had no entry in the command-to-tool map, so it fell back to the one for `homebutler backup` and named `backup_create`. Nothing had printed that command before, which is why it surfaced only when a finding started to. The test that walks doctor's commands checks they are *classified*, not that they are classified correctly — [docs/compatibility.md](docs/compatibility.md) now says so, and the drill forms are pinned
+
+
 ### 📚 Documentation
 
 - the config page never mentioned the legacy `alerts.yaml` (#245). `alerts` warns that the file is deprecated and says to move `rules`/`notify` into `config.yaml` — and the page a reader then opens listed four search paths, none of them that file, and said nothing about where the settings should go. It now says what the fallback is, quotes the warning, and names the two sections to move into

@@ -175,3 +175,28 @@ func TestClassificationPrefersTheLongerMatch(t *testing.T) {
 		t.Errorf("chmod resolved to %q", runner)
 	}
 }
+
+// `homebutler backup drill --all` fell back to the entry for `homebutler
+// backup` and named `backup_create`, so a finding telling the operator to
+// drill would have sent an agent to take another backup instead. The test
+// above could not see it: it checks that every printed command is classified,
+// not that it is classified as the right thing, and those are different
+// properties.
+//
+// The general version needs the cobra tree to know that `backup drill` is a
+// command rather than `backup` with an argument, and that tree is not in this
+// package. So the forms that reach a caller are pinned here, and
+// docs/compatibility.md records that "classified" is what the walk above
+// guarantees.
+func TestDrillCommandsNameTheDrillTool(t *testing.T) {
+	for _, command := range []string{
+		"homebutler backup drill",
+		"homebutler backup drill --all",
+		"homebutler backup drill uptime-kuma",
+	} {
+		runner, tool := classifyCommand(command)
+		if runner != RunnerMCP || tool != "backup_drill" {
+			t.Errorf("%q → runner=%q tool=%q, want mcp/backup_drill", command, runner, tool)
+		}
+	}
+}

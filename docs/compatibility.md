@@ -101,6 +101,12 @@ this one has been wrong are worth writing down rather than discovering twice.
   `int`, and only a person reading the output found it.
 - **Behaviour at the edges.** Exit codes are in the table above for `doctor`
   only. `backup drill` exited `0` on a failed drill until somebody ran one.
+- **Classified, not classified correctly.** The test that walks every command
+  `doctor` prints checks that each one resolves to a runner and a tool. It
+  cannot check that the tool is the right one: `homebutler backup drill --all`
+  resolved to `backup_create` for as long as nothing printed it, because
+  telling `backup drill` from `backup` with an argument needs the command tree
+  and that is not in the package doing the classifying.
 
 Each of these was a real defect, not a hypothetical. They are listed because
 knowing what is not guaranteed is worth as much as the list of what is.
