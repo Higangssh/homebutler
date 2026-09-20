@@ -17,6 +17,7 @@ promise — the golden file there fails the build when any of it moves.
 | **Tool input schemas** | Argument names, their types, and which are required |
 | **Tool risk classes** | `read`, `write`, `destructive`. An agent decides what it may do unattended from these, so a reclassification is a breaking change even though nothing about the call changes |
 | **JSON field names and types** | What `report --json`, `doctor --json` and `status --json` return. A field that changes from a string to an object breaks a caller as thoroughly as one that disappears |
+| **`failed_collectors`** | The names a collector can be reported under — `docker`, `ports`, `processes`. A count is only trustworthy when its collector is absent from this list |
 | **The `kind` vocabulary** | The eight words a change can carry, and what each means |
 | **The `runner` vocabulary** | `mcp`, `cli`, `shell` |
 | **The `category` vocabulary** | The eleven words a `doctor` finding can carry, documented in the README |

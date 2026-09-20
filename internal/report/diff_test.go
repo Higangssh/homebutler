@@ -726,3 +726,74 @@ func TestAPortNoContainerClaimsSaysWhatWouldNameIt(t *testing.T) {
 		t.Fatalf("the finding does not say what would identify it: %q", attention)
 	}
 }
+
+// The diff already refuses to call an uncollected section unchanged. The
+// status lines were still stating counts from the same absent collection, so
+// `running_count: 0` arrived on a machine whose containers had simply not been
+// counted — and the only thing saying so was a sentence in warnings, which the
+// compatibility contract tells callers not to parse.
+func TestUncollectedCountsAreNotReportedAsZero(t *testing.T) {
+	prev := snapshotWith([]docker.Container{
+		{ID: "aaa", Name: "vaultwarden", Image: "vaultwarden:1.32", State: "running"},
+	}, nil)
+
+	// 1. Not collected: the count is absent, and Failed says why.
+	curr := snapshotWith(nil, nil)
+	curr.Failed = []string{inventory.CollectorDocker}
+	r := buildReport(curr, prev)
+
+	if r.Running != nil || r.Stopped != nil {
+		t.Errorf("an uncollected count was reported as a number: running=%v stopped=%v", r.Running, r.Stopped)
+	}
+	var seen bool
+	for _, f := range r.Failed {
+		if f == inventory.CollectorDocker {
+			seen = true
+		}
+	}
+	if !seen {
+		t.Errorf("the count is absent and nothing says why: %v", r.Failed)
+	}
+	status := strings.Join(r.Status, " | ")
+	if strings.Contains(status, "Containers: 0 running") {
+		t.Errorf("a count nobody collected was stated as zero: %s", status)
+	}
+	if !strings.Contains(status, "Containers: not collected") {
+		t.Errorf("the status line does not say the containers were not collected: %s", status)
+	}
+
+	// 2. A real zero is still a zero. This is the case the null must not swallow.
+	r = buildReport(snapshotWith(nil, nil), prev)
+	if r.Running == nil || *r.Running != 0 {
+		t.Errorf("a machine with nothing running lost its zero: %v", r.Running)
+	}
+	if !strings.Contains(strings.Join(r.Status, " | "), "Containers: 0 running, 0 stopped") {
+		t.Errorf("a real zero stopped being reported: %s", strings.Join(r.Status, " | "))
+	}
+
+	// 3. A collected count arrives as itself.
+	r = buildReport(snapshotWith([]docker.Container{
+		{ID: "bbb", Name: "web", State: "running"},
+		{ID: "ccc", Name: "db", State: "exited"},
+	}, nil), prev)
+	if r.Running == nil || *r.Running != 1 {
+		t.Errorf("running count = %v, want 1", r.Running)
+	}
+	if r.Stopped == nil || *r.Stopped != 1 {
+		t.Errorf("stopped count = %v, want 1", r.Stopped)
+	}
+}
+
+// "3 containers stopped" is a finding, and it must not be produced by a
+// collection that never happened.
+func TestUncollectedContainersRaiseNoStoppedFinding(t *testing.T) {
+	curr := snapshotWith(nil, nil)
+	curr.Failed = []string{inventory.CollectorDocker}
+	curr.StoppedCount = 3 // as if a stale count survived the failed collection
+
+	for _, f := range buildReport(curr, snapshotWith(nil, nil)).NeedsAttention {
+		if f.Kind == "container" {
+			t.Errorf("a stopped-container finding was raised from an uncollected snapshot: %s", f.Text)
+		}
+	}
+}

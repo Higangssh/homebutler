@@ -81,6 +81,7 @@ PUT /api/config/wake protection=token
 
 ## json
 report.Report.compared_to:string
+report.Report.failed_collectors:[]string
 report.Report.is_baseline:bool
 report.Report.needs_attention.kind:string
 report.Report.needs_attention.target:string
@@ -91,12 +92,12 @@ report.Report.notable_changes.kind:string
 report.Report.notable_changes.target:string
 report.Report.notable_changes.text:string
 report.Report.notable_changes:[]ChangeLine
-report.Report.public_port_count:int
-report.Report.running_count:int
+report.Report.public_port_count:?int
+report.Report.running_count:?int
 report.Report.server_name:string
 report.Report.snapshot_saved:bool
 report.Report.status:[]string
-report.Report.stopped_count:int
+report.Report.stopped_count:?int
 report.Report.suggested_actions.command:string
 report.Report.suggested_actions.runner:string
 report.Report.suggested_actions.text:string
@@ -119,7 +120,7 @@ report.Report.system.memory:MemInfo
 report.Report.system.os:string
 report.Report.system.time:string
 report.Report.system.uptime:string
-report.Report.system:StatusInfo
+report.Report.system:?StatusInfo
 report.Report.timestamp:string
 report.Report.warnings:[]string
 report.ChangeLine.detail:string

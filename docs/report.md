@@ -133,6 +133,38 @@ The header names the snapshot being compared against:
 `report` hourly and running it once a month produce the same kinds of line about
 very different spans, and the header is what tells them apart.
 
+## When a collector does not answer
+
+Docker being down does not make every container disappear, and it does not
+make the machine empty. A section whose collector did not answer is reported
+as `skipped` rather than compared, and the status lines say so too instead of
+printing the count that was never taken:
+
+```
+── Notable Changes ───────────────────────────────────────────
+   skipped  containers  not compared — Docker did not answer
+
+── Current Status ────────────────────────────────────────────
+   Containers    not collected — Docker did not answer
+```
+
+`--json` carries the same thing as a typed field. **Check
+`failed_collectors` before trusting a count**, because `running_count` is
+`0` when nothing was counted just as it is when nothing is running:
+
+```json
+{
+  "failed_collectors": ["docker"],
+  "running_count": 0,
+  "stopped_count": 0,
+  "warnings": ["docker: docker daemon is not running: exit status 1"]
+}
+```
+
+The collector names are `docker`, `ports` and `processes`. `warnings` says the
+same thing as a sentence for a person to read; `failed_collectors` is the field
+to branch on.
+
 ## What needs attention
 
 `Needs Attention` answers a different question from `Notable Changes`: not what

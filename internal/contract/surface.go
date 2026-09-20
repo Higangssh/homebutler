@@ -201,10 +201,14 @@ func structUnder(t reflect.Type) reflect.Type {
 	return t
 }
 
+// A pointer field marshals as `null` when it is not set, and a caller that was
+// reading a number has to handle that. So nullability is part of the type the
+// golden freezes — `?int` is not `int` — and a field that quietly becomes
+// nullable shows up as a change rather than as nothing at all.
 func typeName(t reflect.Type) string {
 	switch t.Kind() {
 	case reflect.Pointer:
-		return typeName(t.Elem())
+		return "?" + typeName(t.Elem())
 	case reflect.Slice:
 		return "[]" + typeName(t.Elem())
 	case reflect.Map:
