@@ -74,3 +74,32 @@ go test ./internal/contract -update      # regenerate, then commit the diff
 The diff is the point. A renamed tool or a retyped field shows up in a pull
 request next to the changelog line explaining it, rather than in somebody's
 integration four months later.
+
+A line reads `name:type`, with two marks for the two ways a value can fail to
+be there: `name?` is a key that may be absent, `?type` is a value that may be
+`null`. They are different things to a caller, so they are different things
+here.
+
+## What the golden file does not check
+
+A mechanism running is not the same as a mechanism being enough, and the ways
+this one has been wrong are worth writing down rather than discovering twice.
+
+- **Descriptions.** The `category` test reads the README table for its
+  *words*, and nothing reads the column next to them. That column claimed
+  `doctor` reported backups "never drilled" — a finding that does not exist —
+  for as long as it took someone to check. Generating the prose from the code
+  would close it and also make the document a copy of the code, which is the
+  opposite of checking a promise against it, so these are caught one at a time.
+- **Values.** The golden records that `kind` is a string, not that it is one of
+  eight words. The vocabularies are frozen in the table above and tested
+  separately; the golden is about shape.
+- **Meaning.** A field that keeps its name and type and starts meaning
+  something else passes. `running_count` returning `0` for a machine whose
+  containers were never counted was a change of meaning inside an unchanged
+  `int`, and only a person reading the output found it.
+- **Behaviour at the edges.** Exit codes are in the table above for `doctor`
+  only. `backup drill` exited `0` on a failed drill until somebody ran one.
+
+Each of these was a real defect, not a hypothetical. They are listed because
+knowing what is not guaranteed is worth as much as the list of what is.
