@@ -7,6 +7,7 @@ import (
 
 	"github.com/Higangssh/homebutler/internal/notify"
 
+	"github.com/Higangssh/homebutler/internal/config"
 	"github.com/Higangssh/homebutler/internal/install"
 	"github.com/Higangssh/homebutler/internal/proxmox"
 )
@@ -124,7 +125,7 @@ func (s *Server) executeDemoTool(name string, args map[string]any) (any, error) 
 		if format == "json" {
 			return map[string]any{"server_name": serverOrDefault(server), "ports": demoPorts(server)}, nil
 		}
-		return map[string]any{"format": "mermaid", "content": "graph TD\n  home[\"🏠 Home Network\"] --> server[\"🖥 " + serverOrDefault(server) + "\"]\n"}, nil
+		return InventoryExportResult{Format: "mermaid", Content: "graph TD\n  home[\"🏠 Home Network\"] --> server[\"🖥 " + serverOrDefault(server) + "\"]\n"}, nil
 	case "report":
 		return map[string]any{
 			"server_name":       serverOrDefault(server),
@@ -175,25 +176,7 @@ func (s *Server) executeDemoTool(name string, args map[string]any) (any, error) 
 		// only ever passed would teach a caller that this tool has nothing to
 		// say, when catching the silently-ignored key is the reason it exists.
 		strict := boolArg(args, "strict")
-		return map[string]any{
-			"passed":   !strict,
-			"errors":   0,
-			"warnings": 1,
-			"result": map[string]any{
-				"path":   "/home/demo/.homebutler/config.yaml",
-				"source": "default location (~/.homebutler/config.yaml)",
-				"exists": true,
-				"valid":  true,
-				"findings": []map[string]any{
-					{
-						"severity": "warning",
-						"section":  "watch",
-						"message":  "unknown key \"cooldwn\" is ignored",
-						"hint":     "did you mean \"cooldown\"?",
-					},
-				},
-			},
-		}, nil
+		return demoConfigValidate(strict), nil
 
 	case "watch_history":
 		return demoWatchHistory(args), nil
@@ -202,13 +185,13 @@ func (s *Server) executeDemoTool(name string, args map[string]any) (any, error) 
 		// Demo mode writes nothing, so it answers as the state after the call:
 		// the target is on the list. Reporting added=false would be the shape
 		// of "already there", which is a different outcome and not this one.
-		return map[string]any{
-			"container": stringArg(args, "container"),
-			"kind":      demoKind(args),
-			"added":     true,
+		return WatchAddResult{
+			Container: stringArg(args, "container"),
+			Kind:      demoKind(args),
+			Added:     true,
 		}, nil
 	case "watch_remove":
-		return map[string]any{"container": stringArg(args, "container"), "removed": true}, nil
+		return WatchRemoveResult{Container: stringArg(args, "container"), Removed: true}, nil
 	case "notify_test":
 		// One channel that worked and one that did not, so a caller meets the
 		// shape it has to handle rather than an all-green answer that teaches
@@ -272,7 +255,7 @@ func (s *Server) executeDemoTool(name string, args map[string]any) (any, error) 
 		if err != nil {
 			return nil, err
 		}
-		return map[string]any{"slug": slug, "command": command, "warning": proxmox.ScriptWarning}, nil
+		return ProxmoxScriptCommandResult{Slug: slug, Command: command, Warning: proxmox.ScriptWarning}, nil
 
 	case "install_list":
 		// The catalogue is a static map compiled into the binary, so demo mode
@@ -285,7 +268,7 @@ func (s *Server) executeDemoTool(name string, args map[string]any) (any, error) 
 		if _, ok := install.Registry[app]; !ok {
 			return nil, fmt.Errorf("unknown app %q, use install_list to see available apps", app)
 		}
-		return map[string]any{"app": app, "state": "running"}, nil
+		return InstallStatusResult{App: app, State: "running"}, nil
 
 	case "install_app":
 		app := stringArg(args, "app")
@@ -297,12 +280,12 @@ func (s *Server) executeDemoTool(name string, args map[string]any) (any, error) 
 		if p := stringArg(args, "port"); p != "" {
 			port = p
 		}
-		return map[string]any{
-			"status": "installed",
-			"app":    a.Name,
-			"port":   port,
-			"path":   "/home/demo/.homebutler/apps/" + a.Name,
-			"state":  "running",
+		return InstallResult{
+			Status: "installed",
+			App:    a.Name,
+			Port:   port,
+			Path:   "/home/demo/.homebutler/apps/" + a.Name,
+			State:  "running",
 		}, nil
 
 	case "install_uninstall":
@@ -310,14 +293,14 @@ func (s *Server) executeDemoTool(name string, args map[string]any) (any, error) 
 		if _, ok := install.Registry[app]; !ok {
 			return nil, fmt.Errorf("unknown app %q, use install_list to see available apps", app)
 		}
-		return map[string]any{"status": "uninstalled", "app": app, "data_preserved": true}, nil
+		return InstallResult{Status: "uninstalled", App: app, DataPreserved: demoBool(true)}, nil
 
 	case "install_purge":
 		app := stringArg(args, "app")
 		if _, ok := install.Registry[app]; !ok {
 			return nil, fmt.Errorf("unknown app %q, use install_list to see available apps", app)
 		}
-		return map[string]any{"status": "purged", "app": app}, nil
+		return InstallResult{Status: "purged", App: app, DataPreserved: demoBool(false)}, nil
 
 	default:
 		return nil, fmt.Errorf("unknown tool: %s", name)
@@ -708,4 +691,30 @@ func demoKind(args map[string]any) string {
 		return kind
 	}
 	return "docker"
+}
+
+// demoConfigValidate answers with the types the real tool answers with. The
+// map this replaced carried a "section" key, which config.Finding does not
+// have — it has "field" — so demo mode was showing a shape the product never
+// produces. Errors and Warnings are counted from the findings rather than
+// written next to them, which is the other thing a map let drift.
+func demoConfigValidate(strict bool) ConfigValidateResult {
+	result := &config.ValidationResult{
+		Path:   "/home/demo/.homebutler/config.yaml",
+		Source: "default location (~/.homebutler/config.yaml)",
+		Exists: true,
+		Valid:  true,
+		Findings: []config.Finding{{
+			Severity: "warning",
+			Field:    "watch.cooldwn",
+			Message:  `unknown key "cooldwn" is ignored`,
+			Hint:     `did you mean "cooldown"?`,
+		}},
+	}
+	return ConfigValidateResult{
+		Passed:   !strict,
+		Errors:   result.Errors(),
+		Warnings: result.Warnings(),
+		Result:   result,
+	}
 }

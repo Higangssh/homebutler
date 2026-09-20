@@ -505,7 +505,7 @@ func (s *Server) executeTool(name string, args map[string]any) (any, error) {
 		}
 		switch format {
 		case "mermaid":
-			return map[string]any{"format": format, "content": inventory.RenderMermaid(inv)}, nil
+			return InventoryExportResult{Format: format, Content: inventory.RenderMermaid(inv)}, nil
 		case "json":
 			return inv, nil
 		default:
@@ -539,11 +539,11 @@ func (s *Server) executeTool(name string, args map[string]any) (any, error) {
 		}
 		// The result travels with the verdict rather than the verdict being an
 		// error, so a caller that gates on passed still gets to see why.
-		return map[string]any{
-			"passed":   passed,
-			"errors":   result.Errors(),
-			"warnings": result.Warnings(),
-			"result":   result,
+		return ConfigValidateResult{
+			Passed:   passed,
+			Errors:   result.Errors(),
+			Warnings: result.Warnings(),
+			Result:   result,
 		}, nil
 	case "watch_history":
 		dir, err := watch.WatchDir()
@@ -587,7 +587,7 @@ func (s *Server) executeTool(name string, args map[string]any) (any, error) {
 		}
 		// "already watched" is an outcome rather than a failure: an agent that
 		// retries should not be told the second attempt broke something.
-		return map[string]any{"container": container, "kind": kind, "added": added}, nil
+		return WatchAddResult{Container: container, Kind: kind, Added: added}, nil
 	case "watch_remove":
 		container := stringArg(args, "container")
 		if container == "" {
@@ -604,7 +604,7 @@ func (s *Server) executeTool(name string, args map[string]any) (any, error) {
 		if !removed {
 			return nil, fmt.Errorf("container %q is not in the watch list", container)
 		}
-		return map[string]any{"container": container, "removed": true}, nil
+		return WatchRemoveResult{Container: container, Removed: true}, nil
 	case "alerts_history":
 		return alerts.LoadHistory()
 	case "notify_test":
@@ -666,7 +666,7 @@ func (s *Server) executeTool(name string, args map[string]any) (any, error) {
 		if err != nil {
 			return nil, err
 		}
-		return map[string]any{"slug": slug, "command": command, "warning": proxmox.ScriptWarning}, nil
+		return ProxmoxScriptCommandResult{Slug: slug, Command: command, Warning: proxmox.ScriptWarning}, nil
 
 	case "install_list":
 		return install.List(), nil
@@ -684,18 +684,20 @@ func (s *Server) executeTool(name string, args map[string]any) (any, error) {
 		}
 		issues := install.PreCheck(app, port)
 		if len(issues) > 0 {
-			return map[string]any{"status": "failed", "issues": issues}, nil
+			// Names the app even when it refuses: a caller reading `app` used
+			// to get nothing on this branch.
+			return InstallResult{Status: "failed", App: appName, Issues: issues}, nil
 		}
 		if err := install.Install(app, opts); err != nil {
 			return nil, err
 		}
 		status, _ := install.Status(app.Name)
-		return map[string]any{
-			"status": "installed",
-			"app":    app.Name,
-			"port":   port,
-			"path":   install.AppDir(app.Name),
-			"state":  status,
+		return InstallResult{
+			Status: "installed",
+			App:    app.Name,
+			Port:   port,
+			Path:   install.AppDir(app.Name),
+			State:  status,
 		}, nil
 
 	case "install_status":
@@ -704,21 +706,23 @@ func (s *Server) executeTool(name string, args map[string]any) (any, error) {
 		if err != nil {
 			return nil, err
 		}
-		return map[string]any{"app": appName, "state": status}, nil
+		return InstallStatusResult{App: appName, State: status}, nil
 
 	case "install_uninstall":
 		appName := stringArg(args, "app")
 		if err := install.Uninstall(appName); err != nil {
 			return nil, err
 		}
-		return map[string]any{"status": "uninstalled", "app": appName, "data_preserved": true}, nil
+		preserved := true
+		return InstallResult{Status: "uninstalled", App: appName, DataPreserved: &preserved}, nil
 
 	case "install_purge":
 		appName := stringArg(args, "app")
 		if err := install.Purge(appName); err != nil {
 			return nil, err
 		}
-		return map[string]any{"status": "purged", "app": appName}, nil
+		purged := false
+		return InstallResult{Status: "purged", App: appName, DataPreserved: &purged}, nil
 
 	default:
 		return nil, fmt.Errorf("unknown tool: %s", name)
