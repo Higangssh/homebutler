@@ -736,11 +736,15 @@ func TestUncollectedCountsAreNotReportedAsZero(t *testing.T) {
 	prev := snapshotWith([]docker.Container{
 		{ID: "aaa", Name: "vaultwarden", Image: "vaultwarden:1.32", State: "running"},
 	}, nil)
+
+	// 1. Not collected: the count is absent, and Failed says why.
 	curr := snapshotWith(nil, nil)
 	curr.Failed = []string{inventory.CollectorDocker}
-
 	r := buildReport(curr, prev)
 
+	if r.Running != nil || r.Stopped != nil {
+		t.Errorf("an uncollected count was reported as a number: running=%v stopped=%v", r.Running, r.Stopped)
+	}
 	var seen bool
 	for _, f := range r.Failed {
 		if f == inventory.CollectorDocker {
@@ -748,9 +752,8 @@ func TestUncollectedCountsAreNotReportedAsZero(t *testing.T) {
 		}
 	}
 	if !seen {
-		t.Errorf("failed_collectors does not name docker, so a caller cannot tell an absent count from a real zero: %v", r.Failed)
+		t.Errorf("the count is absent and nothing says why: %v", r.Failed)
 	}
-
 	status := strings.Join(r.Status, " | ")
 	if strings.Contains(status, "Containers: 0 running") {
 		t.Errorf("a count nobody collected was stated as zero: %s", status)
@@ -759,11 +762,25 @@ func TestUncollectedCountsAreNotReportedAsZero(t *testing.T) {
 		t.Errorf("the status line does not say the containers were not collected: %s", status)
 	}
 
-	// A machine that really has no containers still gets the number.
-	clean := snapshotWith(nil, nil)
-	status = strings.Join(buildReport(clean, prev).Status, " | ")
-	if !strings.Contains(status, "Containers: 0 running, 0 stopped") {
-		t.Errorf("a real zero stopped being reported: %s", status)
+	// 2. A real zero is still a zero. This is the case the null must not swallow.
+	r = buildReport(snapshotWith(nil, nil), prev)
+	if r.Running == nil || *r.Running != 0 {
+		t.Errorf("a machine with nothing running lost its zero: %v", r.Running)
+	}
+	if !strings.Contains(strings.Join(r.Status, " | "), "Containers: 0 running, 0 stopped") {
+		t.Errorf("a real zero stopped being reported: %s", strings.Join(r.Status, " | "))
+	}
+
+	// 3. A collected count arrives as itself.
+	r = buildReport(snapshotWith([]docker.Container{
+		{ID: "bbb", Name: "web", State: "running"},
+		{ID: "ccc", Name: "db", State: "exited"},
+	}, nil), prev)
+	if r.Running == nil || *r.Running != 1 {
+		t.Errorf("running count = %v, want 1", r.Running)
+	}
+	if r.Stopped == nil || *r.Stopped != 1 {
+		t.Errorf("stopped count = %v, want 1", r.Stopped)
 	}
 }
 

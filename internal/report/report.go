@@ -91,10 +91,16 @@ type Report struct {
 	// passed through: a second description of a machine's state beside
 	// system.StatusInfo would be two things to keep in agreement, and one day
 	// they would not be.
-	System      *system.StatusInfo `json:"system,omitempty"`
-	Running     int                `json:"running_count"`
-	Stopped     int                `json:"stopped_count"`
-	PublicPorts int                `json:"public_port_count"`
+	System *system.StatusInfo `json:"system,omitempty"`
+	// null when the collector behind the number did not answer. A count that
+	// means both "none" and "not counted" is the shape this repository has
+	// already refused once, in `runner`/`tool`: the value says what it is,
+	// and a separate field says why. Here the value is the count and the
+	// reason is Failed — so the count has to be able to be absent, or Failed
+	// becomes a footnote correcting a number that already lied.
+	Running     *int `json:"running_count"`
+	Stopped     *int `json:"stopped_count"`
+	PublicPorts *int `json:"public_port_count"`
 
 	Status         []string     `json:"status"`
 	NeedsAttention []Finding    `json:"needs_attention"`
@@ -296,10 +302,14 @@ func buildReport(snap *Snapshot, prev *Snapshot) *Report {
 	// The same values the Status lines below are rendered from, passed through
 	// so a caller does not have to read them back out of a sentence.
 	r.System = snap.System
-	r.Running = snap.RunningCount
-	r.Stopped = snap.StoppedCount
-	r.PublicPorts = snap.PublicPortCount
 	r.Failed = snap.Failed
+	if !snap.collectorFailed(inventory.CollectorDocker) {
+		r.Running = &snap.RunningCount
+		r.Stopped = &snap.StoppedCount
+	}
+	if !snap.collectorFailed(inventory.CollectorPorts) {
+		r.PublicPorts = &snap.PublicPortCount
+	}
 
 	// Status section
 	if snap.System != nil {

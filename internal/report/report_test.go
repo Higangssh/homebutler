@@ -372,12 +372,15 @@ func TestTheReportEmitsTheValuesItsSentencesAreMadeOf(t *testing.T) {
 
 	r := buildReport(snap, nil)
 
-	if r.Running != snap.RunningCount || r.Stopped != snap.StoppedCount {
-		t.Fatalf("counts do not match the snapshot: report %d/%d, snapshot %d/%d",
-			r.Running, r.Stopped, snap.RunningCount, snap.StoppedCount)
+	if r.Running == nil || r.Stopped == nil {
+		t.Fatalf("a collected count arrived as null: running=%v stopped=%v", r.Running, r.Stopped)
 	}
-	if r.PublicPorts != snap.PublicPortCount {
-		t.Fatalf("public ports: report %d, snapshot %d", r.PublicPorts, snap.PublicPortCount)
+	if *r.Running != snap.RunningCount || *r.Stopped != snap.StoppedCount {
+		t.Fatalf("counts do not match the snapshot: report %d/%d, snapshot %d/%d",
+			*r.Running, *r.Stopped, snap.RunningCount, snap.StoppedCount)
+	}
+	if r.PublicPorts == nil || *r.PublicPorts != snap.PublicPortCount {
+		t.Fatalf("public ports: report %v, snapshot %d", r.PublicPorts, snap.PublicPortCount)
 	}
 	if r.System != snap.System {
 		t.Fatal("the report carries a different system status than the snapshot it was built from")

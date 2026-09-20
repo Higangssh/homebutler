@@ -6,13 +6,15 @@ All notable changes to this project will be documented in this file.
 
 ### ✨ Features
 
-- `report --json` says which collectors did not answer (#240). `failed_collectors` is an array of the collectors that failed on this run — `docker`, `ports`, `processes` — so a caller can tell an absent count from a real zero. The snapshot already recorded this and the report never carried it
+- `report --json` says which collectors did not answer (#240). `failed_collectors` is an array of the collectors that failed on this run — `docker`, `ports`, `processes`. The snapshot already recorded this and the report never carried it
 
 ### 🐛 Fixes
 
 - `report` said a machine had no containers when it had failed to count them (#240). The comparison was careful about this — a section whose collector did not answer is reported as `skipped` rather than called unchanged — but the status lines were rendered from the same absent collection and stated it as a number. `report --json` returned `running_count: 0` for a machine with containers running, and the only thing saying otherwise was a sentence in `warnings`, which the compatibility contract tells callers not to parse. The status line now reads `Containers: not collected — Docker did not answer`, `failed_collectors` carries the same thing as a typed field, and a "containers stopped" finding is no longer raised from a collection that did not happen. A machine that really has nothing running still gets the zero
 
 ### ⚠️ Behavior changes
+
+- **`running_count`, `stopped_count` and `public_port_count` are `null` when the collector behind them did not answer.** They were `0`, which meant both "none" and "not counted" — so `report --json` reported a machine with containers running as having none, and the only thing saying otherwise was a sentence in `warnings`. A consumer reading these as numbers can now meet `null`: it means the count was not taken, and `failed_collectors` names which collector. A machine that really has nothing running still gets `0`. Terminal output is unchanged.
 
 - **`backup drill` exits non-zero when a drill fails.** It exited 0 whatever the verdict, so a cron entry or a CI step reading the exit status was told a backup that does not restore had restored. If you have the drill on a schedule and have been ignoring its exit code, you will start seeing failures — that is the point of the change, and the failures were already there. With `--all`, any single app failing fails the run. `--json` is unchanged and still prints to stdout, so a caller reading `passed` is unaffected. `doctor` exit codes are untouched.
 
