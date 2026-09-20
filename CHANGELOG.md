@@ -4,6 +4,17 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### 🐛 Fixes
+
+- `install_app` answered with two different shapes (#248). A refusal returned `{status, issues}` and a success returned `{status, app, port, path, state}`, so an agent reading `app` got nothing on the branch where something went wrong — the branch it most needs to report. Every install outcome names the app it is about now, and `data_preserved` says which of uninstall and purge happened rather than being present on one and absent on the other
+
+- demo mode showed a `config_validate` shape the product does not produce (#248). Its findings carried a `section` key; `config.Finding` has `field`. The demo exists so a caller can meet the real shape before it has a real machine, and it was built from a map literal that nothing compared against the type it was imitating. It builds the actual types now, and the error and warning counts come from the findings rather than being written beside them
+
+### ♻️ Internal
+
+- eight tool results were `map[string]any` literals written at the call site (#248). A map has no name, so nothing recorded what those tools answer with, a renamed key looked like a new one, and two branches of the same tool could disagree — which is how the `install_app` defect above survived. `config_validate`, `watch_add`, `watch_remove`, `install_app`, `install_status`, `install_uninstall`, `install_purge`, `proxmox_script_command` and `inventory_export`'s mermaid answer have named types now. No key changed
+
+
 ### ✨ Features
 
 - `doctor` can finally ask the one backup question nobody else answers (#239). Its five `backup` findings were all about the archive file — readable, present, parseable, fresh, bounded — and none knew whether any of it had ever been restored. Three of them already ended by telling the operator to run a drill, and nothing checked whether the advice was taken, so a backup nobody had ever drilled looked exactly like one that passed an hour ago. A drill now leaves a record beside the backups, capped at 50 the way `watch` caps incidents, and `doctor` reads it: **no backup has ever been drilled**, and the sharper one, **the newest backup has never been drilled** — there is a drill and it predates the newest archive, so what passed is not what you would restore from. Both are warnings: never having drilled is where every install starts, and `--strict` in cron should not go red on day one for it. `backup drill --json` carries the same timestamp as `drilled_at`

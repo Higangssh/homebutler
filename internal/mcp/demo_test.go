@@ -162,19 +162,25 @@ func TestDemoConfigValidateStrictChangesTheVerdictNotTheFindings(t *testing.T) {
 		t.Fatalf("config_validate strict: %v", err)
 	}
 
-	laxMap := lax.(map[string]any)
-	strictMap := strict.(map[string]any)
+	laxResult, ok := lax.(ConfigValidateResult)
+	if !ok {
+		t.Fatalf("config_validate returned %T, want ConfigValidateResult", lax)
+	}
+	strictResult, ok := strict.(ConfigValidateResult)
+	if !ok {
+		t.Fatalf("config_validate strict returned %T, want ConfigValidateResult", strict)
+	}
 
-	if laxMap["passed"] != true {
+	if !laxResult.Passed {
 		t.Error("warnings alone should not fail without strict")
 	}
-	if strictMap["passed"] != false {
+	if strictResult.Passed {
 		t.Error("strict should turn a warning into a failure")
 	}
-	if laxMap["warnings"] != strictMap["warnings"] {
+	if laxResult.Warnings != strictResult.Warnings {
 		t.Error("strict must change the verdict, not what was found")
 	}
-	if strictMap["result"] == nil {
+	if strictResult.Result == nil {
 		t.Error("the findings must travel with a failing verdict, or a caller cannot see why it failed")
 	}
 }
