@@ -643,7 +643,7 @@ func demoReportResult(saved bool) map[string]any {
 			{"kind": "port", "target": ":8080/tcp", "detail": "nginx → caddy", "text": "port: :8080/tcp — nginx → caddy"},
 			{"kind": "gone", "target": "redis", "text": "gone: redis"},
 			{"kind": "new", "target": "valkey", "text": "new: valkey"},
-			{"kind": "disk", "target": "/mnt/data", "detail": "1.6 GB → 1.7 TB", "text": "disk: /mnt/data — 1.6 GB → 1.7 TB"},
+			{"kind": "disk", "target": "/mnt/data", "detail": "1.6 TB → 1.7 TB", "text": "disk: /mnt/data — 1.6 TB → 1.7 TB"},
 			{"kind": "skipped", "target": "processes", "detail": "not compared — the process collector did not answer",
 				"text": "skipped: processes — not compared — the process collector did not answer"},
 		},

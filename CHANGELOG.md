@@ -6,6 +6,11 @@ All notable changes to this project will be documented in this file.
 
 ### 🐛 Fixes
 
+- the demo reported a mount going from 1.6 GB to 1.7 TB as a routine disk change (#249). The unit was wrong by a factor of a thousand: the same demo describes that mount as 1740 GB of 2000, so the previous reading was 1.6 **TB**. `--demo` is what [docs/mcp-server.md](docs/mcp-server.md) offers an agent to try first and what the dashboard screenshots are taken from, so the number was not only wrong, it was the first number a lot of people saw
+
+
+### 🐛 Fixes
+
 - `install_app` answered with two different shapes (#248). A refusal returned `{status, issues}` and a success returned `{status, app, port, path, state}`, so an agent reading `app` got nothing on the branch where something went wrong — the branch it most needs to report. Every install outcome names the app it is about now, and `data_preserved` says which of uninstall and purge happened rather than being present on one and absent on the other
 
 - demo mode showed a `config_validate` shape the product does not produce (#248). Its findings carried a `section` key; `config.Finding` has `field`. The demo exists so a caller can meet the real shape before it has a real machine, and it was built from a map literal that nothing compared against the type it was imitating. It builds the actual types now, and the error and warning counts come from the findings rather than being written beside them
