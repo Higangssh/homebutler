@@ -2,7 +2,26 @@
 
 All notable changes to this project will be documented in this file.
 
-## [Unreleased]
+## [0.36.1](https://github.com/Higangssh/homebutler/compare/v0.35.2...v0.36.1) - 2026-09-20
+
+**1.0 promised to freeze the tool surface and the JSON schema, and nothing said which bytes.** That promise is why several changes landed before 1.0 rather than after, and the only way to find out a field had been renamed was to notice. [docs/compatibility.md](docs/compatibility.md) now says what is frozen, what is not, and what may still be added; a golden file in `internal/contract` says the same thing to the build. A renamed tool, a retyped field, a risk class that moved or a route that stopped requiring a token now fails a pull request with the lines that moved.
+
+```
+$ go test ./internal/contract
+    the frozen surface changed.
+
+      - docker_stop risk=destructive args=[name:string server:string] required=[name]
+      + docker_stop risk=write args=[name:string server:string] required=[name]
+```
+
+> v0.36.0 was tagged and published nowhere. The release failed before it built
+> anything: `make build-web` ran `npm install`, which rewrote
+> `web/package-lock.json`, and GoReleaser will not build from a modified tree.
+> The tag stays where it is — the Go module proxy had already fetched it — and
+> 0.36.1 is that release. The build now installs from the lockfile rather than
+> resolving the ranges again, and both workflows fail with the diff if a build
+> step writes to the tree at all.
+
 
 ### ✨ Features
 
@@ -20,6 +39,12 @@ All notable changes to this project will be documented in this file.
 
 - replace the demo at the top of the README . The old one was a thumbnail linking to a 34-second video from before the dashboard could edit anything. The new run-through shows what changed, the same answer as JSON with the kind as a field, doctor, a backup drill, and the report on a phone — and its text is captured output rather than transcribed: the generator reads the real `report`, `doctor` and `backup drill` from a demo host and only colours them
 - drop the install demo, which showed `homebutler logs`, a command that does not exist, and five available apps where there are fifteen. Real `install list` output takes its place
+
+### 🧹 Chores
+
+- the release build wrote to its own working tree (#236). `make build-web` ran `npm install`, which resolves the version ranges again and may rewrite `package-lock.json`; GoReleaser refuses to build from a modified tree, so the release died before producing a single artifact and named only the file, not the step. It installs from the lockfile now, and raising a dependency is `make deps-update` — a deliberate act with a diff to review. Both workflows also fail with `git status` and the diff if any build step leaves the tree modified, so the next one of these says what wrote the file
+
+- `golang.org/x/crypto` moves from 0.48.0 to 0.57.0 (#227), nine minor versions in the library every remote command's SSH connection runs through — including the host-key handling 0.34.0 changed. Checked against a real host before merging: key auth and the first-use trust prompt recorded the same fingerprint, a second connection verified against the stored key, and a password was still refused to a host that had not been trusted
 
 ## [0.35.2](https://github.com/Higangssh/homebutler/compare/v0.35.1...v0.35.2) - 2026-09-16
 
