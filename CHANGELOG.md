@@ -4,37 +4,33 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
-### 📚 Documentation
-
-- `failed_collectors` was documented as one list when it is one per surface (#250). The compatibility table named `docker`, `ports` and `processes` without saying where those apply, and `proxmox_status` reports `version`, `cluster` and `resources` in the same field — so a caller that believed the table and met `version` was given a value the table said could not arrive. The row now says the set is per surface and names both, and notes that the dashboard's own refresh uses a different key entirely. The table also says plainly that the Proxmox reads return Proxmox's shape, which is not ours to freeze, while the envelope `proxmox_status` wraps them in is
-
-
-### 🐛 Fixes
-
-- the demo reported a mount going from 1.6 GB to 1.7 TB as a routine disk change (#249). The unit was wrong by a factor of a thousand: the same demo describes that mount as 1740 GB of 2000, so the previous reading was 1.6 **TB**. `--demo` is what [docs/mcp-server.md](docs/mcp-server.md) offers an agent to try first and what the dashboard screenshots are taken from, so the number was not only wrong, it was the first number a lot of people saw
-
-
-### 🐛 Fixes
-
-- `install_app` answered with two different shapes (#248). A refusal returned `{status, issues}` and a success returned `{status, app, port, path, state}`, so an agent reading `app` got nothing on the branch where something went wrong — the branch it most needs to report. Every install outcome names the app it is about now, and `data_preserved` says which of uninstall and purge happened rather than being present on one and absent on the other
-
-- demo mode showed a `config_validate` shape the product does not produce (#248). Its findings carried a `section` key; `config.Finding` has `field`. The demo exists so a caller can meet the real shape before it has a real machine, and it was built from a map literal that nothing compared against the type it was imitating. It builds the actual types now, and the error and warning counts come from the findings rather than being written beside them
-
-### ♻️ Internal
-
-- eight tool results were `map[string]any` literals written at the call site (#248). A map has no name, so nothing recorded what those tools answer with, a renamed key looked like a new one, and two branches of the same tool could disagree — which is how the `install_app` defect above survived. `config_validate`, `watch_add`, `watch_remove`, `install_app`, `install_status`, `install_uninstall`, `install_purge`, `proxmox_script_command` and `inventory_export`'s mermaid answer have named types now. No key changed
-
-
 ### ✨ Features
+
+- every tool declares what it answers with, and a test fails when one does not (#251). The capability registry froze how a tool is called — its name, its arguments, what calling it may do — and said nothing about what comes back, which is the half an agent branches on. Each of the 44 now declares either the type it returns or that the shape is somebody else's and not ours to freeze: the Proxmox reads are decoded from the API into the struct they are emitted from, so `pveversion` and `cpuinfo` are Proxmox's names and freezing them would promise their format. The golden file records which, so a tool changing its answer is a diff. Getting the classification wrong is still possible; leaving it out is not
 
 - `doctor` can finally ask the one backup question nobody else answers (#239). Its five `backup` findings were all about the archive file — readable, present, parseable, fresh, bounded — and none knew whether any of it had ever been restored. Three of them already ended by telling the operator to run a drill, and nothing checked whether the advice was taken, so a backup nobody had ever drilled looked exactly like one that passed an hour ago. A drill now leaves a record beside the backups, capped at 50 the way `watch` caps incidents, and `doctor` reads it: **no backup has ever been drilled**, and the sharper one, **the newest backup has never been drilled** — there is a drill and it predates the newest archive, so what passed is not what you would restore from. Both are warnings: never having drilled is where every install starts, and `--strict` in cron should not go red on day one for it. `backup drill --json` carries the same timestamp as `drilled_at`
 
 ### 🐛 Fixes
 
+- the demo reported a mount going from 1.6 GB to 1.7 TB as a routine disk change (#249). The unit was wrong by a factor of a thousand: the same demo describes that mount as 1740 GB of 2000, so the previous reading was 1.6 **TB**. `--demo` is what [docs/mcp-server.md](docs/mcp-server.md) offers an agent to try first and what the dashboard screenshots are taken from, so the number was not only wrong, it was the first number a lot of people saw
+
+- demo mode answered with the shape homebutler had two releases ago (#251). `--demo` is what [docs/mcp-server.md](docs/mcp-server.md) offers an agent to try first, so it is the first thing a lot of callers ever see from us — and its `report` returned `notable_changes: ["Demo baseline created"]`, a list of sentences, after #199 and #222 replaced exactly that with typed `kind`/`target`/`detail` and the counts beside them. An agent evaluating the claim that it would not have to parse prose was handed prose. It also showed a skipped comparison without `failed_collectors`, which is the false zero this release fixed, demonstrated. Seven tools were missing fields: `report`, `doctor`, `backup_drill`, `open_ports`, `inventory_scan`, `docker_logs` and `wake` — which answered with `target` where `WakeResult` has `mac`
+
+- `install_app` answered with two different shapes (#248). A refusal returned `{status, issues}` and a success returned `{status, app, port, path, state}`, so an agent reading `app` got nothing on the branch where something went wrong — the branch it most needs to report. Every install outcome names the app it is about now, and `data_preserved` says which of uninstall and purge happened rather than being present on one and absent on the other
+
+- demo mode showed a `config_validate` shape the product does not produce (#248). Its findings carried a `section` key; `config.Finding` has `field`. The demo exists so a caller can meet the real shape before it has a real machine, and it was built from a map literal that nothing compared against the type it was imitating. It builds the actual types now, and the error and warning counts come from the findings rather than being written beside them
+
 - a `doctor` finding that said to drill would have sent an agent to take another backup (#239). `homebutler backup drill` had no entry in the command-to-tool map, so it fell back to the one for `homebutler backup` and named `backup_create`. Nothing had printed that command before, which is why it surfaced only when a finding started to. The test that walks doctor's commands checks they are *classified*, not that they are classified correctly — [docs/compatibility.md](docs/compatibility.md) now says so, and the drill forms are pinned
 
+### ♻️ Internal
+
+- CI fails when `[Unreleased]` repeats a section heading (#251). The existing check only walks version headings, so two pull requests each adding `### 🐛 Fixes` stacked up unnoticed — and `release-notes.sh` cuts a section whole, so the release page would have shown two Fixes blocks. Until now that merge happened because somebody did it by hand while preparing the release; the step that catches it is the one that used to be a person remembering
+
+- eight tool results were `map[string]any` literals written at the call site (#248). A map has no name, so nothing recorded what those tools answer with, a renamed key looked like a new one, and two branches of the same tool could disagree — which is how the `install_app` defect above survived. `config_validate`, `watch_add`, `watch_remove`, `install_app`, `install_status`, `install_uninstall`, `install_purge`, `proxmox_script_command` and `inventory_export`'s mermaid answer have named types now. No key changed
 
 ### 📚 Documentation
+
+- `failed_collectors` was documented as one list when it is one per surface (#250). The compatibility table named `docker`, `ports` and `processes` without saying where those apply, and `proxmox_status` reports `version`, `cluster` and `resources` in the same field — so a caller that believed the table and met `version` was given a value the table said could not arrive. The row now says the set is per surface and names both, and notes that the dashboard's own refresh uses a different key entirely. The table also says plainly that the Proxmox reads return Proxmox's shape, which is not ours to freeze, while the envelope `proxmox_status` wraps them in is
 
 - the config page never mentioned the legacy `alerts.yaml` (#245). `alerts` warns that the file is deprecated and says to move `rules`/`notify` into `config.yaml` — and the page a reader then opens listed four search paths, none of them that file, and said nothing about where the settings should go. It now says what the fallback is, quotes the warning, and names the two sections to move into
 

@@ -79,6 +79,52 @@ PUT /api/config/proxmox protection=token
 PUT /api/config/servers protection=token
 PUT /api/config/wake protection=token
 
+## outputs
+alerts: AlertResult
+alerts_history: []HistoryEntry
+backup_create: BackupResult
+backup_drill: DrillResult
+backup_list: []ListEntry
+backup_restore: RestoreResult
+config_validate: ConfigValidateResult
+docker_inspect: InspectResult
+docker_list: []Container
+docker_logs: LogsResult
+docker_restart: ActionResult
+docker_stats: []ContainerStats
+docker_stop: ActionResult
+docker_top: TopResult
+doctor: Result
+install_app: InstallResult
+install_list: []App
+install_purge: InstallResult
+install_status: InstallStatusResult
+install_uninstall: InstallResult
+inventory_export: InventoryExportResult
+inventory_scan: Inventory
+network_scan: []Device
+notify_test: []TestResult
+open_ports: Result
+processes: ProcessResult
+proxmox_guest_reboot: proxmoxGuestActionResult
+proxmox_guest_shutdown: proxmoxGuestActionResult
+proxmox_guest_start: proxmoxGuestActionResult
+proxmox_guests: passthrough
+proxmox_node: passthrough
+proxmox_script_command: ProxmoxScriptCommandResult
+proxmox_script_list: []Script
+proxmox_status: passthrough
+proxmox_task_status: passthrough
+proxmox_tasks: passthrough
+report: Report
+system_status: StatusInfo
+wake: WakeResult
+watch_add: WatchAddResult
+watch_check: RunResult
+watch_history: []Incident
+watch_list: []WatchedTarget
+watch_remove: WatchRemoveResult
+
 ## absent
 alerts_history: no-view-yet
 backup_create: no-action-rule-yet

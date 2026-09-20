@@ -72,6 +72,23 @@ jobs:
               ;;
           esac
 
+          # [Unreleased] is not checked above: the loop only matches version
+          # headings. So a repeated section heading accumulates there quietly —
+          # two `### 🐛 Fixes` from two pull requests — and release-notes.sh
+          # cuts the section whole, so it reaches the release page as two
+          # Fixes blocks. Until now the merge happened because a person did it
+          # while preparing the release.
+          duplicate=$(
+            awk '/^## \[/ { inside = ($0 ~ /Unreleased/) } inside && /^### / { print }' CHANGELOG.md |
+              sort | uniq -d
+          )
+          if [ -n "$duplicate" ]; then
+            echo "[Unreleased] has the same section heading more than once:" >&2
+            echo "$duplicate" >&2
+            echo "Merge the entries under one heading — the release notes are cut from the section whole." >&2
+            exit 1
+          fi
+
   e2e:
     name: End-to-end
     runs-on: ubuntu-latest
