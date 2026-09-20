@@ -6,7 +6,7 @@ All notable changes to this project will be documented in this file.
 
 ### ⚠️ Behavior changes
 
-- **`backup drill` exits non-zero when a drill fails.** It exited 0 whatever the verdict, so a cron entry or a CI step reading the exit status was told a backup that does not restore had restored. With `--all`, any single app failing fails the run. `--json` is unchanged and still prints to stdout, so a caller reading `passed` is unaffected. `doctor` exit codes are untouched.
+- **`backup drill` exits non-zero when a drill fails.** It exited 0 whatever the verdict, so a cron entry or a CI step reading the exit status was told a backup that does not restore had restored. If you have the drill on a schedule and have been ignoring its exit code, you will start seeing failures — that is the point of the change, and the failures were already there. With `--all`, any single app failing fails the run. `--json` is unchanged and still prints to stdout, so a caller reading `passed` is unaffected. `doctor` exit codes are untouched.
 
 ### 📚 Documentation
 
