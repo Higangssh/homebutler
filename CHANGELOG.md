@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### ⚠️ Behavior changes
+
+- **`backup drill` exits non-zero when a drill fails.** It exited 0 whatever the verdict, so a cron entry or a CI step reading the exit status was told a backup that does not restore had restored. If you have the drill on a schedule and have been ignoring its exit code, you will start seeing failures — that is the point of the change, and the failures were already there. With `--all`, any single app failing fails the run. `--json` is unchanged and still prints to stdout, so a caller reading `passed` is unaffected. `doctor` exit codes are untouched.
+
+### 📚 Documentation
+
+- `backup drill` had no page (#238). It is the command that separates having a backup from being able to restore one, and [docs/backup.md](docs/backup.md) — the page about backups — never mentioned it. It now has the run, what each step actually does, that the cleanup happens whether the drill passed or failed, the cron entry that makes a failure visible, and what a passing drill does **not** prove: the app answering a health check on restored data is not every row being there
+
+- the `doctor` category table claimed a finding that does not exist. `backup` was described as covering backups "never drilled", and nothing in `doctor` tracks whether an app has ever been drilled — the word appears only in the advice attached to other findings. The row now says what the five `backup` findings actually are, and the backup page says plainly that nothing remembers this, which is why the drill belongs on a schedule
+
 ## [0.36.1](https://github.com/Higangssh/homebutler/compare/v0.35.2...v0.36.1) - 2026-09-20
 
 **1.0 promised to freeze the tool surface and the JSON schema, and nothing said which bytes.** That promise is why several changes landed before 1.0 rather than after, and the only way to find out a field had been renamed was to notice. [docs/compatibility.md](docs/compatibility.md) now says what is frozen, what is not, and what may still be added; a golden file in `internal/contract` says the same thing to the build. A renamed tool, a retyped field, a risk class that moved or a route that stopped requiring a token now fails a pull request with the lines that moved.

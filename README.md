@@ -158,7 +158,15 @@ HomeButler answers the question none of them ask: **what is different from last 
 
 - **No agent on the machines it watches.** The binary is put there once with `homebutler deploy` and runs only when asked, over SSH — no daemon, no open port, nothing listening between runs.
 - **The judgement is a written rule, not a model.** What earns a line is in [docs/report.md](docs/report.md), and the same input gives the same report — no AI required, no account, no paid tier.
-- **It checks that a backup comes back.** `backup drill` unpacks an archive into an isolated container on a network and port of its own, starts the app on that data, and waits for it to answer an HTTP health check.
+- **It checks that a backup comes back.** A backup you have never restored is a folder. `backup drill` boots the archive as a second copy of the app, on a network and port of its own, and requires it to answer an HTTP health check before calling the archive good — then removes everything it made. A failed drill exits non-zero, so `backup drill --all` belongs in the same cron entry as `backup`. [docs/backup.md](docs/backup.md#drill-proving-the-backup-comes-back) has what it does and what it does not prove.
+
+  ```
+  🔐 Integrity: ✅ tar valid (8 files)
+  🚀 Boot: ✅ container started in 0s
+  🌐 Health: ✅ HTTP 200 on port 60405
+
+  ✅ DRILL PASSED
+  ```
 
 ## Core workflows
 
@@ -194,7 +202,7 @@ caller filters on it without reading the title:
 | `system` | CPU, memory, disk |
 | `docker` | containers that are stopped or unhealthy |
 | `exposure` | ports listening on every interface |
-| `backup` | backups missing, stale, or never drilled |
+| `backup` | backups missing, stale, or growing without a retention limit |
 | `report` | whether there is a baseline to compare against |
 | `watch` | targets listed with nothing polling them |
 | `notifications` | channels configured, or never tested |
@@ -842,7 +850,7 @@ Default thresholds: CPU 90%, Memory 85%, Disk 90%. Start with `watch`, then add 
 
 **"Having a backup" and "being able to restore" are different things.**
 
-Backup Drill boots your backup in an isolated Docker environment and verifies the app actually responds — like a fire drill for your data.
+Backup Drill boots your backup in an isolated Docker environment and verifies the app actually responds — like a fire drill for your data. A failed drill exits non-zero.
 
 ```bash
 homebutler backup drill uptime-kuma        # verify one app
@@ -850,6 +858,8 @@ homebutler backup drill --all              # verify all apps
 homebutler backup drill --json             # machine-readable output
 homebutler backup drill --archive ./file   # use a specific backup
 ```
+
+Full walkthrough, including what a passing drill does *not* prove: [docs/backup.md](docs/backup.md#drill-proving-the-backup-comes-back).
 
 **What happens:**
 1. Finds the latest backup archive
