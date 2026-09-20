@@ -27,6 +27,17 @@ homebutler searches for a config file in the following order:
 
 If no config file is found, sensible defaults are used (CPU 90%, memory 85%, disk 90%).
 
+`~/.homebutler/alerts.yaml` is not in that list. It is read as a fallback for
+notify and webhook settings so an older setup keeps working, and homebutler
+says so when it uses one:
+
+```
+warning: ~/.homebutler/alerts.yaml is deprecated, move rules/notify into config.yaml
+```
+
+Move those settings into the `notify:` and `alerts:` sections below, and the
+warning stops.
+
 ```bash
 # Recommended: use XDG location
 mkdir -p ~/.config/homebutler

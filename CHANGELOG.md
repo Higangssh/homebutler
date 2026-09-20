@@ -6,6 +6,8 @@ All notable changes to this project will be documented in this file.
 
 ### 📚 Documentation
 
+- the config page never mentioned the legacy `alerts.yaml` (#245). `alerts` warns that the file is deprecated and says to move `rules`/`notify` into `config.yaml` — and the page a reader then opens listed four search paths, none of them that file, and said nothing about where the settings should go. It now says what the fallback is, quotes the warning, and names the two sections to move into
+
 - the Proxmox page said the dashboard was read-only, and it edits the `proxmox:` endpoints (#245). Those carry an API token, so the page where somebody decides how much privilege to give one is the worst place for that sentence to be wrong. It now says what the dashboard can edit and what it still cannot: no guest action is on the HTTP surface, and the registry records which decision that is waiting on
 
 - running homebutler inside an LXC or a VM reports on the guest, not the node (#245). [docs/docker.md](docs/docker.md) has said the equivalent about containers since the image shipped, and somebody arriving through Proxmox does not read the Docker page. The Proxmox page now says it in three sentences and links there rather than repeating it — to see the node, attach it under `proxmox:` as an API endpoint; to see other machines, `servers:` over SSH
