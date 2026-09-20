@@ -49,6 +49,11 @@ func Surface() string {
 		b.WriteString(line + "\n")
 	}
 
+	b.WriteString("\n## absent\n")
+	for _, line := range absentLines() {
+		b.WriteString(line + "\n")
+	}
+
 	b.WriteString("\n## json\n")
 	for _, line := range jsonLines() {
 		b.WriteString(line + "\n")
@@ -117,6 +122,39 @@ func routeLines() []string {
 	}
 	sort.Strings(lines)
 	return lines
+}
+
+// absentLines records which capabilities the dashboard cannot reach and which
+// decision each is waiting on. The reasons go out of GET /api/capabilities, so
+// they are something we say rather than something we note — and the answer to
+// "how much is this surface still going to grow" lives here. A capability
+// moving from one reason to another, or acquiring a route, is then a diff.
+func absentLines() []string {
+	var out []string
+	for _, c := range capability.Registry {
+		if c.Exposed() {
+			continue
+		}
+		out = append(out, c.Tool.Name+": "+absentKey(c.HTTP.Absent))
+	}
+	sort.Strings(out)
+	return out
+}
+
+// absentKey names the constant rather than repeating its sentence. The
+// sentences are prose and get better; which decision a capability waits on is
+// the part that is frozen.
+func absentKey(reason string) string {
+	switch reason {
+	case capability.AbsentNoViewYet:
+		return "no-view-yet"
+	case capability.AbsentNoActionRuleYet:
+		return "no-action-rule-yet"
+	case capability.AbsentNoDestructiveRuleYet:
+		return "no-destructive-rule-yet"
+	default:
+		return "UNKNOWN(" + reason + ")"
+	}
 }
 
 // jsonLines records the field names and types a caller receives. Types are

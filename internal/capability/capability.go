@@ -88,15 +88,34 @@ const (
 // Exposed reports whether the dashboard can reach this capability.
 func (c Capability) Exposed() bool { return c.HTTP.Method != "" }
 
-// The reasons a capability is not on the HTTP surface. Shared constants rather
-// than repeated prose, so a decision that changes changes in one place.
+// The reasons a capability is not on the HTTP surface. A closed set: a reason
+// written inline would be prose nobody could count, and this list going out of
+// `GET /api/capabilities` makes each string a sentence we say to whoever asks
+// what the dashboard can do.
+//
+// Every one of these says "not yet". None of them says "never" — that is a
+// product decision, and when one is taken the reason moves here as its own
+// constant rather than being implied by silence.
 const (
-	// A write the dashboard has no confirmation rule for yet. #154 is where
-	// that surface and the token requirement behind it get decided.
-	AbsentNeedsWriteSurface = "no write surface yet: #154 decides the confirmation rule and the token requirement behind it"
 	// A read nobody has built a screen for. Not a decision against it.
 	AbsentNoViewYet = "no view built for it yet"
+	// #154 gave the dashboard a write surface: it edits the config, with a
+	// token, and the validation comes back from the one validator. What it did
+	// not decide is running an action — a restart is not a setting, and the
+	// confirmation a browser should ask for before starting one is open.
+	AbsentNoActionRuleYet = "the dashboard writes settings since #154, and no rule has been decided for running an action from a browser"
+	// The same question with data loss behind it, which is why it is a
+	// different reason and a different issue.
+	AbsentNoDestructiveRuleYet = "no confirmation rule for a destructive action in a browser: #242. The MCP tools take an explicit confirm argument; a browser tab holding a token is a weaker credential than a shell, and what it must show before it removes data has not been decided."
 )
+
+// absentReasons is the closed set, so a capability cannot carry a reason
+// written on the spot. See TestAbsentReasonsAreFromTheClosedSet.
+var absentReasons = map[string]bool{
+	AbsentNoViewYet:            true,
+	AbsentNoActionRuleYet:      true,
+	AbsentNoDestructiveRuleYet: true,
+}
 
 type Capability struct {
 	Tool    Definition
@@ -204,7 +223,7 @@ var Registry = []Capability{
 	{
 		Risk:    RiskWrite,
 		Targets: []TargetKind{TargetProxmox},
-		HTTP:    HTTP{Absent: AbsentNeedsWriteSurface},
+		HTTP:    HTTP{Absent: AbsentNoActionRuleYet},
 		Tool: Definition{
 			Name:        "proxmox_guest_start",
 			Description: "Start one explicitly targeted Proxmox guest after confirmation and return the accepted task UPID",
@@ -214,7 +233,7 @@ var Registry = []Capability{
 	{
 		Risk:    RiskWrite,
 		Targets: []TargetKind{TargetProxmox},
-		HTTP:    HTTP{Absent: AbsentNeedsWriteSurface},
+		HTTP:    HTTP{Absent: AbsentNoActionRuleYet},
 		Tool: Definition{
 			Name:        "proxmox_guest_reboot",
 			Description: "Reboot one explicitly targeted Proxmox guest after confirmation and return the accepted task UPID",
@@ -224,7 +243,7 @@ var Registry = []Capability{
 	{
 		Risk:    RiskDestructive,
 		Targets: []TargetKind{TargetProxmox},
-		HTTP:    HTTP{Absent: AbsentNeedsWriteSurface},
+		HTTP:    HTTP{Absent: AbsentNoDestructiveRuleYet},
 		Tool: Definition{
 			Name:        "proxmox_guest_shutdown",
 			Description: "Gracefully shut down one explicitly targeted Proxmox guest after confirmation and return the accepted task UPID",
@@ -285,7 +304,7 @@ var Registry = []Capability{
 	{
 		Risk:    RiskWrite,
 		Targets: []TargetKind{TargetLocal, TargetServer},
-		HTTP:    HTTP{Absent: AbsentNeedsWriteSurface},
+		HTTP:    HTTP{Absent: AbsentNoActionRuleYet},
 		Tool: Definition{
 			Name:        "docker_restart",
 			Description: "Restart a Docker container by name",
@@ -302,7 +321,7 @@ var Registry = []Capability{
 	{
 		Risk:    RiskDestructive,
 		Targets: []TargetKind{TargetLocal, TargetServer},
-		HTTP:    HTTP{Absent: AbsentNeedsWriteSurface},
+		HTTP:    HTTP{Absent: AbsentNoDestructiveRuleYet},
 		Tool: Definition{
 			Name:        "docker_stop",
 			Description: "Stop a Docker container by name",
@@ -516,7 +535,7 @@ var Registry = []Capability{
 		// free query the way system_status is.
 		Risk:    RiskWrite,
 		Targets: []TargetKind{TargetLocal, TargetServer},
-		HTTP:    HTTP{Absent: AbsentNeedsWriteSurface},
+		HTTP:    HTTP{Absent: AbsentNoActionRuleYet},
 		Tool: Definition{
 			Name:        "watch_check",
 			Description: "Run a one-shot restart check on watched targets and report restarts detected since the last check. Only docker targets can be inspected this way; systemd and pm2 targets are reported as skipped rather than assumed healthy",
@@ -602,7 +621,7 @@ var Registry = []Capability{
 		// what separates it from watch_install (#157).
 		Risk:    RiskWrite,
 		Targets: []TargetKind{TargetLocal, TargetServer},
-		HTTP:    HTTP{Absent: AbsentNeedsWriteSurface},
+		HTTP:    HTTP{Absent: AbsentNoActionRuleYet},
 		Tool: Definition{
 			Name:        "watch_add",
 			Description: "Add a Docker container, systemd unit, or PM2 app to the watch list",
@@ -623,7 +642,7 @@ var Registry = []Capability{
 		// alone, so nothing already observed is lost.
 		Risk:    RiskWrite,
 		Targets: []TargetKind{TargetLocal, TargetServer},
-		HTTP:    HTTP{Absent: AbsentNeedsWriteSurface},
+		HTTP:    HTTP{Absent: AbsentNoActionRuleYet},
 		Tool: Definition{
 			Name:        "watch_remove",
 			Description: "Remove a target from the watch list, leaving its recorded incidents in place",
@@ -673,7 +692,7 @@ var Registry = []Capability{
 	{
 		Risk:    RiskWrite,
 		Targets: []TargetKind{TargetLocal, TargetServer},
-		HTTP:    HTTP{Absent: AbsentNeedsWriteSurface},
+		HTTP:    HTTP{Absent: AbsentNoActionRuleYet},
 		Tool: Definition{
 			Name:        "backup_create",
 			Description: "Create a Docker compose backup archive for all services or one service",
@@ -705,7 +724,7 @@ var Registry = []Capability{
 	{
 		Risk:    RiskWrite,
 		Targets: []TargetKind{TargetLocal, TargetServer},
-		HTTP:    HTTP{Absent: AbsentNeedsWriteSurface},
+		HTTP:    HTTP{Absent: AbsentNoActionRuleYet},
 		Tool: Definition{
 			Name:        "backup_drill",
 			Description: "Verify a backup by booting an app in an isolated Docker environment and checking that it responds",
@@ -723,7 +742,7 @@ var Registry = []Capability{
 	{
 		Risk:    RiskDestructive,
 		Targets: []TargetKind{TargetLocal, TargetServer},
-		HTTP:    HTTP{Absent: AbsentNeedsWriteSurface},
+		HTTP:    HTTP{Absent: AbsentNoDestructiveRuleYet},
 		Tool: Definition{
 			Name:        "backup_restore",
 			Description: "Restore Docker volumes from a backup archive. Destructive: confirm intent before calling.",
@@ -753,7 +772,7 @@ var Registry = []Capability{
 	{
 		Risk:    RiskWrite,
 		Targets: []TargetKind{TargetLocal},
-		HTTP:    HTTP{Absent: AbsentNeedsWriteSurface},
+		HTTP:    HTTP{Absent: AbsentNoActionRuleYet},
 		Tool: Definition{
 			Name:        "install_app",
 			Description: "Install a self-hosted app via docker compose. Pre-checks docker, ports, and duplicates automatically.",
@@ -786,7 +805,7 @@ var Registry = []Capability{
 	{
 		Risk:    RiskWrite,
 		Targets: []TargetKind{TargetLocal},
-		HTTP:    HTTP{Absent: AbsentNeedsWriteSurface},
+		HTTP:    HTTP{Absent: AbsentNoActionRuleYet},
 		Tool: Definition{
 			Name:        "install_uninstall",
 			Description: "Stop an installed app and remove its containers. Data is preserved.",
@@ -802,7 +821,7 @@ var Registry = []Capability{
 	{
 		Risk:    RiskDestructive,
 		Targets: []TargetKind{TargetLocal},
-		HTTP:    HTTP{Absent: AbsentNeedsWriteSurface},
+		HTTP:    HTTP{Absent: AbsentNoDestructiveRuleYet},
 		Tool: Definition{
 			Name:        "install_purge",
 			Description: "Stop an installed app and delete all data including containers, config, and volumes.",

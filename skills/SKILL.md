@@ -143,7 +143,21 @@ homebutler watch tui
 homebutler serve --token <token>
 homebutler deploy --server <name>
 homebutler upgrade
-homebutler notify test
+```
+
+No tool exposes any of these, and a test checks that against the registry
+rather than trusting this list.
+
+### `restore` has a tool, and you should still run it yourself
+
+`restore` writes over the data an app is running on, and the path it writes to
+comes from the archive rather than from you — which is why the CLI refuses a
+bind mount unless you name the path with `--allow-bind`. There is a
+`backup_restore` tool, and over MCP it never restores bind mounts, for the same
+reason: an agent has no way to name a host path it is allowed to write to, so
+the archive's bind mounts are refused and reported in the result.
+
+```bash
 homebutler restore <archive>
 ```
 
