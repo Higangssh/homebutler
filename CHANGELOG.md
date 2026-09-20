@@ -2,7 +2,7 @@
 
 All notable changes to this project will be documented in this file.
 
-## [0.36.1](https://github.com/Higangssh/homebutler/compare/v0.35.2...v0.36.1) - 2026-09-19
+## [0.36.1](https://github.com/Higangssh/homebutler/compare/v0.35.2...v0.36.1) - 2026-09-20
 
 **1.0 promised to freeze the tool surface and the JSON schema, and nothing said which bytes.** That promise is why several changes landed before 1.0 rather than after, and the only way to find out a field had been renamed was to notice. [docs/compatibility.md](docs/compatibility.md) now says what is frozen, what is not, and what may still be added; a golden file in `internal/contract` says the same thing to the build. A renamed tool, a retyped field, a risk class that moved or a route that stopped requiring a token now fails a pull request with the lines that moved.
 
