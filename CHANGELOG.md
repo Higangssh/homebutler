@@ -2,7 +2,19 @@
 
 All notable changes to this project will be documented in this file.
 
-## [Unreleased]
+## [0.38.0](https://github.com/Higangssh/homebutler/compare/v0.37.0...v0.38.0) - 2026-09-21
+
+**Three of `doctor`'s backup findings told you to run a drill, and nothing ever checked whether you had.** A backup nobody has ever restored looked exactly like one that passed an hour ago, because the advice was written down and no part of the build ever read it back. That turned out to be the shape of most of this release.
+
+A mistyped argument was read by nobody and the shell was told the command had worked. No tool said what it answers with, so an agent branching on the reply was branching on something nothing had written down. And `--demo`, the first thing anybody points an agent at, had spent two releases answering with sentences after the typed fields replaced them.
+
+```
+$ homebutler doctor
+⚠️ [backup] The newest backup has never been drilled
+   The last drill was 93d 8h before the newest archive was taken, so what passed is not what you would restore from.
+   → Drill again so the verdict is about the archive you actually have.
+   $ homebutler backup drill --all
+```
 
 ### ⚠️ Behavior changes
 
