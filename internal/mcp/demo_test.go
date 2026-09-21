@@ -1,6 +1,8 @@
 package mcp
 
 import (
+	"github.com/Higangssh/homebutler/internal/watch"
+
 	"testing"
 
 	"github.com/Higangssh/homebutler/internal/capability"
@@ -48,10 +50,12 @@ func TestExecuteDemoTool_Unknown(t *testing.T) {
 }
 
 func TestDemoLogsFallback(t *testing.T) {
-	res := demoLogs("not-found")
-	logs, ok := res["logs"].(string)
-	if !ok || logs == "" {
+	res := demoLogs("not-found", "100")
+	if res.Logs == "" {
 		t.Fatal("expected fallback logs message")
+	}
+	if res.Lines != "100" {
+		t.Errorf("lines = %q, want the argument back", res.Lines)
 	}
 }
 
@@ -109,15 +113,15 @@ func TestEveryAdvertisedToolHasADemoImplementation(t *testing.T) {
 func TestDemoWatchHistoryHonoursItsArguments(t *testing.T) {
 	s := NewServer(&config.Config{}, "dev", true)
 
-	call := func(args map[string]any) []map[string]any {
+	call := func(args map[string]any) []watch.Incident {
 		t.Helper()
 		got, err := s.executeDemoTool("watch_history", args)
 		if err != nil {
 			t.Fatalf("watch_history%v: %v", args, err)
 		}
-		list, ok := got.([]map[string]any)
+		list, ok := got.([]watch.Incident)
 		if !ok {
-			t.Fatalf("watch_history returned %T, want a list", got)
+			t.Fatalf("watch_history returned %T, want a list of incidents", got)
 		}
 		return list
 	}
@@ -126,13 +130,17 @@ func TestDemoWatchHistoryHonoursItsArguments(t *testing.T) {
 		t.Errorf("limit 2 returned %d incidents", n)
 	}
 
+	// The real tool blanks the logs rather than dropping the keys
+	// (watch/query.go), and Incident declares them without omitempty, so a
+	// caller always sees the field and sometimes sees it empty. The demo used
+	// to remove the keys, which is a different answer.
 	withoutLogs := call(map[string]any{"limit": "1"})
-	if _, ok := withoutLogs[0]["pre_logs"]; ok {
-		t.Error("logs must be absent unless include_logs is set")
+	if withoutLogs[0].PreLogs != "" {
+		t.Error("logs must be empty unless include_logs is set")
 	}
 
 	withLogs := call(map[string]any{"limit": "1", "include_logs": true})
-	if _, ok := withLogs[0]["pre_logs"]; !ok {
+	if withLogs[0].PreLogs == "" {
 		t.Error("include_logs must bring the captured logs back")
 	}
 
@@ -141,8 +149,8 @@ func TestDemoWatchHistoryHonoursItsArguments(t *testing.T) {
 		t.Fatal("container filter returned nothing; the demo data no longer has a postgres incident")
 	}
 	for _, inc := range filtered {
-		if inc["container"] != "postgres" {
-			t.Errorf("container filter returned an incident for %v", inc["container"])
+		if inc.Container != "postgres" {
+			t.Errorf("container filter returned an incident for %v", inc.Container)
 		}
 	}
 }

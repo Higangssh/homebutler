@@ -1,15 +1,27 @@
 package mcp
 
 import (
+	"encoding/json"
 	"fmt"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/Higangssh/homebutler/internal/notify"
 
+	"github.com/Higangssh/homebutler/internal/alerts"
+	"github.com/Higangssh/homebutler/internal/backup"
 	"github.com/Higangssh/homebutler/internal/config"
+	"github.com/Higangssh/homebutler/internal/docker"
 	"github.com/Higangssh/homebutler/internal/install"
+	"github.com/Higangssh/homebutler/internal/inventory"
+	"github.com/Higangssh/homebutler/internal/network"
+	"github.com/Higangssh/homebutler/internal/ports"
 	"github.com/Higangssh/homebutler/internal/proxmox"
+	"github.com/Higangssh/homebutler/internal/report"
+	"github.com/Higangssh/homebutler/internal/system"
+	"github.com/Higangssh/homebutler/internal/wake"
+	"github.com/Higangssh/homebutler/internal/watch"
 )
 
 func (s *Server) executeDemoTool(name string, args map[string]any) (any, error) {
@@ -65,7 +77,10 @@ func (s *Server) executeDemoTool(name string, args map[string]any) (any, error) 
 	case "system_status":
 		return demoStatus(server), nil
 	case "docker_list":
-		return demoDocker(server), nil
+		// docker.List returns the containers themselves. The envelope with
+		// `available` belongs to the dashboard's /api/docker route, and the
+		// demo had borrowed it for the tool.
+		return demoContainers(server), nil
 	case "docker_stats":
 		return demoDockerStats(server), nil
 	case "docker_restart":
@@ -85,7 +100,7 @@ func (s *Server) executeDemoTool(name string, args map[string]any) (any, error) 
 		if !ok {
 			return nil, fmt.Errorf("missing required parameter: name")
 		}
-		return demoLogs(cname), nil
+		return demoLogs(cname, demoLines(args)), nil
 	case "docker_top":
 		cname, ok := requireString(args, "name")
 		if !ok {
@@ -103,19 +118,22 @@ func (s *Server) executeDemoTool(name string, args map[string]any) (any, error) 
 		if !ok {
 			return nil, fmt.Errorf("missing required parameter: target")
 		}
-		return map[string]any{"action": "wake", "target": target, "broadcast": "255.255.255.255", "status": "sent"}, nil
+		// WakeResult names the field mac, not target: the demo used to answer
+		// with a key the product does not have.
+		return wake.WakeResult{Action: "wake", MAC: target, Broadcast: "255.255.255.255", Status: "sent"}, nil
 	case "open_ports":
-		return demoPorts(server), nil
+		return ports.Result{Ports: demoPortInfos(server)}, nil
 	case "network_scan":
 		return demoNetworkScan(), nil
 	case "alerts":
 		return demoAlerts(server), nil
 	case "inventory_scan":
-		return map[string]any{
-			"server_name": serverOrDefault(server),
-			"system":      demoStatus(server),
-			"containers":  demoDocker(server),
-			"ports":       demoPorts(server),
+		return inventory.Inventory{
+			ServerName: serverOrDefault(server),
+			Host:       serverOrDefault(server) + ".local",
+			System:     demoStatusInfo(server),
+			Containers: demoContainers(server),
+			Ports:      demoPortInfos(server),
 		}, nil
 	case "inventory_export":
 		format := stringArg(args, "format")
@@ -127,17 +145,11 @@ func (s *Server) executeDemoTool(name string, args map[string]any) (any, error) 
 		}
 		return InventoryExportResult{Format: "mermaid", Content: "graph TD\n  home[\"🏠 Home Network\"] --> server[\"🖥 " + serverOrDefault(server) + "\"]\n"}, nil
 	case "report":
-		return map[string]any{
-			"server_name":       serverOrDefault(server),
-			"status":            []string{"CPU 23%, memory 39%, disk 38%"},
-			"needs_attention":   []string{},
-			"notable_changes":   []string{"Demo baseline created"},
-			"suggested_actions": []string{"Run inventory_scan for topology details"},
-			"snapshot_saved":    !boolArg(args, "no_save"),
-		}, nil
+		return demoReport(server, !boolArg(args, "no_save")), nil
 	case "doctor":
 		return map[string]any{
 			"server_name": serverOrDefault(server),
+			"timestamp":   time.Now().UTC().Format(time.RFC3339),
 			"status":      "warn",
 			"summary":     map[string]any{"pass": 0, "warn": 2, "fail": 0},
 			"findings": []map[string]any{
@@ -202,11 +214,15 @@ func (s *Server) executeDemoTool(name string, args map[string]any) (any, error) 
 			{Channel: notify.ChannelGotify, Sent: false, Error: "request to https://gotify.example.com failed: connection refused"},
 		}, nil
 	case "alerts_history":
-		return []map[string]any{
-			{"time": "2026-04-30 03:14:22", "rule": "disk", "server": "homelab-server", "detail": "Disk / at 91%", "action": "docker prune", "outcome": "resolved"},
-			{"time": "2026-04-29 22:08:10", "rule": "memory", "server": "nas-box", "detail": "Memory at 93%", "action": "none", "outcome": "recovered on its own"},
-			{"time": "2026-04-28 06:41:55", "rule": "container", "server": "homelab-server", "detail": "plex exited (137)", "action": "restart", "outcome": "resolved"},
-		}, nil
+		// alerts.HistoryEntry names these timestamp/metric/details/
+		// action_taken/action_result. The demo used time/server/detail/
+		// action/outcome — five keys the type does not have, and one
+		// (`server`) it has no field for at all.
+		return demoAs[[]alerts.HistoryEntry]([]map[string]any{
+			{"timestamp": "2026-04-30T03:14:22Z", "rule": "disk", "metric": "disk", "details": "Disk / at 91%", "action_taken": "docker prune", "action_result": "resolved"},
+			{"timestamp": "2026-04-29T22:08:10Z", "rule": "memory", "metric": "memory", "details": "Memory at 93%", "action_taken": "none", "action_result": "recovered on its own"},
+			{"timestamp": "2026-04-28T06:41:55Z", "rule": "container", "metric": "container", "details": "plex exited (137)", "action_taken": "restart", "action_result": "resolved"},
+		}), nil
 	case "watch_list":
 		// Mirrors demoWatchHistory's targets, and carries a systemd entry with
 		// no last_checked: watch check cannot inspect those, so a caller that
@@ -228,13 +244,14 @@ func (s *Server) executeDemoTool(name string, args map[string]any) (any, error) 
 		return []map[string]any{{"name": "demo.tar.gz", "path": "~/.homebutler/backups/demo.tar.gz", "size": "12.3 MB", "created_at": "2026-04-30T12:00:00Z"}}, nil
 	case "backup_drill":
 		if boolArg(args, "all") {
-			return map[string]any{"total": 1, "passed": 1, "failed": 0}, nil
+			one := demoDrill("uptime-kuma")
+			return backup.DrillReport{Results: []backup.DrillResult{one}, Total: 1, Passed: 1}, nil
 		}
 		app, ok := requireString(args, "app")
 		if !ok {
 			return nil, fmt.Errorf("missing required parameter: app (or set all=true)")
 		}
-		return map[string]any{"app": app, "passed": true, "integrity": true, "booted": true, "health_status": 200}, nil
+		return demoDrill(app), nil
 	case "backup_restore":
 		archive, ok := requireString(args, "archive")
 		if !ok {
@@ -409,7 +426,7 @@ func demoDocker(server string) map[string]any {
 	}
 }
 
-func demoLogs(container string) map[string]any {
+func demoLogs(container, lines string) docker.LogsResult {
 	logs := map[string]string{
 		"nginx":    "2026/02/27 14:25:01 [notice] 1#1: start worker process 29\n2026/02/27 14:28:33 192.168.1.5 - - \"GET /api/health HTTP/1.1\" 200 2\n2026/02/27 14:29:01 192.168.1.10 - - \"GET / HTTP/1.1\" 200 612\n2026/02/27 14:30:15 192.168.1.20 - - \"GET /dashboard HTTP/1.1\" 304 0",
 		"postgres": "2026-02-27 14:25:00 UTC [1] LOG:  database system is ready to accept connections\n2026-02-27 14:28:00 UTC [45] LOG:  checkpoint starting: time\n2026-02-27 14:28:05 UTC [45] LOG:  checkpoint complete",
@@ -419,7 +436,7 @@ func demoLogs(container string) map[string]any {
 	if !ok {
 		text = fmt.Sprintf("No recent logs for container %q", container)
 	}
-	return map[string]any{"container": container, "logs": text}
+	return docker.LogsResult{Container: container, Lines: lines, Logs: text}
 }
 
 // demoDockerTop mirrors the demo fleet's containers so top, list and inspect
@@ -549,14 +566,14 @@ func demoPorts(server string) []map[string]any {
 	}
 }
 
-func demoNetworkScan() []map[string]any {
-	return []map[string]any{
-		{"ip": "192.168.1.1", "mac": "00:11:22:33:44:55", "hostname": "router.local"},
-		{"ip": "192.168.1.10", "mac": "AA:BB:CC:11:22:33", "hostname": "homelab-server"},
-		{"ip": "192.168.1.20", "mac": "DD:EE:FF:44:55:66", "hostname": "nas-box"},
-		{"ip": "192.168.1.30", "mac": "11:22:33:AA:BB:CC", "hostname": "raspberry-pi"},
-		{"ip": "192.168.1.50", "mac": "44:55:66:DD:EE:FF", "hostname": "gaming-pc"},
-	}
+func demoNetworkScan() []network.Device {
+	return demoAs[[]network.Device]([]map[string]any{
+		{"ip": "192.168.1.1", "mac": "00:11:22:33:44:55", "hostname": "router.local", "status": "up"},
+		{"ip": "192.168.1.10", "mac": "AA:BB:CC:11:22:33", "hostname": "homelab-server", "status": "up"},
+		{"ip": "192.168.1.20", "mac": "DD:EE:FF:44:55:66", "hostname": "nas-box", "status": "up"},
+		{"ip": "192.168.1.30", "mac": "11:22:33:AA:BB:CC", "hostname": "raspberry-pi", "status": "up"},
+		{"ip": "192.168.1.50", "mac": "44:55:66:DD:EE:FF", "hostname": "gaming-pc", "status": "up"},
+	})
 }
 
 func demoAlerts(server string) map[string]any {
@@ -594,7 +611,7 @@ func demoAlerts(server string) map[string]any {
 // see what those arguments actually do. A demo that ignored them would teach
 // the wrong thing about the tool it is demonstrating — particularly
 // include_logs, whose whole purpose is that the expensive shape is opt-in.
-func demoWatchHistory(args map[string]any) []map[string]any {
+func demoWatchHistory(args map[string]any) []watch.Incident {
 	incidents := []map[string]any{
 		{
 			"id": "demo-nextcloud-20260430T120000Z", "container": "nextcloud",
@@ -648,7 +665,10 @@ func demoWatchHistory(args map[string]any) []map[string]any {
 		incidents = stripped
 	}
 
-	return incidents
+	// watch.Incident declares pre_logs and post_logs without omitempty, so
+	// the real tool sends them empty rather than leaving them out. Going
+	// through the type keeps the demo saying the same thing.
+	return demoAs[[]watch.Incident](incidents)
 }
 
 // demoProcesses honours limit and sort_by, and always carries a zombie. The
@@ -716,5 +736,127 @@ func demoConfigValidate(strict bool) ConfigValidateResult {
 		Errors:   result.Errors(),
 		Warnings: result.Warnings(),
 		Result:   result,
+	}
+}
+
+// The demo data below is written as maps because the values are what matter
+// and retyping two hundred lines of them by hand is how a digit moves. The
+// shape comes from the types instead: these adapters marshal the map and
+// unmarshal it into the type the tool declares, so a field the map forgot
+// arrives as a zero value rather than not arriving, and a key the type does
+// not have is dropped rather than shown to a caller.
+//
+// A dropped key would be a silent version of the `section`/`field` defect, so
+// TestDemoDataHasNoKeysItsTypeLacks fails when the map carries one.
+func demoAs[T any](data any) T {
+	var out T
+	raw, err := json.Marshal(data)
+	if err != nil {
+		return out
+	}
+	_ = json.Unmarshal(raw, &out)
+	return out
+}
+
+func demoStatusInfo(server string) *system.StatusInfo {
+	out := demoAs[system.StatusInfo](demoStatus(server))
+	return &out
+}
+
+func demoContainers(server string) []docker.Container {
+	d := demoDocker(server)
+	list := d["containers"]
+	return demoAs[[]docker.Container](list)
+}
+
+func demoPortInfos(server string) []ports.PortInfo {
+	return demoAs[[]ports.PortInfo](demoPorts(server))
+}
+
+// demoLines is the lines argument as the real tool would have received it.
+func demoLines(args map[string]any) string {
+	if v := stringArg(args, "lines"); v != "" {
+		return v
+	}
+	return "100"
+}
+
+// demoReport answers with report.Report rather than a map, because the thing
+// this product sells is that an agent does not parse sentences — and the demo
+// was answering with `notable_changes: ["Demo baseline created"]`, a list of
+// strings, two releases after the typed kind/target/detail landed. The first
+// shape a caller ever saw from us contradicted the claim it came to check.
+func demoReport(server string, saved bool) report.Report {
+	status := demoStatusInfo(server)
+	containers := demoContainers(server)
+
+	running, stopped := 0, 0
+	for _, c := range containers {
+		if c.State == "running" {
+			running++
+		} else {
+			stopped++
+		}
+	}
+	public := 0
+	for _, p := range demoPortInfos(server) {
+		if p.Address == "0.0.0.0" {
+			public++
+		}
+	}
+
+	now := time.Now().UTC()
+	return report.Report{
+		Timestamp:     now.Format(time.RFC3339),
+		ServerName:    serverOrDefault(server),
+		IsBaseline:    false,
+		SnapshotSaved: saved,
+		ComparedTo:    now.Add(-6 * time.Hour).Format(time.RFC3339),
+		System:        status,
+		Running:       &running,
+		Stopped:       &stopped,
+		PublicPorts:   &public,
+		Status: []string{
+			fmt.Sprintf("Containers: %d running, %d stopped", running, stopped),
+			fmt.Sprintf("Public ports: %d", public),
+		},
+		NeedsAttention: []report.Finding{
+			{Kind: "port", Target: ":8080/tcp", Text: "Port :8080/tcp is answered by caddy now, and was not at the last report"},
+		},
+		NotableChanges: []report.ChangeLine{
+			{Kind: "replaced", Target: "vaultwarden", Detail: "recreated, 4f2a1c → 9b7e03, vaultwarden:1.32 → vaultwarden:1.33",
+				Text: "replaced: vaultwarden — recreated, 4f2a1c → 9b7e03, vaultwarden:1.32 → vaultwarden:1.33"},
+			{Kind: "port", Target: ":8080/tcp", Detail: "nginx → caddy", Text: "port: :8080/tcp — nginx → caddy"},
+			{Kind: "skipped", Target: "processes", Detail: "not compared — the process collector did not answer",
+				Text: "skipped: processes — not compared — the process collector did not answer"},
+		},
+		// The skipped line above says a collector did not answer, so the field
+		// that says which one has to be here too. A demo that showed one
+		// without the other would be demonstrating the false zero this
+		// release fixed.
+		Failed: []string{inventory.CollectorProcesses},
+		SuggestedActions: []report.Action{
+			{Text: "Verify :8080/tcp should be answering from caddy."},
+		},
+	}
+}
+
+// demoDrill answers with the drill's own type. The map it replaced carried
+// five of the twelve fields, so a caller meeting demo first would not know
+// that a drill reports the archive it used or how long it took.
+func demoDrill(app string) backup.DrillResult {
+	return backup.DrillResult{
+		App:          app,
+		Archive:      "~/.homebutler/backups/demo.tar.gz",
+		Size:         "12.3 MB",
+		FileCount:    8,
+		Integrity:    true,
+		Booted:       true,
+		BootSeconds:  1,
+		HealthStatus: 200,
+		HealthPort:   "60405",
+		Passed:       true,
+		TotalSeconds: 3,
+		DrilledAt:    time.Now().UTC().Format(time.RFC3339),
 	}
 }

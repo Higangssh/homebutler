@@ -24,6 +24,7 @@ import (
 	"github.com/Higangssh/homebutler/internal/capability"
 	"github.com/Higangssh/homebutler/internal/config"
 	"github.com/Higangssh/homebutler/internal/doctor"
+	"github.com/Higangssh/homebutler/internal/mcp"
 	"github.com/Higangssh/homebutler/internal/report"
 	"github.com/Higangssh/homebutler/internal/server"
 	"github.com/Higangssh/homebutler/internal/system"
@@ -46,6 +47,11 @@ func Surface() string {
 
 	b.WriteString("\n## routes\n")
 	for _, line := range routeLines() {
+		b.WriteString(line + "\n")
+	}
+
+	b.WriteString("\n## outputs\n")
+	for _, line := range outputLines() {
 		b.WriteString(line + "\n")
 	}
 
@@ -122,6 +128,32 @@ func routeLines() []string {
 	}
 	sort.Strings(lines)
 	return lines
+}
+
+// outputLines records what each tool answers with: the type when the shape is
+// ours, or the word passthrough when it is not. The registry froze how a tool
+// is called and said nothing about what comes back, which is the half an agent
+// branches on — and a tool quietly moving from one to the other, or changing
+// the type it answers with, is a change a caller feels.
+//
+// The reason string for a passthrough is not here. It is prose and improves;
+// that a tool is one is the part worth freezing.
+func outputLines() []string {
+	var out []string
+	for _, c := range capability.Registry {
+		name := c.Tool.Name
+		o, ok := mcp.ToolOutputs[name]
+		switch {
+		case !ok:
+			out = append(out, name+": UNDECLARED")
+		case o.Frozen != nil:
+			out = append(out, name+": "+typeName(reflect.TypeOf(o.Frozen)))
+		default:
+			out = append(out, name+": passthrough")
+		}
+	}
+	sort.Strings(out)
+	return out
 }
 
 // absentLines records which capabilities the dashboard cannot reach and which
