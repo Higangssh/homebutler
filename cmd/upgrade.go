@@ -15,6 +15,7 @@ func newUpgradeCmd() *cobra.Command {
 
 	cmd := &cobra.Command{
 		Use:   "upgrade",
+		Args:  cobra.NoArgs,
 		Short: "Upgrade local + all remote servers to latest",
 		Long:  "Upgrade homebutler on the local machine and all configured remote servers to the latest version.",
 		RunE: func(cmd *cobra.Command, args []string) error {

@@ -35,6 +35,7 @@ func newInventoryScanCmd() *cobra.Command {
 	var filter string
 	cmd := &cobra.Command{
 		Use:   "scan",
+		Args:  cobra.NoArgs,
 		Short: "Scan and display current server inventory",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runInventoryScan(filter)
@@ -48,6 +49,7 @@ func newInventoryShowCmd() *cobra.Command {
 	var filter string
 	cmd := &cobra.Command{
 		Use:   "show",
+		Args:  cobra.NoArgs,
 		Short: "Show current server inventory (same as scan)",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runInventoryScan(filter)
@@ -96,6 +98,7 @@ func newInventoryExportCmd() *cobra.Command {
 
 	cmd := &cobra.Command{
 		Use:   "export",
+		Args:  cobra.NoArgs,
 		Short: "Export inventory in a structured format",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if err := loadConfig(); err != nil {

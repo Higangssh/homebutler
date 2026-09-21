@@ -10,6 +10,7 @@ import (
 func newVersionCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:     "version",
+		Args:    cobra.NoArgs,
 		Aliases: []string{},
 		Short:   "Print version",
 		Long:    "Print the homebutler version, build date, and Go runtime version.",

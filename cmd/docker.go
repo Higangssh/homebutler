@@ -28,6 +28,7 @@ func newDockerCmd() *cobra.Command {
 func newDockerListCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:     "list",
+		Args:    cobra.NoArgs,
 		Aliases: []string{"ls"},
 		Short:   "List running containers",
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -117,6 +118,7 @@ func newDockerLogsCmd() *cobra.Command {
 func newDockerStatsCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "stats",
+		Args:  cobra.NoArgs,
 		Short: "Show resource usage for all running containers",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if err := loadConfig(); err != nil {

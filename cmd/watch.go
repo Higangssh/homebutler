@@ -60,6 +60,7 @@ Subcommands:
 func newWatchTUICmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "tui",
+		Args:  cobra.NoArgs,
 		Short: "TUI dashboard (monitors all configured servers)",
 		Long:  "Launch the terminal UI dashboard that monitors all configured servers in real-time.",
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -173,6 +174,7 @@ Examples:
 func newWatchListCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:     "list",
+		Args:    cobra.NoArgs,
 		Short:   "Show watched containers",
 		Aliases: []string{"ls"},
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -237,6 +239,7 @@ func newWatchRemoveCmd() *cobra.Command {
 func newWatchCheckCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "check",
+		Args:  cobra.NoArgs,
 		Short: "Run a one-shot restart check on all watched containers",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			// Loaded so config.yaml's watch settings reach this command too;
@@ -295,6 +298,7 @@ func newWatchStartCmd() *cobra.Command {
 
 	cmd := &cobra.Command{
 		Use:   "start",
+		Args:  cobra.NoArgs,
 		Short: "Start continuous monitoring",
 		Long: `Start foreground monitoring using event-based or polling monitors.
 Docker targets use docker events (real-time). Systemd and PM2 targets use polling.`,
@@ -636,6 +640,7 @@ func newWatchHistoryCmd() *cobra.Command {
 	)
 	cmd := &cobra.Command{
 		Use:     "history",
+		Args:    cobra.NoArgs,
 		Aliases: []string{"incidents"},
 		Short:   "List restart history",
 		RunE: func(cmd *cobra.Command, args []string) error {

@@ -51,6 +51,7 @@ Use --to to specify a custom backup destination.`,
 func newBackupListCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "list",
+		Args:  cobra.NoArgs,
 		Short: "List existing backups",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if err := loadConfig(); err != nil {

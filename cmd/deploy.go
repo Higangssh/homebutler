@@ -14,6 +14,7 @@ func newDeployCmd() *cobra.Command {
 
 	cmd := &cobra.Command{
 		Use:   "deploy",
+		Args:  cobra.NoArgs,
 		Short: "Install homebutler on remote servers",
 		Long: `Deploy homebutler binary to remote servers via SSH.
 

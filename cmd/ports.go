@@ -13,6 +13,7 @@ import (
 func newPortsCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "ports",
+		Args:  cobra.NoArgs,
 		Short: "List open ports with process info",
 		Long:  "List all open TCP/UDP ports and their associated processes.",
 		RunE: func(cmd *cobra.Command, args []string) error {

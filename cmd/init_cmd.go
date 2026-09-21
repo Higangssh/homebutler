@@ -7,6 +7,7 @@ import (
 func newInitCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "init",
+		Args:  cobra.NoArgs,
 		Short: "Interactive setup wizard (creates config)",
 		Long:  "Run the interactive setup wizard to create or update the homebutler configuration file.",
 		RunE: func(cmd *cobra.Command, args []string) error {

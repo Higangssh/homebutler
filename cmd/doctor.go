@@ -15,6 +15,7 @@ func newDoctorCmd() *cobra.Command {
 
 	cmd := &cobra.Command{
 		Use:   "doctor",
+		Args:  cobra.NoArgs,
 		Short: "Diagnose homelab health, exposure, backups, and readiness",
 		Long: `Run a read-only diagnosis for the things that usually hurt self-hosted servers:
 resource pressure, stopped containers, public bind ports, backup hygiene,

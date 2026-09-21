@@ -953,7 +953,10 @@ Auto-detects OS/architecture, downloads the latest release, and installs to PATH
 npm install -g homebutler
 ```
 
-Downloads the Go binary automatically. Use `npx -y homebutler@latest` to run without installing globally.
+Downloads the Go binary automatically. This package publishes one command,
+`homebutler-mcp`, and it starts the MCP server — `npx -y homebutler@latest`
+launches that, not the CLI. For the command line, use one of the other
+installs above.
 
 ### Go Install
 

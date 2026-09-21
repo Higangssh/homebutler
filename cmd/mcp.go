@@ -10,6 +10,7 @@ func newMCPCmd() *cobra.Command {
 
 	cmd := &cobra.Command{
 		Use:   "mcp",
+		Args:  cobra.NoArgs,
 		Short: "Start MCP server (JSON-RPC over stdio)",
 		Long:  "Start the Model Context Protocol server for AI agent integration.",
 		RunE: func(cmd *cobra.Command, args []string) error {
