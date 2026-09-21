@@ -133,6 +133,30 @@ versions — they are inputs to an action rather than a version of one. Raising
 them is a pull request of its own, which is the point: CI runs the new linter
 against the whole tree before it can fail a release.
 
+### Checking that a check works
+
+A test that has never failed has not been shown to do anything. The habit here
+is to break the thing on purpose and watch the test name it — several of the
+guards in this repository were written that way, and the comment above each one
+says what it was checked against.
+
+That habit has one failure mode worth knowing before you meet it. **In an
+experiment where you expect a failure, "it passed" has two meanings: the check
+is useless, or your edit never landed.** Confirm the second before believing
+the first.
+
+Both of these happened here on the same afternoon:
+
+- `gofmt` had aligned a field as `Args:    cobra.NoArgs,`, and a
+  search-and-replace written with a single space matched nothing. The guard
+  looked broken; it was not.
+- The same string appeared twice in one file, so a replace-once hit the wrong
+  one. The conclusion drawn from it — that two tests both missed a defect —
+  was wrong about one of them.
+
+So check the edit took before running anything: count the occurrences first,
+print how many were replaced, or delete by line number rather than by text.
+
 ### Changing something other people build on
 
 Tool names, JSON fields, risk classes, `doctor`'s exit codes, documented config
