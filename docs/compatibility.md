@@ -109,8 +109,21 @@ this one has been wrong are worth writing down rather than discovering twice.
   telling `backup drill` from `backup` with an argument needs the command tree
   and that is not in the package doing the classifying.
 
-Each of these was a real defect, not a hypothetical. They are listed because
-knowing what is not guaranteed is worth as much as the list of what is.
+- **Whatever was true when it was regenerated.** `-update` writes the current
+  surface, not the correct one. A defect present at that moment becomes the
+  golden, and every run afterwards defends it — the check stops being a
+  question and becomes a record of an answer nobody read. The same shape
+  outside this file, on the same day: the screenshot on the landing page and
+  the copy in `assets/` were byte-identical and the comparison passed, and
+  both showed a `doctor` state the product cannot produce. Identical is not
+  correct. A published asset gets read all the way through after it is made,
+  not only at the one number it was remade for.
+
+Each of these was a real defect, not a hypothetical, and that is the rule this
+list keeps: an entry names an accident that happened and what it got past. A
+list of things that could go wrong would be longer, and nobody would read a
+long one. They are here because knowing what is not guaranteed is worth as
+much as the list of what is.
 
 Prose is not checkable, but a claim inside prose often is. The skill says shell
 commands are for the things no tool exposes, and it listed `homebutler notify
