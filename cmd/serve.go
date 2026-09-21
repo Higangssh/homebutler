@@ -16,6 +16,7 @@ func newServeCmd() *cobra.Command {
 
 	cmd := &cobra.Command{
 		Use:   "serve",
+		Args:  cobra.NoArgs,
 		Short: "Web dashboard (default port 8080)",
 		Long:  "Start the homebutler web dashboard. Use --demo for realistic demo data without real system calls.",
 		RunE: func(cmd *cobra.Command, args []string) error {

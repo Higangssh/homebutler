@@ -25,6 +25,7 @@ func newProcessesCmd() *cobra.Command {
 
 	cmd := &cobra.Command{
 		Use:     "processes",
+		Args:    cobra.NoArgs,
 		Aliases: []string{"ps"},
 		Short:   "Show top processes by resource usage",
 		Long:    "Display top processes sorted by CPU or memory usage, with zombie detection.",

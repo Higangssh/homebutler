@@ -73,6 +73,7 @@ Use --config to load YAML rules for self-healing mode.`,
 func newAlertsInitCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "init",
+		Args:  cobra.NoArgs,
 		Short: "Interactively generate a user-friendly config.yaml template",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			home, err := os.UserHomeDir()
@@ -123,6 +124,7 @@ func newAlertsInitCmd() *cobra.Command {
 func newAlertsHistoryCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "history",
+		Args:  cobra.NoArgs,
 		Short: "Show recent alert and remediation history",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			entries, err := alerts.LoadHistory()
@@ -143,6 +145,7 @@ func newAlertsTestNotifyCmd() *cobra.Command {
 
 	cmd := &cobra.Command{
 		Use:   "test-notify",
+		Args:  cobra.NoArgs,
 		Short: "Send a test notification to all configured providers",
 		Long: `Send a test notification to all configured providers.
 

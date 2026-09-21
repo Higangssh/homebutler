@@ -22,6 +22,7 @@ func newNetworkCmd() *cobra.Command {
 func newNetworkScanCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "scan",
+		Args:  cobra.NoArgs,
 		Short: "Discover devices on local network",
 		Long:  "Scan the local network to discover connected devices.",
 		RunE: func(cmd *cobra.Command, args []string) error {

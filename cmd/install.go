@@ -52,6 +52,7 @@ Usage:
 func newInstallListCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:     "list",
+		Args:    cobra.NoArgs,
 		Aliases: []string{"ls"},
 		Short:   "List available apps",
 		RunE: func(cmd *cobra.Command, args []string) error {

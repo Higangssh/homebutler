@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### ⚠️ Behavior changes
+
+- **A command that takes no arguments now rejects one instead of ignoring it.** `homebutler report not-a-thing` printed a report and exited `0`; `homebutler mcp report` did nothing and exited `0`. Cobra accepts anything by default, so 28 commands took whatever they were given and read none of it — an unknown *flag* was caught and an unknown *word* was swallowed. They say what they take now, and a mistyped argument is an error. Anything scripted around a stray word being tolerated will start failing, which is the point: the exit code is the part a machine reads, and it was the part that lied
+
 ### ✨ Features
 
 - every tool declares what it answers with, and a test fails when one does not (#251). The capability registry froze how a tool is called — its name, its arguments, what calling it may do — and said nothing about what comes back, which is the half an agent branches on. Each of the 44 now declares either the type it returns or that the shape is somebody else's and not ours to freeze: the Proxmox reads are decoded from the API into the struct they are emitted from, so `pveversion` and `cpuinfo` are Proxmox's names and freezing them would promise their format. The golden file records which, so a tool changing its answer is a diff. Getting the classification wrong is still possible; leaving it out is not
@@ -31,6 +35,8 @@ All notable changes to this project will be documented in this file.
 - eight tool results were `map[string]any` literals written at the call site (#248). A map has no name, so nothing recorded what those tools answer with, a renamed key looked like a new one, and two branches of the same tool could disagree — which is how the `install_app` defect above survived. `config_validate`, `watch_add`, `watch_remove`, `install_app`, `install_status`, `install_uninstall`, `install_purge`, `proxmox_script_command` and `inventory_export`'s mermaid answer have named types now. No key changed
 
 ### 📚 Documentation
+
+- the README offered `npx -y homebutler@latest` as a way to run homebutler without installing it, and that is not what it runs (#246). The npm package publishes one command, `homebutler-mcp`, which starts the MCP server — the section already said "npm (MCP server)" and the line under it read like a way to try the CLI. It now says what it launches
 
 - the list of what the contract mechanism does not check gains the one it could never have caught about itself (#253). `-update` records the surface as it is, not as it should be, so a defect present when somebody regenerates becomes the golden and every later run defends it. The same shape turned up outside the repository on the same day: two copies of a screenshot were byte-identical, the comparison passed, and both showed a `doctor` state the product cannot produce. The rule the list keeps is that every entry is an accident that happened, with what it got past — a list of hypotheticals would be longer and nobody would read it
 

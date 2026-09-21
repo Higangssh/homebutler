@@ -10,6 +10,7 @@ import (
 func newStatusCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "status",
+		Args:  cobra.NoArgs,
 		Short: "System status (CPU, memory, disk, uptime)",
 		Long:  "Display current system status including CPU usage, memory, disk space, and uptime.",
 		RunE: func(cmd *cobra.Command, args []string) error {

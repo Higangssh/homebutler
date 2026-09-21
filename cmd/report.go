@@ -13,6 +13,7 @@ func newReportCmd() *cobra.Command {
 
 	cmd := &cobra.Command{
 		Use:   "report",
+		Args:  cobra.NoArgs,
 		Short: "Generate a concise butler-style status report",
 		Long: `Collect current system, container, and port state into a snapshot,
 compare against the previous snapshot, and print a human-readable report.
