@@ -1,6 +1,12 @@
 # assets
 
-Images referenced by the README. Nothing here ships in the binary.
+Images referenced by the README and by homebutler.dev. Nothing here ships in
+the binary.
+
+Where an image is used in both places, **this directory holds the original** and
+the site copies it. The landing page repository runs `tools/check-assets.py`,
+which fails when a file that exists in both is not byte-identical — one copy
+getting fixed and the other not is the failure that keeps happening here.
 
 ## report-card.svg / doctor-card.svg
 
@@ -106,3 +112,49 @@ npx playwright screenshot --viewport-size=1280,640 \
 ```
 
 Then re-upload it under Settings → General → Social preview.
+
+## web-report.png
+
+The Report tab at desktop width, used as the product shot on homebutler.dev. It
+lived only in the site repository until 2026-09-21, which made it the one asset
+with nothing to compare against.
+
+Re-bake it after any change to the Report tab or to the demo data behind it:
+
+```bash
+make build-web
+make build VERSION=v0.37.0     # a real tag: the footer carries the version and
+                               # a dev build string names something nobody can
+                               # install
+./homebutler serve --demo --host 127.0.0.1 --port 8791
+
+cd web && node ../assets/bake-web-report.mjs ../assets/web-report
+# then resample the .2x.png down to 1200 wide
+```
+
+`bake-web-report.mjs` **refuses to write the file when the numbers do not hold
+up.** Two defects shipped in this picture on the day it was written, and
+neither was a broken layout:
+
+- a mount reported going from `1.6 GB` to `1.7 TB`, a thousandfold, while the
+  same demo described it as 1740 of 2000 GB
+- a `doctor` card badged `WARN` above a failing finding, claiming nine passes
+  while listing one — a state `overallStatus` cannot return
+
+Both are the right type in the right place and the wrong number, which is what
+gets published: a layout breaks visibly, a number does not. So the script reads
+the rendered page and checks it against `/api/report`, `/api/doctor` and
+`/api/status` — the doctor badge against the status, the summary against the
+findings it lists, and each disk change against the mount's actual size.
+
+That last one is the point. Checking the page against `/api/report` alone would
+not have caught the disk defect, because the API said `1.6 GB` too — both are
+the same demo data. What contradicts it is a different endpoint: no mount
+arrives at 1.7 TB from a tenth of its own size. **Two views agreeing about one
+wrong number is not a check.** Both defects were re-introduced and the script
+was confirmed to fail on each before this was written.
+
+Take it from `--demo`, never from a real machine. The demo profile is the only
+thing that keeps a hostname, a private address, or a home directory path out of
+a picture, and a picture is the one place scrubbing cannot reach: the text in it
+is pixels.
