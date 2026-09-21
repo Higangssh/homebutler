@@ -668,8 +668,12 @@ func (s *Server) demoDoctor(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, map[string]any{
 		"timestamp":   time.Now().UTC().Format(time.RFC3339),
 		"server_name": "homelab-server",
-		"status":      "warn",
-		"summary":     map[string]int{"pass": 9, "warn": 2, "fail": 1},
+		// Counted from the findings below rather than written beside them.
+		// doctor.overallStatus returns fail whenever fail > 0, so "warn" with
+		// a failing finding is a state the product cannot produce — and this
+		// is the screen the site's screenshot is taken from.
+		"status":  "fail",
+		"summary": map[string]int{"pass": 1, "warn": 2, "fail": 1},
 		"findings": []map[string]any{
 			{"severity": "fail", "category": "backup", "title": "No backup in the last 7 days",
 				"detail": "The most recent archive is 11 days old.", "action": "Take one now",
