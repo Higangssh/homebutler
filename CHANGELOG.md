@@ -4,6 +4,11 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### 📚 Documentation
+
+- `failed_collectors` was documented as one list when it is one per surface (#250). The compatibility table named `docker`, `ports` and `processes` without saying where those apply, and `proxmox_status` reports `version`, `cluster` and `resources` in the same field — so a caller that believed the table and met `version` was given a value the table said could not arrive. The row now says the set is per surface and names both, and notes that the dashboard's own refresh uses a different key entirely. The table also says plainly that the Proxmox reads return Proxmox's shape, which is not ours to freeze, while the envelope `proxmox_status` wraps them in is
+
+
 ### 🐛 Fixes
 
 - the demo reported a mount going from 1.6 GB to 1.7 TB as a routine disk change (#249). The unit was wrong by a factor of a thousand: the same demo describes that mount as 1740 GB of 2000, so the previous reading was 1.6 **TB**. `--demo` is what [docs/mcp-server.md](docs/mcp-server.md) offers an agent to try first and what the dashboard screenshots are taken from, so the number was not only wrong, it was the first number a lot of people saw

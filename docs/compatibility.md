@@ -17,7 +17,8 @@ promise — the golden file there fails the build when any of it moves.
 | **Tool input schemas** | Argument names, their types, and which are required |
 | **Tool risk classes** | `read`, `write`, `destructive`. An agent decides what it may do unattended from these, so a reclassification is a breaking change even though nothing about the call changes |
 | **JSON field names and types** | What `report --json`, `doctor --json` and `status --json` return. A field that changes from a string to an object breaks a caller as thoroughly as one that disappears |
-| **`failed_collectors`** | The names a collector can be reported under — `docker`, `ports`, `processes`. A count is only trustworthy when its collector is absent from this list |
+| **`failed_collectors`** | A closed set per surface, not one list. `report` and `inventory_scan` report `docker`, `ports`, `processes`; `proxmox_status` reports `version`, `cluster`, `resources`. A count is only trustworthy when its collector is absent from the list on that surface. The dashboard's own refresh reports under a different key, `refresh_failed_collectors`, and is not this field |
+| **Proxmox reads** | `proxmox_status`, `proxmox_guests`, `proxmox_node`, `proxmox_tasks` and `proxmox_task_status` return Proxmox's own shape, and it is not ours to freeze — `pveversion`, `loadavg` and `cpuinfo` are their names. What is frozen is the envelope: `proxmox_status` keeps `warnings` and `failed_collectors`, because those are ours and mean the same thing they mean everywhere else |
 | **The `kind` vocabulary** | The eight words a change can carry, and what each means |
 | **The `runner` vocabulary** | `mcp`, `cli`, `shell` |
 | **The `category` vocabulary** | The eleven words a `doctor` finding can carry, documented in the README |
