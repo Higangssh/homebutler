@@ -15,8 +15,8 @@ metadata:
 
 [homebutler](https://github.com/Higangssh/homebutler) remembers what a server
 looked like last time and reports only the changes worth mentioning. One Go
-binary: no daemon, no database, no agent on the machines it watches — the
-binary is deployed there once and runs only when asked, over SSH.
+binary: no database, and no agent on the machines it watches — the binary is
+deployed there once and runs only when asked, over SSH.
 
 > This file is published to ClawHub as `@higangssh/homebutler`. The copy that
 > matters lives in the repository at `skills/SKILL.md`, and a test in `cmd/`
@@ -183,7 +183,11 @@ homebutler watch tui
 ```
 
 `watch` is a restart tracker: it records incidents, captures the logs from the
-moment a container went down, and notifies. It is not a live dashboard — that is
+moment a container went down, and notifies. `watch install` hands that loop to
+the machine's own supervisor — a systemd user unit or a launchd agent — so it
+keeps running after logout. That is the one part of homebutler that stays
+running, and it runs where the operator installed it, not on the machines it
+watches. It is not a live dashboard — that is
 `watch tui`, and it is for a person rather than an agent.
 
 ### `serve` edits, with a token

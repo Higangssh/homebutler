@@ -1,7 +1,7 @@
 # homebutler
 
 A single Go binary for running a small home server: CLI, TUI, web dashboard, and
-an MCP server, with no daemon and no database.
+an MCP server, with no database and nothing running on the machines it watches.
 
 ## Verify before claiming anything works
 

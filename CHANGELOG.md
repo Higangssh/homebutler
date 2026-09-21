@@ -48,6 +48,8 @@ $ homebutler doctor
 
 ### 📚 Documentation
 
+- "no daemon" was not true, and the skill said it to agents (#260). `watch install` writes a systemd user unit or a launchd agent and starts it, so something does keep running — on the machine the operator installed it on. The claim that holds is the one the README already makes and the one that separates this from the tools that put an agent on every host: **nothing runs on the machines homebutler watches.** `skills/SKILL.md` says that now instead, and its `watch` section says plainly which part stays running and where. The social preview card carried the same word and now names the true claim
+
 - the README offered `npx -y homebutler@latest` as a way to run homebutler without installing it, and that is not what it runs (#246). The npm package publishes one command, `homebutler-mcp`, which starts the MCP server — the section already said "npm (MCP server)" and the line under it read like a way to try the CLI. It now says what it launches
 
 - the list of what the contract mechanism does not check gains the one it could never have caught about itself (#253). `-update` records the surface as it is, not as it should be, so a defect present when somebody regenerates becomes the golden and every later run defends it. The same shape turned up outside the repository on the same day: two copies of a screenshot were byte-identical, the comparison passed, and both showed a `doctor` state the product cannot produce. The rule the list keeps is that every entry is an accident that happened, with what it got past — a list of hypotheticals would be longer and nobody would read it
