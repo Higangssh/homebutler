@@ -4,6 +4,14 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### ✨ Features
+
+- the dashboard can run the fourteen actions that were waiting on a rule (#242, #263). #154 gave it a write surface for *settings* and decided nothing about running an action, so fourteen capabilities pointed at a closed issue. They are on three tiers now, decided by one question — can this be undone by doing something else? **Ten run on the click that asks for them**: a restarted container comes back, a started guest can be shut down, an extra archive is an extra file. **`docker_stop` and `proxmox_guest_shutdown` take an explicit `confirm`**, because the service is down until somebody starts it. **`backup_restore` and `install_purge` take the target's name typed back**, because a click cannot say which thing the operator meant to lose and neither comes back. Asking twice for the first ten would buy nothing and teach people to click through confirmations, which is what the other two tiers depend on not happening
+
+- the tiers are frozen at 1.0 and the golden file records which one each route is (#242). It used to derive protection from the difference between a tokened and an untokened server, which can only say whether a token is needed — so all three tiers rendered as `token` and a capability moving between them was invisible. It reads the declared tier now
+
+## [Unreleased]
+
 ### 📚 Documentation
 
 - tool descriptions said what a tool is for and not what calling it does (#258). Glama grades every MCP tool definition it indexes, and ours came back the same way almost across the board: 5/5 on purpose, 2/5 on behaviour transparency and on usage guidelines. The three that scored above 4.0 were the only three with a second clause. Twenty-three descriptions now have one, each written from the code rather than from the name — `docker_stop` says nothing here starts it again, because there is no start tool; `alerts_history` says an empty list means nothing was recording rather than nothing went wrong; `report` says it moves the window every later comparison is measured from. The other twenty-one were left alone: `wake` sending a magic packet is complete as it stands, and conciseness is graded too. Tool names and input schemas are frozen at 1.0 and none of them changed

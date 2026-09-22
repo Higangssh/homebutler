@@ -688,3 +688,99 @@ func (s *Server) demoDoctor(w http.ResponseWriter, r *http.Request) {
 		},
 	})
 }
+
+// The action tier in demo mode. Each answers with the shape its real handler
+// answers with — a demo that returned a different shape would teach a caller
+// the wrong one, which is the defect #251 removed from the MCP demo.
+func (s *Server) demoDockerRestart(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, map[string]any{"action": "restart", "container": r.PathValue("name"), "status": "ok"})
+}
+
+func (s *Server) demoDockerStop(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, map[string]any{"action": "stop", "container": r.PathValue("name"), "status": "ok"})
+}
+
+func (s *Server) demoBackupCreate(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, map[string]any{
+		"archive": "/home/demo/.homebutler/backups/backup_2026-04-30_1200.tar.gz",
+		"size":    "12.3 MB", "services": []string{"vaultwarden"}, "volumes": 2, "pruned": 0,
+	})
+}
+
+func (s *Server) demoBackupDrill(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, map[string]any{
+		"app": "uptime-kuma", "archive": "/home/demo/.homebutler/backups/demo.tar.gz",
+		"size": "12.3 MB", "file_count": 8, "integrity": true, "booted": true,
+		"boot_seconds": 1, "health_status": 200, "health_port": "60405",
+		"passed": true, "total_seconds": 3,
+		"drilled_at": time.Now().UTC().Format(time.RFC3339),
+	})
+}
+
+func (s *Server) demoBackupRestore(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, map[string]any{
+		"archive": bodyString(r, "archive"), "restored": []string{"vaultwarden_data"},
+		"refused": []string{}, "services": []string{"vaultwarden"},
+	})
+}
+
+func (s *Server) demoInstallApp(w http.ResponseWriter, r *http.Request) {
+	app := r.PathValue("app")
+	port := bodyString(r, "port")
+	if port == "" {
+		port = "3001"
+	}
+	writeJSON(w, installResponse{
+		Status: "installed", App: app, Port: port,
+		Path: "/home/demo/.homebutler/apps/" + app, State: "running",
+	})
+}
+
+func (s *Server) demoInstallUninstall(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, installResponse{Status: "uninstalled", App: r.PathValue("app"), DataPreserved: demoBool(true)})
+}
+
+func (s *Server) demoInstallPurge(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, installResponse{Status: "purged", App: r.PathValue("app"), DataPreserved: demoBool(false)})
+}
+
+func (s *Server) demoWatchAdd(w http.ResponseWriter, r *http.Request) {
+	kind := bodyString(r, "kind")
+	if kind == "" {
+		kind = "docker"
+	}
+	writeJSON(w, map[string]any{"container": bodyString(r, "container"), "kind": kind, "added": true})
+}
+
+func (s *Server) demoWatchRemove(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, map[string]any{"container": r.PathValue("name"), "removed": true})
+}
+
+func (s *Server) demoGuestAction(action string) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, map[string]any{
+			"endpoint": "pve", "node": bodyString(r, "node"), "type": bodyString(r, "type"),
+			"vmid": r.PathValue("vmid"), "action": action, "status": "accepted",
+			"upid": "UPID:pve:00001234:0000ABCD:66000000:" + action + ":100:demo@pve:",
+		})
+	}
+}
+
+// demoWatchCheck carries a skipped target on purpose: an empty incident list
+// must not read as "the whole watch list is healthy", which is what the real
+// command's Skipped field exists to prevent.
+func (s *Server) demoWatchCheck(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, map[string]any{
+		"checked": 2,
+		"incidents": []map[string]any{{
+			"id": "demo-nextcloud-20260430T120000Z", "container": "nextcloud",
+			"detected_at": "2026-04-30T12:00:00Z", "restart_count": 3,
+		}},
+		"skipped": []map[string]any{{
+			"container": "caddy", "kind": "systemd",
+			"reason": "only docker targets can be inspected this way",
+		}},
+	})
+}
+
+func demoBool(v bool) *bool { return &v }

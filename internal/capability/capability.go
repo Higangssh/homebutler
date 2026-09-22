@@ -75,15 +75,37 @@ type HTTP struct {
 // Protection is what reaching a capability from a browser costs.
 type Protection string
 
+// The tiers are decided by one question: can this be undone by doing something
+// else? A restarted container comes back and a started guest can be shut down,
+// so asking twice for those would buy nothing and teach people to click through
+// confirmations — which is what the two tiers below it depend on not happening.
+//
+// All three are frozen at 1.0. docs/compatibility.md carries the table.
 const (
 	// Nothing beyond being able to reach the page.
 	ProtectionNone Protection = ""
 	// A bearer token, and the route is not registered at all without one.
+	// Reads, settings, and actions that are undone by doing something else.
 	ProtectionToken Protection = "token"
 	// A token, plus a confirmation the caller sends deliberately — the same
-	// line --confirm draws for a guest action in the CLI.
+	// line --confirm draws for a guest action in the CLI. For a destructive
+	// action that is reversible: the service comes back when it is started
+	// again.
 	ProtectionTokenAndConfirm Protection = "token+confirm"
+	// A token, plus the name of the target echoed back in the request. For a
+	// destructive action that is not reversible — data is gone, and a click
+	// cannot say which thing the operator meant to lose.
+	ProtectionTokenAndName Protection = "token+name"
 )
+
+// protections is the closed set, so a capability cannot carry a tier written
+// on the spot. See TestProtectionsAreFromTheClosedSet.
+var protections = map[Protection]bool{
+	ProtectionNone:            true,
+	ProtectionToken:           true,
+	ProtectionTokenAndConfirm: true,
+	ProtectionTokenAndName:    true,
+}
 
 // Exposed reports whether the dashboard can reach this capability.
 func (c Capability) Exposed() bool { return c.HTTP.Method != "" }
@@ -223,7 +245,7 @@ var Registry = []Capability{
 	{
 		Risk:    RiskWrite,
 		Targets: []TargetKind{TargetProxmox},
-		HTTP:    HTTP{Absent: AbsentNoActionRuleYet},
+		HTTP:    HTTP{Method: "POST", Path: "/api/proxmox/guests/{vmid}/start", Protection: ProtectionToken},
 		Tool: Definition{
 			Name:        "proxmox_guest_start",
 			Description: "Start one explicitly targeted Proxmox guest after confirmation and return the accepted task UPID",
@@ -233,7 +255,7 @@ var Registry = []Capability{
 	{
 		Risk:    RiskWrite,
 		Targets: []TargetKind{TargetProxmox},
-		HTTP:    HTTP{Absent: AbsentNoActionRuleYet},
+		HTTP:    HTTP{Method: "POST", Path: "/api/proxmox/guests/{vmid}/reboot", Protection: ProtectionToken},
 		Tool: Definition{
 			Name:        "proxmox_guest_reboot",
 			Description: "Reboot one explicitly targeted Proxmox guest after confirmation and return the accepted task UPID",
@@ -243,7 +265,7 @@ var Registry = []Capability{
 	{
 		Risk:    RiskDestructive,
 		Targets: []TargetKind{TargetProxmox},
-		HTTP:    HTTP{Absent: AbsentNoDestructiveRuleYet},
+		HTTP:    HTTP{Method: "POST", Path: "/api/proxmox/guests/{vmid}/shutdown", Protection: ProtectionTokenAndConfirm},
 		Tool: Definition{
 			Name:        "proxmox_guest_shutdown",
 			Description: "Gracefully shut down one explicitly targeted Proxmox guest after confirmation and return the accepted task UPID",
@@ -304,7 +326,7 @@ var Registry = []Capability{
 	{
 		Risk:    RiskWrite,
 		Targets: []TargetKind{TargetLocal, TargetServer},
-		HTTP:    HTTP{Absent: AbsentNoActionRuleYet},
+		HTTP:    HTTP{Method: "POST", Path: "/api/docker/{name}/restart", Protection: ProtectionToken},
 		Tool: Definition{
 			Name:        "docker_restart",
 			Description: "Restart a Docker container by name. It goes down and comes back, and the result says the restart command succeeded, not that the app inside is serving again. Read the logs first if you do not know why it needs restarting",
@@ -321,7 +343,7 @@ var Registry = []Capability{
 	{
 		Risk:    RiskDestructive,
 		Targets: []TargetKind{TargetLocal, TargetServer},
-		HTTP:    HTTP{Absent: AbsentNoDestructiveRuleYet},
+		HTTP:    HTTP{Method: "POST", Path: "/api/docker/{name}/stop", Protection: ProtectionTokenAndConfirm},
 		Tool: Definition{
 			Name:        "docker_stop",
 			Description: "Stop a Docker container by name. Nothing here starts it again: there is no start tool, so the operator brings it back themselves",
@@ -535,7 +557,7 @@ var Registry = []Capability{
 		// free query the way system_status is.
 		Risk:    RiskWrite,
 		Targets: []TargetKind{TargetLocal, TargetServer},
-		HTTP:    HTTP{Absent: AbsentNoActionRuleYet},
+		HTTP:    HTTP{Method: "POST", Path: "/api/watch/check", Protection: ProtectionToken},
 		Tool: Definition{
 			Name:        "watch_check",
 			Description: "Run a one-shot restart check on watched targets and report restarts detected since the last check. Only docker targets can be inspected this way; systemd and pm2 targets are reported as skipped rather than assumed healthy",
@@ -621,7 +643,7 @@ var Registry = []Capability{
 		// what separates it from watch_install (#157).
 		Risk:    RiskWrite,
 		Targets: []TargetKind{TargetLocal, TargetServer},
-		HTTP:    HTTP{Absent: AbsentNoActionRuleYet},
+		HTTP:    HTTP{Method: "POST", Path: "/api/watch/targets", Protection: ProtectionToken},
 		Tool: Definition{
 			Name:        "watch_add",
 			Description: "Add a Docker container, systemd unit, or PM2 app to the watch list. This writes the list and nothing begins watching it — a supervisor has to be installed separately, which only the operator can do. Adding a target twice is reported as added=false rather than an error",
@@ -642,7 +664,7 @@ var Registry = []Capability{
 		// alone, so nothing already observed is lost.
 		Risk:    RiskWrite,
 		Targets: []TargetKind{TargetLocal, TargetServer},
-		HTTP:    HTTP{Absent: AbsentNoActionRuleYet},
+		HTTP:    HTTP{Method: "POST", Path: "/api/watch/targets/{name}/remove", Protection: ProtectionToken},
 		Tool: Definition{
 			Name:        "watch_remove",
 			Description: "Remove a target from the watch list, leaving its recorded incidents in place. Only the list changes: whatever was supervising it keeps running until the operator stops it",
@@ -692,7 +714,7 @@ var Registry = []Capability{
 	{
 		Risk:    RiskWrite,
 		Targets: []TargetKind{TargetLocal, TargetServer},
-		HTTP:    HTTP{Absent: AbsentNoActionRuleYet},
+		HTTP:    HTTP{Method: "POST", Path: "/api/backup", Protection: ProtectionToken},
 		Tool: Definition{
 			Name:        "backup_create",
 			Description: "Create a Docker compose backup archive for all services or one service. Volumes are read while the containers run, so a database mid-write can land inconsistent; an archive is not evidence it restores, which is what backup_drill answers",
@@ -724,7 +746,7 @@ var Registry = []Capability{
 	{
 		Risk:    RiskWrite,
 		Targets: []TargetKind{TargetLocal, TargetServer},
-		HTTP:    HTTP{Absent: AbsentNoActionRuleYet},
+		HTTP:    HTTP{Method: "POST", Path: "/api/backup/drill", Protection: ProtectionToken},
 		Tool: Definition{
 			Name:        "backup_drill",
 			Description: "Verify a backup by booting an app in an isolated Docker environment and checking that it responds. A second copy runs beside the live one on a network and port of its own, and everything it made is removed either way. A pass means the archive is not corrupt and the app starts on it, not that every row is there",
@@ -742,7 +764,7 @@ var Registry = []Capability{
 	{
 		Risk:    RiskDestructive,
 		Targets: []TargetKind{TargetLocal, TargetServer},
-		HTTP:    HTTP{Absent: AbsentNoDestructiveRuleYet},
+		HTTP:    HTTP{Method: "POST", Path: "/api/backup/restore", Protection: ProtectionTokenAndName},
 		Tool: Definition{
 			Name:        "backup_restore",
 			Description: "Restore Docker volumes from a backup archive, overwriting the data the app is running on. Destructive: confirm intent before calling. Bind mounts declared by the archive are always refused here, because an agent has no way to name a host path it may write to",
@@ -772,7 +794,7 @@ var Registry = []Capability{
 	{
 		Risk:    RiskWrite,
 		Targets: []TargetKind{TargetLocal},
-		HTTP:    HTTP{Absent: AbsentNoActionRuleYet},
+		HTTP:    HTTP{Method: "POST", Path: "/api/install/{app}", Protection: ProtectionToken},
 		Tool: Definition{
 			Name:        "install_app",
 			Description: "Install a self-hosted app via docker compose. Pre-checks docker, ports, and duplicates automatically, and a refusal comes back as a result with the reasons rather than as an error",
@@ -805,7 +827,7 @@ var Registry = []Capability{
 	{
 		Risk:    RiskWrite,
 		Targets: []TargetKind{TargetLocal},
-		HTTP:    HTTP{Absent: AbsentNoActionRuleYet},
+		HTTP:    HTTP{Method: "POST", Path: "/api/install/{app}/uninstall", Protection: ProtectionToken},
 		Tool: Definition{
 			Name:        "install_uninstall",
 			Description: "Stop an installed app and remove its containers. The app directory and its volumes stay on disk; install_purge is the one that deletes them",
@@ -821,7 +843,7 @@ var Registry = []Capability{
 	{
 		Risk:    RiskDestructive,
 		Targets: []TargetKind{TargetLocal},
-		HTTP:    HTTP{Absent: AbsentNoDestructiveRuleYet},
+		HTTP:    HTTP{Method: "POST", Path: "/api/install/{app}/purge", Protection: ProtectionTokenAndName},
 		Tool: Definition{
 			Name:        "install_purge",
 			Description: "Stop an installed app and delete all data including containers, config, and volumes. Nothing here restores it and no backup is taken first: take one before calling if the data matters",

@@ -118,11 +118,29 @@ func routeLines() []string {
 		without[route] = true
 	}
 
+	// The tier a capability declares, keyed by "METHOD /path". Taking it from
+	// the registry rather than from the route diff is the difference between
+	// recording that a token is needed and recording which tier it is: a
+	// capability moving from "a second confirmation" to "the target's name
+	// typed out" is a change a dashboard feels, and the diff of two servers
+	// cannot see it.
+	tiers := map[string]capability.Protection{}
+	for _, c := range capability.Registry {
+		if c.Exposed() {
+			tiers[c.HTTP.Method+" "+c.HTTP.Path] = c.HTTP.Protection
+		}
+	}
+
 	var lines []string
 	for _, route := range guarded.Routes() {
 		protection := "token"
 		if without[route] {
 			protection = "none"
+		}
+		// A capability's own tier wins: it is the frozen thing, and it says
+		// more than "a token is needed" for the four destructive ones.
+		if tier, ok := tiers[route]; ok && tier != capability.ProtectionNone {
+			protection = string(tier)
 		}
 		lines = append(lines, fmt.Sprintf("%s protection=%s", route, protection))
 	}

@@ -199,6 +199,59 @@ func (s *Server) record(pattern string, handler http.HandlerFunc) {
 	s.mux.HandleFunc(pattern, handler)
 }
 
+// requireTier applies what a capability's tier asks the caller to bring, in
+// the one place every capability route is registered. Doing it inside each
+// handler would make it a thing fourteen handlers have to remember, and the
+// fifteenth would not.
+//
+// The tiers are decided by whether doing something else undoes the action.
+// docs/compatibility.md carries the table; internal/capability holds the
+// vocabulary.
+func requireTier(c capability.Capability, h http.HandlerFunc) http.HandlerFunc {
+	switch c.HTTP.Protection {
+	case capability.ProtectionTokenAndConfirm:
+		return func(w http.ResponseWriter, r *http.Request) {
+			if !confirmed(r) {
+				writeError(w, http.StatusBadRequest,
+					fmt.Sprintf("%s stops a running service: send confirm=true to say that is what you meant", c.Tool.Name))
+				return
+			}
+			h(w, r)
+		}
+	case capability.ProtectionTokenAndName:
+		return func(w http.ResponseWriter, r *http.Request) {
+			target := tierTarget(c, r)
+			if target == "" {
+				writeError(w, http.StatusBadRequest,
+					fmt.Sprintf("%s destroys data and the request does not say what it is about", c.Tool.Name))
+				return
+			}
+			// The name typed back, not a flag: a click cannot say which thing
+			// the operator meant to lose, and this one does not come back.
+			if confirmName(r) != target {
+				writeError(w, http.StatusBadRequest,
+					fmt.Sprintf("%s cannot be undone: send confirm_name=%q to say that is the one you meant", c.Tool.Name, target))
+				return
+			}
+			h(w, r)
+		}
+	default:
+		return h
+	}
+}
+
+// tierTarget is what the name has to match: the path value when the route
+// names one, and the body's own field when it does not.
+func tierTarget(c capability.Capability, r *http.Request) string {
+	for _, key := range []string{"name", "app", "vmid"} {
+		if v := r.PathValue(key); v != "" {
+			return v
+		}
+	}
+	// backup_restore names its target in the body rather than the path.
+	return bodyString(r, "archive")
+}
+
 func (s *Server) routes() {
 	s.registered = nil
 	// api wraps handlers with CORS and optional bearer token auth.
@@ -224,7 +277,7 @@ func (s *Server) routes() {
 			continue
 		}
 		if h, ok := handlers[c.Tool.Name]; ok {
-			s.record(c.HTTP.Method+" "+c.HTTP.Path, api(h))
+			s.record(c.HTTP.Method+" "+c.HTTP.Path, api(requireTier(c, h)))
 		}
 	}
 
@@ -293,35 +346,63 @@ func (s *Server) routes() {
 func (s *Server) capabilityHandlers() map[string]http.HandlerFunc {
 	if s.demo {
 		return map[string]http.HandlerFunc{
-			"system_status":  s.demoStatus,
-			"docker_list":    s.demoDocker,
-			"docker_stats":   s.demoDockerStats,
-			"processes":      s.demoProcesses,
-			"alerts":         s.demoAlerts,
-			"open_ports":     s.demoPorts,
-			"wake":           s.demoWakeSend,
-			"proxmox_status": s.handleProxmoxStatus,
-			"watch_list":     s.demoWatch,
-			"watch_history":  s.demoWatchIncidents,
-			"notify_test":    s.demoNotifyTest,
-			"report":         s.demoReportSnapshot,
-			"doctor":         s.demoDoctor,
+			"system_status":          s.demoStatus,
+			"docker_list":            s.demoDocker,
+			"docker_stats":           s.demoDockerStats,
+			"processes":              s.demoProcesses,
+			"alerts":                 s.demoAlerts,
+			"open_ports":             s.demoPorts,
+			"wake":                   s.demoWakeSend,
+			"proxmox_status":         s.handleProxmoxStatus,
+			"watch_list":             s.demoWatch,
+			"watch_history":          s.demoWatchIncidents,
+			"notify_test":            s.demoNotifyTest,
+			"report":                 s.demoReportSnapshot,
+			"doctor":                 s.demoDoctor,
+			"docker_restart":         s.demoDockerRestart,
+			"docker_stop":            s.demoDockerStop,
+			"backup_create":          s.demoBackupCreate,
+			"backup_drill":           s.demoBackupDrill,
+			"backup_restore":         s.demoBackupRestore,
+			"install_app":            s.demoInstallApp,
+			"install_uninstall":      s.demoInstallUninstall,
+			"install_purge":          s.demoInstallPurge,
+			"watch_add":              s.demoWatchAdd,
+			"watch_remove":           s.demoWatchRemove,
+			"watch_check":            s.demoWatchCheck,
+			"proxmox_guest_start":    s.demoGuestAction("start"),
+			"proxmox_guest_reboot":   s.demoGuestAction("reboot"),
+			"proxmox_guest_shutdown": s.demoGuestAction("shutdown"),
 		}
 	}
 	return map[string]http.HandlerFunc{
-		"system_status":  s.handleStatus,
-		"docker_list":    s.handleDocker,
-		"docker_stats":   s.handleDockerStats,
-		"processes":      s.handleProcesses,
-		"alerts":         s.handleAlerts,
-		"open_ports":     s.handlePorts,
-		"wake":           s.handleWakeSend,
-		"proxmox_status": s.handleProxmoxStatus,
-		"watch_list":     s.handleWatch,
-		"watch_history":  s.handleWatchIncidents,
-		"notify_test":    s.handleNotifyTest,
-		"report":         s.handleReportSnapshot,
-		"doctor":         s.handleDoctor,
+		"system_status":          s.handleStatus,
+		"docker_list":            s.handleDocker,
+		"docker_stats":           s.handleDockerStats,
+		"processes":              s.handleProcesses,
+		"alerts":                 s.handleAlerts,
+		"open_ports":             s.handlePorts,
+		"wake":                   s.handleWakeSend,
+		"proxmox_status":         s.handleProxmoxStatus,
+		"watch_list":             s.handleWatch,
+		"watch_history":          s.handleWatchIncidents,
+		"notify_test":            s.handleNotifyTest,
+		"report":                 s.handleReportSnapshot,
+		"docker_restart":         s.handleDockerRestart,
+		"docker_stop":            s.handleDockerStop,
+		"backup_create":          s.handleBackupCreate,
+		"backup_drill":           s.handleBackupDrill,
+		"backup_restore":         s.handleBackupRestore,
+		"install_app":            s.handleInstallApp,
+		"install_uninstall":      s.handleInstallUninstall,
+		"install_purge":          s.handleInstallPurge,
+		"watch_add":              s.handleWatchAdd,
+		"watch_remove":           s.handleWatchRemove,
+		"watch_check":            s.handleWatchCheck,
+		"proxmox_guest_start":    s.proxmoxGuestAction(proxmox.GuestActionStart),
+		"proxmox_guest_reboot":   s.proxmoxGuestAction(proxmox.GuestActionReboot),
+		"proxmox_guest_shutdown": s.proxmoxGuestAction(proxmox.GuestActionShutdown),
+		"doctor":                 s.handleDoctor,
 	}
 }
 
