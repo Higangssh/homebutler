@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### 📚 Documentation
+
+- tool descriptions said what a tool is for and not what calling it does (#258). Glama grades every MCP tool definition it indexes, and ours came back the same way almost across the board: 5/5 on purpose, 2/5 on behaviour transparency and on usage guidelines. The three that scored above 4.0 were the only three with a second clause. Twenty-three descriptions now have one, each written from the code rather than from the name — `docker_stop` says nothing here starts it again, because there is no start tool; `alerts_history` says an empty list means nothing was recording rather than nothing went wrong; `report` says it moves the window every later comparison is measured from. The other twenty-one were left alone: `wake` sending a magic packet is complete as it stands, and conciseness is graded too. Tool names and input schemas are frozen at 1.0 and none of them changed
+
 ## [0.38.0](https://github.com/Higangssh/homebutler/compare/v0.37.0...v0.38.0) - 2026-09-21
 
 **Three of `doctor`'s backup findings told you to run a drill, and nothing ever checked whether you had.** A backup nobody has ever restored looked exactly like one that passed an hour ago, because the advice was written down and no part of the build ever read it back. That turned out to be the shape of most of this release.

@@ -211,7 +211,7 @@ var Registry = []Capability{
 		HTTP:    HTTP{Method: "GET", Path: "/api/status"},
 		Tool: Definition{
 			Name:        "system_status",
-			Description: "Get system status including CPU, memory, disk usage, and uptime",
+			Description: "Get system status including CPU, memory, disk usage, and uptime, for the machine this binary runs on. Inside a container that is the container, not the host underneath it",
 			InputSchema: Schema{
 				Type: "object",
 				Properties: map[string]Property{
@@ -292,7 +292,7 @@ var Registry = []Capability{
 		HTTP:    HTTP{Method: "GET", Path: "/api/docker"},
 		Tool: Definition{
 			Name:        "docker_list",
-			Description: "List Docker containers with their status, image, and ports",
+			Description: "List Docker containers with their status, image, and ports. Stopped containers are included, so a name appearing here is not a name that is running — read state",
 			InputSchema: Schema{
 				Type: "object",
 				Properties: map[string]Property{
@@ -307,7 +307,7 @@ var Registry = []Capability{
 		HTTP:    HTTP{Absent: AbsentNoActionRuleYet},
 		Tool: Definition{
 			Name:        "docker_restart",
-			Description: "Restart a Docker container by name",
+			Description: "Restart a Docker container by name. It goes down and comes back, and the result says the restart command succeeded, not that the app inside is serving again. Read the logs first if you do not know why it needs restarting",
 			InputSchema: Schema{
 				Type: "object",
 				Properties: map[string]Property{
@@ -324,7 +324,7 @@ var Registry = []Capability{
 		HTTP:    HTTP{Absent: AbsentNoDestructiveRuleYet},
 		Tool: Definition{
 			Name:        "docker_stop",
-			Description: "Stop a Docker container by name",
+			Description: "Stop a Docker container by name. Nothing here starts it again: there is no start tool, so the operator brings it back themselves",
 			InputSchema: Schema{
 				Type: "object",
 				Properties: map[string]Property{
@@ -341,7 +341,7 @@ var Registry = []Capability{
 		HTTP:    HTTP{Absent: AbsentNoViewYet},
 		Tool: Definition{
 			Name:        "docker_logs",
-			Description: "Get logs from a Docker container",
+			Description: "Get logs from a Docker container: the last lines only, 50 by default, and it returns rather than following the stream",
 			InputSchema: Schema{
 				Type: "object",
 				Properties: map[string]Property{
@@ -408,7 +408,7 @@ var Registry = []Capability{
 		HTTP:    HTTP{Method: "POST", Path: "/api/wake/{name}", Protection: ProtectionToken},
 		Tool: Definition{
 			Name:        "wake",
-			Description: "Send a Wake-on-LAN magic packet to wake a machine",
+			Description: "Send a Wake-on-LAN magic packet to wake a machine. The packet is fire-and-forget: a successful result means it was sent, not that anything woke up",
 			InputSchema: Schema{
 				Type: "object",
 				Properties: map[string]Property{
@@ -425,7 +425,7 @@ var Registry = []Capability{
 		HTTP:    HTTP{Method: "GET", Path: "/api/ports"},
 		Tool: Definition{
 			Name:        "open_ports",
-			Description: "List open network ports with associated process information",
+			Description: "List open network ports with associated process information. The process behind a port is not always readable without privilege, and missing_process says so rather than leaving the field quietly empty",
 			InputSchema: Schema{
 				Type: "object",
 				Properties: map[string]Property{
@@ -440,7 +440,7 @@ var Registry = []Capability{
 		HTTP:    HTTP{Absent: AbsentNoViewYet},
 		Tool: Definition{
 			Name:        "network_scan",
-			Description: "Scan the local network to discover devices (IP, MAC, hostname)",
+			Description: "Scan the local network to discover devices (IP, MAC, hostname). It probes every address on the subnet and takes up to 30 seconds, so it is an answer to a question somebody asked rather than a way to begin",
 			InputSchema: Schema{
 				Type: "object",
 			},
@@ -452,7 +452,7 @@ var Registry = []Capability{
 		HTTP:    HTTP{Method: "GET", Path: "/api/alerts"},
 		Tool: Definition{
 			Name:        "alerts",
-			Description: "Check resource alerts for CPU, memory, and disk usage against configured thresholds",
+			Description: "Check resource alerts for CPU, memory, and disk usage against configured thresholds. It reads and compares; nothing is sent anywhere and nothing is recorded, which is what a running watcher does instead",
 			InputSchema: Schema{
 				Type: "object",
 				Properties: map[string]Property{
@@ -502,7 +502,7 @@ var Registry = []Capability{
 		HTTP:    HTTP{Method: "POST", Path: "/api/report/snapshot", Protection: ProtectionToken},
 		Tool: Definition{
 			Name:        "report",
-			Description: "Generate a butler-style health report with snapshot comparison, warnings, notable changes, and suggested actions",
+			Description: "Generate a butler-style health report with snapshot comparison, warnings, notable changes, and suggested actions. It saves a snapshot unless no_save is set, which moves the window every later comparison is measured from — so a loop that calls this leaves nothing to compare against",
 			InputSchema: Schema{
 				Type: "object",
 				Properties: map[string]Property{
@@ -624,7 +624,7 @@ var Registry = []Capability{
 		HTTP:    HTTP{Absent: AbsentNoActionRuleYet},
 		Tool: Definition{
 			Name:        "watch_add",
-			Description: "Add a Docker container, systemd unit, or PM2 app to the watch list",
+			Description: "Add a Docker container, systemd unit, or PM2 app to the watch list. This writes the list and nothing begins watching it — a supervisor has to be installed separately, which only the operator can do. Adding a target twice is reported as added=false rather than an error",
 			InputSchema: Schema{
 				Type: "object",
 				Properties: map[string]Property{
@@ -645,7 +645,7 @@ var Registry = []Capability{
 		HTTP:    HTTP{Absent: AbsentNoActionRuleYet},
 		Tool: Definition{
 			Name:        "watch_remove",
-			Description: "Remove a target from the watch list, leaving its recorded incidents in place",
+			Description: "Remove a target from the watch list, leaving its recorded incidents in place. Only the list changes: whatever was supervising it keeps running until the operator stops it",
 			InputSchema: Schema{
 				Type: "object",
 				Properties: map[string]Property{
@@ -665,7 +665,7 @@ var Registry = []Capability{
 		HTTP:    HTTP{Method: "POST", Path: "/api/notify/test", Protection: ProtectionToken},
 		Tool: Definition{
 			Name:        "notify_test",
-			Description: "Send one test notification through every configured channel and report which ones arrived",
+			Description: "Send one test notification through every configured channel and report which ones arrived. A real message goes out to each, so anyone reading those channels sees it",
 			InputSchema: Schema{
 				Type: "object",
 				Properties: map[string]Property{
@@ -680,7 +680,7 @@ var Registry = []Capability{
 		HTTP:    HTTP{Absent: AbsentNoViewYet},
 		Tool: Definition{
 			Name:        "alerts_history",
-			Description: "Show recorded alert and remediation history",
+			Description: "Show recorded alert and remediation history. Entries are only written while a watcher is running, so an empty list means nothing was recording rather than nothing went wrong",
 			InputSchema: Schema{
 				Type: "object",
 				Properties: map[string]Property{
@@ -695,7 +695,7 @@ var Registry = []Capability{
 		HTTP:    HTTP{Absent: AbsentNoActionRuleYet},
 		Tool: Definition{
 			Name:        "backup_create",
-			Description: "Create a Docker compose backup archive for all services or one service",
+			Description: "Create a Docker compose backup archive for all services or one service. Volumes are read while the containers run, so a database mid-write can land inconsistent; an archive is not evidence it restores, which is what backup_drill answers",
 			InputSchema: Schema{
 				Type: "object",
 				Properties: map[string]Property{
@@ -712,7 +712,7 @@ var Registry = []Capability{
 		HTTP:    HTTP{Absent: AbsentNoViewYet},
 		Tool: Definition{
 			Name:        "backup_list",
-			Description: "List existing backup archives in the configured backup directory",
+			Description: "List existing backup archives in the configured backup directory. It reads names, sizes and dates — that an archive is here says nothing about whether it restores, which is what backup_drill answers",
 			InputSchema: Schema{
 				Type: "object",
 				Properties: map[string]Property{
@@ -727,7 +727,7 @@ var Registry = []Capability{
 		HTTP:    HTTP{Absent: AbsentNoActionRuleYet},
 		Tool: Definition{
 			Name:        "backup_drill",
-			Description: "Verify a backup by booting an app in an isolated Docker environment and checking that it responds",
+			Description: "Verify a backup by booting an app in an isolated Docker environment and checking that it responds. A second copy runs beside the live one on a network and port of its own, and everything it made is removed either way. A pass means the archive is not corrupt and the app starts on it, not that every row is there",
 			InputSchema: Schema{
 				Type: "object",
 				Properties: map[string]Property{
@@ -745,7 +745,7 @@ var Registry = []Capability{
 		HTTP:    HTTP{Absent: AbsentNoDestructiveRuleYet},
 		Tool: Definition{
 			Name:        "backup_restore",
-			Description: "Restore Docker volumes from a backup archive. Destructive: confirm intent before calling.",
+			Description: "Restore Docker volumes from a backup archive, overwriting the data the app is running on. Destructive: confirm intent before calling. Bind mounts declared by the archive are always refused here, because an agent has no way to name a host path it may write to",
 			InputSchema: Schema{
 				Type: "object",
 				Properties: map[string]Property{
@@ -763,7 +763,7 @@ var Registry = []Capability{
 		HTTP:    HTTP{Absent: AbsentNoViewYet},
 		Tool: Definition{
 			Name:        "install_list",
-			Description: "List available self-hosted apps that can be installed",
+			Description: "List available self-hosted apps that can be installed. The catalogue is compiled into the binary, so this reaches no network and answers the same on any machine",
 			InputSchema: Schema{
 				Type: "object",
 			},
@@ -775,7 +775,7 @@ var Registry = []Capability{
 		HTTP:    HTTP{Absent: AbsentNoActionRuleYet},
 		Tool: Definition{
 			Name:        "install_app",
-			Description: "Install a self-hosted app via docker compose. Pre-checks docker, ports, and duplicates automatically.",
+			Description: "Install a self-hosted app via docker compose. Pre-checks docker, ports, and duplicates automatically, and a refusal comes back as a result with the reasons rather than as an error",
 			InputSchema: Schema{
 				Type: "object",
 				Properties: map[string]Property{
@@ -792,7 +792,7 @@ var Registry = []Capability{
 		HTTP:    HTTP{Absent: AbsentNoViewYet},
 		Tool: Definition{
 			Name:        "install_status",
-			Description: "Check the status of an installed app",
+			Description: "Check the status of an installed app, as its containers report it. An app homebutler did not install is not known here",
 			InputSchema: Schema{
 				Type: "object",
 				Properties: map[string]Property{
@@ -808,7 +808,7 @@ var Registry = []Capability{
 		HTTP:    HTTP{Absent: AbsentNoActionRuleYet},
 		Tool: Definition{
 			Name:        "install_uninstall",
-			Description: "Stop an installed app and remove its containers. Data is preserved.",
+			Description: "Stop an installed app and remove its containers. The app directory and its volumes stay on disk; install_purge is the one that deletes them",
 			InputSchema: Schema{
 				Type: "object",
 				Properties: map[string]Property{
@@ -824,7 +824,7 @@ var Registry = []Capability{
 		HTTP:    HTTP{Absent: AbsentNoDestructiveRuleYet},
 		Tool: Definition{
 			Name:        "install_purge",
-			Description: "Stop an installed app and delete all data including containers, config, and volumes.",
+			Description: "Stop an installed app and delete all data including containers, config, and volumes. Nothing here restores it and no backup is taken first: take one before calling if the data matters",
 			InputSchema: Schema{
 				Type: "object",
 				Properties: map[string]Property{
