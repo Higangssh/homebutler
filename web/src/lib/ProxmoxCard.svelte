@@ -1,6 +1,15 @@
 <script>
   import { onMount } from 'svelte';
-  import { getProxmoxEndpoints, getProxmoxStatus } from './api.js';
+  import {
+    getProxmoxEndpoints,
+    getProxmoxStatus,
+    startGuest,
+    rebootGuest,
+    shutdownGuest,
+  } from './api.js';
+  import ConfirmShutdown from './ConfirmShutdown.svelte';
+
+  let { canAct = false } = $props();
 
   let endpoints = $state(null);
   let selectedEndpoint = $state('');
@@ -48,6 +57,34 @@
 
   function failed(collector) {
     return data?.failed_collectors?.includes(collector);
+  }
+
+  // The guest an action is running against, and the one whose shutdown is
+  // waiting to be confirmed. Keyed by vmid and node together: the same vmid
+  // can exist on two nodes of a cluster, which is also why the action itself
+  // sends both rather than letting the server guess.
+  let acting = $state('');
+  let confirming = $state('');
+  let actionError = $state('');
+
+  const key = guest => `${guest.node}/${guest.vmid}`;
+
+  async function act(guest, run) {
+    if (acting) return;
+    acting = key(guest);
+    actionError = '';
+    try {
+      await run(guest, selectedEndpoint);
+      confirming = '';
+      // Proxmox answers with a task id and does the work afterwards, so the
+      // list is refreshed rather than edited: whatever it says next is what
+      // actually happened.
+      await refresh(selectedEndpoint);
+    } catch (err) {
+      actionError = `${guest.name || guest.vmid}: ${err.message}`;
+    } finally {
+      acting = '';
+    }
   }
 
   function formatTimestamp(value) {
@@ -229,7 +266,7 @@
         {:else}
           <div class="table-wrap">
             <table>
-              <thead><tr><th>VMID</th><th>Name</th><th>Type</th><th>Node</th><th>Status</th></tr></thead>
+              <thead><tr><th>VMID</th><th>Name</th><th>Type</th><th>Node</th><th>Status</th>{#if canAct}<th></th>{/if}</tr></thead>
               <tbody>
                 {#each data.resources.guests as guest}
                   <tr>
@@ -238,11 +275,50 @@
                     <td>{guest.type.toUpperCase()}</td>
                     <td>{guest.node}</td>
                     <td class={statusClass(guest.status)}>{guest.status}</td>
+                    {#if canAct}
+                      <td class="guest-actions">
+                        {#if guest.template}
+                          <span class="muted">template</span>
+                        {:else if guest.status === 'running'}
+                          <button
+                            aria-label="Reboot {guest.name || guest.vmid}"
+                            disabled={!!acting}
+                            onclick={() => act(guest, rebootGuest)}
+                          >Reboot</button>
+                          <button
+                            class="danger"
+                            aria-label="Shut down {guest.name || guest.vmid}"
+                            disabled={!!acting}
+                            onclick={() => (confirming = confirming === key(guest) ? '' : key(guest))}
+                          >Shut down</button>
+                        {:else if guest.status === 'stopped'}
+                          <button
+                            aria-label="Start {guest.name || guest.vmid}"
+                            disabled={!!acting}
+                            onclick={() => act(guest, startGuest)}
+                          >Start</button>
+                        {/if}
+                      </td>
+                    {/if}
                   </tr>
+                  {#if confirming === key(guest)}
+                    <tr><td colspan="6">
+                      <ConfirmShutdown
+                        name={guest.name || String(guest.vmid)}
+                        vmid={guest.vmid}
+                        busy={acting === key(guest)}
+                        onconfirm={() => act(guest, shutdownGuest)}
+                        oncancel={() => (confirming = '')}
+                      />
+                    </td></tr>
+                  {/if}
                 {/each}
               </tbody>
             </table>
           </div>
+          {#if actionError}
+            <p class="unavailable">{actionError}</p>
+          {/if}
         {/if}
       </div>
 
@@ -284,6 +360,32 @@
 </section>
 
 <style>
+  .guest-actions {
+    white-space: nowrap;
+    text-align: right;
+  }
+
+  .guest-actions button {
+    font-size: 0.7rem;
+    padding: 0.15rem 0.45rem;
+    margin-left: 0.3rem;
+    border-radius: 4px;
+    border: 1px solid var(--border);
+    background: var(--bg-primary);
+    color: var(--text-heading);
+    cursor: pointer;
+  }
+
+  .guest-actions button:disabled {
+    opacity: 0.5;
+    cursor: default;
+  }
+
+  .guest-actions .danger {
+    border-color: color-mix(in srgb, var(--red) 50%, var(--border));
+    color: var(--red);
+  }
+
   .card {
     grid-column: 1 / -1;
     background: var(--bg-card);

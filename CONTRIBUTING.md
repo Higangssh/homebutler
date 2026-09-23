@@ -200,6 +200,22 @@ and what a good entry says. Walk it when the one-sentence answer to "what is
 homebutler" changes — those copies keep introducing the old answer until
 somebody opens a PR against them.
 
+### A route lands with something that calls it
+
+**An endpoint nobody calls has only ever answered the questions a test
+imagined.** Register the route in the same release as the screen or command
+that uses it, or leave it recorded as absent in the registry until then.
+
+Two defects in one release came from the other order. `GET /api/install/{app}`
+returned HTTP 500 for an app that had never been installed — the ordinary
+state of fourteen of the fifteen apps in the catalogue — because the handler
+passed `install.Status`'s error through and nothing had yet asked about an app
+that was not there. And two actions took the name of a thing no route
+returned, which was invisible for as long as the only caller was a dashboard
+that already had the value in hand.
+
+Both were found the same way: by building the screen and watching it ask.
+
 ### Cutting a release
 
 The version in `skills/SKILL.md` is pinned, because a skill that tells an agent

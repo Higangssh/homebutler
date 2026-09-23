@@ -337,3 +337,34 @@ export function purgeApp(app) {
     body: JSON.stringify({ confirm_name: app }),
   });
 }
+
+// Proxmox guests.
+//
+// A guest is addressed explicitly and never guessed: the vmid is in the path
+// and the node and type go in the body, because the same vmid can exist on
+// two nodes in a cluster and the server refuses a request that leaves either
+// out. All three values come off the guest row the caller clicked.
+function guestAction(action, guest, endpoint, body = {}) {
+  const query = endpoint ? `?endpoint=${encodeURIComponent(endpoint)}` : '';
+  return fetchJSON(`/api/proxmox/guests/${encodeURIComponent(guest.vmid)}/${action}${query}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ node: guest.node, type: guest.type, ...body }),
+  });
+}
+
+// Starting and rebooting run on the click: a started guest can be shut down
+// and a rebooted one comes back.
+export function startGuest(guest, endpoint) {
+  return guestAction('start', guest, endpoint);
+}
+
+export function rebootGuest(guest, endpoint) {
+  return guestAction('reboot', guest, endpoint);
+}
+
+// Shutdown takes an explicit confirm. Nothing on this screen starts a guest
+// that is off except the operator, and the guest stays off until they do.
+export function shutdownGuest(guest, endpoint) {
+  return guestAction('shutdown', guest, endpoint, { confirm: true });
+}
