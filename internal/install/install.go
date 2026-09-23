@@ -2,6 +2,7 @@ package install
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -765,6 +766,22 @@ func Purge(appName string) error {
 }
 
 // Status checks if the installed app is running.
+// ErrNotInstalled is what Status answers for an app that is in the catalogue
+// and has never been installed. That is the ordinary state of almost every
+// entry, so a caller has to be able to tell it apart from a failure: the HTTP
+// route said 500 for it until somebody looked.
+var ErrNotInstalled = errors.New("not installed")
+
+// Installed reports whether an app has been installed here, without asking
+// Docker anything.
+func Installed(appName string) bool {
+	if err := ValidateAppName(appName); err != nil {
+		return false
+	}
+	_, err := os.Stat(filepath.Join(GetInstalledPath(appName), "docker-compose.yml"))
+	return err == nil
+}
+
 func Status(appName string) (string, error) {
 	if err := ValidateAppName(appName); err != nil {
 		return "", err
@@ -773,7 +790,7 @@ func Status(appName string) (string, error) {
 	composeFile := filepath.Join(appDir, "docker-compose.yml")
 
 	if _, err := os.Stat(composeFile); os.IsNotExist(err) {
-		return "", fmt.Errorf("%s is not installed", appName)
+		return "", fmt.Errorf("%s is %w", appName, ErrNotInstalled)
 	}
 
 	out, err := util.DockerCmd("compose", "-f", composeFile, "ps",

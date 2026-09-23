@@ -300,3 +300,40 @@ export function removeWatchTarget(name) {
 export function checkWatchTargets() {
   return fetchJSON('/api/watch/check', { method: 'POST' });
 }
+
+// The app catalogue. install_list is a static map compiled into the binary, so
+// this is the same list install_app will accept.
+export function getInstallable() {
+  return fetchJSON('/api/install');
+}
+
+export function getInstallStatus(app) {
+  return fetchJSON(`/api/install/${encodeURIComponent(app)}`);
+}
+
+// Installing answers 200 with status "failed" and a list of issues when the
+// pre-flight refuses — a taken port is an answer, not an error, and the
+// operator changes the port and asks again. Reading it as a failure would put
+// that sentence in a toast instead of beside the field that fixes it.
+export function installApp(app, port) {
+  return fetchJSON(`/api/install/${encodeURIComponent(app)}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(port ? { port } : {}),
+  });
+}
+
+// Stops the app and leaves its data. install_purge is the one that does not.
+export function uninstallApp(app) {
+  return fetchJSON(`/api/install/${encodeURIComponent(app)}/uninstall`, { method: 'POST' });
+}
+
+// The third tier: the app's own name, echoed back. A click cannot say which
+// thing the operator meant to lose, and this one does not come back.
+export function purgeApp(app) {
+  return fetchJSON(`/api/install/${encodeURIComponent(app)}/purge`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ confirm_name: app }),
+  });
+}
