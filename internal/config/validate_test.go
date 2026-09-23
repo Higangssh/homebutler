@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 )
@@ -766,4 +767,57 @@ watch:
 	r := Validate(path)
 
 	requireFinding(t, r, "max_incident", SeverityWarning)
+}
+
+// topLevelKeys says it mirrors the yaml tags on Config, and until now nothing
+// read the other half of that sentence. The list drives what `config validate`
+// prints and what a misspelled key is suggested against, so a section added to
+// Config and not to the list is one the file can set and validate never
+// mentions — which is the report somebody checks when a setting seems to be
+// ignored.
+func TestEveryConfigSectionIsReported(t *testing.T) {
+	listed := map[string]bool{}
+	for _, name := range topLevelKeys {
+		listed[name] = true
+	}
+
+	tagged := map[string]bool{}
+	typ := reflect.TypeOf(Config{})
+	for i := 0; i < typ.NumField(); i++ {
+		tag := typ.Field(i).Tag.Get("yaml")
+		name, _, _ := strings.Cut(tag, ",")
+		if name == "" || name == "-" {
+			continue
+		}
+		tagged[name] = true
+		if !listed[name] {
+			t.Errorf("Config has a %q section that config validate never reports; add it to topLevelKeys", name)
+		}
+	}
+
+	for name := range listed {
+		if !tagged[name] {
+			t.Errorf("topLevelKeys names %q, which is not a yaml key on Config", name)
+		}
+	}
+}
+
+// The token is why doctor makes people chmod this file, so the command that
+// prints the file's contents back must not print it.
+func TestValidateNeverPrintsTheWebToken(t *testing.T) {
+	const token = "tok_must_not_be_printed"
+	path := filepath.Join(t.TempDir(), "config.yaml")
+	if err := os.WriteFile(path, []byte("web:\n  token: "+token+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	r := Validate(path)
+	for _, s := range r.Sections {
+		if strings.Contains(s.Summary, token) {
+			t.Errorf("section %q prints the token: %s", s.Name, s.Summary)
+		}
+		if s.Name == "web" && !strings.Contains(s.Summary, "token set") {
+			t.Errorf("web section = %q, want it to say a token is set", s.Summary)
+		}
+	}
 }

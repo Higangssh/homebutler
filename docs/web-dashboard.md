@@ -7,6 +7,49 @@ homebutler serve                # http://localhost:8080
 homebutler serve --port 3000    # custom port
 ```
 
+## Keeping it running
+
+`homebutler serve` runs for as long as the terminal it started in. To hand it to
+the supervisor the host already has — a launchd agent on macOS, a systemd user
+unit on Linux — install it:
+
+```bash
+homebutler serve install                 # supervised, on 127.0.0.1:8080
+homebutler serve install --port 9090     # somewhere else
+homebutler serve install --host 0.0.0.0  # needs a token, see below
+homebutler serve installed               # what is installed, and the address it serves
+homebutler serve uninstall               # stop it and remove the unit
+```
+
+The unit is user-level, for the same reasons `watch install`'s is: the config it
+reads lives in the invoking user's home directory, and on macOS a LaunchDaemon
+would outlive the logged-in session Docker Desktop needs. On Linux a user unit
+stops at logout unless lingering is enabled, and `serve install` says so.
+
+Reinstalling on a different port needs `--force`, which stops the running
+service before writing the new unit. Overwriting the file alone is not enough:
+launchd keeps the old address live until the agent is unloaded.
+
+### The token is not in the unit
+
+`serve install` writes the address and never the token. A unit file is
+world-readable, and `--token` is visible in `ps` to every user on the machine,
+so the installed dashboard reads its token from the config file instead:
+
+```yaml
+web:
+  token: your-long-random-token
+```
+
+`doctor` already requires that file to be `0600` once it holds a secret.
+`homebutler serve` reads the same key, so `--token` is now only needed for a
+one-off run with a different one.
+
+Installing on an address other machines can reach with no token configured is
+refused. A foreground dashboard is exposed for as long as somebody is watching
+the terminal; an installed one is exposed until it is uninstalled, and the
+refusal names both ways out — set `web.token`, or bind `127.0.0.1`.
+
 Access from another machine via SSH tunnel:
 
 ```bash

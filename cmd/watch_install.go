@@ -39,7 +39,7 @@ logged-in session, so a LaunchDaemon would poll a daemon that is not there.`,
 				return fmt.Errorf("cannot determine the homebutler binary path: %w", err)
 			}
 
-			path := service.UnitPath(kind, home)
+			path := service.UnitPath(kind, home, service.Watch)
 			if service.Installed(path) && !force {
 				return fmt.Errorf("%s already exists; pass --force to overwrite it", path)
 			}
@@ -48,13 +48,13 @@ logged-in session, so a LaunchDaemon would poll a daemon that is not there.`,
 			// old configuration stays live. Unload first; the error is ignored
 			// because "was not loaded" is the normal case here.
 			if service.Installed(path) {
-				_ = service.Run(service.StopCommand(kind, path))
+				_ = service.Run(service.StopCommand(kind, path, service.Watch))
 			}
-			if err := service.Write(path, service.Render(kind, exe, home)); err != nil {
+			if err := service.Write(path, service.Render(kind, exe, home, service.Watch)); err != nil {
 				return err
 			}
 
-			start := service.StartCommand(kind, path)
+			start := service.StartCommand(kind, path, service.Watch)
 			if err := service.Run(start); err != nil {
 				// The unit is written; only activation failed. Say both, so the
 				// operator knows what to remove and what to run by hand.
@@ -94,14 +94,14 @@ func newWatchUninstallCmd() *cobra.Command {
 			if err != nil {
 				return fmt.Errorf("cannot determine home directory: %w", err)
 			}
-			path := service.UnitPath(kind, home)
+			path := service.UnitPath(kind, home, service.Watch)
 			if !service.Installed(path) {
 				return fmt.Errorf("no unit installed at %s", path)
 			}
 
 			// Stopping can fail on a unit that is already stopped, which is not
 			// a reason to leave the file behind.
-			stopErr := service.Run(service.StopCommand(kind, path))
+			stopErr := service.Run(service.StopCommand(kind, path, service.Watch))
 			if err := os.Remove(path); err != nil {
 				return fmt.Errorf("remove %s: %w", path, err)
 			}
@@ -130,8 +130,8 @@ func newWatchStatusCmd() *cobra.Command {
 			if err != nil {
 				return fmt.Errorf("cannot determine home directory: %w", err)
 			}
-			path := service.UnitPath(kind, home)
-			plan := service.Plan{Kind: kind, Path: path, Start: service.StartCommand(kind, path)}
+			path := service.UnitPath(kind, home, service.Watch)
+			plan := service.Plan{Kind: kind, Path: path, Start: service.StartCommand(kind, path, service.Watch)}
 			if jsonOutput {
 				return output(map[string]any{"installed": service.Installed(path), "plan": plan}, true)
 			}

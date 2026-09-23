@@ -19,6 +19,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 )
 
@@ -30,8 +31,49 @@ const (
 	Launchd Kind = "launchd"
 )
 
-// Label is the unit and agent name. It doubles as the plist filename.
-const Label = "dev.homebutler.watch"
+// Unit describes one of the services homebutler can hand to the host's
+// supervisor. There are two, and keeping them separate is the point: opening a
+// port has to be something somebody asked for, never a side effect of
+// installing monitoring.
+type Unit struct {
+	// Label names the launchd agent and the systemd unit, and doubles as the
+	// filename of both.
+	Label string
+	// Description is what systemctl prints for the unit.
+	Description string
+	// Args is the homebutler subcommand the supervisor runs.
+	Args []string
+	// LogFile is where launchd redirects output, relative to ~/.homebutler/logs.
+	// Empty means the service writes nothing worth keeping.
+	LogFile string
+}
+
+// Watch is the monitoring loop, the service homebutler has always installed.
+var Watch = Unit{
+	Label:       "dev.homebutler.watch",
+	Description: "homebutler monitoring",
+	Args:        []string{"watch", "start"},
+	LogFile:     "watch.log",
+}
+
+// Serve is the web dashboard, bound to host:port.
+//
+// The address is an argument and not a default because a supervised dashboard
+// is one somebody comes back to months later: the unit has to say what it
+// binds, and reading the arguments back out of it is how a report cannot
+// disagree with what is actually running.
+//
+// No token appears here. A unit file is world-readable and a command line is
+// visible in ps to every user on the machine, so the token is read from the
+// config file, which doctor already checks is 0600.
+func Serve(host string, port int) Unit {
+	return Unit{
+		Label:       "dev.homebutler.serve",
+		Description: "homebutler web dashboard",
+		Args:        []string{"serve", "--host", host, "--port", strconv.Itoa(port)},
+		LogFile:     "serve.log",
+	}
+}
 
 // Plan is what Install would do, and what Status reports after it has.
 type Plan struct {
@@ -63,24 +105,24 @@ func Detect() (Kind, error) {
 	}
 }
 
-// UnitPath is where the unit or agent file belongs for kind.
-func UnitPath(kind Kind, home string) string {
+// UnitPath is where u's unit or agent file belongs for kind.
+func UnitPath(kind Kind, home string, u Unit) string {
 	switch kind {
 	case Systemd:
-		return filepath.Join(home, ".config", "systemd", "user", Label+".service")
+		return filepath.Join(home, ".config", "systemd", "user", u.Label+".service")
 	case Launchd:
-		return filepath.Join(home, "Library", "LaunchAgents", Label+".plist")
+		return filepath.Join(home, "Library", "LaunchAgents", u.Label+".plist")
 	}
 	return ""
 }
 
-// Render writes the unit text for kind, running the binary at exe.
-func Render(kind Kind, exe, home string) string {
+// Render writes u's unit text for kind, running the binary at exe.
+func Render(kind Kind, exe, home string, u Unit) string {
 	switch kind {
 	case Systemd:
-		return systemdUnit(exe)
+		return systemdUnit(exe, u)
 	case Launchd:
-		return launchdPlist(exe, home)
+		return launchdPlist(exe, home, u)
 	}
 	return ""
 }
@@ -94,30 +136,34 @@ func Render(kind Kind, exe, home string) string {
 // (internal/remote/ssh.go), which is the same problem in a different place.
 const servicePATH = "/usr/local/bin:/usr/local/sbin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin:/snap/bin"
 
-func systemdUnit(exe string) string {
+func systemdUnit(exe string, u Unit) string {
 	return fmt.Sprintf(`[Unit]
-Description=homebutler monitoring
+Description=%s
 Documentation=https://github.com/Higangssh/homebutler
-# Docker may not be up yet at login; the monitor reconnects on its own, so this
+# Docker may not be up yet at login; homebutler reconnects on its own, so this
 # is a hint about ordering rather than a requirement.
 After=docker.service
 
 [Service]
 Type=simple
 Environment=PATH=%s
-ExecStart=%s watch start
-# The monitor retries a dropped event stream itself, so a restart here means the
+ExecStart=%s %s
+# homebutler retries a dropped connection itself, so a restart here means the
 # process actually died. The delay keeps a crash loop from filling the journal.
 Restart=always
 RestartSec=10s
 
 [Install]
 WantedBy=default.target
-`, servicePATH, exe)
+`, u.Description, servicePATH, exe, strings.Join(u.Args, " "))
 }
 
-func launchdPlist(exe, home string) string {
-	logDir := filepath.Join(home, ".homebutler", "logs")
+func launchdPlist(exe, home string, u Unit) string {
+	logPath := LogPath(Launchd, home, u)
+	args := "    <string>" + exe + "</string>\n"
+	for _, a := range u.Args {
+		args += "    <string>" + a + "</string>\n"
+	}
 	return fmt.Sprintf(`<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
@@ -126,10 +172,7 @@ func launchdPlist(exe, home string) string {
   <string>%s</string>
   <key>ProgramArguments</key>
   <array>
-    <string>%s</string>
-    <string>watch</string>
-    <string>start</string>
-  </array>
+%s  </array>
   <key>EnvironmentVariables</key>
   <dict>
     <key>PATH</key>
@@ -139,25 +182,25 @@ func launchdPlist(exe, home string) string {
   <true/>
   <key>KeepAlive</key>
   <true/>
-  <!-- launchd restarts on exit with no delay of its own; the monitor reconnects
+  <!-- launchd restarts on exit with no delay of its own; homebutler reconnects
        internally, so a restart here means the process died, and this keeps that
        from becoming a spin. -->
   <key>ThrottleInterval</key>
   <integer>10</integer>
   <key>StandardOutPath</key>
-  <string>%s/watch.log</string>
+  <string>%s</string>
   <key>StandardErrorPath</key>
-  <string>%s/watch.log</string>
+  <string>%s</string>
 </dict>
 </plist>
-`, Label, exe, servicePATH, logDir, logDir)
+`, u.Label, args, servicePATH, logPath, logPath)
 }
 
 // StartCommand activates a written unit.
-func StartCommand(kind Kind, path string) []string {
+func StartCommand(kind Kind, path string, u Unit) []string {
 	switch kind {
 	case Systemd:
-		return []string{"systemctl", "--user", "enable", "--now", Label + ".service"}
+		return []string{"systemctl", "--user", "enable", "--now", u.Label + ".service"}
 	case Launchd:
 		return []string{"launchctl", "bootstrap", "gui/" + fmt.Sprint(os.Getuid()), path}
 	}
@@ -165,12 +208,12 @@ func StartCommand(kind Kind, path string) []string {
 }
 
 // StopCommand deactivates an installed unit.
-func StopCommand(kind Kind, path string) []string {
+func StopCommand(kind Kind, path string, u Unit) []string {
 	switch kind {
 	case Systemd:
-		return []string{"systemctl", "--user", "disable", "--now", Label + ".service"}
+		return []string{"systemctl", "--user", "disable", "--now", u.Label + ".service"}
 	case Launchd:
-		return []string{"launchctl", "bootout", "gui/" + fmt.Sprint(os.Getuid()) + "/" + Label}
+		return []string{"launchctl", "bootout", "gui/" + fmt.Sprint(os.Getuid()) + "/" + u.Label}
 	}
 	return nil
 }
@@ -204,7 +247,7 @@ func Write(path, content string) error {
 // where its unit file is. It answers about the file, not the supervisor: a unit
 // that exists and is stopped reads as installed here, and saying more would
 // mean asking systemd or launchd on every call.
-func InstalledUnit() (bool, string) {
+func InstalledUnit(u Unit) (bool, string) {
 	kind, err := Detect()
 	if err != nil {
 		return false, ""
@@ -213,7 +256,7 @@ func InstalledUnit() (bool, string) {
 	if err != nil {
 		return false, ""
 	}
-	path := UnitPath(kind, home)
+	path := UnitPath(kind, home, u)
 	return Installed(path), path
 }
 
@@ -245,11 +288,11 @@ const MaxLogBytes = 4 << 20
 
 // LogPath is the file the launchd agent redirects output into. Empty on
 // platforms whose supervisor already handles this.
-func LogPath(kind Kind, home string) string {
-	if kind != Launchd {
+func LogPath(kind Kind, home string, u Unit) string {
+	if kind != Launchd || u.LogFile == "" {
 		return ""
 	}
-	return filepath.Join(home, ".homebutler", "logs", "watch.log")
+	return filepath.Join(home, ".homebutler", "logs", u.LogFile)
 }
 
 // TrimLog truncates path to its last max bytes, keeping the end, and does
@@ -305,12 +348,12 @@ func indexByte(b []byte, c byte) int {
 // The monitors read their targets once at startup, so adding a target while
 // the service runs has no effect until it is restarted — and a user who is not
 // told that has a container they believe is watched and is not.
-func RestartCommand(kind Kind) []string {
+func RestartCommand(kind Kind, u Unit) []string {
 	switch kind {
 	case Systemd:
-		return []string{"systemctl", "--user", "restart", Label + ".service"}
+		return []string{"systemctl", "--user", "restart", u.Label + ".service"}
 	case Launchd:
-		return []string{"launchctl", "kickstart", "-k", "gui/" + fmt.Sprint(os.Getuid()) + "/" + Label}
+		return []string{"launchctl", "kickstart", "-k", "gui/" + fmt.Sprint(os.Getuid()) + "/" + u.Label}
 	}
 	return nil
 }
@@ -326,8 +369,75 @@ func RestartNote() string {
 	if err != nil {
 		return ""
 	}
-	if !Installed(UnitPath(kind, home)) {
+	if !Installed(UnitPath(kind, home, Watch)) {
 		return ""
 	}
-	return strings.Join(RestartCommand(kind), " ")
+	return strings.Join(RestartCommand(kind, Watch), " ")
+}
+
+// UnitArgs reads back the homebutler arguments a written unit runs, without the
+// binary path. It returns nil when content is not a unit this package wrote.
+//
+// Reporting an installed service means answering "what is it actually doing",
+// and the only answer that cannot drift is the one the supervisor reads. A
+// port recorded anywhere else is a second copy waiting to disagree with the
+// unit after somebody edits one of them.
+func UnitArgs(kind Kind, content string) []string {
+	switch kind {
+	case Systemd:
+		for _, line := range strings.Split(content, "\n") {
+			if rest, ok := strings.CutPrefix(line, "ExecStart="); ok {
+				fields := strings.Fields(rest)
+				if len(fields) < 2 {
+					return nil
+				}
+				return fields[1:] // drop the binary path
+			}
+		}
+	case Launchd:
+		_, rest, ok := strings.Cut(content, "<key>ProgramArguments</key>")
+		if !ok {
+			return nil
+		}
+		array, _, ok := strings.Cut(rest, "</array>")
+		if !ok {
+			return nil
+		}
+		var args []string
+		for {
+			_, after, ok := strings.Cut(array, "<string>")
+			if !ok {
+				break
+			}
+			value, remainder, ok := strings.Cut(after, "</string>")
+			if !ok {
+				break
+			}
+			args = append(args, value)
+			array = remainder
+		}
+		if len(args) < 2 {
+			return nil
+		}
+		return args[1:] // drop the binary path
+	}
+	return nil
+}
+
+// Address picks the --host and --port out of a unit's arguments. The bools
+// report whether each was found, so a unit written by an older version — or by
+// hand — reads as "not stated" rather than as 0.
+func Address(args []string) (host string, port int, ok bool) {
+	var haveHost, havePort bool
+	for i := 0; i+1 < len(args); i++ {
+		switch args[i] {
+		case "--host":
+			host, haveHost = args[i+1], true
+		case "--port":
+			if n, err := strconv.Atoi(args[i+1]); err == nil {
+				port, havePort = n, true
+			}
+		}
+	}
+	return host, port, haveHost && havePort
 }
