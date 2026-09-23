@@ -25,6 +25,18 @@ type Config struct {
 	Watch     WatchRuntimeConfig    `yaml:"watch,omitempty"`
 	Backup    BackupConfig          `yaml:"backup,omitempty"`
 	BackupDir string                `yaml:"backup_dir,omitempty"`
+	Web       WebConfig             `yaml:"web,omitempty"`
+}
+
+// WebConfig holds what the dashboard needs that cannot be passed on a command
+// line.
+type WebConfig struct {
+	// Token authenticates the dashboard's API. It lives here rather than in a
+	// flag because --token is visible in ps to every user on the machine, and
+	// a supervised dashboard would have to keep it in a unit file that is not
+	// ours to protect. The secret tag is what makes the 0600 check apply to a
+	// config that holds one.
+	Token string `yaml:"token,omitempty" json:"-" secret:"true"`
 }
 
 type WatchRuntimeConfig struct {

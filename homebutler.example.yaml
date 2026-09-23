@@ -48,6 +48,14 @@ alerts:
 # Backup directory (optional)
 # backup_dir: /mnt/nas/backups/homebutler
 
+# Web dashboard
+web:
+  # Bearer token for the dashboard API. Setting it makes the settings screen
+  # editable, and is what `homebutler serve install` reads at startup — the
+  # unit file never carries it, and --token would put it in ps for every user
+  # on the machine. A config file holding this must be 0600; doctor checks.
+  # token: your-long-random-token
+
 # Output format is a per-command flag, not a config key: homebutler <cmd> --json
 
 # Check this file with: homebutler config validate

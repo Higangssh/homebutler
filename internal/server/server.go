@@ -831,7 +831,7 @@ func (s *Server) handleWatch(w http.ResponseWriter, r *http.Request) {
 		targets = []watch.Target{}
 	}
 
-	installed, unit := service.InstalledUnit()
+	installed, unit := service.InstalledUnit(service.Watch)
 
 	// A directory that cannot be listed is reported as no incidents kept
 	// rather than failing the whole view: the target list is the part that

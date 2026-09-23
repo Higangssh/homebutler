@@ -350,6 +350,7 @@ would prune the baseline you wanted to compare against. Saving one is a button.
 homebutler serve              # Start on port 8080
 homebutler serve --port 3000  # Custom port
 homebutler serve --demo       # Demo mode with realistic sample data
+homebutler serve install      # Let the host keep it running
 ```
 
 </details>
@@ -811,7 +812,13 @@ Flags:
 homebutler serve                # http://localhost:8080
 homebutler serve --port 3000    # custom port
 homebutler serve --demo         # demo mode with sample data
+homebutler serve install        # hand it to launchd or systemd, so it survives logout
+homebutler serve uninstall      # and take it back
 ```
+
+The installed unit records the address and never the token — that comes from
+`web.token` in the config file, because `--token` is visible in `ps` to every
+user on the machine.
 
 📖 **[Web dashboard details →](docs/web-dashboard.md)**
 

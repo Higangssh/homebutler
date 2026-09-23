@@ -141,6 +141,7 @@ homebutler trust <server>
 homebutler watch install
 homebutler watch tui
 homebutler serve --token <token>
+homebutler serve install
 homebutler deploy --server <name>
 homebutler upgrade
 ```
@@ -196,12 +197,16 @@ watches. It is not a live dashboard — that is
 homebutler serve
 homebutler serve --token <token>
 homebutler serve --host 0.0.0.0 --token <token>
+homebutler serve install
 ```
 
 Since **0.33.0** the dashboard edits the config file: alert thresholds,
 notification channels, Wake-on-LAN devices, servers and Proxmox endpoints.
-Without `--token` it is read-only and the write routes do not exist at all. The
-Report tab shows what `report` reports. There is a container image,
+Without a token it is read-only and the write routes do not exist at all. The
+token can also live in the config file as `web.token`, which is where `serve
+install` reads it: a unit file is not homebutler's to protect, and `--token`
+is visible in `ps` to every user on the machine. The Report tab shows what
+`report` reports. There is a container image,
 `ghcr.io/higangssh/homebutler`, which reaches the machines in `servers:` over
 SSH — a container cannot see the host it runs on, and says so rather than
 answering with its own numbers.

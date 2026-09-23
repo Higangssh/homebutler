@@ -601,7 +601,7 @@ func checkIncidentRetention(r *Result, cfg *config.Config, dir string) {
 // effect this command should not grow quietly.
 func checkWatching(r *Result, dir string, installedFn func() (bool, string)) {
 	if installedFn == nil {
-		installedFn = service.InstalledUnit
+		installedFn = func() (bool, string) { return service.InstalledUnit(service.Watch) }
 	}
 	if dir == "" {
 		d, err := watch.WatchDir()

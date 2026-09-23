@@ -414,7 +414,7 @@ Docker targets use docker events (real-time). Systemd and PM2 targets use pollin
 			var logPath string
 			if kind, err := service.Detect(); err == nil {
 				if home, err := os.UserHomeDir(); err == nil {
-					if lp := service.LogPath(kind, home); lp != "" {
+					if lp := service.LogPath(kind, home, service.Watch); lp != "" {
 						logPath = lp
 						_ = service.TrimLog(logPath, service.MaxLogBytes)
 						ticker := time.NewTicker(time.Hour)
