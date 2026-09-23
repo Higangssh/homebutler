@@ -182,6 +182,17 @@ One section, where the file has two. Run the thing that consumes the output,
 on the input it will really get, and read what comes out — a green check is
 evidence about the check, and that is all it is.
 
+And read all of it. **A filter over the output is not the output.** An
+experiment on `--exclude` was piped through `grep -E "FAIL|excluded a mount" |
+head -3`, the three lines that fitted were a different assertion, and the
+conclusion drawn was that the check had not fired. It had — on the fourth
+line. The same `head` that keeps a log readable is what turns a failure into a
+silence, and the reading was wrong in the direction that ends an experiment
+early.
+
+Both of the habits above exist because the answer looked like the one you
+wanted. This one is the version where you never see the answer at all.
+
 ### Changing something other people build on
 
 Tool names, JSON fields, risk classes, `doctor`'s exit codes, documented config
