@@ -167,6 +167,14 @@ of it moves, with the diff and the command to regenerate the golden file. If
 the change is deliberate, regenerate, commit the golden file alongside it, and
 write the ⚠️ Behavior changes line.
 
+### Describing homebutler somewhere else
+
+Some of homebutler's description lives in other people's repositories, where no
+test here can reach it. [docs/listings.md](docs/listings.md) lists the places
+and what a good entry says. Walk it when the one-sentence answer to "what is
+homebutler" changes — those copies keep introducing the old answer until
+somebody opens a PR against them.
+
 ### Cutting a release
 
 The version in `skills/SKILL.md` is pinned, because a skill that tells an agent
