@@ -1,10 +1,70 @@
 <script>
   import { onMount } from 'svelte';
-  import { getWatch, getWatchIncidents, getWatchIncident } from './api.js';
+  import {
+    getWatch,
+    getWatchIncidents,
+    getWatchIncident,
+    addWatchTarget,
+    removeWatchTarget,
+    checkWatchTargets,
+  } from './api.js';
+
+  let { canAct = false } = $props();
 
   let overview = $state(null);
   let incidents = $state(null);
   let error = $state('');
+
+  // All three actions here are the first tier: they run on the click that
+  // asked for them. A target removed by mistake is a target added back, and a
+  // check that was not needed costs one poll. Nothing to confirm.
+  let busy = $state('');
+  let actionError = $state('');
+  let checked = $state('');
+  let newContainer = $state('');
+  let newKind = $state('docker');
+
+  async function reload() {
+    [overview, incidents] = await Promise.all([getWatch(), getWatchIncidents(25)]);
+  }
+
+  async function run(label, work) {
+    if (busy) return;
+    busy = label;
+    actionError = '';
+    try {
+      const result = await work();
+      await reload();
+      return result;
+    } catch (err) {
+      actionError = err.message;
+    } finally {
+      busy = '';
+    }
+  }
+
+  async function add(event) {
+    event.preventDefault();
+    const container = newContainer.trim();
+    if (!container) return;
+    const result = await run('add', () => addWatchTarget({ container, kind: newKind }));
+    // AddTarget answers added:false for a container already on the list, which
+    // is not an error and not something to report as a success either.
+    if (result && result.added === false) {
+      actionError = `${container} is already on the watch list`;
+      return;
+    }
+    if (result) newContainer = '';
+  }
+
+  async function checkNow() {
+    const result = await run('check', checkWatchTargets);
+    if (!result) return;
+    const found = result.incidents?.length ?? 0;
+    checked = found === 0
+      ? 'Checked every target just now. Nothing had restarted.'
+      : `Checked every target just now. ${found} incident(s) recorded.`;
+  }
 
   let openId = $state('');
   let openIncident = $state(null);
@@ -12,7 +72,7 @@
 
   onMount(async () => {
     try {
-      [overview, incidents] = await Promise.all([getWatch(), getWatchIncidents(25)]);
+      await reload();
     } catch (err) {
       error = err.message;
     }
@@ -82,7 +142,19 @@
       <div class="section-header">
         <h2>Watched</h2>
         <span class="badge">{overview.targets.length}</span>
+        {#if canAct && overview.targets.length > 0}
+          <button class="action" onclick={checkNow} disabled={!!busy}>
+            {busy === 'check' ? 'Checking…' : 'Check now'}
+          </button>
+        {/if}
       </div>
+
+      {#if checked}
+        <p class="note">{checked}</p>
+      {/if}
+      {#if actionError}
+        <p class="error">{actionError}</p>
+      {/if}
       {#if overview.targets.length === 0}
         <p class="empty">
           Nothing is being watched. <code class="inline">homebutler watch add &lt;container&gt;</code>
@@ -99,9 +171,42 @@
                 <code class="unit">{target.unit}</code>
               {/if}
               <span class="since">watched since {exact(target.added_at)}</span>
+              {#if canAct}
+                <button
+                  class="remove"
+                  aria-label="Stop watching {target.container}"
+                  disabled={!!busy}
+                  onclick={() => run('remove', () => removeWatchTarget(target.container))}
+                >Stop watching</button>
+              {/if}
             </div>
           {/each}
         </div>
+      {/if}
+
+      {#if canAct}
+        <form class="add" onsubmit={add}>
+          <input
+            name="container"
+            placeholder="container name"
+            aria-label="Container to watch"
+            bind:value={newContainer}
+            disabled={!!busy}
+          />
+          <select name="kind" aria-label="How it is supervised" bind:value={newKind} disabled={!!busy}>
+            <option value="docker">docker</option>
+            <option value="systemd">systemd</option>
+            <option value="pm2">pm2</option>
+          </select>
+          <button type="submit" disabled={!!busy || !newContainer.trim()}>
+            {busy === 'add' ? 'Adding…' : 'Watch it'}
+          </button>
+        </form>
+        {#if overview.targets.length > 0 && !overview.service.installed}
+          <p class="note">
+            Adding it records nothing until a service is installed to poll the list.
+          </p>
+        {/if}
       {/if}
     </div>
 
@@ -223,7 +328,62 @@
     display: flex;
     justify-content: space-between;
     align-items: center;
+    gap: 0.5rem;
     margin-bottom: 0.75rem;
+  }
+
+  .section-header .action {
+    margin-left: auto;
+  }
+
+  button.action,
+  .add button,
+  .remove {
+    font-size: 0.7rem;
+    padding: 0.25rem 0.55rem;
+    border-radius: 5px;
+    border: 1px solid var(--border);
+    background: var(--bg-primary);
+    color: var(--text-heading);
+    cursor: pointer;
+  }
+
+  button:disabled {
+    opacity: 0.5;
+    cursor: default;
+  }
+
+  .remove {
+    margin-top: 0.5rem;
+    align-self: flex-start;
+  }
+
+  .add {
+    display: flex;
+    gap: 0.5rem;
+    margin-top: 0.75rem;
+    flex-wrap: wrap;
+  }
+
+  .add input,
+  .add select {
+    font-size: 0.75rem;
+    padding: 0.25rem 0.5rem;
+    border-radius: 5px;
+    border: 1px solid var(--border);
+    background: var(--bg-primary);
+    color: var(--text-heading);
+  }
+
+  .add input {
+    flex: 1;
+    min-width: 8rem;
+  }
+
+  .note {
+    font-size: 0.72rem;
+    color: var(--text-secondary);
+    margin-top: 0.5rem;
   }
 
   h2 {

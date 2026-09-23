@@ -7,6 +7,9 @@ vi.mock('./api.js', () => ({
   getWatch: vi.fn(),
   getWatchIncidents: vi.fn(),
   getWatchIncident: vi.fn(),
+  addWatchTarget: vi.fn(),
+  removeWatchTarget: vi.fn(),
+  checkWatchTargets: vi.fn(),
 }));
 
 function overview(extra = {}) {
@@ -18,10 +21,10 @@ function overview(extra = {}) {
   };
 }
 
-async function show(data, incidents = []) {
+async function show(data, incidents = [], props = {}) {
   getWatch.mockResolvedValue(data);
   getWatchIncidents.mockResolvedValue(incidents);
-  render(WatchCard);
+  render(WatchCard, props);
   await vi.waitFor(() => expect(getWatch).toHaveBeenCalled());
   await new Promise(r => setTimeout(r, 0));
 }
@@ -85,5 +88,26 @@ describe('incidents', () => {
   it('says so when nothing has restarted', async () => {
     await show(overview(), []);
     expect(screen.getByText(/No incidents recorded/)).toBeTruthy();
+  });
+});
+
+describe('what the card offers to do', () => {
+  // Without a token the action routes are not registered, so every one of
+  // these would answer 404 — which reads the same as a feature that was never
+  // built. The default is off for the same reason: a card mounted without
+  // being told shows nothing it cannot do.
+  it('offers nothing when the dashboard cannot act', async () => {
+    await show(overview());
+    expect(screen.getByText('plex')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Check now' })).toBeNull();
+    expect(screen.queryByRole('button', { name: /Stop watching/ })).toBeNull();
+    expect(screen.queryByLabelText('Container to watch')).toBeNull();
+  });
+
+  it('offers all three when it can act', async () => {
+    await show(overview(), [], { canAct: true });
+    expect(screen.getByRole('button', { name: 'Check now' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Stop watching plex' })).toBeTruthy();
+    expect(screen.getByLabelText('Container to watch')).toBeTruthy();
   });
 });

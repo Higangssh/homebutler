@@ -165,7 +165,7 @@
     {:else if activeTab === 'report'}
       <ReportCard />
     {:else if activeTab === 'watch'}
-      <WatchCard />
+      <WatchCard {canAct} />
     {:else}
       <ConfigCard />
     {/if}
