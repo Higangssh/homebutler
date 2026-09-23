@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### ✨ Features
+
+- a bind mount can be the wrong size to archive, and there was no way to say so (#282). A media server mounts a library directory and `backup` tarred it whole, every time — reported from a real Jellyfin setup where that directory is terabytes. `--exclude` leaves a path out, covering anything mounted under it on path boundaries, so `/mnt/media` covers `/mnt/media/movies` and not `/mnt/media-backup`. It applies to bind mounts only; a named volume is Docker's own directory and has no host path to match. **What was excluded is written into the archive**, and the mount stays in the manifest marked `excluded` rather than being dropped from it: somebody restoring months later has to be able to tell *this service had a media directory and it is not in here* from *this service had no media directory*. A path that matched nothing is reported, because a misspelled `--exclude` archives the terabytes it was meant to avoid and the archive size is otherwise the only place that shows. The cost was never only disk — `backup drill` boots an archive and requires it to answer a health check, and a terabyte archive cannot be drilled, so the data nobody wanted backed up was what stopped the verification from being usable on the data they did
+
 ## [0.39.0](https://github.com/Higangssh/homebutler/compare/v0.38.0...v0.39.0) - 2026-09-23
 
 **Fourteen things homebutler can do had been waiting on a rule for what a browser must produce before it does them, and while that rule did not exist the dashboard could only look.** 0.35.1 gave it a write surface for *settings* (#154) and decided nothing about running an action, so fourteen capabilities sat in the registry pointing at an issue.

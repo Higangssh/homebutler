@@ -628,7 +628,7 @@ func (s *Server) executeTool(name string, args map[string]any) (any, error) {
 		if backupDir == "" {
 			backupDir = s.cfg.ResolveBackupDir()
 		}
-		return backup.Run(backupDir, stringArg(args, "service"), s.cfg.ResolveBackupRetention())
+		return backup.Run(backupDir, stringArg(args, "service"), s.cfg.ResolveBackupRetention(), stringSliceArg(args, "exclude"))
 	case "backup_list":
 		return backup.List(s.cfg.ResolveBackupDir())
 	case "backup_drill":
@@ -959,6 +959,36 @@ func isModernProtocolVersion(version string) bool {
 }
 
 // Helper functions
+
+// stringSliceArg reads a JSON array of strings. A single string is accepted as
+// a list of one, because an agent that has one path to exclude will send one
+// path, and refusing it would be refusing the common case on a technicality.
+func stringSliceArg(args map[string]any, key string) []string {
+	if args == nil {
+		return nil
+	}
+	switch val := args[key].(type) {
+	case string:
+		if val == "" {
+			return nil
+		}
+		return []string{val}
+	case []any:
+		out := make([]string, 0, len(val))
+		for _, item := range val {
+			if s, ok := item.(string); ok && s != "" {
+				out = append(out, s)
+			}
+		}
+		if len(out) == 0 {
+			return nil
+		}
+		return out
+	case []string:
+		return val
+	}
+	return nil
+}
 
 func stringArg(args map[string]any, key string) string {
 	if args == nil {

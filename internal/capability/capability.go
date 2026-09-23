@@ -31,6 +31,10 @@ type Property struct {
 	Enum        []string `json:"enum,omitempty"`
 	Minimum     *float64 `json:"minimum,omitempty"`
 	Maximum     *float64 `json:"maximum,omitempty"`
+	// Items is what an array holds. A JSON Schema array without it says
+	// nothing about its contents, and a client generating a call from the
+	// schema has to guess.
+	Items *Property `json:"items,omitempty"`
 }
 
 type Risk string
@@ -744,6 +748,11 @@ var Registry = []Capability{
 					"service": {Type: "string", Description: "Specific service to back up (optional)"},
 					"to":      {Type: "string", Description: "Custom backup destination directory (optional)"},
 					"server":  {Type: "string", Description: "Remote server name from config (optional, runs locally if omitted)"},
+					"exclude": {
+						Type:        "array",
+						Items:       &Property{Type: "string"},
+						Description: "Host paths not to archive, covering bind mounts at or under each one. What was excluded is written into the archive manifest, so a later restore can tell a mount that was left out from one that never existed (optional)",
+					},
 				},
 			},
 		},

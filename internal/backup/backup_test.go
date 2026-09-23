@@ -192,3 +192,60 @@ func TestCopyComposeFiles(t *testing.T) {
 		t.Error(".env was not copied")
 	}
 }
+
+// #282: a Jellyfin media bind mount can be terabytes, and it went into every
+// archive. What the exclusion has to get right is not only "skip it" but
+// "skip exactly it".
+func TestExcludedByCoversTheMountAndWhatIsUnderIt(t *testing.T) {
+	media := Mount{Type: "bind", Source: "/mnt/media", Name: "/mnt/media"}
+	movies := Mount{Type: "bind", Source: "/mnt/media/movies", Name: "/mnt/media/movies"}
+	config := Mount{Type: "bind", Source: "/srv/jellyfin/config", Name: "/srv/jellyfin/config"}
+	// The one a prefix match gets wrong if it does not check the boundary.
+	sibling := Mount{Type: "bind", Source: "/mnt/media-backup", Name: "/mnt/media-backup"}
+
+	exclude := []string{"/mnt/media"}
+
+	if _, ok := excludedBy(media, exclude); !ok {
+		t.Error("the excluded path itself was not excluded")
+	}
+	// Somebody who says /mnt/media means the media. A compose file that mounts
+	// a subdirectory separately has not changed their mind.
+	if _, ok := excludedBy(movies, exclude); !ok {
+		t.Error("a mount under the excluded path was not excluded")
+	}
+	if _, ok := excludedBy(config, exclude); ok {
+		t.Error("an unrelated mount was excluded")
+	}
+	if _, ok := excludedBy(sibling, exclude); ok {
+		t.Error("/mnt/media-backup was excluded by /mnt/media: the match is not on a path boundary")
+	}
+}
+
+// A named volume is Docker's own directory and has no host path to match.
+// Matching its name against a path would mostly be a way to exclude nothing
+// while appearing to work.
+func TestOnlyBindMountsAreExcluded(t *testing.T) {
+	volume := Mount{Type: "volume", Name: "jellyfin_config", Source: "/var/lib/docker/volumes/jellyfin_config/_data"}
+	if _, ok := excludedBy(volume, []string{"/var/lib/docker/volumes/jellyfin_config/_data"}); ok {
+		t.Error("a named volume was excluded by its docker-internal path")
+	}
+}
+
+func TestExcludePathsAreNormalised(t *testing.T) {
+	m := Mount{Type: "bind", Source: "/mnt/media", Name: "/mnt/media"}
+	for _, pattern := range []string{"/mnt/media/", "/mnt/media", " /mnt/media ", "/mnt/./media"} {
+		if _, ok := excludedBy(m, []string{pattern}); !ok {
+			t.Errorf("%q did not match /mnt/media", pattern)
+		}
+	}
+	// An empty exclusion must not match everything, which is what a bare
+	// --exclude= would otherwise do. The protection is filepath.Clean, not a
+	// guard: Clean("") is ".", and "." does not prefix an absolute path. Used
+	// raw the pattern would be "", and "" + "/" prefixes every absolute path
+	// there is — which is the break this catches.
+	for _, pattern := range []string{"", "  "} {
+		if _, ok := excludedBy(m, []string{pattern}); ok {
+			t.Errorf("%q excluded a mount", pattern)
+		}
+	}
+}

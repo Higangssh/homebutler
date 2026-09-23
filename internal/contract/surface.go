@@ -81,7 +81,7 @@ func toolLines() []string {
 	for _, c := range capability.Registry {
 		var args []string
 		for name, property := range c.Tool.InputSchema.Properties {
-			args = append(args, name+":"+property.Type)
+			args = append(args, name+":"+argType(property))
 		}
 		sort.Strings(args)
 
@@ -96,6 +96,17 @@ func toolLines() []string {
 	}
 	sort.Strings(lines)
 	return lines
+}
+
+// argType renders a property's type, including what an array holds. Without
+// the element type an array of paths and an array of numbers are the same
+// line, so changing one into the other — which breaks every caller — would not
+// show up in the file that exists to show it.
+func argType(property capability.Property) string {
+	if property.Type == "array" && property.Items != nil {
+		return "array<" + property.Items.Type + ">"
+	}
+	return property.Type
 }
 
 // routeLines covers what a dashboard, a widget or a script can reach over HTTP,

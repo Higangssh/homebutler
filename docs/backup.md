@@ -55,6 +55,33 @@ The temporary container is removed immediately after (`--rm`). The volume is mou
 
 **Bind mounts** are backed up directly from the host filesystem using `tar`.
 
+#### Leaving a bind mount out
+
+A bind mount can be the wrong size to archive. A media server mounts a library
+directory, and that directory is terabytes of files that are not what a backup
+of the service is for:
+
+```bash
+homebutler backup --service jellyfin --exclude /mnt/media
+homebutler backup --exclude /mnt/media --exclude /srv/downloads
+```
+
+An exclusion covers the path and anything mounted under it, on path boundaries
+— `/mnt/media` covers `/mnt/media/movies` and does not cover `/mnt/media-backup`.
+It applies to bind mounts only: a named volume is Docker's own directory and
+has no host path to match.
+
+**What was excluded is written into the archive**, not only printed at the
+time. The manifest carries the paths, and the mount stays in its service's
+entry marked `"excluded": true` — because somebody restoring months later has
+to be able to tell *this service had a media directory and it is not in here*
+from *this service had no media directory*, and a mount simply left out of the
+manifest says the second.
+
+A path that matched nothing is reported. A misspelled `--exclude` archives the
+terabytes it was meant to avoid, and without the warning the archive's size is
+the only place that shows.
+
 ### Step 4: Copy compose files
 
 The `docker-compose.yml` and `.env` files are copied into the archive. These are essential for restoring your services.
