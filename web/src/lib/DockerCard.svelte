@@ -1,14 +1,39 @@
 <script>
-  import { onMount, onDestroy } from 'svelte';
-  import { getDocker } from './api.js';
+  import { onDestroy } from 'svelte';
+  import { getDocker, restartContainer, stopContainer } from './api.js';
+  import ConfirmStop from './ConfirmStop.svelte';
 
-  let { server = '' } = $props();
+  let { server = '', canAct = false } = $props();
 
   let containers = $state([]);
   let available = $state(true);
   let message = $state('');
   let error = $state('');
   let timer;
+
+  // The container an action is running against, and the one whose stop is
+  // waiting to be confirmed. Names, not indexes: the list refreshes every five
+  // seconds and an index points at a different container afterwards.
+  let acting = $state('');
+  let confirming = $state('');
+  let actionError = $state('');
+
+  async function act(name, run) {
+    if (acting) return;
+    acting = name;
+    actionError = '';
+    try {
+      await run(name, server);
+      confirming = '';
+      // Docker reports the new state a moment after it accepts the command, so
+      // the refresh that matters is the next scheduled one, not this one.
+      await refresh();
+    } catch (err) {
+      actionError = `${name}: ${err.message}`;
+    } finally {
+      acting = '';
+    }
+  }
 
   async function refresh() {
     try {
@@ -25,6 +50,8 @@
   $effect(() => {
     server;
     containers = [];
+    confirming = '';
+    actionError = '';
     refresh();
     clearInterval(timer);
     timer = setInterval(refresh, 5000);
@@ -63,9 +90,38 @@
             <span class="detail">{c.image}</span>
           </div>
           <span class="status">{c.status}</span>
+          {#if canAct && c.state === 'running'}
+            <div class="row-actions">
+              <button
+                onclick={() => act(c.name, restartContainer)}
+                disabled={!!acting}
+                aria-label="Restart {c.name}"
+                title="Restart {c.name}"
+              >{acting === c.name && confirming !== c.name ? '…' : 'Restart'}</button>
+              <button
+                class="danger"
+                onclick={() => (confirming = confirming === c.name ? '' : c.name)}
+                disabled={!!acting}
+                aria-label="Stop {c.name}"
+                title="Stop {c.name}"
+              >Stop</button>
+            </div>
+          {/if}
         </div>
+        {#if confirming === c.name}
+          <ConfirmStop
+            name={c.name}
+            busy={acting === c.name}
+            onconfirm={() => act(c.name, stopContainer)}
+            oncancel={() => (confirming = '')}
+          />
+        {/if}
       {/each}
     </div>
+  {/if}
+
+  {#if actionError}
+    <p class="error">{actionError}</p>
   {/if}
 </div>
 
@@ -159,6 +215,32 @@
     color: var(--text-secondary);
     flex-shrink: 0;
     text-align: right;
+  }
+
+  .row-actions {
+    display: flex;
+    gap: 0.375rem;
+    flex-shrink: 0;
+  }
+
+  .row-actions button {
+    font-size: 0.7rem;
+    padding: 0.2rem 0.45rem;
+    border-radius: 4px;
+    border: 1px solid var(--border);
+    background: var(--bg-primary);
+    color: var(--text-heading);
+    cursor: pointer;
+  }
+
+  .row-actions button:disabled {
+    opacity: 0.5;
+    cursor: default;
+  }
+
+  .row-actions .danger {
+    border-color: color-mix(in srgb, var(--red) 50%, var(--border));
+    color: var(--red);
   }
 
   .error {

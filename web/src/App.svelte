@@ -1,6 +1,7 @@
 <script>
   import { onMount } from 'svelte';
   import {
+    getConfig,
     getServers,
     getServerStatus,
     getVersion,
@@ -33,6 +34,14 @@
   let auth = $state('checking');
   let rejected = $state(false);
 
+  // Whether this dashboard can run an action at all. Without a token the
+  // action routes are not registered, so a button would 404 rather than 401 —
+  // the screen cannot tell that apart from a missing feature by status code,
+  // and finding out by calling is the wrong way round. /api/config already
+  // answers it, and reading the same flag the Config tab reads keeps there
+  // from being a second copy to disagree with.
+  let canAct = $state(false);
+
   // /api/version is the cheapest guarded endpoint, so it answers the only
   // question that has to be settled first.
   async function checkAuth() {
@@ -53,6 +62,17 @@
     }
   }
 
+  async function loadCapabilities() {
+    try {
+      const cfg = await getConfig();
+      canAct = !!cfg.editable;
+    } catch {
+      // A dashboard that cannot answer this is one that shows no actions,
+      // which is the safe way to be wrong about it.
+      canAct = false;
+    }
+  }
+
   async function loadServers() {
     try {
       servers = await getServers();
@@ -65,7 +85,7 @@
     setToken(token);
     rejected = false;
     if (await checkAuth()) {
-      await loadServers();
+      await Promise.all([loadServers(), loadCapabilities()]);
       return;
     }
     // Never keep a credential the server has refused: the next page load would
@@ -80,7 +100,7 @@
     onUnauthorized(() => {
       auth = 'token-required';
     });
-    if (await checkAuth()) await loadServers();
+    if (await checkAuth()) await Promise.all([loadServers(), loadCapabilities()]);
   });
 </script>
 
@@ -136,7 +156,7 @@
       <div class="grid">
         <ProxmoxCard />
         <StatusCard server={selectedServer} />
-        <DockerCard server={selectedServer} />
+        <DockerCard server={selectedServer} {canAct} />
         <ProcessCard server={selectedServer} />
         <AlertCard server={selectedServer} />
         <PortsCard server={selectedServer} />

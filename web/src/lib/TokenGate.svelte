@@ -21,8 +21,9 @@
   <form class="card" onsubmit={submit}>
     <h1>This dashboard needs a token</h1>
     <p class="lead">
-      It was started with <code>--token</code>, so every request has to carry it.
-      Paste the token you passed to <code>homebutler serve</code>.
+      A token is configured, so every request has to carry it. Paste the one in
+      <code>web.token</code> in your config file — or the one you passed to
+      <code>homebutler serve --token</code>.
     </p>
 
     <label for="token">Token</label>
