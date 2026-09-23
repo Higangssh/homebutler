@@ -50,15 +50,19 @@ watch_remove risk=write args=[container:string server:string] required=[containe
 
 ## routes
 GET /api/alerts protection=none
+GET /api/backup protection=none
 GET /api/capabilities protection=none
 GET /api/config protection=none
 GET /api/docker protection=none
 GET /api/docker/stats protection=none
 GET /api/doctor protection=none
+GET /api/install protection=none
+GET /api/install/{app} protection=none
 GET /api/overview protection=none
 GET /api/ports protection=none
 GET /api/processes protection=none
 GET /api/proxmox/endpoints protection=none
+GET /api/proxmox/guests protection=none
 GET /api/proxmox/status protection=none
 GET /api/report protection=none
 GET /api/servers protection=none
@@ -141,17 +145,13 @@ watch_remove: WatchRemoveResult
 
 ## absent
 alerts_history: no-view-yet
-backup_list: no-view-yet
 config_validate: no-view-yet
 docker_inspect: no-view-yet
 docker_logs: no-view-yet
 docker_top: no-view-yet
-install_list: no-view-yet
-install_status: no-view-yet
 inventory_export: no-view-yet
 inventory_scan: no-view-yet
 network_scan: no-view-yet
-proxmox_guests: no-view-yet
 proxmox_node: no-view-yet
 proxmox_script_command: no-view-yet
 proxmox_script_list: no-view-yet

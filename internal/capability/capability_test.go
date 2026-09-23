@@ -210,3 +210,58 @@ func TestProtectionsAreFromTheClosedSet(t *testing.T) {
 		}
 	}
 }
+
+// A route that acts on something it has to be told the name of has to be able
+// to find that name here. An endpoint that takes an identifier, with no
+// endpoint that produces one, is half an API: our own dashboard knows the
+// value because it fetched it from somewhere, and nobody else has a somewhere.
+//
+// backup_restore is why Target is declared rather than derived. Its archive
+// name arrives in the body, so a rule that reads paths for "{...}" would walk
+// straight past the one route where the gap was worst — backup_list had no
+// HTTP route at all, so there was no way through this API to learn the name of
+// an archive to restore.
+func TestARouteThatTakesATargetCanFindOne(t *testing.T) {
+	exposed := map[string]Capability{}
+	for _, c := range Registry {
+		if c.Exposed() {
+			exposed[c.Tool.Name] = c
+		}
+	}
+
+	for _, c := range Registry {
+		if c.HTTP.Target == "" {
+			continue
+		}
+		if c.HTTP.Target == TargetFromConfig {
+			// Served by GET /api/wake, which is not a capability. Nothing
+			// here can check that route exists; internal/contract records it.
+			continue
+		}
+		source, ok := exposed[c.HTTP.Target]
+		if !ok {
+			t.Errorf("%s takes a target from %q, which is not reachable over HTTP: a caller has no way to learn the value this route requires",
+				c.Tool.Name, c.HTTP.Target)
+			continue
+		}
+		if source.HTTP.Method != "GET" {
+			t.Errorf("%s takes a target from %s, which is %s and not a read",
+				c.Tool.Name, c.HTTP.Target, source.HTTP.Method)
+		}
+	}
+}
+
+// The half of the rule that can be checked mechanically: an identifier in the
+// path is visible, so forgetting to say where it comes from is catchable.
+// An identifier in the body is not — see the comment above.
+func TestEveryPathParameterSaysWhereItComesFrom(t *testing.T) {
+	for _, c := range Registry {
+		if !c.Exposed() || !strings.Contains(c.HTTP.Path, "{") {
+			continue
+		}
+		if c.HTTP.Target == "" {
+			t.Errorf("%s is %s and names no Target: a caller cannot know what to put in place of the {...}",
+				c.Tool.Name, c.HTTP.Path)
+		}
+	}
+}

@@ -6,7 +6,9 @@ import (
 	"time"
 
 	"github.com/Higangssh/homebutler/internal/config"
+	"github.com/Higangssh/homebutler/internal/install"
 	"github.com/Higangssh/homebutler/internal/notify"
+	"github.com/Higangssh/homebutler/internal/proxmox"
 	"github.com/Higangssh/homebutler/internal/remote"
 	"github.com/Higangssh/homebutler/internal/system"
 	"github.com/Higangssh/homebutler/internal/watch"
@@ -784,3 +786,41 @@ func (s *Server) demoWatchCheck(w http.ResponseWriter, r *http.Request) {
 }
 
 func demoBool(v bool) *bool { return &v }
+
+// The reads the actions depend on, in demo mode.
+//
+// install_list and install_status answer from the real catalogue rather than
+// from invented apps: it is a static map compiled into the binary, so demo
+// data taken from anywhere else would drift away from what install_app
+// accepts, and the e2e suite would be exercising a list the product does not
+// have.
+
+func (s *Server) demoBackupList(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, []map[string]any{
+		{"name": "uptime-kuma-20260430T120000Z.tar.gz", "path": "~/.homebutler/backups/uptime-kuma-20260430T120000Z.tar.gz", "size": "12.3 MB", "created_at": "2026-04-30T12:00:00Z"},
+		{"name": "gitea-20260428T030000Z.tar.gz", "path": "~/.homebutler/backups/gitea-20260428T030000Z.tar.gz", "size": "88.1 MB", "created_at": "2026-04-28T03:00:00Z"},
+	})
+}
+
+func (s *Server) demoInstallList(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, install.List())
+}
+
+func (s *Server) demoInstallStatus(w http.ResponseWriter, r *http.Request) {
+	name := r.PathValue("app")
+	if _, ok := install.Registry[name]; !ok {
+		writeError(w, http.StatusNotFound, "unknown app "+name)
+		return
+	}
+	writeJSON(w, map[string]any{"app": name, "state": "running"})
+}
+
+func (s *Server) demoProxmoxGuests(w http.ResponseWriter, r *http.Request) {
+	guests := []proxmox.Guest{
+		{VMID: 100, Name: "docker-host", Type: "qemu", Node: "pve1", Status: "running"},
+		{VMID: 101, Name: "media", Type: "qemu", Node: "pve1", Status: "running"},
+		{VMID: 200, Name: "adguard", Type: "lxc", Node: "pve1", Status: "stopped"},
+	}
+	query := r.URL.Query()
+	writeJSON(w, filterGuests(guests, query.Get("node"), query.Get("status"), query.Get("type")))
+}

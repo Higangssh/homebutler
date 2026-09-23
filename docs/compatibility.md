@@ -27,6 +27,14 @@ promise — the golden file there fails the build when any of it moves.
 | **HTTP routes and their protection** | The path, the method, and what the tier below asks the caller to bring. A route that quietly stops needing one is the change nobody sees |
 | **Which decision an absence waits on** | A capability the dashboard cannot reach records why. The sentence is prose and improves; the decision it names is frozen, so a tool quietly moving from "waiting on a rule" to "never" is a diff. Additive change after 1.0 is allowed — [the registry](../internal/capability/capability.go) is what says how much is still coming |
 
+Four absences carried the wrong reason until they became routes.
+`backup_list`, `install_list`, `install_status` and `proxmox_guests` said
+`no view built for it yet`, which was true and was not what was keeping them
+out: the actions beside them could not be called without them. The reason a
+thing is absent is the part this file freezes, so a wrong one is not a typo —
+it is a decision recorded as waiting on something it was not waiting on, and
+it is what let three uncallable actions look finished.
+
 A field whose value is a sentence — `report --json`'s `status` and `warnings`,
 `doctor`'s `title`, `detail` and `action` — is frozen as a field: it keeps its
 name and stays an array of strings. **The sentences inside it are not.** They
@@ -55,6 +63,37 @@ still meaning something when one appears.
 A route whose tier requires anything is not registered at all without a token,
 so reaching it unauthenticated gets a 404 rather than a 401: a surface that
 answers is a surface to be reached the moment the check is got wrong.
+
+### A route that takes a target can find one
+
+**An endpoint that takes an identifier exists alongside an endpoint that
+produces one.** Otherwise a caller has to get that value from somewhere other
+than this API, and for anyone who is not our own dashboard there is nowhere
+else — which makes it half an API rather than a small gap.
+
+This was found by building the screens. `POST /api/backup/restore` took an
+archive name and there was no route that returned one; `POST
+/api/install/{app}/purge` took an app name and there was no route that listed
+apps; the three Proxmox guest actions took a `vmid`, a `node` and a `type`, and
+nothing served the guests. All three actions were reachable, correct and
+uncallable by anyone who had not already been told the answer. They were about
+to be frozen that way.
+
+`backup_list`, `install_list`, `install_status` and `proxmox_guests` have
+routes now. Each route that acts on a named thing declares where that name
+comes from — `capability.HTTP.Target` — and a test fails when the source is
+not a read this API exposes.
+
+The other thirteen absences stay absent, and the line is not "does it have a
+sibling" but **can the write next to it be used without this read**.
+`docker_list` already names containers, so `docker_logs` and `docker_inspect`
+are extra views rather than prerequisites; `proxmox_status` already answers for
+an endpoint; `network_scan`, `inventory_scan`, `inventory_export` and
+`config_validate` have no write beside them at all.
+
+The usual argument that adding a route later is additive, and so allowed after
+1.0, does not apply here. That argument is about a capability nobody is
+depending on yet. These four had writes shipped against them.
 
 ## Not frozen
 
@@ -130,6 +169,15 @@ this one has been wrong are worth writing down rather than discovering twice.
   telling `backup drill` from `backup` with an argument needs the command tree
   and that is not in the package doing the classifying.
 
+- **An identifier the route takes in its body.** `capability.HTTP.Target` says
+  where a route's target comes from, and a test fails when that source is not
+  a read this API exposes. Only half of it is mechanical: a `{param}` in a
+  path is visible, so forgetting to declare one is caught, but `backup_restore`
+  takes its archive name in the body and no walk over the registry can see
+  that. It was the worst instance of the gap — there was no route at all that
+  returned an archive name — and a rule that only read paths would have
+  stepped over it. The declaration is what catches it, and a declaration is
+  something a person remembers to write.
 - **Whatever was true when it was regenerated.** `-update` writes the current
   surface, not the correct one. A defect present at that moment becomes the
   golden, and every run afterwards defends it — the check stops being a
