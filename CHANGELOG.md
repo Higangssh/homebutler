@@ -22,6 +22,8 @@ All notable changes to this project will be documented in this file.
 
 ### ♻️ Internal
 
+- coverage was measured, printed into a log nobody opens, and thrown away (#254). CI ran the whole suite a second time only to produce one line of stdout, so the slowest job in the build was doubled for a number nothing recorded — and nothing could say whether a change made it worse. It is one run now, the total lands on the checks page of the pull request that changed it, and the profile goes to Coveralls, which holds the previous value so the delta arrives while the diff that caused it is still on screen. The README carries the coverage and pkg.go.dev links, which are also the two things [avelino/awesome-go](https://github.com/avelino/awesome-go)'s submission CI rejects a project for missing
+
 - `[Unreleased]` had been written twice, and the check for exactly this could not see it. #251 added a step that fails when `[Unreleased]` repeats a section heading, because `release-notes.sh` cuts a section whole. Two `## [Unreleased]` headings slip past it: the repeated `###` headings are one in each block, so there is nothing to find. The release PR renames a heading, singular — the second block would have stayed behind, and the notes, which run from the version heading to the next `## [`, would have ended there. Cutting notes from the file as it stood publishes the Features section and drops the Documentation one. CI now counts the heading as well
 
 ## [0.38.0](https://github.com/Higangssh/homebutler/compare/v0.37.0...v0.38.0) - 2026-09-21
