@@ -80,7 +80,7 @@ func (r *ValidationResult) add(severity, field, message, hint string) {
 }
 
 // topLevelKeys mirrors the yaml tags on Config, in the order they are reported.
-var topLevelKeys = []string{"servers", "proxmox", "wake", "alerts", "notify", "watch", "backup", "backup_dir"}
+var topLevelKeys = []string{"servers", "proxmox", "wake", "alerts", "notify", "watch", "backup", "backup_dir", "web"}
 
 // Validate resolves the config the same way every other command does, then
 // reports what it found without applying it. It never contacts a remote
@@ -414,6 +414,15 @@ func sectionSummary(name string, present bool, cfg *Config) string {
 			return cfg.ResolveBackupDir() + " (default)"
 		}
 		return cfg.ResolveBackupDir()
+
+	case "web":
+		// Whether a token is set, never which one: config validate prints to a
+		// terminal somebody may be sharing, and this is the file doctor makes
+		// people chmod for holding exactly this.
+		if cfg.Web.Token == "" {
+			return "no token · dashboard is read-only"
+		}
+		return "token set · dashboard can edit the config"
 	}
 	return ""
 }
