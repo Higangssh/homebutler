@@ -279,3 +279,24 @@ export function stopContainer(name, server) {
     body: JSON.stringify({ confirm: true }),
   });
 }
+
+// The watch list. All three run on the click that asks for them: a target
+// removed by mistake is a target added back, and a check that was not needed
+// costs one poll.
+export function addWatchTarget(target) {
+  return fetchJSON('/api/watch/targets', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(target),
+  });
+}
+
+export function removeWatchTarget(name) {
+  return fetchJSON(`/api/watch/targets/${encodeURIComponent(name)}/remove`, { method: 'POST' });
+}
+
+// Polls every target once now, rather than waiting for the service's next
+// round. It is a write because it can record an incident and send a message.
+export function checkWatchTargets() {
+  return fetchJSON('/api/watch/check', { method: 'POST' });
+}
