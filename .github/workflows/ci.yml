@@ -91,6 +91,18 @@ jobs:
             exit 1
           fi
 
+          # A section heading with no blank line before it is a heading some
+          # renderers read as part of the paragraph above. release-notes.sh
+          # cuts this file and the result is pasted onto the release page, and
+          # a release page cannot be fixed after the tag. Found one line away
+          # from shipping, left behind by a script that reordered entries.
+          glued=$(awk 'prev != "" && /^### / { print NR ": " $0 } { prev = $0 }' CHANGELOG.md)
+          if [ -n "$glued" ]; then
+            echo "a section heading has no blank line before it:" >&2
+            echo "$glued" >&2
+            exit 1
+          fi
+
           duplicate=$(
             awk '/^## \[/ { inside = ($0 ~ /Unreleased/) } inside && /^### / { print }' CHANGELOG.md |
               sort | uniq -d
