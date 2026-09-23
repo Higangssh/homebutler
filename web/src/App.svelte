@@ -160,7 +160,7 @@
       </div>
 
       <div class="grid">
-        <ProxmoxCard />
+        <ProxmoxCard {canAct} />
         <StatusCard server={selectedServer} />
         <DockerCard server={selectedServer} {canAct} />
         <ProcessCard server={selectedServer} />
