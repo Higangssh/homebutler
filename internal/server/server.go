@@ -373,6 +373,10 @@ func (s *Server) capabilityHandlers() map[string]http.HandlerFunc {
 			"proxmox_guest_start":    s.demoGuestAction("start"),
 			"proxmox_guest_reboot":   s.demoGuestAction("reboot"),
 			"proxmox_guest_shutdown": s.demoGuestAction("shutdown"),
+			"backup_list":            s.demoBackupList,
+			"install_list":           s.demoInstallList,
+			"install_status":         s.demoInstallStatus,
+			"proxmox_guests":         s.demoProxmoxGuests,
 		}
 	}
 	return map[string]http.HandlerFunc{
@@ -403,6 +407,10 @@ func (s *Server) capabilityHandlers() map[string]http.HandlerFunc {
 		"proxmox_guest_reboot":   s.proxmoxGuestAction(proxmox.GuestActionReboot),
 		"proxmox_guest_shutdown": s.proxmoxGuestAction(proxmox.GuestActionShutdown),
 		"doctor":                 s.handleDoctor,
+		"backup_list":            s.handleBackupList,
+		"install_list":           s.handleInstallList,
+		"install_status":         s.handleInstallStatus,
+		"proxmox_guests":         s.handleProxmoxGuests,
 	}
 }
 

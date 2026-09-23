@@ -4,11 +4,17 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### ⚠️ Behavior changes
+
+- **Four capabilities that recorded `no view built for it yet` now have HTTP routes.** `backup_list`, `install_list`, `install_status` and `proxmox_guests` answer `GET /api/backup`, `/api/install`, `/api/install/{app}` and `/api/proxmox/guests`. Nothing that worked stops working — they are reads, and like every other read they are registered with or without a token. Anything branching on the registry's absence list will see four fewer entries
+
 ### ✨ Features
 
 - the dashboard can run the fourteen actions that were waiting on a rule (#242, #263). #154 gave it a write surface for *settings* and decided nothing about running an action, so fourteen capabilities pointed at a closed issue. They are on three tiers now, decided by one question — can this be undone by doing something else? **Ten run on the click that asks for them**: a restarted container comes back, a started guest can be shut down, an extra archive is an extra file. **`docker_stop` and `proxmox_guest_shutdown` take an explicit `confirm`**, because the service is down until somebody starts it. **`backup_restore` and `install_purge` take the target's name typed back**, because a click cannot say which thing the operator meant to lose and neither comes back. Asking twice for the first ten would buy nothing and teach people to click through confirmations, which is what the other two tiers depend on not happening
 
 - the tiers are frozen at 1.0 and the golden file records which one each route is (#242). It used to derive protection from the difference between a tokened and an untokened server, which can only say whether a token is needed — so all three tiers rendered as `token` and a capability moving between them was invisible. It reads the declared tier now
+
+- three actions were reachable, correct, and impossible for anyone but our own dashboard to call (#272). `backup_restore` takes the name of an archive and no route returned one. `install_purge` takes the name of an app and no route listed them. The three Proxmox guest actions take a `vmid`, a `node` and a `type`, and nothing served the guests. Our dashboard would have known those values because it fetched them from somewhere; any other caller had nowhere to fetch them from, and **that was about to be frozen at 1.0**. `backup_list`, `install_list`, `install_status` and `proxmox_guests` have HTTP routes now. Every route that acts on a named thing declares where the name comes from, and a test fails when that source is not a read this API exposes — the rule being that an endpoint taking an identifier exists alongside one producing it. The other thirteen absences stay absent: the line is not whether a read has a sibling but whether the write beside it can be used without it
 
 - the watch list can be changed from the screen that shows it (#272). Adding a target, removing one and checking every target now are the first tier — a target removed by mistake is a target added back, and a check that was not needed costs one poll — so all three run on the click that asked for them and none of them stops to ask. Two answers that were not errors now read as what they are: `watch add` for something already on the list says so instead of reporting a save, and `watch check` says whether it found anything rather than only that it ran. Adding a target while no service is installed says the obvious thing out loud, because the list records nothing until something polls it
 
