@@ -249,3 +249,33 @@ export function saveSnapshot() {
 export function getDoctor() {
   return fetchJSON('/api/doctor');
 }
+
+// Actions.
+//
+// Every one of these is a POST the server gates on a protection tier, and the
+// tier is the reason the calls do not share one helper: an action that runs on
+// the click that asked for it and an action that needs the target's name typed
+// back are not the same interaction with a flag set.
+//
+// A dashboard with no token does not get a 401 from these — the routes are not
+// registered at all, so the answer is 404. That is deliberate on the server
+// side, and it means the screen has to know from /api/config whether it can
+// act, rather than finding out by calling and reading a status code.
+
+// Restart runs on the click. The container comes back, so a second question
+// would be asking about something that undoes itself.
+export function restartContainer(name, server) {
+  return fetchJSON(withServer(`/api/docker/${encodeURIComponent(name)}/restart`, server), {
+    method: 'POST',
+  });
+}
+
+// Stop takes an explicit confirm, because nothing here starts it again: there
+// is no start tool, and the service is down until somebody goes and does it.
+export function stopContainer(name, server) {
+  return fetchJSON(withServer(`/api/docker/${encodeURIComponent(name)}/stop`, server), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ confirm: true }),
+  });
+}
