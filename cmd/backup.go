@@ -10,6 +10,7 @@ import (
 func newBackupCmd() *cobra.Command {
 	var service string
 	var backupTo string
+	var exclude []string
 
 	cmd := &cobra.Command{
 		Use:   "backup",
@@ -31,7 +32,7 @@ Use --to to specify a custom backup destination.`,
 				backupDir = cfg.ResolveBackupDir()
 			}
 
-			result, err := backup.Run(backupDir, service, cfg.ResolveBackupRetention())
+			result, err := backup.Run(backupDir, service, cfg.ResolveBackupRetention(), exclude)
 			if err != nil {
 				return err
 			}
@@ -41,6 +42,7 @@ Use --to to specify a custom backup destination.`,
 
 	cmd.Flags().StringVar(&service, "service", "", "Backup a specific service only")
 	cmd.Flags().StringVar(&backupTo, "to", "", "Custom backup destination")
+	cmd.Flags().StringSliceVar(&exclude, "exclude", nil, "Host path not to archive; repeatable. Covers bind mounts at or under it")
 
 	cmd.AddCommand(newBackupListCmd())
 	cmd.AddCommand(newDrillCmd())

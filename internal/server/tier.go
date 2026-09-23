@@ -66,3 +66,27 @@ func bodyString(r *http.Request, key string) string {
 	v, _ := bodyFields(r)[key].(string)
 	return v
 }
+
+// bodyStrings reads a JSON array of strings from the request body, and takes a
+// bare string as a list of one.
+func bodyStrings(r *http.Request, key string) []string {
+	switch val := bodyFields(r)[key].(type) {
+	case string:
+		if val == "" {
+			return nil
+		}
+		return []string{val}
+	case []any:
+		out := make([]string, 0, len(val))
+		for _, item := range val {
+			if s, ok := item.(string); ok && s != "" {
+				out = append(out, s)
+			}
+		}
+		if len(out) == 0 {
+			return nil
+		}
+		return out
+	}
+	return nil
+}

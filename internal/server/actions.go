@@ -40,7 +40,7 @@ func (s *Server) handleDockerStop(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleBackupCreate(w http.ResponseWriter, r *http.Request) {
 	cfg := s.config()
-	result, err := backup.Run(cfg.ResolveBackupDir(), bodyString(r, "service"), cfg.ResolveBackupRetention())
+	result, err := backup.Run(cfg.ResolveBackupDir(), bodyString(r, "service"), cfg.ResolveBackupRetention(), bodyStrings(r, "exclude"))
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return

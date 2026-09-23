@@ -5,7 +5,7 @@
 ## tools
 alerts risk=read args=[server:string]
 alerts_history risk=read args=[server:string]
-backup_create risk=write args=[server:string service:string to:string]
+backup_create risk=write args=[exclude:array<string> server:string service:string to:string]
 backup_drill risk=write args=[all:boolean app:string archive:string server:string]
 backup_list risk=read args=[server:string]
 backup_restore risk=destructive args=[archive:string server:string service:string] required=[archive]

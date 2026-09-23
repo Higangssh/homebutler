@@ -85,6 +85,24 @@ func output(data any, jsonOut bool) error {
 			}
 			fmt.Printf("  %d kept, %s total.\n", p.Kept, backup.FormatSize(p.KeptSum))
 		}
+		// Named individually, for the same reason the removed backups are.
+		// What an archive does not contain is the thing somebody restoring
+		// from it most needs to have been told, and the archive is where they
+		// will read it — this is only the copy at the time.
+		if len(v.Skipped) > 0 {
+			fmt.Printf("\n  Excluded %d bind mount(s), recorded in the archive:\n", len(v.Skipped))
+			for _, name := range v.Skipped {
+				fmt.Printf("    %s\n", name)
+			}
+		}
+		// A misspelled path backs up the terabytes it was meant to avoid, and
+		// the archive size is the only other place that shows up.
+		if len(v.UnmatchedExcludes) > 0 {
+			fmt.Printf("\n⚠️  %d --exclude path(s) matched no bind mount, so nothing was left out for them:\n", len(v.UnmatchedExcludes))
+			for _, name := range v.UnmatchedExcludes {
+				fmt.Printf("    %s\n", name)
+			}
+		}
 	case *backup.RestoreResult:
 		fmt.Printf("Restore complete from: %s\n", v.Archive)
 		fmt.Printf("  Services: %s\n", strings.Join(v.Services, ", "))

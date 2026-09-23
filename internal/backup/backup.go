@@ -17,6 +17,13 @@ type Mount struct {
 	Name        string `json:"name"`        // volume name or host path
 	Source      string `json:"source"`      // host path
 	Destination string `json:"destination"` // container path
+
+	// Excluded marks a mount the archive deliberately does not contain. The
+	// mount stays in the manifest: a restore months later has to be able to
+	// tell "this service had a media directory and it is not in here" from
+	// "this service had no media directory", and an omitted entry says the
+	// second.
+	Excluded bool `json:"excluded,omitempty"`
 }
 
 // ServiceInfo holds container and mount info for a compose service.
@@ -32,6 +39,12 @@ type Manifest struct {
 	Version   string        `json:"version"`
 	CreatedAt string        `json:"created_at"`
 	Services  []ServiceInfo `json:"services"`
+
+	// Excluded is what the operator asked to leave out, written into the
+	// archive rather than only reported at the time. The person reading this
+	// is restoring, possibly months later, and what is missing is the thing
+	// they most need told.
+	Excluded []string `json:"excluded,omitempty"`
 }
 
 // BackupResult is returned after a successful backup.
@@ -44,6 +57,15 @@ type BackupResult struct {
 	// Pruned is what retention removed after this backup was written, and is
 	// absent when retention is not configured — which is the default.
 	Pruned *PruneResult `json:"pruned,omitempty"`
+
+	// Skipped names the bind mounts left out, as service:path. Absent when
+	// nothing was excluded.
+	Skipped []string `json:"skipped,omitempty"`
+
+	// UnmatchedExcludes are paths that were asked for and matched no mount.
+	// A misspelled path silently backs up the terabytes it was meant to
+	// avoid, and the archive size is the only other place that shows up.
+	UnmatchedExcludes []string `json:"unmatched_excludes,omitempty"`
 }
 
 // ListEntry represents a single backup in the list.
@@ -75,7 +97,7 @@ const archiveStampLayout = "2006-01-02_150405.000"
 // Retention is applied after the archive is written and only if writing it
 // succeeded. Pruning before, or on the way out of a failure, would delete
 // history to make room for a backup that does not exist.
-func Run(backupDir, service string, retention RetentionConfig) (*BackupResult, error) {
+func Run(backupDir, service string, retention RetentionConfig, exclude []string) (*BackupResult, error) {
 	projects, err := listComposeProjects()
 	if err != nil {
 		return nil, fmt.Errorf("failed to list compose projects: %w", err)
@@ -137,12 +159,32 @@ func Run(backupDir, service string, retention RetentionConfig) (*BackupResult, e
 
 	// Backup volumes
 	volumeCount := 0
-	for _, svc := range allServices {
-		for _, m := range svc.Mounts {
-			if err := backupMount(m, volDir); err != nil {
+	var skipped []string
+	matched := make(map[string]bool, len(exclude))
+	for i := range allServices {
+		svc := &allServices[i]
+		for j := range svc.Mounts {
+			m := &svc.Mounts[j]
+			if pattern, ok := excludedBy(*m, exclude); ok {
+				// Recorded on the mount, not dropped from it: the manifest is
+				// what a restore reads, and a service that had a media
+				// directory needs to look different from one that never did.
+				m.Excluded = true
+				matched[pattern] = true
+				skipped = append(skipped, svc.Name+":"+m.Source)
+				continue
+			}
+			if err := backupMount(*m, volDir); err != nil {
 				return nil, fmt.Errorf("failed to backup mount %s: %w", m.Name, err)
 			}
 			volumeCount++
+		}
+	}
+
+	var unmatched []string
+	for _, pattern := range exclude {
+		if !matched[cleanExclude(pattern)] {
+			unmatched = append(unmatched, pattern)
 		}
 	}
 
@@ -151,6 +193,7 @@ func Run(backupDir, service string, retention RetentionConfig) (*BackupResult, e
 		Version:   "1",
 		CreatedAt: time.Now().Format(time.RFC3339),
 		Services:  allServices,
+		Excluded:  exclude,
 	}
 	manifestData, err := json.MarshalIndent(manifest, "", "  ")
 	if err != nil {
@@ -185,10 +228,12 @@ func Run(backupDir, service string, retention RetentionConfig) (*BackupResult, e
 	}
 
 	result := &BackupResult{
-		Archive:  archivePath,
-		Services: svcNames,
-		Volumes:  volumeCount,
-		Size:     size,
+		Archive:           archivePath,
+		Services:          svcNames,
+		Volumes:           volumeCount,
+		Size:              size,
+		Skipped:           skipped,
+		UnmatchedExcludes: unmatched,
 	}
 
 	if !retention.IsZero() {
@@ -442,4 +487,39 @@ func FormatSize(bytes int64) string {
 	default:
 		return fmt.Sprintf("%d B", bytes)
 	}
+}
+
+// cleanExclude normalises a path the way the mount sources are compared, so
+// `/mnt/media/` and `/mnt/media` are the same exclusion.
+func cleanExclude(path string) string {
+	return filepath.Clean(strings.TrimSpace(path))
+}
+
+// excludedBy reports which exclusion, if any, covers a mount.
+//
+// Only bind mounts have a host path to match. A named volume is Docker's own
+// directory and excluding it would be a different feature with a different
+// argument — matching a volume's name against a path would mostly be a way to
+// exclude nothing while looking like it worked.
+//
+// A directory under an excluded one is excluded too: somebody who says
+// /mnt/media means the media, and a compose file that mounts
+// /mnt/media/movies separately has not changed their mind. The comparison is
+// on path boundaries, so /mnt/media-backup is not covered by /mnt/media.
+func excludedBy(m Mount, exclude []string) (string, bool) {
+	if m.Type != "bind" || m.Source == "" {
+		return "", false
+	}
+	source := filepath.Clean(m.Source)
+	for _, raw := range exclude {
+		// Cleaning is what stops an empty --exclude from matching everything:
+		// filepath.Clean("") is ".", which neither equals nor prefixes an
+		// absolute mount source. Used raw it would be "", and "" + "/" is the
+		// prefix of every absolute path there is.
+		pattern := cleanExclude(raw)
+		if source == pattern || strings.HasPrefix(source, pattern+string(filepath.Separator)) {
+			return pattern, true
+		}
+	}
+	return "", false
 }
