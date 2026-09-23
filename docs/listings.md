@@ -41,6 +41,7 @@ wrong.
 | `charm-and-friends/charm-in-the-wild` | PR against System Management, alphabetical |
 | Glama | rebuilds itself from the README — the one entry here a commit still fixes |
 | GitHub repository description and topics | repository settings, not a file |
+| ClawHub | `skills/SKILL.md` published as `@higangssh/homebutler`; a new version has to be pushed |
 | homebutler.dev | the `homebutler-site` repository, which builds on its own push |
 
 The list is incomplete by nature. Add a row when you find one rather than
@@ -49,6 +50,13 @@ remembering it.
 Glama is the exception in the table: it regrades from the README, so a commit
 here reaches it and nobody has to open anything. Every other row needs a person
 who remembers. Check which kind a row is before you go and fix it.
+
+ClawHub is the row that costs the most when it goes stale, because what is
+there is not a description of the product — it is a file an agent installs and
+follows. `cmd/skill_test.go` pins every command and tool name in
+`skills/SKILL.md`, which is the copy in this repository; the published copy is
+whatever was last pushed. In September 2026 that was 9,891 bytes against
+11,297 here, two corrections behind.
 
 ## Writing an entry somewhere else
 
