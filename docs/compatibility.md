@@ -72,17 +72,25 @@ than this API, and for anyone who is not our own dashboard there is nowhere
 else — which makes it half an API rather than a small gap.
 
 This was found by building the screens. `POST /api/backup/restore` took an
-archive name and there was no route that returned one; `POST
+archive name and there was no route that returned one, and `POST
 /api/install/{app}/purge` took an app name and there was no route that listed
-apps; the three Proxmox guest actions took a `vmid`, a `node` and a `type`, and
-nothing served the guests. All three actions were reachable, correct and
-uncallable by anyone who had not already been told the answer. They were about
-to be frozen that way.
+apps. Both were reachable, correct and uncallable by anyone who had not
+already been told the answer, and they were about to be frozen that way.
 
 `backup_list`, `install_list`, `install_status` and `proxmox_guests` have
 routes now. Each route that acts on a named thing declares where that name
 comes from — `capability.HTTP.Target` — and a test fails when the source is
 not a read this API exposes.
+
+**`proxmox_guests` is in that list and was not one of the blocked ones.** It
+was added saying the guest actions had no source for their `vmid`, `node` and
+`type`, and that was wrong: `proxmox_status` returns `resources.guests`, with
+all three on every entry, and the dashboard's Proxmox card had been rendering
+that table since before the actions existed. By the rule above it belonged
+with `proxmox_node` and `proxmox_tasks` — an extra view, not a prerequisite.
+The route stays, because it is the filtered one the guest screen reads and
+undoing a published route costs more than it saves, but the reason recorded
+for it was not true and the correction belongs where the claim was made.
 
 The other thirteen absences stay absent, and the line is not "does it have a
 sibling" but **can the write next to it be used without this read**.
