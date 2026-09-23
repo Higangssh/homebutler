@@ -21,6 +21,7 @@
   import ConfigCard from './lib/ConfigCard.svelte';
   import ReportCard from './lib/ReportCard.svelte';
   import WatchCard from './lib/WatchCard.svelte';
+  import AppsCard from './lib/AppsCard.svelte';
   import ProxmoxCard from './lib/ProxmoxCard.svelte';
 
   let servers = $state([]);
@@ -132,6 +133,11 @@
       >Watch</button>
       <button
         class="tab"
+        class:active={activeTab === 'apps'}
+        onclick={() => activeTab = 'apps'}
+      >Apps</button>
+      <button
+        class="tab"
         class:active={activeTab === 'config'}
         onclick={() => activeTab = 'config'}
       >Config</button>
@@ -166,6 +172,8 @@
       <ReportCard />
     {:else if activeTab === 'watch'}
       <WatchCard {canAct} />
+    {:else if activeTab === 'apps'}
+      <AppsCard {canAct} />
     {:else}
       <ConfigCard />
     {/if}

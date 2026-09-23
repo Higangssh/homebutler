@@ -31,14 +31,21 @@ func (s *Server) handleInstallList(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, install.List())
 }
 
-// handleInstallStatus answers for one app. An unknown name is a 404 rather
-// than an empty state: "this app is not installed" and "there is no such app"
-// are different answers, and a caller deciding whether to install reads them
-// differently.
+// handleInstallStatus answers for one app.
+//
+// Three answers, and they are three: a name that is not in the catalogue is a
+// 404, an app in the catalogue that has never been installed is
+// installed:false, and anything else is a failure. Not installed is the
+// ordinary state of almost every entry — this route answered 500 for it until
+// a screen asked.
 func (s *Server) handleInstallStatus(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("app")
 	if _, ok := install.Registry[name]; !ok {
 		writeError(w, http.StatusNotFound, "unknown app "+name)
+		return
+	}
+	if !install.Installed(name) {
+		writeJSON(w, map[string]any{"app": name, "installed": false})
 		return
 	}
 	state, err := install.Status(name)
@@ -46,7 +53,7 @@ func (s *Server) handleInstallStatus(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	writeJSON(w, map[string]any{"app": name, "state": state})
+	writeJSON(w, map[string]any{"app": name, "installed": true, "state": state})
 }
 
 // handleProxmoxGuests lists the guests on an endpoint, filtered the way the

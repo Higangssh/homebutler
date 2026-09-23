@@ -812,7 +812,13 @@ func (s *Server) demoInstallStatus(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, "unknown app "+name)
 		return
 	}
-	writeJSON(w, map[string]any{"app": name, "state": "running"})
+	// One installed app and one that is not, so a screen has both states to
+	// render without the demo pretending everything is installed.
+	if name != "uptime-kuma" {
+		writeJSON(w, map[string]any{"app": name, "installed": false})
+		return
+	}
+	writeJSON(w, map[string]any{"app": name, "installed": true, "state": "running"})
 }
 
 func (s *Server) demoProxmoxGuests(w http.ResponseWriter, r *http.Request) {
