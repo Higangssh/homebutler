@@ -32,19 +32,23 @@ failing. Nothing checks that they still describe the same product as the README
 
 ## Copies in someone else's tree
 
-A pull request is the only way to change any of these, and none of them tell you
-when they have gone wrong.
+None of these are in this tree, and none of them tell you when they have gone
+wrong.
 
 | Where | How it changes |
 |---|---|
 | `punkpeye/awesome-mcp-servers` | PR against the Monitoring section |
 | `charm-and-friends/charm-in-the-wild` | PR against System Management, alphabetical |
-| Glama | rebuilt from the README; `glama.json` only names the maintainer |
+| Glama | rebuilds itself from the README — the one entry here a commit still fixes |
 | GitHub repository description and topics | repository settings, not a file |
 | homebutler.dev | the `homebutler-site` repository, which builds on its own push |
 
 The list is incomplete by nature. Add a row when you find one rather than
 remembering it.
+
+Glama is the exception in the table: it regrades from the README, so a commit
+here reaches it and nobody has to open anything. Every other row needs a person
+who remembers. Check which kind a row is before you go and fix it.
 
 ## Writing an entry somewhere else
 
