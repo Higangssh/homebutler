@@ -157,6 +157,31 @@ Both of these happened here on the same afternoon:
 So check the edit took before running anything: count the occurrences first,
 print how many were replaced, or delete by line number rather than by text.
 
+There is a second failure mode, and it is quieter, because it looks like
+success. **A check passing is an answer to the question the check asks, which
+is not always the question you meant to ask.**
+
+`CHANGELOG.md` had two `## [Unreleased]` headings. The CI step that exists for
+exactly this fails when `[Unreleased]` repeats a *section* heading — and with
+two blocks, each section heading appears once in each, so there was no
+duplicate to find and the step passed. The check was not broken. It was asking
+"is anything repeated inside this block" when the thing to ask was "is there
+one block".
+
+Nothing would have said so. `release-notes.sh` cuts from a version heading to
+the next `## [`, so the release page would have carried the first block and
+silently dropped the second. It was found by renaming the heading the way a
+release PR renames it and running the script:
+
+```bash
+$ scripts/release-notes.sh 0.39.0 CHANGELOG.probe.md | grep '^### '
+### ✨ Features
+```
+
+One section, where the file has two. Run the thing that consumes the output,
+on the input it will really get, and read what comes out — a green check is
+evidence about the check, and that is all it is.
+
 ### Changing something other people build on
 
 Tool names, JSON fields, risk classes, `doctor`'s exit codes, documented config
