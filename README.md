@@ -21,6 +21,8 @@
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License: MIT"></a>
   <a href="https://github.com/Higangssh/homebutler/releases"><img src="https://img.shields.io/github/v/release/Higangssh/homebutler" alt="Release"></a>
   <a href="https://glama.ai/mcp/servers/Higangssh/homebutler"><img src="https://glama.ai/mcp/servers/Higangssh/homebutler/badges/score.svg" alt="homebutler MCP server"></a>
+  <a href="https://coveralls.io/github/Higangssh/homebutler?branch=main"><img src="https://coveralls.io/repos/github/Higangssh/homebutler/badge.svg?branch=main" alt="Coverage Status"></a>
+  <a href="https://pkg.go.dev/github.com/Higangssh/homebutler"><img src="https://pkg.go.dev/badge/github.com/Higangssh/homebutler.svg" alt="Go Reference"></a>
 </p>
 
 <p align="center">

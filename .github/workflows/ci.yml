@@ -172,13 +172,40 @@ jobs:
       - name: Build
         run: go build ./...
 
+      # One run, not two. The suite waits on real timeouts in internal/network
+      # and internal/remote, so running it again only to measure it doubled the
+      # slowest job in CI for a number that was then thrown away.
       - name: Test
-        run: go test ./... -v -race
+        run: go test ./... -v -race -coverprofile=coverage.out
 
-      - name: Test coverage
+      # The number used to go to stdout of a job nobody opens. The summary is
+      # on the checks page of the pull request that changed it.
+      #
+      # This will not equal the badge, and neither is wrong: `go tool cover`
+      # reports covered *statements* and Coveralls reports covered *lines*.
+      # The first upload from here measured 60.7% and 63% of the same file.
+      # Compare either number against itself over time, never against the
+      # other one.
+      - name: Coverage
         run: |
-          go test ./... -coverprofile=coverage.out
-          go tool cover -func=coverage.out | tail -1
+          total=$(go tool cover -func=coverage.out | tail -1 | awk '{print $NF}')
+          echo "Total coverage: **$total**" >> "$GITHUB_STEP_SUMMARY"
+          echo "total coverage: $total"
+
+      # Coveralls holds the previous value, which is the part a log cannot do:
+      # the delta arrives on the pull request while the diff that caused it is
+      # still on screen.
+      #
+      # Skipped for pull requests from forks, where GITHUB_TOKEN is read-only
+      # and the upload fails. A contributor's PR is not the place to turn a
+      # coverage report into a red check.
+      - name: Publish coverage
+        if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
+        uses: coverallsapp/github-action@v2
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          file: coverage.out
+          format: golang
 
   build:
     name: Build (${{ matrix.goos }}/${{ matrix.goarch }})
