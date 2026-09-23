@@ -10,11 +10,13 @@ All notable changes to this project will be documented in this file.
 
 - the tiers are frozen at 1.0 and the golden file records which one each route is (#242). It used to derive protection from the difference between a tokened and an untokened server, which can only say whether a token is needed — so all three tiers rendered as `token` and a capability moving between them was invisible. It reads the declared tier now
 
-## [Unreleased]
-
 ### 📚 Documentation
 
 - tool descriptions said what a tool is for and not what calling it does (#258). Glama grades every MCP tool definition it indexes, and ours came back the same way almost across the board: 5/5 on purpose, 2/5 on behaviour transparency and on usage guidelines. The three that scored above 4.0 were the only three with a second clause. Twenty-three descriptions now have one, each written from the code rather than from the name — `docker_stop` says nothing here starts it again, because there is no start tool; `alerts_history` says an empty list means nothing was recording rather than nothing went wrong; `report` says it moves the window every later comparison is measured from. The other twenty-one were left alone: `wake` sending a magic packet is complete as it stands, and conciseness is graded too. Tool names and input schemas are frozen at 1.0 and none of them changed
+
+### ♻️ Internal
+
+- `[Unreleased]` had been written twice, and the check for exactly this could not see it. #251 added a step that fails when `[Unreleased]` repeats a section heading, because `release-notes.sh` cuts a section whole. Two `## [Unreleased]` headings slip past it: the repeated `###` headings are one in each block, so there is nothing to find. The release PR renames a heading, singular — the second block would have stayed behind, and the notes, which run from the version heading to the next `## [`, would have ended there. Cutting notes from the file as it stood publishes the Features section and drops the Documentation one. CI now counts the heading as well
 
 ## [0.38.0](https://github.com/Higangssh/homebutler/compare/v0.37.0...v0.38.0) - 2026-09-21
 

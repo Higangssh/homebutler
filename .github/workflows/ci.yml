@@ -78,6 +78,19 @@ jobs:
           # cuts the section whole, so it reaches the release page as two
           # Fixes blocks. Until now the merge happened because a person did it
           # while preparing the release.
+          # The heading itself first. Two [Unreleased] sections read as one
+          # while nobody looks, and the check below never fires because the
+          # repeated section headings are one in each block. The release PR
+          # renames a heading, singular, so the second block would stay behind
+          # and release-notes.sh — which cuts from the version heading to the
+          # next `## [` — would end the notes there and publish half of them.
+          count=$(grep -c '^## \[Unreleased\]' CHANGELOG.md || true)
+          if [ "$count" -gt 1 ]; then
+            echo "CHANGELOG.md has $count [Unreleased] headings; there can be one." >&2
+            echo "The release notes are cut from a version heading to the next one, so the entries under the second would not be published." >&2
+            exit 1
+          fi
+
           duplicate=$(
             awk '/^## \[/ { inside = ($0 ~ /Unreleased/) } inside && /^### / { print }' CHANGELOG.md |
               sort | uniq -d
