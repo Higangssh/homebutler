@@ -180,6 +180,12 @@ jobs:
 
       # The number used to go to stdout of a job nobody opens. The summary is
       # on the checks page of the pull request that changed it.
+      #
+      # This will not equal the badge, and neither is wrong: `go tool cover`
+      # reports covered *statements* and Coveralls reports covered *lines*.
+      # The first upload from here measured 60.7% and 63% of the same file.
+      # Compare either number against itself over time, never against the
+      # other one.
       - name: Coverage
         run: |
           total=$(go tool cover -func=coverage.out | tail -1 | awk '{print $NF}')
