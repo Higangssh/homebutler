@@ -50,6 +50,18 @@ refused. A foreground dashboard is exposed for as long as somebody is watching
 the terminal; an installed one is exposed until it is uninstalled, and the
 refusal names both ways out — set `web.token`, or bind `127.0.0.1`.
 
+That refusal happens once, and the config file outlives it. `doctor` checks the
+same thing on every run, because removing `web.token` afterwards leaves the
+installed dashboard answering the network with nothing in front of it and
+nothing fails to say so:
+
+```
+❌ [exposure] The installed dashboard answers the network with no token
+   It is running on 0.0.0.0:8080 and ~/.config/homebutler/config.yaml has no
+   web.token, so anyone who can reach this machine gets the dashboard.
+   → Set web.token, or reinstall it on 127.0.0.1.
+```
+
 Access from another machine via SSH tunnel:
 
 ```bash

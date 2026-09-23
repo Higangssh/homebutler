@@ -280,3 +280,89 @@ func TestCheckBackupSize_SilentOnceRetentionIsConfigured(t *testing.T) {
 func staticDrills(records ...backup.DrillRecord) func(string) ([]backup.DrillRecord, error) {
 	return func(string) ([]backup.DrillRecord, error) { return records, nil }
 }
+
+// The drift `serve install` cannot catch. Installing refuses a reachable bind
+// with no token, and that decision is made once — the config file outlives it.
+func TestAnInstalledDashboardThatLostItsTokenIsAFailure(t *testing.T) {
+	r := &Result{}
+	checkDashboard(r, &config.Config{Path: "/home/x/config.yaml"}, func() InstalledDashboard {
+		return InstalledDashboard{Installed: true, Unit: "/u/serve.plist", Host: "0.0.0.0", Port: 8080, Addressed: true}
+	})
+
+	finding := findingFor(t, r, "exposure")
+	if finding.Severity != SeverityFail {
+		t.Errorf("severity = %q, want fail: this is an open unauthenticated port", finding.Severity)
+	}
+	// The refusal at install time names both ways out, and so does this: which
+	// one is right depends on something homebutler cannot see.
+	if !strings.Contains(finding.Action, "web.token") || !strings.Contains(finding.Action, "127.0.0.1") {
+		t.Errorf("action names only one way out: %q", finding.Action)
+	}
+	if !strings.Contains(finding.Detail, "0.0.0.0:8080") {
+		t.Errorf("detail does not say where it is listening: %q", finding.Detail)
+	}
+}
+
+func TestATokenedDashboardOnTheNetworkPasses(t *testing.T) {
+	r := &Result{}
+	checkDashboard(r, &config.Config{Web: config.WebConfig{Token: "s"}}, func() InstalledDashboard {
+		return InstalledDashboard{Installed: true, Unit: "/u", Host: "0.0.0.0", Port: 8080, Addressed: true}
+	})
+	if f := findingFor(t, r, "exposure"); f.Severity != SeverityPass {
+		t.Errorf("severity = %q, want pass", f.Severity)
+	}
+}
+
+// Loopback with no token is what `serve install` allows, so doctor must not
+// then complain about it.
+func TestALoopbackDashboardWithNoTokenIsNotAFinding(t *testing.T) {
+	for _, host := range []string{"127.0.0.1", "localhost", "::1"} {
+		r := &Result{}
+		checkDashboard(r, &config.Config{}, func() InstalledDashboard {
+			return InstalledDashboard{Installed: true, Unit: "/u", Host: host, Port: 8080, Addressed: true}
+		})
+		f := findingFor(t, r, "exposure")
+		if f.Severity != SeverityPass {
+			t.Errorf("%s: severity = %q, want pass", host, f.Severity)
+		}
+	}
+}
+
+// Most machines have no dashboard installed, and doctor saying anything about
+// one would be doctor inventing a subject.
+func TestNoDashboardMeansNoFinding(t *testing.T) {
+	r := &Result{}
+	checkDashboard(r, &config.Config{}, func() InstalledDashboard { return InstalledDashboard{} })
+	for _, f := range r.Findings {
+		if f.Category == "exposure" {
+			t.Errorf("reported %q about a dashboard that is not installed", f.Title)
+		}
+	}
+}
+
+// A unit that names no address cannot be judged. Guessing loopback would be
+// the reassuring guess, and that is the wrong direction to guess in.
+func TestAUnitWithNoAddressIsNotAssumedSafe(t *testing.T) {
+	r := &Result{}
+	checkDashboard(r, &config.Config{}, func() InstalledDashboard {
+		return InstalledDashboard{Installed: true, Unit: "/u/serve.plist"}
+	})
+	f := findingFor(t, r, "exposure")
+	if f.Severity == SeverityPass {
+		t.Errorf("a unit that states no address was reported as fine: %+v", f)
+	}
+	if !strings.Contains(f.Detail, "cannot tell") {
+		t.Errorf("detail does not say it could not tell: %q", f.Detail)
+	}
+}
+
+func findingFor(t *testing.T, r *Result, category string) Finding {
+	t.Helper()
+	for _, f := range r.Findings {
+		if f.Category == category {
+			return f
+		}
+	}
+	t.Fatalf("no %s finding in %+v", category, r.Findings)
+	return Finding{}
+}

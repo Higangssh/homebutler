@@ -74,6 +74,10 @@ var cliOnly = map[string]string{
 	// quietly and doctor reports the same finding again, with nothing to show
 	// that anything was installed (#157).
 	"homebutler watch install": "installs a service whose unit would record the wrong binary path when run through anything but the installed binary",
+	// Same unit, same reason, and one more: reinstalling opens a port. An
+	// agent deciding on its own which address the dashboard should answer on
+	// is the decision serve install exists to make a person take.
+	"homebutler serve install": "installs a service whose unit would record the wrong binary path when run through anything but the installed binary, and chooses what address a dashboard answers on",
 }
 
 // classifyCommand reports who can run command, and the tool when one can.
@@ -188,6 +192,21 @@ type CollectFuncs struct {
 	// and where it is. Injected so the check is testable without a systemd or
 	// launchd on the machine running the tests.
 	WatchServiceFn func() (bool, string)
+	// ServeServiceFn reports the installed dashboard, for the same reason.
+	ServeServiceFn func() InstalledDashboard
+}
+
+// InstalledDashboard is what a supervised `serve` says about itself, read out
+// of the unit the supervisor runs rather than from a record kept beside it.
+type InstalledDashboard struct {
+	Installed bool
+	Unit      string
+	Host      string
+	Port      int
+	// Addressed is false for a unit that names no --host and --port. A unit
+	// written by hand, or by a version that did not put them there, is one
+	// this check cannot judge rather than one it should judge as loopback.
+	Addressed bool
 }
 
 // DefaultCollectFuncs returns real doctor data sources.
@@ -270,6 +289,7 @@ func Run(cfg *config.Config, fns CollectFuncs, opts Options) (*Result, error) {
 	checkWatching(r, fns.WatchDir, fns.WatchServiceFn)
 	checkWatchNotifications(r, cfg, fns.WatchDir)
 	checkConfigPermissions(r, cfg)
+	checkDashboard(r, cfg, fns.ServeServiceFn)
 	checkNotifications(r, cfg)
 	checkReportBaseline(r, fns.SnapshotDir)
 	checkProxmox(r, cfg, fns.ProxmoxOpenFn)
@@ -705,6 +725,102 @@ func checkConfigPermissions(r *Result, cfg *config.Config) {
 		cfg.Path+" can be read by any user on this machine, and homebutler will refuse to load it.",
 		"Restrict it to your account.",
 		"chmod 600 "+cfg.Path)
+}
+
+// checkDashboard answers the question `serve install` cannot.
+//
+// Installing refuses to bind past loopback with no token configured, and that
+// is a decision made once. The config file outlives it: remove web.token
+// afterwards — by editing it, or by restoring an older copy — and a dashboard
+// installed on 0.0.0.0 with authentication goes on running without it. Nothing
+// fails. The service is not restarted, the write routes stop being registered
+// rather than start refusing, and from outside it is indistinguishable from a
+// dashboard that was always read-only.
+//
+// What it deliberately does not do is ask whether the service is up. That
+// would mean opening a socket, and doctor is the command people run when
+// something is already wrong — the same reason checkWatching answers about
+// the unit file rather than about systemd.
+func checkDashboard(r *Result, cfg *config.Config, serveFn func() InstalledDashboard) {
+	if serveFn == nil {
+		serveFn = defaultInstalledDashboard
+	}
+	dashboard := serveFn()
+	if !dashboard.Installed {
+		return
+	}
+
+	// A unit that states no address is one this cannot judge. Guessing
+	// loopback would be the reassuring guess, and reassuring is the wrong
+	// direction to guess in.
+	if !dashboard.Addressed {
+		r.add(SeverityWarn, "exposure",
+			"An installed dashboard does not say what it binds",
+			dashboard.Unit+" names no --host and --port, so homebutler cannot tell whether it is reachable from the network.",
+			"Reinstall it so the unit records its address.",
+			"homebutler serve install --force")
+		return
+	}
+
+	address := fmt.Sprintf("%s:%d", dashboard.Host, dashboard.Port)
+	token := ""
+	if cfg != nil {
+		token = cfg.Web.Token
+	}
+
+	if token == "" && !loopbackHost(dashboard.Host) {
+		r.add(SeverityFail, "exposure",
+			"The installed dashboard answers the network with no token",
+			fmt.Sprintf("It is running on %s and %s has no web.token, so anyone who can reach this machine gets the dashboard. serve install refuses this, which means the token was removed after it was installed.", address, configPathFor(cfg)),
+			"Set web.token, or reinstall it on 127.0.0.1 — which one is right depends on whether it is meant to be reachable.",
+			"homebutler serve install --host 127.0.0.1 --force")
+		return
+	}
+
+	detail := "Reachable only from this machine."
+	if !loopbackHost(dashboard.Host) {
+		detail = "Reachable from the network, and web.token is set."
+	}
+	r.add(SeverityPass, "exposure",
+		"Dashboard installed on "+address, detail, "", "")
+}
+
+// loopbackHost reports whether binding host exposes the dashboard only to the
+// machine it runs on. The same four spellings cmd/serve.go refuses on.
+func loopbackHost(host string) bool {
+	switch host {
+	case "127.0.0.1", "localhost", "::1", "[::1]":
+		return true
+	}
+	return false
+}
+
+func configPathFor(cfg *config.Config) string {
+	if cfg == nil || cfg.Path == "" {
+		return "the config file"
+	}
+	return cfg.Path
+}
+
+// defaultInstalledDashboard reads the unit the supervisor actually runs. The
+// address comes out of its arguments rather than from anything written
+// alongside, so this cannot report a port nothing is bound to.
+func defaultInstalledDashboard() InstalledDashboard {
+	unit := service.Serve("", 0)
+	installed, path := service.InstalledUnit(unit)
+	if !installed {
+		return InstalledDashboard{}
+	}
+	kind, err := service.Detect()
+	if err != nil {
+		return InstalledDashboard{Installed: true, Unit: path}
+	}
+	content, err := os.ReadFile(path)
+	if err != nil {
+		return InstalledDashboard{Installed: true, Unit: path}
+	}
+	host, port, ok := service.Address(service.UnitArgs(kind, string(content)))
+	return InstalledDashboard{Installed: true, Unit: path, Host: host, Port: port, Addressed: ok}
 }
 
 func checkNotifications(r *Result, cfg *config.Config) {
