@@ -82,11 +82,34 @@ func TestExposedCapabilitiesCarryTheProtectionTheirRiskNeeds(t *testing.T) {
 				t.Errorf("%s is a write reachable from a browser and is protected by %q, not a token", c.Tool.Name, c.HTTP.Protection)
 			}
 		case RiskDestructive:
-			if c.HTTP.Protection != ProtectionTokenAndConfirm {
-				t.Errorf("%s is destructive and reachable from a browser without a confirmation", c.Tool.Name)
+			// Not "is there a gate" but "is it the gate this one's tier
+			// calls for". A destructive action that can be undone by doing
+			// something else takes a second confirmation; one that cannot
+			// takes the target's name, because a click cannot say which
+			// thing the operator meant to lose.
+			want := destructiveTier[c.Tool.Name]
+			if want == "" {
+				t.Errorf("%s is destructive and reachable from a browser and no tier was decided for it", c.Tool.Name)
+				continue
+			}
+			if c.HTTP.Protection != want {
+				t.Errorf("%s is tier %q and its route asks for %q", c.Tool.Name, want, c.HTTP.Protection)
 			}
 		}
 	}
+}
+
+// destructiveTier records which of the two destructive tiers each one is in,
+// decided in #242 by whether doing something else undoes it. Keeping it here
+// rather than reading it back off the route is the point: the test would pass
+// trivially if it asked the registry what the registry says.
+var destructiveTier = map[string]Protection{
+	// Reversible: the service comes back when it is started again.
+	"docker_stop":            ProtectionTokenAndConfirm,
+	"proxmox_guest_shutdown": ProtectionTokenAndConfirm,
+	// Not reversible: the data is gone.
+	"backup_restore": ProtectionTokenAndName,
+	"install_purge":  ProtectionTokenAndName,
 }
 
 // wake is the one write a browser could always reach, because it sends a magic
@@ -99,6 +122,19 @@ func TestEveryExposedWriteIsOneWeChose(t *testing.T) {
 		"wake":        "the wake button; sends a magic packet on the local network",
 		"notify_test": "the settings screen's test button; sends one message through channels the operator configured",
 		"report":      "the Report tab's save button; writes a snapshot, which moves the window the next comparison covers. Reading the comparison is GET /api/report, which saves nothing",
+
+		// #263: the action tier. Every one of these is undone by doing
+		// something else, which is why none of them asks twice.
+		"docker_restart":       "the container card's restart button; the container comes back",
+		"backup_create":        "the backup screen; an extra archive is an extra file",
+		"backup_drill":         "the backup screen; boots a copy beside the live app and removes it either way",
+		"install_app":          "the app catalogue; shows its pre-flight and the host port it will bind before it runs",
+		"install_uninstall":    "the app screen; stops the app and leaves its data, which install_purge is the one that does not",
+		"watch_add":            "the watch screen; writes the list, and the supervisor is a separate install the operator does",
+		"watch_remove":         "the watch screen; the incidents it recorded stay",
+		"watch_check":          "the watch screen's check button; reads the targets and records what it found",
+		"proxmox_guest_start":  "the Proxmox screen; a started guest can be shut down",
+		"proxmox_guest_reboot": "the Proxmox screen; the guest comes back",
 	}
 
 	for _, c := range Registry {
@@ -160,6 +196,17 @@ func TestDestructiveAbsencesNameTheDestructiveDecision(t *testing.T) {
 			if c.HTTP.Absent != AbsentNoActionRuleYet {
 				t.Errorf("%s is a write and waits on %q", c.Tool.Name, c.HTTP.Absent)
 			}
+		}
+	}
+}
+
+// The tiers go out of GET /api/capabilities and are frozen at 1.0, so a tier
+// written at the call site would be a promise nobody could count. Same closed
+// set as the absence reasons, for the same reason.
+func TestProtectionsAreFromTheClosedSet(t *testing.T) {
+	for _, c := range Registry {
+		if !protections[c.HTTP.Protection] {
+			t.Errorf("%s asks for %q, which is not one of the tiers", c.Tool.Name, c.HTTP.Protection)
 		}
 	}
 }

@@ -70,9 +70,23 @@ GET /api/watch protection=none
 GET /api/watch/incidents protection=none
 GET /api/watch/incidents/{id} protection=none
 OPTIONS /api/ protection=none
+POST /api/backup protection=token
+POST /api/backup/drill protection=token
+POST /api/backup/restore protection=token+name
+POST /api/docker/{name}/restart protection=token
+POST /api/docker/{name}/stop protection=token+confirm
+POST /api/install/{app} protection=token
+POST /api/install/{app}/purge protection=token+name
+POST /api/install/{app}/uninstall protection=token
 POST /api/notify/test protection=token
+POST /api/proxmox/guests/{vmid}/reboot protection=token
+POST /api/proxmox/guests/{vmid}/shutdown protection=token+confirm
+POST /api/proxmox/guests/{vmid}/start protection=token
 POST /api/report/snapshot protection=token
 POST /api/wake/{name} protection=token
+POST /api/watch/check protection=token
+POST /api/watch/targets protection=token
+POST /api/watch/targets/{name}/remove protection=token
 PUT /api/config/alerts protection=token
 PUT /api/config/notify protection=token
 PUT /api/config/proxmox protection=token
@@ -127,36 +141,22 @@ watch_remove: WatchRemoveResult
 
 ## absent
 alerts_history: no-view-yet
-backup_create: no-action-rule-yet
-backup_drill: no-action-rule-yet
 backup_list: no-view-yet
-backup_restore: no-destructive-rule-yet
 config_validate: no-view-yet
 docker_inspect: no-view-yet
 docker_logs: no-view-yet
-docker_restart: no-action-rule-yet
-docker_stop: no-destructive-rule-yet
 docker_top: no-view-yet
-install_app: no-action-rule-yet
 install_list: no-view-yet
-install_purge: no-destructive-rule-yet
 install_status: no-view-yet
-install_uninstall: no-action-rule-yet
 inventory_export: no-view-yet
 inventory_scan: no-view-yet
 network_scan: no-view-yet
-proxmox_guest_reboot: no-action-rule-yet
-proxmox_guest_shutdown: no-destructive-rule-yet
-proxmox_guest_start: no-action-rule-yet
 proxmox_guests: no-view-yet
 proxmox_node: no-view-yet
 proxmox_script_command: no-view-yet
 proxmox_script_list: no-view-yet
 proxmox_task_status: no-view-yet
 proxmox_tasks: no-view-yet
-watch_add: no-action-rule-yet
-watch_check: no-action-rule-yet
-watch_remove: no-action-rule-yet
 
 ## json
 report.Report.compared_to?:string

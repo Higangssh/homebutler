@@ -24,7 +24,7 @@ promise — the golden file there fails the build when any of it moves.
 | **The `category` vocabulary** | The eleven words a `doctor` finding can carry, documented in the README |
 | **`doctor` exit codes** | Including under `--strict` |
 | **Documented config keys** | Everything in [configuration.md](configuration.md) keeps its name and meaning |
-| **HTTP routes and their protection** | The path, the method, and whether a token is required. A route that quietly stops needing one is the change nobody sees |
+| **HTTP routes and their protection** | The path, the method, and what the tier below asks the caller to bring. A route that quietly stops needing one is the change nobody sees |
 | **Which decision an absence waits on** | A capability the dashboard cannot reach records why. The sentence is prose and improves; the decision it names is frozen, so a tool quietly moving from "waiting on a rule" to "never" is a diff. Additive change after 1.0 is allowed — [the registry](../internal/capability/capability.go) is what says how much is still coming |
 
 A field whose value is a sentence — `report --json`'s `status` and `warnings`,
@@ -34,6 +34,27 @@ are written for a person and get better; nothing should be parsing them. Where
 a caller needs a value rather than a sentence, the value is a typed field of
 its own, and if one is missing that is a bug worth reporting rather than a
 reason to split a string.
+
+### What a browser has to bring
+
+Three tiers, decided by one question — can this be undone by doing something
+else? All three are frozen: a capability moving between them changes what a
+dashboard has to ask for before it acts.
+
+| Tier | The caller sends | Who is in it |
+| --- | --- | --- |
+| **action** | a token | the click that asks for it is the whole ceremony. `docker_restart`, `backup_create`, `backup_drill`, `install_app`, `install_uninstall`, `watch_add`, `watch_remove`, `watch_check`, `proxmox_guest_start`, `proxmox_guest_reboot` |
+| **destructive, reversible** | a token and `confirm: true` | the service comes back when it is started again. `docker_stop`, `proxmox_guest_shutdown` |
+| **destructive, not reversible** | a token and `confirm_name` equal to the target | the data is gone, and a click cannot say which thing the operator meant to lose. `backup_restore`, `install_purge` |
+
+The ten in the first tier are there on purpose. Asking twice for something that
+is undone by doing something else buys no safety and teaches people to click
+through confirmations — and the two tiers under it depend on a confirmation
+still meaning something when one appears.
+
+A route whose tier requires anything is not registered at all without a token,
+so reaching it unauthenticated gets a 404 rather than a 401: a surface that
+answers is a surface to be reached the moment the check is got wrong.
 
 ## Not frozen
 
