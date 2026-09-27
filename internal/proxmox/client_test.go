@@ -61,7 +61,7 @@ func TestClientRequests(t *testing.T) {
 	if resources, err := client.Resources(ctx); err != nil || len(resources.Guests) != 3 {
 		t.Fatalf("Resources() = %#v, %v", resources, err)
 	}
-	if status, err := client.NodeStatus(ctx, "pve1"); err != nil || status.CPUInfo.CPUs != 16 {
+	if status, err := client.NodeStatus(ctx, "pve1"); err != nil || status.CPUInfo.CPUs == nil || *status.CPUInfo.CPUs != 16 {
 		t.Fatalf("NodeStatus() = %#v, %v", status, err)
 	}
 	if tasks, err := client.Tasks(ctx, "pve1"); err != nil || len(tasks) != 3 {
@@ -226,7 +226,8 @@ func TestNodeStatusAndTasksFixtures(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if status.BootInfo.SecureBoot || status.CPU == nil || *status.CPU != 0.012113083387472 || status.Memory.Total == nil || *status.Memory.Total != 30261309440 {
+		// secureboot:0 is a reported off, which is not the same as not reported.
+		if status.BootInfo.SecureBoot == nil || *status.BootInfo.SecureBoot || status.CPU == nil || *status.CPU != 0.012113083387472 || status.Memory.Total == nil || *status.Memory.Total != 30261309440 {
 			t.Errorf("NodeStatus() = %#v", status)
 		}
 	})
@@ -727,4 +728,70 @@ func colonHex(value []byte) string {
 		parts = append(parts, encoded[i:i+2])
 	}
 	return strings.Join(parts, ":")
+}
+
+// Proxmox sends the repository id as repoid and we write it as repo_id. The
+// struct only had the second name, so the field was dropped on the way in
+// and proxmox_status never showed it.
+func TestVersionReadsTheRepositoryIDProxmoxSends(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write(readFixture(t, "version-pve9.json"))
+	}))
+	defer server.Close()
+
+	version, err := testClient(t, server.URL).Version(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := Version{Version: "9.1.4", Release: "9.1", RepoID: "sanitized-repo"}
+	if version != want {
+		t.Errorf("decoded %+v, want %+v", version, want)
+	}
+	out, err := json.Marshal(version)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := string(out); got != `{"version":"9.1.4","release":"9.1","repo_id":"sanitized-repo"}` {
+		t.Errorf("written as %s", got)
+	}
+}
+
+// A count or a flag Proxmox did not send is left out; one it sent as 0 or
+// false is written as 0 or false. Writing the first as the second tells an
+// agent a node has no cores, or that secure boot is off, when nobody said so.
+func TestNodeStatusSaysOnlyWhatProxmoxSent(t *testing.T) {
+	for _, c := range []struct {
+		name, body string
+		want       map[string]bool
+	}{
+		{"absent", `{"cpuinfo":{"mhz":"3000"},"boot-info":{"mode":"efi"}}`,
+			map[string]bool{"cores": false, "cpus": false, "user_hz": false, "secureboot": false}},
+		{"zero", `{"cpuinfo":{"cores":0,"cpus":0,"user_hz":0},"boot-info":{"mode":"efi","secureboot":0}}`,
+			map[string]bool{"cores": true, "cpus": true, "user_hz": true, "secureboot": true}},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			var status NodeStatus
+			if err := json.Unmarshal([]byte(c.body), &status); err != nil {
+				t.Fatal(err)
+			}
+			out, err := json.Marshal(status)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var written struct {
+				CPUInfo  map[string]any `json:"cpuinfo"`
+				BootInfo map[string]any `json:"boot_info"`
+			}
+			if err := json.Unmarshal(out, &written); err != nil {
+				t.Fatal(err)
+			}
+			for key, want := range c.want {
+				_, inCPU := written.CPUInfo[key]
+				_, inBoot := written.BootInfo[key]
+				if got := inCPU || inBoot; got != want {
+					t.Errorf("%s present = %v, want %v, in %s", key, got, want, out)
+				}
+			}
+		})
+	}
 }

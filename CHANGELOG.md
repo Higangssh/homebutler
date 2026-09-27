@@ -10,6 +10,7 @@ All notable changes to this project will be documented in this file.
 - **The Proxmox guest actions declare `type` as `qemu` or `lxc`** (#288). Those were already the only two values accepted, so every call that worked before still works; the schema now says so instead of the description
 - **`report --json`, `doctor --json` and `status --json` carry `schema_version: 1`** (#288), as do the matching MCP tools and dashboard routes. After 1.0 a new field cannot be added without a caller guessing whether its absence means an older homebutler, so the version goes in before the freeze. It is on the top-level document only: the `system` object nested inside `report` and `inventory_scan` does not carry one, because there it would read as the version of the document around it
 - **`report` warns when it cannot read the previous snapshot** (#289). It used to treat an unreadable snapshot exactly like having none: the run became a baseline, and the note said *First inspection — no previous snapshot found*. So a damaged file, or a format change in an upgrade, ended the comparison history with nothing on the screen to show it. It is still a baseline, and the report is not stopped, but `warnings` now names the file and the reason, and the note says nothing was compared. A first run, with no snapshot at all, says nothing new
+- **`proxmox_node` leaves out a count or flag Proxmox did not send** (#PR). `cpuinfo.cores`, `cpuinfo.cpus`, `cpuinfo.user_hz` and `boot_info.secureboot` were written as `0` or `false` when Proxmox left them out, which told an agent a node had no cores or secure boot off when nobody had said so. They are now left out in that case, and written as before when Proxmox sends them, `0` and `false` included
 
 ### ✨ Features
 
@@ -18,6 +19,8 @@ All notable changes to this project will be documented in this file.
 ### 🐛 Fixes
 
 - the demo dashboard answered a Proxmox guest action with `vmid` as a string (#288). The real route sends a number. The guest action result had been written out four times, once each for the MCP tool, the CLI, the route and the demo, and only the demo's copy had drifted. There is one `proxmox.GuestActionResult` now, and all four use it
+
+- `proxmox_status` never showed the repository id Proxmox reports (#PR). Proxmox sends it as `repoid`, and the struct only knew the name it is written under, `repo_id`, so the value was dropped on the way in. The key was always declared and never appeared
 
 ### 🧪 Tests
 
