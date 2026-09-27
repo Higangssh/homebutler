@@ -6,9 +6,9 @@ All notable changes to this project will be documented in this file.
 
 ### ⚠️ Behavior changes
 
-- **Six count arguments are declared as integers instead of strings or numbers** (#288). `docker_logs` `lines`, `processes` `limit`, `watch_history` `limit`, `install_app` `port`, `report` `keep` and `doctor` `backup_max_age_hours`. A call that sends `"50"` still works exactly as before, and a test holds both spellings; what changed is what the schema tells an agent to send. 1.0 freezes the schema, and a count left as a string would have stayed one
+- **Six count arguments are declared as integers instead of strings or numbers** (#288). `docker_logs` `lines`, `processes` `limit`, `watch_history` `limit`, `install_app` `port`, `report` `keep` and `doctor` `backup_max_age_hours`. A call that sends `"50"` still works exactly as before, and a test holds both spellings; what changed is what the schema tells an agent to send. `keep` and `backup_max_age_hours` were `number`, and a fractional value sent to either was already cut to a whole one; the schema now says so. 1.0 freezes the schema, and a count left as a string would have stayed one
 - **The Proxmox guest actions declare `type` as `qemu` or `lxc`** (#288). Those were already the only two values accepted, so every call that worked before still works; the schema now says so instead of the description
-- **`report --json`, `doctor --json` and `status --json` carry `schema_version: 1`** (#288), as do the matching MCP tools and dashboard routes. After 1.0 a new field cannot be added without a caller guessing whether its absence means an older homebutler, so the version goes in before the freeze. `status` is nested inside `report` and `inventory_scan`, and those copies carry it too
+- **`report --json`, `doctor --json` and `status --json` carry `schema_version: 1`** (#288), as do the matching MCP tools and dashboard routes. After 1.0 a new field cannot be added without a caller guessing whether its absence means an older homebutler, so the version goes in before the freeze. It is on the top-level document only: the `system` object nested inside `report` and `inventory_scan` does not carry one, because there it would read as the version of the document around it
 
 ### ✨ Features
 

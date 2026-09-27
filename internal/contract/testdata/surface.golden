@@ -135,7 +135,7 @@ proxmox_status: passthrough
 proxmox_task_status: passthrough
 proxmox_tasks: passthrough
 report: Report
-system_status: StatusInfo
+system_status: StatusDoc
 wake: WakeResult
 watch_add: WatchAddResult
 watch_check: RunResult
@@ -198,7 +198,6 @@ report.Report.system?.memory.usage_percent:float64
 report.Report.system?.memory.used_gb:float64
 report.Report.system?.memory:MemInfo
 report.Report.system?.os:string
-report.Report.system?.schema_version:int
 report.Report.system?.time:string
 report.Report.system?.uptime:string
 report.Report.system?:?StatusInfo
@@ -258,7 +257,6 @@ system.StatusInfo.memory.usage_percent:float64
 system.StatusInfo.memory.used_gb:float64
 system.StatusInfo.memory:MemInfo
 system.StatusInfo.os:string
-system.StatusInfo.schema_version:int
 system.StatusInfo.time:string
 system.StatusInfo.uptime:string
 alerts.AlertResult.cpu.current:float64
@@ -398,7 +396,6 @@ inventory.Inventory.system.memory.usage_percent:float64
 inventory.Inventory.system.memory.used_gb:float64
 inventory.Inventory.system.memory:MemInfo
 inventory.Inventory.system.os:string
-inventory.Inventory.system.schema_version:int
 inventory.Inventory.system.time:string
 inventory.Inventory.system.uptime:string
 inventory.Inventory.system:?StatusInfo
@@ -481,6 +478,24 @@ system.ProcessResult.zombies?.rss:int64
 system.ProcessResult.zombies?.state?:string
 system.ProcessResult.zombies?.zombie?:bool
 system.ProcessResult.zombies?:[]ProcessInfo
+system.StatusDoc.arch:string
+system.StatusDoc.cpu.cores:int
+system.StatusDoc.cpu.usage_percent:float64
+system.StatusDoc.cpu:CPUInfo
+system.StatusDoc.disks.mount:string
+system.StatusDoc.disks.total_gb:float64
+system.StatusDoc.disks.usage_percent:float64
+system.StatusDoc.disks.used_gb:float64
+system.StatusDoc.disks:[]DiskInfo
+system.StatusDoc.hostname:string
+system.StatusDoc.memory.total_gb:float64
+system.StatusDoc.memory.usage_percent:float64
+system.StatusDoc.memory.used_gb:float64
+system.StatusDoc.memory:MemInfo
+system.StatusDoc.os:string
+system.StatusDoc.schema_version:int
+system.StatusDoc.time:string
+system.StatusDoc.uptime:string
 wake.WakeResult.action:string
 wake.WakeResult.broadcast:string
 wake.WakeResult.mac:string

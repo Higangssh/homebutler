@@ -43,7 +43,7 @@ func passthrough(who string) Output { return Output{Passthrough: who} }
 // docs/compatibility.md says so.
 var ToolOutputs = map[string]Output{
 	// Reads of the machine, all shapes we wrote.
-	"system_status":  frozen(system.StatusInfo{}),
+	"system_status":  frozen(system.StatusDoc{}),
 	"processes":      frozen(system.ProcessResult{}),
 	"open_ports":     frozen(ports.Result{}),
 	"network_scan":   frozen([]network.Device{}),

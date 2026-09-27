@@ -216,6 +216,10 @@ func tagKeys(t reflect.Type) []string {
 			continue
 		}
 		name, _, _ := strings.Cut(f.Tag.Get("json"), ",")
+		if embedded(f, name) {
+			out = append(out, tagKeys(f.Type)...)
+			continue
+		}
 		switch name {
 		case "-":
 			continue
@@ -259,6 +263,10 @@ func requiredKeys(t reflect.Type) []string {
 			continue
 		}
 		name, opts, _ := strings.Cut(f.Tag.Get("json"), ",")
+		if embedded(f, name) {
+			out = append(out, requiredKeys(f.Type)...)
+			continue
+		}
 		if name == "-" || strings.Contains(opts, "omitempty") {
 			continue
 		}
@@ -268,4 +276,18 @@ func requiredKeys(t reflect.Type) []string {
 		out = append(out, name)
 	}
 	return out
+}
+
+// embedded reports an untagged embedded struct, whose keys encoding/json
+// promotes into the outer object. system.StatusDoc is one: its keys are
+// StatusInfo's, not a key named StatusInfo.
+func embedded(f reflect.StructField, name string) bool {
+	if !f.Anonymous || name != "" {
+		return false
+	}
+	t := f.Type
+	for t.Kind() == reflect.Pointer {
+		t = t.Elem()
+	}
+	return t.Kind() == reflect.Struct
 }

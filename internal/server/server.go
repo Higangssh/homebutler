@@ -541,7 +541,7 @@ func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	writeJSON(w, info)
+	writeJSON(w, system.Document(info))
 }
 
 func (s *Server) handleDocker(w http.ResponseWriter, r *http.Request) {
@@ -1023,7 +1023,7 @@ func (s *Server) handleServerStatus(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusInternalServerError, err.Error())
 			return
 		}
-		writeJSON(w, info)
+		writeJSON(w, system.Document(info))
 		return
 	}
 

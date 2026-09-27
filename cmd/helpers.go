@@ -206,7 +206,7 @@ func runLocalCommand(args []string) ([]byte, error) {
 		if err != nil {
 			return nil, err
 		}
-		return json.Marshal(info)
+		return json.Marshal(system.Document(info))
 	case "alerts":
 		alertCfg := &config.AlertConfig{CPU: 90, Memory: 85, Disk: 90}
 		result, err := alerts.Check(alertCfg)

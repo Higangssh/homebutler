@@ -430,7 +430,11 @@ func (s *Server) executeTool(name string, args map[string]any) (any, error) {
 
 	switch name {
 	case "system_status":
-		return system.Status()
+		info, err := system.Status()
+		if err != nil {
+			return nil, err
+		}
+		return system.Document(info), nil
 	case "docker_list":
 		return docker.List()
 	case "docker_restart":
