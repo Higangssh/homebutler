@@ -25,6 +25,7 @@ promise — the golden file there fails the build when any of it moves.
 | **The `category` vocabulary** | The eleven words a `doctor` finding can carry, documented in the README |
 | **Result vocabularies** | The words a result's `status` or `severity` can hold: `doctor` and `config_validate` severities, the `alerts` levels, the install outcomes, the `watch` kinds, the status of a docker, wake or Proxmox guest action, and the Proxmox guest action names. A new word is additive; a word removed or renamed is not |
 | **Argument enums** | Where a tool's input schema lists the words an argument accepts, as `watch_add`'s `kind` does |
+| **Snapshots an earlier release saved** | `report` compares against the newest file in `~/.homebutler/reports/snapshots/`, and one written by any release from 0.18.0 on is read and compared against. A key an older release wrote is not renamed or dropped. A snapshot that cannot be read makes a new baseline, with a warning that names the file |
 | **`doctor` exit codes** | Including under `--strict` |
 | **Documented config keys** | Everything in [configuration.md](configuration.md) keeps its name and meaning |
 | **HTTP routes and their protection** | The path, the method, and what the tier below asks the caller to bring. A route that quietly stops needing one is the change nobody sees |

@@ -2,7 +2,9 @@ package report
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"sort"
@@ -213,10 +215,17 @@ func Run(cfg *config.Config, fns CollectFuncs, opts Options) (*Report, error) {
 		snapshotDir = defaultSnapshotDir()
 	}
 
-	// Load the latest previous snapshot.
-	prev, _ := loadLatest(snapshotDir)
+	// Load the latest previous snapshot. None at all is a first run. One that
+	// exists and cannot be read is not: the run still becomes a baseline, but
+	// it says so, because otherwise a format change or a damaged file ends the
+	// comparison history with nothing on the screen to show it happened.
+	prev, err := loadLatest(snapshotDir)
+	unreadable := err != nil && !errors.Is(err, errNoSnapshots)
 
 	report := buildReport(snap, prev)
+	if unreadable {
+		report.Warnings = append(report.Warnings, "the previous snapshot could not be read, so nothing was compared: "+err.Error())
+	}
 
 	if opts.Keep < 1 {
 		opts.Keep = 1
@@ -231,13 +240,22 @@ func Run(cfg *config.Config, fns CollectFuncs, opts Options) (*Report, error) {
 			report.Warnings = append(report.Warnings, "retention cleanup: "+err.Error())
 		}
 	}
-	updateBaselineWording(report, opts.NoSave)
+	updateBaselineWording(report, opts.NoSave, unreadable)
 
 	return report, nil
 }
 
-func updateBaselineWording(r *Report, noSave bool) {
+func updateBaselineWording(r *Report, noSave, unreadable bool) {
 	if !r.IsBaseline {
+		return
+	}
+	if unreadable {
+		// Not a first inspection: there is history, and it could not be read.
+		if noSave {
+			r.NotableChanges = []ChangeLine{note("Nothing compared — the previous snapshot could not be read. --no-save skipped a new baseline.")}
+			return
+		}
+		r.NotableChanges = []ChangeLine{note("Nothing compared — the previous snapshot could not be read. A new baseline was created.")}
 		return
 	}
 	if noSave {
@@ -542,18 +560,26 @@ func saveSnapshot(dir string, snap *Snapshot) error {
 	return os.WriteFile(filepath.Join(dir, filename), data, 0o644)
 }
 
+// errNoSnapshots is a first run: nothing has been saved yet, which is not a
+// problem and is not reported as one.
+var errNoSnapshots = errors.New("no previous snapshots")
+
 func loadLatest(dir string) (*Snapshot, error) {
 	files, err := listSnapshotFiles(dir)
-	if err != nil || len(files) == 0 {
-		return nil, fmt.Errorf("no previous snapshots")
+	if errors.Is(err, fs.ErrNotExist) || (err == nil && len(files) == 0) {
+		return nil, errNoSnapshots
 	}
-	data, err := os.ReadFile(filepath.Join(dir, files[len(files)-1]))
+	if err != nil {
+		return nil, err
+	}
+	path := filepath.Join(dir, files[len(files)-1])
+	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, err
 	}
 	var snap Snapshot
 	if err := json.Unmarshal(data, &snap); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("%s: %w", path, err)
 	}
 	return &snap, nil
 }

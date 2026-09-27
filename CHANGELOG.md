@@ -9,6 +9,7 @@ All notable changes to this project will be documented in this file.
 - **Six count arguments are declared as integers instead of strings or numbers** (#288). `docker_logs` `lines`, `processes` `limit`, `watch_history` `limit`, `install_app` `port`, `report` `keep` and `doctor` `backup_max_age_hours`. A call that sends `"50"` still works exactly as before, and a test holds both spellings; what changed is what the schema tells an agent to send. `keep` and `backup_max_age_hours` were `number`, and a fractional value sent to either was already cut to a whole one; the schema now says so. 1.0 freezes the schema, and a count left as a string would have stayed one
 - **The Proxmox guest actions declare `type` as `qemu` or `lxc`** (#288). Those were already the only two values accepted, so every call that worked before still works; the schema now says so instead of the description
 - **`report --json`, `doctor --json` and `status --json` carry `schema_version: 1`** (#288), as do the matching MCP tools and dashboard routes. After 1.0 a new field cannot be added without a caller guessing whether its absence means an older homebutler, so the version goes in before the freeze. It is on the top-level document only: the `system` object nested inside `report` and `inventory_scan` does not carry one, because there it would read as the version of the document around it
+- **`report` warns when it cannot read the previous snapshot** (#289). It used to treat an unreadable snapshot exactly like having none: the run became a baseline, and the note said *First inspection — no previous snapshot found*. So a damaged file, or a format change in an upgrade, ended the comparison history with nothing on the screen to show it. It is still a baseline, and the report is not stopped, but `warnings` now names the file and the reason, and the note says nothing was compared. A first run, with no snapshot at all, says nothing new
 
 ### ✨ Features
 
@@ -24,6 +25,8 @@ All notable changes to this project will be documented in this file.
 
 - the words a status can hold are in the golden file, and so are the words an argument accepts (#287). The golden said a result's `status` was a string and not which strings, so `install_purge` could have stopped answering `purged`, or `watch_add` could have stopped taking `pm2`, and nothing failed. The install outcomes had been spelled separately by the MCP tool and the HTTP route. They and four other status sets are now named types with their words declared once. The JSON is unchanged
 
+
+- snapshots written by 0.18.0, 0.22.0, 0.26.0 and 0.39.0 are in the repository, and a test compares a report against each one (#289). Each was written by that release's own binary on a real machine, and the snapshot format changed at the first three. A second test fails when a key any of them holds is no longer read, because renaming a key decodes without an error and compares against a zero value
 ## [0.39.0](https://github.com/Higangssh/homebutler/compare/v0.38.0...v0.39.0) - 2026-09-23
 
 **Fourteen things homebutler can do had been waiting on a rule for what a browser must produce before it does them, and while that rule did not exist the dashboard could only look.** 0.35.1 gave it a write surface for *settings* (#154) and decided nothing about running an action, so fourteen capabilities sat in the registry pointing at an issue.
