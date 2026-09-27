@@ -53,21 +53,14 @@ the PR is still missing.
 Depth before breadth. Covering the existing targets thoroughly comes before
 adding new ones.
 
-Working toward 1.0, which freezes the MCP tool surface and the JSON schema:
+Comparing identities rather than counts (#58) and tracking processes and
+network rather than only observing them (#59) landed before 1.0, because they
+changed the shape of what `report` returns and 1.0 froze that shape.
 
-- Compare identities rather than counts, so a container swap is not read as no
-  change (#58)
-- Track processes and network rather than only observing them (#59)
-
-Those two are the question homebutler exists to answer, which is why they come
-before adding more things to ask it about. They also have to land before 1.0
-rather than after: they change the shape of what `report` returns, and 1.0
-freezes that shape.
-
-New targets generally wait until after 1.0, so open an issue before starting one.
-Work already discussed and agreed in an issue keeps the terms it was given.
-Proxmox is past its original scope — #104, #105 and #107 are in review, and #106
-is open and unclaimed.
+A new target is additive, so 1.0 does not stand in its way, but it is still a
+larger commitment than a change inside an existing one: open an issue before
+starting. Work already discussed and agreed in an issue keeps the terms it was
+given.
 
 ## Before submitting a PR
 
