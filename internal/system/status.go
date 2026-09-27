@@ -7,18 +7,20 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Higangssh/homebutler/internal/schema"
 	"github.com/Higangssh/homebutler/internal/util"
 )
 
 type StatusInfo struct {
-	Hostname string     `json:"hostname"`
-	OS       string     `json:"os"`
-	Arch     string     `json:"arch"`
-	Uptime   string     `json:"uptime"`
-	CPU      CPUInfo    `json:"cpu"`
-	Memory   MemInfo    `json:"memory"`
-	Disks    []DiskInfo `json:"disks"`
-	Time     string     `json:"time"`
+	SchemaVersion schema.Version `json:"schema_version"`
+	Hostname      string         `json:"hostname"`
+	OS            string         `json:"os"`
+	Arch          string         `json:"arch"`
+	Uptime        string         `json:"uptime"`
+	CPU           CPUInfo        `json:"cpu"`
+	Memory        MemInfo        `json:"memory"`
+	Disks         []DiskInfo     `json:"disks"`
+	Time          string         `json:"time"`
 }
 
 type CPUInfo struct {

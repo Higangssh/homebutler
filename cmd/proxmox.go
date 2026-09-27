@@ -281,7 +281,7 @@ func newProxmoxGuestActionCmd(action proxmox.GuestAction) *cobra.Command {
 			if err != nil {
 				return fmt.Errorf("submit Proxmox guest %s for endpoint %q node %q %s VMID %d: %w", action, endpoint.Name, node, guestType, vmid, err)
 			}
-			result := proxmoxGuestActionResult{
+			result := proxmox.GuestActionResult{
 				Endpoint: endpoint.Name, Node: node, Type: guestType, VMID: vmid,
 				Action: action, Status: proxmox.ActionAccepted, UPID: upid,
 			}
@@ -383,16 +383,6 @@ type proxmoxScriptCommandResult struct {
 	Slug    string `json:"slug"`
 	Command string `json:"command"`
 	Warning string `json:"warning"`
-}
-
-type proxmoxGuestActionResult struct {
-	Endpoint string               `json:"endpoint"`
-	Node     string               `json:"node"`
-	Type     string               `json:"type"`
-	VMID     int                  `json:"vmid"`
-	Action   proxmox.GuestAction  `json:"action"`
-	Status   proxmox.ActionStatus `json:"status"`
-	UPID     string               `json:"upid"`
 }
 
 type proxmoxTaskStatusResult struct {

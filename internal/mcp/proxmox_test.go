@@ -158,7 +158,7 @@ func TestProxmoxPhase2Dispatch(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			action := result.(proxmoxGuestActionResult)
+			action := result.(proxmox.GuestActionResult)
 			if action.Status != "accepted" || action.Action != tt.action || action.UPID != "UPID:pve1:opaque" || action.Type != tt.guestType {
 				t.Errorf("result = %#v", action)
 			}
@@ -288,7 +288,7 @@ func TestProxmoxPhase2Demo(t *testing.T) {
 	args := map[string]any{"endpoint": "pve", "node": "pve1", "type": "qemu", "vmid": 100, "confirm": true}
 	for _, name := range []string{"proxmox_guest_start", "proxmox_guest_reboot", "proxmox_guest_shutdown"} {
 		result, err := s.executeDemoTool(name, args)
-		if err != nil || result.(proxmoxGuestActionResult).Status != "accepted" {
+		if err != nil || result.(proxmox.GuestActionResult).Status != "accepted" {
 			t.Errorf("%s demo = %#v, %v", name, result, err)
 		}
 	}

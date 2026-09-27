@@ -92,9 +92,9 @@ var ToolOutputs = map[string]Output{
 	// so their field names are Proxmox's.
 	"proxmox_script_list":    frozen([]proxmox.Script{}),
 	"proxmox_script_command": frozen(ProxmoxScriptCommandResult{}),
-	"proxmox_guest_start":    frozen(proxmoxGuestActionResult{}),
-	"proxmox_guest_reboot":   frozen(proxmoxGuestActionResult{}),
-	"proxmox_guest_shutdown": frozen(proxmoxGuestActionResult{}),
+	"proxmox_guest_start":    frozen(proxmox.GuestActionResult{}),
+	"proxmox_guest_reboot":   frozen(proxmox.GuestActionResult{}),
+	"proxmox_guest_shutdown": frozen(proxmox.GuestActionResult{}),
 
 	"proxmox_status":      passthrough("the Proxmox API, inside an envelope of ours"),
 	"proxmox_guests":      passthrough("the Proxmox API"),

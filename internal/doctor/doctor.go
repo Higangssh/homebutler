@@ -15,6 +15,7 @@ import (
 	"github.com/Higangssh/homebutler/internal/inventory"
 	"github.com/Higangssh/homebutler/internal/ports"
 	"github.com/Higangssh/homebutler/internal/proxmox"
+	"github.com/Higangssh/homebutler/internal/schema"
 	"github.com/Higangssh/homebutler/internal/service"
 	"github.com/Higangssh/homebutler/internal/style"
 	"github.com/Higangssh/homebutler/internal/watch"
@@ -140,11 +141,12 @@ type Finding struct {
 
 // Result is the structured output of a doctor run.
 type Result struct {
-	Timestamp  string    `json:"timestamp"`
-	ServerName string    `json:"server_name"`
-	Status     string    `json:"status"`
-	Summary    Summary   `json:"summary"`
-	Findings   []Finding `json:"findings"`
+	SchemaVersion schema.Version `json:"schema_version"`
+	Timestamp     string         `json:"timestamp"`
+	ServerName    string         `json:"server_name"`
+	Status        string         `json:"status"`
+	Summary       Summary        `json:"summary"`
+	Findings      []Finding      `json:"findings"`
 }
 
 // Summary counts findings by severity.

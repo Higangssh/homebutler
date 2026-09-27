@@ -19,6 +19,7 @@ import (
 	"github.com/Higangssh/homebutler/internal/ports"
 	"github.com/Higangssh/homebutler/internal/proxmox"
 	"github.com/Higangssh/homebutler/internal/report"
+	"github.com/Higangssh/homebutler/internal/schema"
 	"github.com/Higangssh/homebutler/internal/system"
 	"github.com/Higangssh/homebutler/internal/wake"
 	"github.com/Higangssh/homebutler/internal/watch"
@@ -55,7 +56,7 @@ func (s *Server) executeDemoTool(name string, args map[string]any) (any, error) 
 		if err != nil {
 			return nil, err
 		}
-		return proxmoxGuestActionResult{
+		return proxmox.GuestActionResult{
 			Endpoint: request.Endpoint, Node: request.Node, Type: request.Type, VMID: request.VMID,
 			Action: request.Action, Status: proxmox.ActionAccepted, UPID: "UPID:" + request.Node + ":demo",
 		}, nil
@@ -75,7 +76,9 @@ func (s *Server) executeDemoTool(name string, args map[string]any) (any, error) 
 		_ = endpoint
 		return proxmox.TaskStatus{UPID: upid, Node: node, Type: "qmstart", ID: "100", User: "demo@pve", Status: "stopped", ExitStatus: "OK", Result: proxmox.TaskResult("stopped", "OK")}, nil
 	case "system_status":
-		return demoStatus(server), nil
+		status := demoStatus(server)
+		status["schema_version"] = schema.Current
+		return status, nil
 	case "docker_list":
 		// docker.List returns the containers themselves. The envelope with
 		// `available` belongs to the dashboard's /api/docker route, and the
@@ -148,10 +151,11 @@ func (s *Server) executeDemoTool(name string, args map[string]any) (any, error) 
 		return demoReport(server, !boolArg(args, "no_save")), nil
 	case "doctor":
 		return map[string]any{
-			"server_name": serverOrDefault(server),
-			"timestamp":   time.Now().UTC().Format(time.RFC3339),
-			"status":      "warn",
-			"summary":     map[string]any{"pass": 0, "warn": 2, "fail": 0},
+			"schema_version": schema.Current,
+			"server_name":    serverOrDefault(server),
+			"timestamp":      time.Now().UTC().Format(time.RFC3339),
+			"status":         "warn",
+			"summary":        map[string]any{"pass": 0, "warn": 2, "fail": 0},
 			"findings": []map[string]any{
 				{"severity": "warn", "category": "exposure", "title": "4 port(s) are listening on all interfaces", "action": "Make sure each one is intentional and protected.", "command": "homebutler inventory scan"},
 				{"severity": "warn", "category": "backup", "title": "Latest backup is older than expected", "action": "Run a fresh backup. If this app matters, follow up with a backup drill.", "command": "homebutler backup"},

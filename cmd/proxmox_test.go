@@ -404,7 +404,7 @@ func TestProxmoxGuestActions(t *testing.T) {
 				t.Fatalf("proxmox guest %s: %v", tt.action, err)
 			}
 
-			var result proxmoxGuestActionResult
+			var result proxmox.GuestActionResult
 			if err := json.Unmarshal(output.Bytes(), &result); err != nil {
 				t.Fatal(err)
 			}

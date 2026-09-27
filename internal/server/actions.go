@@ -241,9 +241,9 @@ func (s *Server) proxmoxGuestAction(action proxmox.GuestAction) http.HandlerFunc
 			writeError(w, http.StatusInternalServerError, err.Error())
 			return
 		}
-		writeJSON(w, map[string]any{
-			"endpoint": endpoint.Name, "node": node, "type": guestType,
-			"vmid": vmid, "action": string(action), "status": proxmox.ActionAccepted, "upid": upid,
+		writeJSON(w, proxmox.GuestActionResult{
+			Endpoint: endpoint.Name, Node: node, Type: guestType,
+			VMID: vmid, Action: action, Status: proxmox.ActionAccepted, UPID: upid,
 		})
 	}
 }

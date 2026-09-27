@@ -14,6 +14,7 @@ import (
 	"github.com/Higangssh/homebutler/internal/doctor"
 	"github.com/Higangssh/homebutler/internal/inventory"
 	"github.com/Higangssh/homebutler/internal/ports"
+	"github.com/Higangssh/homebutler/internal/schema"
 	"github.com/Higangssh/homebutler/internal/style"
 	"github.com/Higangssh/homebutler/internal/system"
 )
@@ -76,10 +77,11 @@ type Action struct {
 // held an em dash, an address and a port — which is reading prose with extra
 // steps, and the kind column exists to avoid exactly that.
 type Report struct {
-	Timestamp     string `json:"timestamp"`
-	ServerName    string `json:"server_name"`
-	IsBaseline    bool   `json:"is_baseline"`
-	SnapshotSaved bool   `json:"snapshot_saved"`
+	SchemaVersion schema.Version `json:"schema_version"`
+	Timestamp     string         `json:"timestamp"`
+	ServerName    string         `json:"server_name"`
+	IsBaseline    bool           `json:"is_baseline"`
+	SnapshotSaved bool           `json:"snapshot_saved"`
 
 	// System, Running, Stopped and PublicPorts are the values Status is
 	// rendered from. Status is the same information written for a person —
