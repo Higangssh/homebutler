@@ -27,7 +27,7 @@ All notable changes to this project will be documented in this file.
 
 - snapshots written by 0.18.0, 0.22.0, 0.26.0 and 0.39.0 are in the repository, and a test compares a report against each one (#289). Each was written by that release's own binary on a real machine, and the snapshot format changed at the first three. A second test fails when a key any of them holds is no longer read, because renaming a key decodes without an error and compares against a zero value
 
-- the five Proxmox reads are frozen like every other tool (#PR). They were recorded as passing Proxmox's own shape through, which was not true: each one decodes into a struct of ours and writes that struct's keys, and `resources.guests` renames `maxcpu` to `max_cpu` and splits `tags` into a list. The guest actions take their `vmid`, `node` and `type` from that list, so the shape a write depends on was outside the freeze. The values still follow Proxmox; the keys do not
+- the five Proxmox reads are frozen like every other tool (#290). They were recorded as passing Proxmox's own shape through, which was not true: each one decodes into a struct of ours and writes that struct's keys, and `resources.guests` renames `maxcpu` to `max_cpu` and splits `tags` into a list. The guest actions take their `vmid`, `node` and `type` from that list, so the shape a write depends on was outside the freeze. The values still follow Proxmox; the keys do not
 
 ## [0.39.0](https://github.com/Higangssh/homebutler/compare/v0.38.0...v0.39.0) - 2026-09-23
 
