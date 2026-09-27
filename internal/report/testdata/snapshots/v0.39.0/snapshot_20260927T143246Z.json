@@ -1,0 +1,256 @@
+{
+  "timestamp": "2026-09-27T14:32:46Z",
+  "server_name": "homelab-server",
+  "system": {
+    "hostname": "homelab-server",
+    "os": "linux",
+    "arch": "arm64",
+    "uptime": "15d 6h",
+    "cpu": {
+      "usage_percent": 0,
+      "cores": 4
+    },
+    "memory": {
+      "total_gb": 7.75,
+      "used_gb": 0.51,
+      "usage_percent": 6.66
+    },
+    "disks": [
+      {
+        "mount": "/",
+        "total_gb": 59,
+        "used_gb": 7.1,
+        "usage_percent": 13
+      }
+    ],
+    "time": "2026-09-27T14:32:46Z"
+  },
+  "containers": [
+    {
+      "id": "40c84388ee5c",
+      "name": "hb-fixture-c",
+      "image": "alpine",
+      "status": "Stopped · 7s ago",
+      "state": "exited",
+      "ports": ""
+    },
+    {
+      "id": "05fcf603364d",
+      "name": "hb-fixture-b",
+      "image": "nginx:alpine",
+      "status": "Running · 9s",
+      "state": "running",
+      "ports": "0.0.0.0:18081-\u003e80/tcp, [::]:18081-\u003e80/tcp"
+    },
+    {
+      "id": "2641c295808d",
+      "name": "hb-fixture-a",
+      "image": "alpine",
+      "status": "Running · 19s",
+      "state": "running",
+      "ports": ""
+    }
+  ],
+  "ports": [
+    {
+      "protocol": "tcp",
+      "address": "127.0.0.53%lo",
+      "port": "53"
+    },
+    {
+      "protocol": "tcp",
+      "address": "127.0.0.54",
+      "port": "53"
+    },
+    {
+      "protocol": "tcp",
+      "address": "0.0.0.0",
+      "port": "22"
+    },
+    {
+      "protocol": "tcp",
+      "address": "0.0.0.0",
+      "port": "18081",
+      "container": "hb-fixture-b (nginx:alpine)"
+    },
+    {
+      "protocol": "tcp",
+      "address": "[::]",
+      "port": "22"
+    },
+    {
+      "protocol": "tcp",
+      "address": "[::]",
+      "port": "18081",
+      "container": "hb-fixture-b (nginx:alpine)"
+    }
+  ],
+  "processes": [
+    {
+      "name": "(sd-pam)",
+      "hash": "0d897431b48d"
+    },
+    {
+      "name": "ModemManager",
+      "hash": "7e61f1940400"
+    },
+    {
+      "name": "agetty",
+      "hash": "0dfd06e659fc"
+    },
+    {
+      "name": "agetty",
+      "hash": "fd7be7cca9de"
+    },
+    {
+      "name": "avahi-daemon",
+      "hash": "ee0ff61fbaf0"
+    },
+    {
+      "name": "avahi-daemon",
+      "hash": "c4f9e518a947"
+    },
+    {
+      "name": "bash",
+      "hash": "7987c9033f23"
+    },
+    {
+      "name": "brcmf_wdog/mmc1:0001:1",
+      "hash": "afa097ff0316"
+    },
+    {
+      "name": "card1-crtc0",
+      "hash": "5f7fe03500e9"
+    },
+    {
+      "name": "card1-crtc1",
+      "hash": "d27963dc33fa"
+    },
+    {
+      "name": "card1-crtc2",
+      "hash": "167c9396887c"
+    },
+    {
+      "name": "card1-crtc3",
+      "hash": "5df15194ff65"
+    },
+    {
+      "name": "cec-vc4-hdmi-0",
+      "hash": "24dd983cae85"
+    },
+    {
+      "name": "cec-vc4-hdmi-1",
+      "hash": "7bea9eee68c2"
+    },
+    {
+      "name": "containerd",
+      "hash": "5475e93b3281"
+    },
+    {
+      "name": "cron",
+      "hash": "f9b9d8b405b7"
+    },
+    {
+      "name": "dbus-daemon",
+      "hash": "67e4db6b3f3c"
+    },
+    {
+      "name": "dockerd",
+      "hash": "aa74e5628f0b"
+    },
+    {
+      "name": "hwrng",
+      "hash": "43e6a739530e"
+    },
+    {
+      "name": "polkitd",
+      "hash": "23349296b78f"
+    },
+    {
+      "name": "pool_workqueue_release",
+      "hash": "edc49c77e9fa"
+    },
+    {
+      "name": "ps"
+    },
+    {
+      "name": "psimon",
+      "hash": "1113a0e7cba3"
+    },
+    {
+      "name": "rsyslogd",
+      "hash": "2aa70e73c921"
+    },
+    {
+      "name": "snapd",
+      "hash": "7086c70635d5"
+    },
+    {
+      "name": "spi0",
+      "hash": "d6de410c708c"
+    },
+    {
+      "name": "spi10",
+      "hash": "8a082e7c4843"
+    },
+    {
+      "name": "sshd",
+      "hash": "3c15abfc3b54"
+    },
+    {
+      "name": "sshd",
+      "hash": "a8f3f4764f90"
+    },
+    {
+      "name": "sshd",
+      "hash": "dc676ed3f3d7"
+    },
+    {
+      "name": "systemd",
+      "hash": "0ab60bb6cfde"
+    },
+    {
+      "name": "systemd-journal",
+      "hash": "cfe087184bd6"
+    },
+    {
+      "name": "systemd-logind",
+      "hash": "ecf9958263b4"
+    },
+    {
+      "name": "systemd-network",
+      "hash": "91f14a2979a6"
+    },
+    {
+      "name": "systemd-resolve",
+      "hash": "995dc06d7c17"
+    },
+    {
+      "name": "systemd-timesyn",
+      "hash": "c52c6f2b6444"
+    },
+    {
+      "name": "systemd-udevd",
+      "hash": "6747eb266ac1"
+    },
+    {
+      "name": "udisksd",
+      "hash": "f558f776017d"
+    },
+    {
+      "name": "unattended-upgr",
+      "hash": "27bce5f60bc2"
+    },
+    {
+      "name": "watchdogd",
+      "hash": "6e377906302a"
+    },
+    {
+      "name": "wpa_supplicant",
+      "hash": "6d380648bb5a"
+    }
+  ],
+  "running_count": 2,
+  "stopped_count": 1,
+  "public_port_count": 4
+}

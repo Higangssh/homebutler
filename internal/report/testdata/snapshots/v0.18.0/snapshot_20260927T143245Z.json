@@ -1,0 +1,89 @@
+{
+  "timestamp": "2026-09-27T14:32:45Z",
+  "server_name": "homelab-server",
+  "system": {
+    "hostname": "homelab-server",
+    "os": "linux",
+    "arch": "arm64",
+    "uptime": "15d 6h",
+    "cpu": {
+      "usage_percent": 0,
+      "cores": 4
+    },
+    "memory": {
+      "total_gb": 7.75,
+      "used_gb": 0.52,
+      "usage_percent": 6.82
+    },
+    "disks": [
+      {
+        "mount": "/",
+        "total_gb": 59,
+        "used_gb": 7.1,
+        "usage_percent": 13
+      }
+    ],
+    "time": "2026-09-27T14:32:45Z"
+  },
+  "containers": [
+    {
+      "id": "40c84388ee5c",
+      "name": "hb-fixture-c",
+      "image": "alpine",
+      "status": "Stopped · 6s ago",
+      "state": "exited",
+      "ports": ""
+    },
+    {
+      "id": "05fcf603364d",
+      "name": "hb-fixture-b",
+      "image": "nginx:alpine",
+      "status": "Running · 8s",
+      "state": "running",
+      "ports": "0.0.0.0:18081-\u003e80/tcp, [::]:18081-\u003e80/tcp"
+    },
+    {
+      "id": "2641c295808d",
+      "name": "hb-fixture-a",
+      "image": "alpine",
+      "status": "Running · 18s",
+      "state": "running",
+      "ports": ""
+    }
+  ],
+  "ports": [
+    {
+      "protocol": "tcp",
+      "address": "127.0.0.53%lo",
+      "port": "53"
+    },
+    {
+      "protocol": "tcp",
+      "address": "127.0.0.54",
+      "port": "53"
+    },
+    {
+      "protocol": "tcp",
+      "address": "0.0.0.0",
+      "port": "22"
+    },
+    {
+      "protocol": "tcp",
+      "address": "0.0.0.0",
+      "port": "18081"
+    },
+    {
+      "protocol": "tcp",
+      "address": "[::]",
+      "port": "22"
+    },
+    {
+      "protocol": "tcp",
+      "address": "[::]",
+      "port": "18081"
+    }
+  ],
+  "running_count": 2,
+  "stopped_count": 1,
+  "public_port_count": 2
+}

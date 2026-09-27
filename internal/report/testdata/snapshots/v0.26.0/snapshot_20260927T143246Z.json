@@ -1,0 +1,566 @@
+{
+  "timestamp": "2026-09-27T14:32:46Z",
+  "server_name": "homelab-server",
+  "system": {
+    "hostname": "homelab-server",
+    "os": "linux",
+    "arch": "arm64",
+    "uptime": "15d 6h",
+    "cpu": {
+      "usage_percent": 0,
+      "cores": 4
+    },
+    "memory": {
+      "total_gb": 7.75,
+      "used_gb": 0.51,
+      "usage_percent": 6.66
+    },
+    "disks": [
+      {
+        "mount": "/",
+        "total_gb": 59,
+        "used_gb": 7.1,
+        "usage_percent": 13
+      }
+    ],
+    "time": "2026-09-27T14:32:46Z"
+  },
+  "containers": [
+    {
+      "id": "40c84388ee5c",
+      "name": "hb-fixture-c",
+      "image": "alpine",
+      "status": "Stopped · 7s ago",
+      "state": "exited",
+      "ports": ""
+    },
+    {
+      "id": "05fcf603364d",
+      "name": "hb-fixture-b",
+      "image": "nginx:alpine",
+      "status": "Running · 9s",
+      "state": "running",
+      "ports": "0.0.0.0:18081-\u003e80/tcp, [::]:18081-\u003e80/tcp"
+    },
+    {
+      "id": "2641c295808d",
+      "name": "hb-fixture-a",
+      "image": "alpine",
+      "status": "Running · 19s",
+      "state": "running",
+      "ports": ""
+    }
+  ],
+  "ports": [
+    {
+      "protocol": "tcp",
+      "address": "127.0.0.53%lo",
+      "port": "53"
+    },
+    {
+      "protocol": "tcp",
+      "address": "127.0.0.54",
+      "port": "53"
+    },
+    {
+      "protocol": "tcp",
+      "address": "0.0.0.0",
+      "port": "22"
+    },
+    {
+      "protocol": "tcp",
+      "address": "0.0.0.0",
+      "port": "18081"
+    },
+    {
+      "protocol": "tcp",
+      "address": "[::]",
+      "port": "22"
+    },
+    {
+      "protocol": "tcp",
+      "address": "[::]",
+      "port": "18081"
+    }
+  ],
+  "processes": [
+    {
+      "name": "(sd-pam)",
+      "hash": "0d897431b48d"
+    },
+    {
+      "name": "0",
+      "hash": "1199363d2d7c"
+    },
+    {
+      "name": "0",
+      "hash": "70f269c5051e"
+    },
+    {
+      "name": "0",
+      "hash": "20a06c4017e1"
+    },
+    {
+      "name": "0:0-events",
+      "hash": "be3c65cd6c93"
+    },
+    {
+      "name": "0:1-mm_percpu_wq",
+      "hash": "dc32ba07b232"
+    },
+    {
+      "name": "0:1H-mmc_complete",
+      "hash": "4ca840bd318d"
+    },
+    {
+      "name": "0:2-cgroup_free",
+      "hash": "70ff79fe1731"
+    },
+    {
+      "name": "0:2H",
+      "hash": "be934fdf4190"
+    },
+    {
+      "name": "1",
+      "hash": "bf0be0603939"
+    },
+    {
+      "name": "1",
+      "hash": "308a7cd1ced5"
+    },
+    {
+      "name": "1",
+      "hash": "a9abc1ce550c"
+    },
+    {
+      "name": "166-mmc1",
+      "hash": "548db071d459"
+    },
+    {
+      "name": "167-mmc0",
+      "hash": "2231aab22642"
+    },
+    {
+      "name": "171-1000800000.codec",
+      "hash": "945843d2ddd4"
+    },
+    {
+      "name": "175-vc4 hdmi hpd connected",
+      "hash": "52a3521c5925"
+    },
+    {
+      "name": "176-vc4 hdmi hpd disconnected",
+      "hash": "5dc8e28bee1b"
+    },
+    {
+      "name": "177-vc4 hdmi cec rx",
+      "hash": "587cd70ca96a"
+    },
+    {
+      "name": "178-vc4 hdmi cec tx",
+      "hash": "8ddab3d2f6f9"
+    },
+    {
+      "name": "179-vc4 hdmi hpd connected",
+      "hash": "480c7baaf424"
+    },
+    {
+      "name": "180-vc4 hdmi hpd disconnected",
+      "hash": "80539ec9451f"
+    },
+    {
+      "name": "181-vc4 hdmi cec rx",
+      "hash": "fd2e00a25212"
+    },
+    {
+      "name": "182-vc4 hdmi cec tx",
+      "hash": "0055aa3e6af3"
+    },
+    {
+      "name": "1:1-cgroup_free",
+      "hash": "08cbf3b8e946"
+    },
+    {
+      "name": "1:1H-kblockd",
+      "hash": "e4a20322775f"
+    },
+    {
+      "name": "1:2-events",
+      "hash": "2d45396f1149"
+    },
+    {
+      "name": "1:2H",
+      "hash": "ec0c9beaa734"
+    },
+    {
+      "name": "2",
+      "hash": "d705344970b2"
+    },
+    {
+      "name": "2",
+      "hash": "b71fc2739bf5"
+    },
+    {
+      "name": "2",
+      "hash": "998875c2c39a"
+    },
+    {
+      "name": "2:0-cgroup_free",
+      "hash": "bea8df34638d"
+    },
+    {
+      "name": "2:0H",
+      "hash": "9b2cc8d9cfde"
+    },
+    {
+      "name": "2:1-events",
+      "hash": "4a982d46a9fa"
+    },
+    {
+      "name": "2:1H-kblockd",
+      "hash": "cde05fc840a5"
+    },
+    {
+      "name": "2:3-cgroup_release",
+      "hash": "7aae64efa732"
+    },
+    {
+      "name": "3",
+      "hash": "f2285731bd74"
+    },
+    {
+      "name": "3",
+      "hash": "e288a5ba53e7"
+    },
+    {
+      "name": "3",
+      "hash": "c3425606b137"
+    },
+    {
+      "name": "3:0-events",
+      "hash": "f144ba769053"
+    },
+    {
+      "name": "3:1-events",
+      "hash": "0d8126508e11"
+    },
+    {
+      "name": "3:1H-kblockd",
+      "hash": "7e14f6b79380"
+    },
+    {
+      "name": "3:2-events",
+      "hash": "74813b1e1eff"
+    },
+    {
+      "name": "3:2H",
+      "hash": "5e6fd641da0d"
+    },
+    {
+      "name": "43-aerdrv",
+      "hash": "8ffa19ba2704"
+    },
+    {
+      "name": "ModemManager",
+      "hash": "7e61f1940400"
+    },
+    {
+      "name": "R-blkcg",
+      "hash": "9c1605a80bc2"
+    },
+    {
+      "name": "R-brcmf",
+      "hash": "8cd910ede715"
+    },
+    {
+      "name": "R-cfg80",
+      "hash": "d91ee243ca9d"
+    },
+    {
+      "name": "R-devfr",
+      "hash": "c5cfb97b1205"
+    },
+    {
+      "name": "R-edac-",
+      "hash": "b3462c88ee34"
+    },
+    {
+      "name": "R-ext4-",
+      "hash": "e700b70228f2"
+    },
+    {
+      "name": "R-inet_",
+      "hash": "fab9450e4af6"
+    },
+    {
+      "name": "R-ipv6_",
+      "hash": "2655bb5efcf9"
+    },
+    {
+      "name": "R-kbloc",
+      "hash": "902a6bb80b8f"
+    },
+    {
+      "name": "R-kinte",
+      "hash": "51c7bcab4aec"
+    },
+    {
+      "name": "R-kmpat",
+      "hash": "a8e8809d0cb6"
+    },
+    {
+      "name": "R-kstrp",
+      "hash": "f1391991f6e7"
+    },
+    {
+      "name": "R-kthro",
+      "hash": "2d350ce34ec0"
+    },
+    {
+      "name": "R-md",
+      "hash": "e3c7ab3ac9ff"
+    },
+    {
+      "name": "R-md_bi",
+      "hash": "26b99a337d4f"
+    },
+    {
+      "name": "R-mld",
+      "hash": "bac0eaa3dce2"
+    },
+    {
+      "name": "R-mm_pe",
+      "hash": "cbfc69d54c7a"
+    },
+    {
+      "name": "R-mmc_c",
+      "hash": "53009b0ea081"
+    },
+    {
+      "name": "R-netns",
+      "hash": "8f197c27f6cc"
+    },
+    {
+      "name": "R-quota",
+      "hash": "bb54656bb3c2"
+    },
+    {
+      "name": "R-raid5",
+      "hash": "9569d1fa3e9b"
+    },
+    {
+      "name": "R-rcu_g",
+      "hash": "f8b49f1de53d"
+    },
+    {
+      "name": "R-rcu_p",
+      "hash": "af2cc9c7e01f"
+    },
+    {
+      "name": "R-sdhci",
+      "hash": "010cd07ea546"
+    },
+    {
+      "name": "R-slub_",
+      "hash": "d63787e6dad6"
+    },
+    {
+      "name": "R-tls-s",
+      "hash": "323e9ea88472"
+    },
+    {
+      "name": "R-tpm_d",
+      "hash": "1172543af28b"
+    },
+    {
+      "name": "R-write",
+      "hash": "4e6496e16d9c"
+    },
+    {
+      "name": "agetty",
+      "hash": "0dfd06e659fc"
+    },
+    {
+      "name": "agetty",
+      "hash": "fd7be7cca9de"
+    },
+    {
+      "name": "avahi-daemon",
+      "hash": "ee0ff61fbaf0"
+    },
+    {
+      "name": "avahi-daemon",
+      "hash": "c4f9e518a947"
+    },
+    {
+      "name": "bash",
+      "hash": "7987c9033f23"
+    },
+    {
+      "name": "card1-crtc0",
+      "hash": "5f7fe03500e9"
+    },
+    {
+      "name": "card1-crtc1",
+      "hash": "d27963dc33fa"
+    },
+    {
+      "name": "card1-crtc2",
+      "hash": "167c9396887c"
+    },
+    {
+      "name": "card1-crtc3",
+      "hash": "5df15194ff65"
+    },
+    {
+      "name": "cec-vc4-hdmi-0",
+      "hash": "24dd983cae85"
+    },
+    {
+      "name": "cec-vc4-hdmi-1",
+      "hash": "7bea9eee68c2"
+    },
+    {
+      "name": "containerd",
+      "hash": "5475e93b3281"
+    },
+    {
+      "name": "cron",
+      "hash": "f9b9d8b405b7"
+    },
+    {
+      "name": "dbus-daemon",
+      "hash": "67e4db6b3f3c"
+    },
+    {
+      "name": "dockerd",
+      "hash": "aa74e5628f0b"
+    },
+    {
+      "name": "hwrng",
+      "hash": "43e6a739530e"
+    },
+    {
+      "name": "mmc1:0001:1",
+      "hash": "afa097ff0316"
+    },
+    {
+      "name": "mmcblk0p2-8",
+      "hash": "ac1cade1567a"
+    },
+    {
+      "name": "polkitd",
+      "hash": "23349296b78f"
+    },
+    {
+      "name": "pool_workqueue_release",
+      "hash": "edc49c77e9fa"
+    },
+    {
+      "name": "ps"
+    },
+    {
+      "name": "psimon",
+      "hash": "1113a0e7cba3"
+    },
+    {
+      "name": "rsyslogd",
+      "hash": "2aa70e73c921"
+    },
+    {
+      "name": "snapd",
+      "hash": "7086c70635d5"
+    },
+    {
+      "name": "spi0",
+      "hash": "d6de410c708c"
+    },
+    {
+      "name": "spi10",
+      "hash": "8a082e7c4843"
+    },
+    {
+      "name": "sshd",
+      "hash": "3c15abfc3b54"
+    },
+    {
+      "name": "sshd",
+      "hash": "a8f3f4764f90"
+    },
+    {
+      "name": "sshd",
+      "hash": "dc676ed3f3d7"
+    },
+    {
+      "name": "systemd",
+      "hash": "0ab60bb6cfde"
+    },
+    {
+      "name": "systemd-journal",
+      "hash": "cfe087184bd6"
+    },
+    {
+      "name": "systemd-logind",
+      "hash": "ecf9958263b4"
+    },
+    {
+      "name": "systemd-network",
+      "hash": "91f14a2979a6"
+    },
+    {
+      "name": "systemd-resolve",
+      "hash": "995dc06d7c17"
+    },
+    {
+      "name": "systemd-timesyn",
+      "hash": "c52c6f2b6444"
+    },
+    {
+      "name": "systemd-udevd",
+      "hash": "6747eb266ac1"
+    },
+    {
+      "name": "u8:1-thermal_events",
+      "hash": "773051c955aa"
+    },
+    {
+      "name": "u8:2-flush-179:0",
+      "hash": "51f68af2c9dc"
+    },
+    {
+      "name": "u8:3-flush-179:0",
+      "hash": "7f739b9f82a2"
+    },
+    {
+      "name": "u8:4-events_power_efficient",
+      "hash": "cbff6352f8d9"
+    },
+    {
+      "name": "u9:0-hci0",
+      "hash": "e4c7624f5447"
+    },
+    {
+      "name": "u9:1-hci0",
+      "hash": "b5ad393ba6d5"
+    },
+    {
+      "name": "udisksd",
+      "hash": "f558f776017d"
+    },
+    {
+      "name": "unattended-upgr",
+      "hash": "27bce5f60bc2"
+    },
+    {
+      "name": "watchdogd",
+      "hash": "6e377906302a"
+    },
+    {
+      "name": "wpa_supplicant",
+      "hash": "6d380648bb5a"
+    }
+  ],
+  "running_count": 2,
+  "stopped_count": 1,
+  "public_port_count": 4
+}
