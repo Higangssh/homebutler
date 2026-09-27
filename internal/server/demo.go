@@ -3,6 +3,7 @@ package server
 import (
 	"encoding/json"
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/Higangssh/homebutler/internal/config"
@@ -10,6 +11,7 @@ import (
 	"github.com/Higangssh/homebutler/internal/notify"
 	"github.com/Higangssh/homebutler/internal/proxmox"
 	"github.com/Higangssh/homebutler/internal/remote"
+	"github.com/Higangssh/homebutler/internal/schema"
 	"github.com/Higangssh/homebutler/internal/system"
 	"github.com/Higangssh/homebutler/internal/watch"
 )
@@ -38,11 +40,12 @@ func (s *Server) demoStatus(w http.ResponseWriter, r *http.Request) {
 	switch name {
 	case "":
 		writeJSON(w, map[string]any{
-			"hostname": "homelab-server",
-			"os":       "linux",
-			"arch":     "amd64",
-			"uptime":   "4d 12h",
-			"time":     "2026-02-27T14:30:00Z",
+			"schema_version": schema.Current,
+			"hostname":       "homelab-server",
+			"os":             "linux",
+			"arch":           "amd64",
+			"uptime":         "4d 12h",
+			"time":           "2026-02-27T14:30:00Z",
 			"cpu": map[string]any{
 				"usage_percent": 23.4,
 				"cores":         8,
@@ -59,11 +62,12 @@ func (s *Server) demoStatus(w http.ResponseWriter, r *http.Request) {
 		})
 	case "nas-box":
 		writeJSON(w, map[string]any{
-			"hostname": "nas-box",
-			"os":       "linux",
-			"arch":     "amd64",
-			"uptime":   "12d 3h",
-			"time":     "2026-02-27T14:30:00Z",
+			"schema_version": schema.Current,
+			"hostname":       "nas-box",
+			"os":             "linux",
+			"arch":           "amd64",
+			"uptime":         "12d 3h",
+			"time":           "2026-02-27T14:30:00Z",
 			"cpu": map[string]any{
 				"usage_percent": 5.2,
 				"cores":         4,
@@ -80,11 +84,12 @@ func (s *Server) demoStatus(w http.ResponseWriter, r *http.Request) {
 		})
 	case "raspberry-pi":
 		writeJSON(w, map[string]any{
-			"hostname": "raspberry-pi",
-			"os":       "linux",
-			"arch":     "arm64",
-			"uptime":   "28d 7h",
-			"time":     "2026-02-27T14:30:00Z",
+			"schema_version": schema.Current,
+			"hostname":       "raspberry-pi",
+			"os":             "linux",
+			"arch":           "arm64",
+			"uptime":         "28d 7h",
+			"time":           "2026-02-27T14:30:00Z",
 			"cpu": map[string]any{
 				"usage_percent": 12.1,
 				"cores":         4,
@@ -472,19 +477,22 @@ func (s *Server) demoServerStatus(w http.ResponseWriter, r *http.Request) {
 
 	data := map[string]map[string]any{
 		"homelab-server": {
-			"hostname": "homelab-server", "os": "linux", "arch": "amd64", "uptime": "4d 12h",
+			"schema_version": schema.Current,
+			"hostname":       "homelab-server", "os": "linux", "arch": "amd64", "uptime": "4d 12h",
 			"cpu":    map[string]any{"usage_percent": 23.4, "cores": 8},
 			"memory": map[string]any{"total_gb": 32.0, "used_gb": 12.4, "usage_percent": 38.8},
 			"disks":  []map[string]any{{"mount": "/", "total_gb": 500.0, "used_gb": 187.5, "usage_percent": 37.5}},
 		},
 		"nas-box": {
-			"hostname": "nas-box", "os": "linux", "arch": "amd64", "uptime": "12d 3h",
+			"schema_version": schema.Current,
+			"hostname":       "nas-box", "os": "linux", "arch": "amd64", "uptime": "12d 3h",
 			"cpu":    map[string]any{"usage_percent": 5.2, "cores": 4},
 			"memory": map[string]any{"total_gb": 16.0, "used_gb": 6.8, "usage_percent": 42.5},
 			"disks":  []map[string]any{{"mount": "/", "total_gb": 120.0, "used_gb": 32.0, "usage_percent": 26.7}},
 		},
 		"raspberry-pi": {
-			"hostname": "raspberry-pi", "os": "linux", "arch": "arm64", "uptime": "28d 7h",
+			"schema_version": schema.Current,
+			"hostname":       "raspberry-pi", "os": "linux", "arch": "arm64", "uptime": "28d 7h",
 			"cpu":    map[string]any{"usage_percent": 12.1, "cores": 4},
 			"memory": map[string]any{"total_gb": 8.0, "used_gb": 3.2, "usage_percent": 40.0},
 			"disks":  []map[string]any{{"mount": "/", "total_gb": 64.0, "used_gb": 18.0, "usage_percent": 28.1}},
@@ -625,6 +633,7 @@ func (s *Server) demoOverview(w http.ResponseWriter, r *http.Request) {
 // nobody has looked at.
 func demoReportResult(saved bool) map[string]any {
 	return map[string]any{
+		"schema_version": schema.Current,
 		"timestamp":      time.Now().UTC().Format(time.RFC3339),
 		"server_name":    "homelab-server",
 		"is_baseline":    false,
@@ -668,8 +677,9 @@ func (s *Server) demoReportSnapshot(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) demoDoctor(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, map[string]any{
-		"timestamp":   time.Now().UTC().Format(time.RFC3339),
-		"server_name": "homelab-server",
+		"schema_version": schema.Current,
+		"timestamp":      time.Now().UTC().Format(time.RFC3339),
+		"server_name":    "homelab-server",
 		// Counted from the findings below rather than written beside them.
 		// doctor.overallStatus returns fail whenever fail > 0, so "warn" with
 		// a failing finding is a state the product cannot produce — and this
@@ -760,10 +770,15 @@ func (s *Server) demoWatchRemove(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) demoGuestAction(action string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		writeJSON(w, map[string]any{
-			"endpoint": "pve", "node": bodyString(r, "node"), "type": bodyString(r, "type"),
-			"vmid": r.PathValue("vmid"), "action": action, "status": proxmox.ActionAccepted,
-			"upid": "UPID:pve:00001234:0000ABCD:66000000:" + action + ":100:demo@pve:",
+		vmid, err := strconv.Atoi(r.PathValue("vmid"))
+		if err != nil {
+			writeError(w, http.StatusBadRequest, "vmid must be a number")
+			return
+		}
+		writeJSON(w, proxmox.GuestActionResult{
+			Endpoint: "pve", Node: bodyString(r, "node"), Type: bodyString(r, "type"),
+			VMID: vmid, Action: proxmox.GuestAction(action), Status: proxmox.ActionAccepted,
+			UPID: "UPID:pve:00001234:0000ABCD:66000000:" + action + ":100:demo@pve:",
 		})
 	}
 }

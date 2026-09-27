@@ -17,16 +17,6 @@ type proxmoxGuestActionRequest struct {
 	Action   proxmox.GuestAction
 }
 
-type proxmoxGuestActionResult struct {
-	Endpoint string               `json:"endpoint"`
-	Node     string               `json:"node"`
-	Type     string               `json:"type"`
-	VMID     int                  `json:"vmid"`
-	Action   proxmox.GuestAction  `json:"action"`
-	Status   proxmox.ActionStatus `json:"status"`
-	UPID     string               `json:"upid"`
-}
-
 func (s *Server) executeProxmox(name string, args map[string]any) (any, error) {
 	actionRequest, isAction, err := proxmoxGuestActionArgs(name, args)
 	if err != nil {
@@ -91,7 +81,7 @@ func (s *Server) executeProxmox(name string, args map[string]any) (any, error) {
 		if err != nil {
 			return nil, err
 		}
-		return proxmoxGuestActionResult{
+		return proxmox.GuestActionResult{
 			Endpoint: endpoint.Name, Node: actionRequest.Node, Type: actionRequest.Type, VMID: actionRequest.VMID,
 			Action: actionRequest.Action, Status: proxmox.ActionAccepted, UPID: upid,
 		}, nil

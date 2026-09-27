@@ -12,13 +12,13 @@ backup_restore risk=destructive args=[archive:string server:string service:strin
 config_validate risk=read args=[strict:boolean]
 docker_inspect risk=read args=[name:string server:string] required=[name]
 docker_list risk=read args=[server:string]
-docker_logs risk=read args=[lines:string name:string server:string] required=[name]
+docker_logs risk=read args=[lines:integer name:string server:string] required=[name]
 docker_restart risk=write args=[name:string server:string] required=[name]
 docker_stats risk=read args=[server:string]
 docker_stop risk=destructive args=[name:string server:string] required=[name]
 docker_top risk=read args=[name:string server:string] required=[name]
-doctor risk=read args=[backup_max_age_hours:number server:string]
-install_app risk=write args=[app:string port:string] required=[app]
+doctor risk=read args=[backup_max_age_hours:integer server:string]
+install_app risk=write args=[app:string port:integer] required=[app]
 install_list risk=read args=[]
 install_purge risk=destructive args=[app:string] required=[app]
 install_status risk=read args=[app:string] required=[app]
@@ -28,10 +28,10 @@ inventory_scan risk=read args=[server:string]
 network_scan risk=read args=[]
 notify_test risk=write args=[server:string]
 open_ports risk=read args=[server:string]
-processes risk=read args=[limit:string server:string sort_by:string]
-proxmox_guest_reboot risk=write args=[confirm:boolean endpoint:string node:string type:string vmid:integer] required=[confirm endpoint node type vmid]
-proxmox_guest_shutdown risk=destructive args=[confirm:boolean endpoint:string node:string type:string vmid:integer] required=[confirm endpoint node type vmid]
-proxmox_guest_start risk=write args=[confirm:boolean endpoint:string node:string type:string vmid:integer] required=[confirm endpoint node type vmid]
+processes risk=read args=[limit:integer server:string sort_by:string]
+proxmox_guest_reboot risk=write args=[confirm:boolean endpoint:string node:string type:string{lxc|qemu} vmid:integer] required=[confirm endpoint node type vmid]
+proxmox_guest_shutdown risk=destructive args=[confirm:boolean endpoint:string node:string type:string{lxc|qemu} vmid:integer] required=[confirm endpoint node type vmid]
+proxmox_guest_start risk=write args=[confirm:boolean endpoint:string node:string type:string{lxc|qemu} vmid:integer] required=[confirm endpoint node type vmid]
 proxmox_guests risk=read args=[endpoint:string node:string status:string type:string]
 proxmox_node risk=read args=[endpoint:string node:string] required=[node]
 proxmox_script_command risk=read args=[slug:string] required=[slug]
@@ -39,12 +39,12 @@ proxmox_script_list risk=read args=[]
 proxmox_status risk=read args=[endpoint:string]
 proxmox_task_status risk=read args=[endpoint:string node:string upid:string] required=[endpoint node upid]
 proxmox_tasks risk=read args=[endpoint:string node:string] required=[node]
-report risk=write args=[keep:number no_save:boolean server:string]
+report risk=write args=[keep:integer no_save:boolean server:string]
 system_status risk=read args=[server:string]
 wake risk=write args=[broadcast:string target:string] required=[target]
 watch_add risk=write args=[container:string kind:string{docker|pm2|systemd} server:string unit:string] required=[container]
 watch_check risk=write args=[server:string]
-watch_history risk=read args=[container:string include_logs:boolean limit:string server:string]
+watch_history risk=read args=[container:string include_logs:boolean limit:integer server:string]
 watch_list risk=read args=[server:string]
 watch_remove risk=write args=[container:string server:string] required=[container]
 
@@ -124,9 +124,9 @@ network_scan: []Device
 notify_test: []TestResult
 open_ports: Result
 processes: ProcessResult
-proxmox_guest_reboot: proxmoxGuestActionResult
-proxmox_guest_shutdown: proxmoxGuestActionResult
-proxmox_guest_start: proxmoxGuestActionResult
+proxmox_guest_reboot: GuestActionResult
+proxmox_guest_shutdown: GuestActionResult
+proxmox_guest_start: GuestActionResult
 proxmox_guests: passthrough
 proxmox_node: passthrough
 proxmox_script_command: ProxmoxScriptCommandResult
@@ -135,7 +135,7 @@ proxmox_status: passthrough
 proxmox_task_status: passthrough
 proxmox_tasks: passthrough
 report: Report
-system_status: StatusInfo
+system_status: StatusDoc
 wake: WakeResult
 watch_add: WatchAddResult
 watch_check: RunResult
@@ -173,6 +173,7 @@ report.Report.notable_changes.text:string
 report.Report.notable_changes:[]ChangeLine
 report.Report.public_port_count:?int
 report.Report.running_count:?int
+report.Report.schema_version:int
 report.Report.server_name:string
 report.Report.snapshot_saved:bool
 report.Report.status:[]string
@@ -222,6 +223,7 @@ doctor.Result.findings.severity:string
 doctor.Result.findings.title:string
 doctor.Result.findings.tool?:string
 doctor.Result.findings:[]Finding
+doctor.Result.schema_version:int
 doctor.Result.server_name:string
 doctor.Result.status:string
 doctor.Result.summary.fail:int
@@ -434,13 +436,6 @@ mcp.WatchAddResult.container:string
 mcp.WatchAddResult.kind:string
 mcp.WatchRemoveResult.container:string
 mcp.WatchRemoveResult.removed:bool
-mcp.proxmoxGuestActionResult.action:string
-mcp.proxmoxGuestActionResult.endpoint:string
-mcp.proxmoxGuestActionResult.node:string
-mcp.proxmoxGuestActionResult.status:string
-mcp.proxmoxGuestActionResult.type:string
-mcp.proxmoxGuestActionResult.upid:string
-mcp.proxmoxGuestActionResult.vmid:int
 network.Device.hostname?:string
 network.Device.ip:string
 network.Device.mac?:string
@@ -456,6 +451,13 @@ ports.Result.ports.port:string
 ports.Result.ports.process?:string
 ports.Result.ports.protocol:string
 ports.Result.ports:[]PortInfo
+proxmox.GuestActionResult.action:string
+proxmox.GuestActionResult.endpoint:string
+proxmox.GuestActionResult.node:string
+proxmox.GuestActionResult.status:string
+proxmox.GuestActionResult.type:string
+proxmox.GuestActionResult.upid:string
+proxmox.GuestActionResult.vmid:int
 proxmox.Script.description:string
 proxmox.Script.name:string
 proxmox.Script.slug:string
@@ -476,6 +478,24 @@ system.ProcessResult.zombies?.rss:int64
 system.ProcessResult.zombies?.state?:string
 system.ProcessResult.zombies?.zombie?:bool
 system.ProcessResult.zombies?:[]ProcessInfo
+system.StatusDoc.arch:string
+system.StatusDoc.cpu.cores:int
+system.StatusDoc.cpu.usage_percent:float64
+system.StatusDoc.cpu:CPUInfo
+system.StatusDoc.disks.mount:string
+system.StatusDoc.disks.total_gb:float64
+system.StatusDoc.disks.usage_percent:float64
+system.StatusDoc.disks.used_gb:float64
+system.StatusDoc.disks:[]DiskInfo
+system.StatusDoc.hostname:string
+system.StatusDoc.memory.total_gb:float64
+system.StatusDoc.memory.usage_percent:float64
+system.StatusDoc.memory.used_gb:float64
+system.StatusDoc.memory:MemInfo
+system.StatusDoc.os:string
+system.StatusDoc.schema_version:int
+system.StatusDoc.time:string
+system.StatusDoc.uptime:string
 wake.WakeResult.action:string
 wake.WakeResult.broadcast:string
 wake.WakeResult.mac:string

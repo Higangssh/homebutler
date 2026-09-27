@@ -24,7 +24,10 @@ func newStatusCmd() *cobra.Command {
 			if err != nil {
 				return fmt.Errorf("failed to get system status: %w", err)
 			}
-			return output(info, jsonOutput)
+			if jsonOutput {
+				return output(system.Document(info), true)
+			}
+			return output(info, false)
 		},
 	}
 }

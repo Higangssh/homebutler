@@ -4,9 +4,19 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### ⚠️ Behavior changes
+
+- **Six count arguments are declared as integers instead of strings or numbers** (#288). `docker_logs` `lines`, `processes` `limit`, `watch_history` `limit`, `install_app` `port`, `report` `keep` and `doctor` `backup_max_age_hours`. A call that sends `"50"` still works exactly as before, and a test holds both spellings; what changed is what the schema tells an agent to send. `keep` and `backup_max_age_hours` were `number`, and a fractional value sent to either was already cut to a whole one; the schema now says so. 1.0 freezes the schema, and a count left as a string would have stayed one
+- **The Proxmox guest actions declare `type` as `qemu` or `lxc`** (#288). Those were already the only two values accepted, so every call that worked before still works; the schema now says so instead of the description
+- **`report --json`, `doctor --json` and `status --json` carry `schema_version: 1`** (#288), as do the matching MCP tools and dashboard routes. After 1.0 a new field cannot be added without a caller guessing whether its absence means an older homebutler, so the version goes in before the freeze. It is on the top-level document only: the `system` object nested inside `report` and `inventory_scan` does not carry one, because there it would read as the version of the document around it
+
 ### ✨ Features
 
 - a bind mount can be the wrong size to archive, and there was no way to say so (#282). A media server mounts a library directory and `backup` tarred it whole, every time — reported from a real Jellyfin setup where that directory is terabytes. `--exclude` leaves a path out, covering anything mounted under it on path boundaries, so `/mnt/media` covers `/mnt/media/movies` and not `/mnt/media-backup`. It applies to bind mounts only; a named volume is Docker's own directory and has no host path to match. **What was excluded is written into the archive**, and the mount stays in the manifest marked `excluded` rather than being dropped from it: somebody restoring months later has to be able to tell *this service had a media directory and it is not in here* from *this service had no media directory*. A path that matched nothing is reported, because a misspelled `--exclude` archives the terabytes it was meant to avoid and the archive size is otherwise the only place that shows. The cost was never only disk — `backup drill` boots an archive and requires it to answer a health check, and a terabyte archive cannot be drilled, so the data nobody wanted backed up was what stopped the verification from being usable on the data they did
+
+### 🐛 Fixes
+
+- the demo dashboard answered a Proxmox guest action with `vmid` as a string (#288). The real route sends a number. The guest action result had been written out four times, once each for the MCP tool, the CLI, the route and the demo, and only the demo's copy had drifted. There is one `proxmox.GuestActionResult` now, and all four use it
 
 ### 🧪 Tests
 

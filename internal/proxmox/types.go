@@ -276,6 +276,19 @@ func ActionStatuses() []ActionStatus {
 	return []ActionStatus{ActionAccepted}
 }
 
+// GuestActionResult is what a guest start, shutdown or reboot answers with,
+// from the MCP tools, the CLI and the dashboard's routes alike. It was written
+// out four times, and the demo route's copy sent vmid as a string.
+type GuestActionResult struct {
+	Endpoint string       `json:"endpoint"`
+	Node     string       `json:"node"`
+	Type     string       `json:"type"`
+	VMID     int          `json:"vmid"`
+	Action   GuestAction  `json:"action"`
+	Status   ActionStatus `json:"status"`
+	UPID     string       `json:"upid"`
+}
+
 // TaskStatus is returned by /nodes/{node}/tasks/{upid}/status.
 type TaskStatus struct {
 	UPID       string `json:"upid"`

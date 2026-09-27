@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Higangssh/homebutler/internal/schema"
 	"github.com/Higangssh/homebutler/internal/util"
 )
 
@@ -19,6 +20,22 @@ type StatusInfo struct {
 	Memory   MemInfo    `json:"memory"`
 	Disks    []DiskInfo `json:"disks"`
 	Time     string     `json:"time"`
+}
+
+// StatusDoc is status as a document of its own: what `status --json`, the
+// system_status tool and the status routes answer with. StatusInfo is also
+// nested inside report and inventory answers, and a schema_version there
+// would read as the version of the document it sits in, which it is not. So
+// the version goes on the outside, and embedding keeps the keys flat: the
+// document is StatusInfo's keys with one more.
+type StatusDoc struct {
+	SchemaVersion schema.Version `json:"schema_version"`
+	*StatusInfo
+}
+
+// Document wraps a status for answering with at the top level.
+func Document(info *StatusInfo) StatusDoc {
+	return StatusDoc{StatusInfo: info}
 }
 
 type CPUInfo struct {

@@ -392,7 +392,7 @@ var Registry = []Capability{
 				Type: "object",
 				Properties: map[string]Property{
 					"name":   {Type: "string", Description: "Container name to get logs from"},
-					"lines":  {Type: "string", Description: "Number of log lines to return (default: 50)"},
+					"lines":  {Type: "integer", Description: "Number of log lines to return (default: 50)"},
 					"server": {Type: "string", Description: "Remote server name from config (optional, runs locally if omitted)"},
 				},
 				Required: []string{"name"},
@@ -552,7 +552,7 @@ var Registry = []Capability{
 			InputSchema: Schema{
 				Type: "object",
 				Properties: map[string]Property{
-					"keep":    {Type: "number", Description: "Number of snapshots to retain (default: 30)"},
+					"keep":    {Type: "integer", Description: "Number of snapshots to retain (default: 30)"},
 					"no_save": {Type: "boolean", Description: "Preview without writing a snapshot"},
 					"server":  {Type: "string", Description: "Remote server name from config (optional, runs locally if omitted)"},
 				},
@@ -569,7 +569,7 @@ var Registry = []Capability{
 			InputSchema: Schema{
 				Type: "object",
 				Properties: map[string]Property{
-					"backup_max_age_hours": {Type: "number", Description: "Warn when the latest backup is older than this many hours (default: 168)"},
+					"backup_max_age_hours": {Type: "integer", Description: "Warn when the latest backup is older than this many hours (default: 168)"},
 					"server":               {Type: "string", Description: "Remote server name from config (optional, runs locally if omitted)"},
 				},
 			},
@@ -603,7 +603,7 @@ var Registry = []Capability{
 			InputSchema: Schema{
 				Type: "object",
 				Properties: map[string]Property{
-					"limit":   {Type: "string", Description: "Number of processes to return (default: 10, 0 for all)"},
+					"limit":   {Type: "integer", Description: "Number of processes to return (default: 10, 0 for all)"},
 					"sort_by": {Type: "string", Description: "Sort by cpu (default) or mem"},
 					"server":  {Type: "string", Description: "Remote server name from config (optional, runs locally if omitted)"},
 				},
@@ -638,7 +638,7 @@ var Registry = []Capability{
 			InputSchema: Schema{
 				Type: "object",
 				Properties: map[string]Property{
-					"limit":        {Type: "string", Description: "Most recent N incidents (default: 10, 0 for all)"},
+					"limit":        {Type: "integer", Description: "Most recent N incidents (default: 10, 0 for all)"},
 					"container":    {Type: "string", Description: "Only incidents for this target (optional)"},
 					"include_logs": {Type: "boolean", Description: "Include the logs captured before and after each restart (default: false)"},
 					"server":       {Type: "string", Description: "Remote server name from config (optional, runs locally if omitted)"},
@@ -831,7 +831,7 @@ var Registry = []Capability{
 				Type: "object",
 				Properties: map[string]Property{
 					"app":  {Type: "string", Description: "App name (e.g. uptime-kuma, vaultwarden)"},
-					"port": {Type: "string", Description: "Custom host port (optional, uses default if omitted)"},
+					"port": {Type: "integer", Description: "Custom host port (optional, uses default if omitted)"},
 				},
 				Required: []string{"app"},
 			},
@@ -897,7 +897,7 @@ func proxmoxGuestActionSchema() Schema {
 	return Schema{Type: "object", Properties: map[string]Property{
 		"endpoint": {Type: "string", Description: "Explicit Proxmox endpoint name from config"},
 		"node":     {Type: "string", Description: "Proxmox node name"},
-		"type":     {Type: "string", Description: "Guest type: qemu or lxc"},
+		"type":     {Type: "string", Description: "Guest type: qemu or lxc", Enum: []string{"qemu", "lxc"}},
 		"vmid":     {Type: "integer", Description: "Proxmox guest VMID from 1 through 999999999"},
 		"confirm":  {Type: "boolean", Description: "Must be true to confirm the explicit guest action target"},
 	}, Required: []string{"endpoint", "node", "type", "vmid", "confirm"}}
