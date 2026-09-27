@@ -127,13 +127,13 @@ processes: ProcessResult
 proxmox_guest_reboot: GuestActionResult
 proxmox_guest_shutdown: GuestActionResult
 proxmox_guest_start: GuestActionResult
-proxmox_guests: passthrough
-proxmox_node: passthrough
+proxmox_guests: []Guest
+proxmox_node: NodeStatus
 proxmox_script_command: ProxmoxScriptCommandResult
 proxmox_script_list: []Script
-proxmox_status: passthrough
-proxmox_task_status: passthrough
-proxmox_tasks: passthrough
+proxmox_status: DefaultView
+proxmox_task_status: TaskStatus
+proxmox_tasks: []Task
 report: Report
 system_status: StatusDoc
 wake: WakeResult
@@ -451,6 +451,83 @@ ports.Result.ports.port:string
 ports.Result.ports.process?:string
 ports.Result.ports.protocol:string
 ports.Result.ports:[]PortInfo
+proxmox.DefaultView.cluster.id?:string
+proxmox.DefaultView.cluster.ip?:string
+proxmox.DefaultView.cluster.level?:string
+proxmox.DefaultView.cluster.local?:bool
+proxmox.DefaultView.cluster.name?:string
+proxmox.DefaultView.cluster.nodeid?:int
+proxmox.DefaultView.cluster.nodes?:int
+proxmox.DefaultView.cluster.online?:bool
+proxmox.DefaultView.cluster.quorate?:?bool
+proxmox.DefaultView.cluster.type:string
+proxmox.DefaultView.cluster.version?:int
+proxmox.DefaultView.cluster:[]ClusterStatus
+proxmox.DefaultView.failed_collectors?:[]string
+proxmox.DefaultView.failure_classes?:map[string]string
+proxmox.DefaultView.resources.guests.cpu?:?float64
+proxmox.DefaultView.resources.guests.disk?:?int64
+proxmox.DefaultView.resources.guests.lock?:string
+proxmox.DefaultView.resources.guests.max_cpu?:?float64
+proxmox.DefaultView.resources.guests.max_disk?:?int64
+proxmox.DefaultView.resources.guests.max_mem?:?int64
+proxmox.DefaultView.resources.guests.mem?:?int64
+proxmox.DefaultView.resources.guests.name?:string
+proxmox.DefaultView.resources.guests.net_in?:?int64
+proxmox.DefaultView.resources.guests.net_out?:?int64
+proxmox.DefaultView.resources.guests.node:string
+proxmox.DefaultView.resources.guests.pool?:string
+proxmox.DefaultView.resources.guests.status:string
+proxmox.DefaultView.resources.guests.tags?:[]string
+proxmox.DefaultView.resources.guests.template:bool
+proxmox.DefaultView.resources.guests.type:string
+proxmox.DefaultView.resources.guests.uptime?:?int64
+proxmox.DefaultView.resources.guests.vmid:int
+proxmox.DefaultView.resources.guests:[]Guest
+proxmox.DefaultView.resources.nodes.cpu?:?float64
+proxmox.DefaultView.resources.nodes.level?:string
+proxmox.DefaultView.resources.nodes.local?:bool
+proxmox.DefaultView.resources.nodes.max_cpu?:?float64
+proxmox.DefaultView.resources.nodes.max_mem?:?int64
+proxmox.DefaultView.resources.nodes.mem?:?int64
+proxmox.DefaultView.resources.nodes.name:string
+proxmox.DefaultView.resources.nodes.ssl_fingerprint?:string
+proxmox.DefaultView.resources.nodes.status:string
+proxmox.DefaultView.resources.nodes.uptime?:?int64
+proxmox.DefaultView.resources.nodes:[]Node
+proxmox.DefaultView.resources.storage.content?:string
+proxmox.DefaultView.resources.storage.name:string
+proxmox.DefaultView.resources.storage.node?:string
+proxmox.DefaultView.resources.storage.shared?:bool
+proxmox.DefaultView.resources.storage.status?:string
+proxmox.DefaultView.resources.storage.total?:?int64
+proxmox.DefaultView.resources.storage.type?:string
+proxmox.DefaultView.resources.storage.used?:?int64
+proxmox.DefaultView.resources.storage:[]Store
+proxmox.DefaultView.resources:Resources
+proxmox.DefaultView.version.release:string
+proxmox.DefaultView.version.repo_id?:string
+proxmox.DefaultView.version.version:string
+proxmox.DefaultView.version:Version
+proxmox.DefaultView.warnings?:[]string
+proxmox.Guest.cpu?:?float64
+proxmox.Guest.disk?:?int64
+proxmox.Guest.lock?:string
+proxmox.Guest.max_cpu?:?float64
+proxmox.Guest.max_disk?:?int64
+proxmox.Guest.max_mem?:?int64
+proxmox.Guest.mem?:?int64
+proxmox.Guest.name?:string
+proxmox.Guest.net_in?:?int64
+proxmox.Guest.net_out?:?int64
+proxmox.Guest.node:string
+proxmox.Guest.pool?:string
+proxmox.Guest.status:string
+proxmox.Guest.tags?:[]string
+proxmox.Guest.template:bool
+proxmox.Guest.type:string
+proxmox.Guest.uptime?:?int64
+proxmox.Guest.vmid:int
 proxmox.GuestActionResult.action:string
 proxmox.GuestActionResult.endpoint:string
 proxmox.GuestActionResult.node:string
@@ -458,9 +535,49 @@ proxmox.GuestActionResult.status:string
 proxmox.GuestActionResult.type:string
 proxmox.GuestActionResult.upid:string
 proxmox.GuestActionResult.vmid:int
+proxmox.NodeStatus.boot_info.mode?:string
+proxmox.NodeStatus.boot_info.secureboot:bool
+proxmox.NodeStatus.boot_info:BootInfo
+proxmox.NodeStatus.cpu?:?float64
+proxmox.NodeStatus.cpuinfo.cores:int
+proxmox.NodeStatus.cpuinfo.cpus:int
+proxmox.NodeStatus.cpuinfo.hvm:string
+proxmox.NodeStatus.cpuinfo.mhz:string
+proxmox.NodeStatus.cpuinfo.user_hz:int
+proxmox.NodeStatus.cpuinfo:CPUInfo
+proxmox.NodeStatus.loadavg?:[]string
+proxmox.NodeStatus.memory.available?:?int64
+proxmox.NodeStatus.memory.free?:?int64
+proxmox.NodeStatus.memory.total?:?int64
+proxmox.NodeStatus.memory.used?:?int64
+proxmox.NodeStatus.memory:Memory
+proxmox.NodeStatus.pveversion?:string
+proxmox.NodeStatus.uptime?:?int64
+proxmox.NodeStatus.wait?:?float64
 proxmox.Script.description:string
 proxmox.Script.name:string
 proxmox.Script.slug:string
+proxmox.Task.endtime?:?int64
+proxmox.Task.id?:string
+proxmox.Task.node:string
+proxmox.Task.pid?:int64
+proxmox.Task.pstart?:int64
+proxmox.Task.starttime?:int64
+proxmox.Task.status:string
+proxmox.Task.type:string
+proxmox.Task.upid:string
+proxmox.Task.user?:string
+proxmox.TaskStatus.exitstatus?:string
+proxmox.TaskStatus.id?:string
+proxmox.TaskStatus.node:string
+proxmox.TaskStatus.pid?:int64
+proxmox.TaskStatus.pstart?:int64
+proxmox.TaskStatus.result:string
+proxmox.TaskStatus.starttime?:int64
+proxmox.TaskStatus.status:string
+proxmox.TaskStatus.type:string
+proxmox.TaskStatus.upid:string
+proxmox.TaskStatus.user?:string
 system.ProcessResult.processes.cpu:float64
 system.ProcessResult.processes.mem:float64
 system.ProcessResult.processes.name:string

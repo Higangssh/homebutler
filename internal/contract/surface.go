@@ -198,27 +198,20 @@ func routeLines() []string {
 	return lines
 }
 
-// outputLines records what each tool answers with: the type when the shape is
-// ours, or the word passthrough when it is not. The registry froze how a tool
-// is called and said nothing about what comes back, which is the half an agent
-// branches on — and a tool quietly moving from one to the other, or changing
-// the type it answers with, is a change a caller feels.
-//
-// The reason string for a passthrough is not here. It is prose and improves;
-// that a tool is one is the part worth freezing.
+// outputLines records the type each tool answers with. The registry froze how
+// a tool is called and said nothing about what comes back, which is the half
+// an agent branches on — and a tool changing the type it answers with is a
+// change a caller feels.
 func outputLines() []string {
 	var out []string
 	for _, c := range capability.Registry {
 		name := c.Tool.Name
-		o, ok := mcp.ToolOutputs[name]
-		switch {
-		case !ok:
+		answer, ok := mcp.ToolOutputs[name]
+		if !ok || answer == nil {
 			out = append(out, name+": UNDECLARED")
-		case o.Frozen != nil:
-			out = append(out, name+": "+typeName(reflect.TypeOf(o.Frozen)))
-		default:
-			out = append(out, name+": passthrough")
+			continue
 		}
+		out = append(out, name+": "+typeName(reflect.TypeOf(answer)))
 	}
 	sort.Strings(out)
 	return out
@@ -291,11 +284,11 @@ func jsonLines() []string {
 	// the golden did not move. The types above keep their place, so this is
 	// appended rather than merged into them.
 	answers := map[string]reflect.Type{}
-	for _, o := range mcp.ToolOutputs {
-		if o.Frozen == nil {
+	for _, answer := range mcp.ToolOutputs {
+		if answer == nil {
 			continue
 		}
-		t := reflect.TypeOf(o.Frozen)
+		t := reflect.TypeOf(answer)
 		for t.Kind() == reflect.Slice || t.Kind() == reflect.Pointer {
 			t = t.Elem()
 		}
