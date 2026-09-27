@@ -1,15 +1,15 @@
-# What 1.0 freezes
+# What 1.0 promises
 
-homebutler is pre-1.0, and until the tag lands anything may change. 1.0 is the
-point where that stops being true for the parts other people build on: an agent
-branching on a change's `kind`, a cron job reading `doctor`'s exit code, a
-widget polling `/api/report`, a compose file naming config keys.
+From 1.0, the parts other people build on do not change without a major
+release: an agent branching on a change's `kind`, a cron job reading
+`doctor`'s exit code, a widget polling `/api/report`, a compose file naming
+config keys.
 
 This file says which of those are frozen. `internal/contract` holds the same
 answer in a form a test can check, because a promise nobody can verify is not a
 promise — the golden file there fails the build when any of it moves.
 
-## Frozen at 1.0
+## Frozen since 1.0
 
 | | |
 | --- | --- |
