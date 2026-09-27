@@ -2,6 +2,10 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.0.0](https://github.com/Higangssh/homebutler/compare/v0.40.0...v1.0.0) - YYYY-MM-DD
+
+**From this release, what homebutler answers with is a promise: a tool, a field, a word an agent branches on or a route a script calls does not change before 2.0, and the build fails when something tries.** [docs/compatibility.md](docs/compatibility.md) lists what is frozen and what may still be added; `go test ./internal/contract` is the check that holds it.
+
 ## [0.40.0](https://github.com/Higangssh/homebutler/compare/v0.39.0...v0.40.0) - 2026-09-28
 
 **1.0 promises that what homebutler answers with will not move under the people who build on it, and until this release most of that promise could not be checked.** The golden file read the fields of three commands and named the type of everything else, so a field renamed inside `docker_list`, a status word dropped from `install_purge`, or a snapshot an older release wrote could all change with the build still green. All of it is under the test now: every tool's answer field by field, the words a status or an argument can hold, the five Proxmox reads, and a snapshot from each release whose format changed.
