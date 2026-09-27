@@ -68,8 +68,8 @@ func TestProxmoxToolsUseConfiguredEndpoint(t *testing.T) {
 	if err != nil {
 		t.Fatalf("proxmox_node: %v", err)
 	}
-	if got := node.(proxmox.NodeStatus).CPUInfo.CPUs; got != 16 {
-		t.Errorf("proxmox_node CPUs = %d, want 16", got)
+	if got := node.(proxmox.NodeStatus).CPUInfo.CPUs; got == nil || *got != 16 {
+		t.Errorf("proxmox_node CPUs = %v, want 16", got)
 	}
 
 	tasks, err := s.executeTool("proxmox_tasks", map[string]any{"node": "pve1"})

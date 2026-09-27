@@ -14,6 +14,27 @@ type Version struct {
 	RepoID  string `json:"repo_id,omitempty"`
 }
 
+// UnmarshalJSON reads the repository id under the name Proxmox sends, repoid.
+// The struct only had the name it is written under, so the value was dropped
+// on the way in and never shown. repo_id is still accepted, so an answer of
+// ours read back keeps it too.
+func (v *Version) UnmarshalJSON(data []byte) error {
+	var raw struct {
+		Version string `json:"version"`
+		Release string `json:"release"`
+		RepoID  string `json:"repoid"`
+		Ours    string `json:"repo_id"`
+	}
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	*v = Version{Version: raw.Version, Release: raw.Release, RepoID: raw.RepoID}
+	if v.RepoID == "" {
+		v.RepoID = raw.Ours
+	}
+	return nil
+}
+
 // ClusterStatus is an item returned by /cluster/status.
 type ClusterStatus struct {
 	Type    string `json:"type"`
@@ -193,12 +214,15 @@ type NodeStatus struct {
 	BootInfo   BootInfo `json:"boot_info"`
 }
 
+// CPUInfo's counts are pointers so that a count Proxmox did not send is left
+// out rather than written as 0. A node with no cores is not a thing, and an
+// agent reading cores: 0 has been told one.
 type CPUInfo struct {
-	Cores  int    `json:"cores"`
-	CPUs   int    `json:"cpus"`
+	Cores  *int   `json:"cores,omitempty"`
+	CPUs   *int   `json:"cpus,omitempty"`
 	MHz    string `json:"mhz"`
 	HVM    string `json:"hvm"`
-	UserHZ int    `json:"user_hz"`
+	UserHZ *int   `json:"user_hz,omitempty"`
 }
 
 type Memory struct {
@@ -208,15 +232,17 @@ type Memory struct {
 	Available *int64 `json:"available,omitempty"`
 }
 
+// BootInfo.SecureBoot is left out when Proxmox did not say, rather than
+// reported as off.
 type BootInfo struct {
 	Mode       string `json:"mode,omitempty"`
-	SecureBoot bool   `json:"secureboot"`
+	SecureBoot *bool  `json:"secureboot,omitempty"`
 }
 
 func (n *NodeStatus) UnmarshalJSON(data []byte) error {
 	type rawBootInfo struct {
-		Mode       string       `json:"mode"`
-		SecureBoot flexibleBool `json:"secureboot"`
+		Mode       string        `json:"mode"`
+		SecureBoot *flexibleBool `json:"secureboot"`
 	}
 	type rawNodeStatus struct {
 		CPU        *float64    `json:"cpu"`
@@ -232,7 +258,11 @@ func (n *NodeStatus) UnmarshalJSON(data []byte) error {
 	if err := json.Unmarshal(data, &raw); err != nil {
 		return err
 	}
-	*n = NodeStatus{CPU: raw.CPU, Wait: raw.Wait, Uptime: raw.Uptime, LoadAvg: raw.LoadAvg, PVEVersion: raw.PVEVersion, CPUInfo: raw.CPUInfo, Memory: raw.Memory, BootInfo: BootInfo{Mode: raw.BootInfo.Mode, SecureBoot: bool(raw.BootInfo.SecureBoot)}}
+	*n = NodeStatus{CPU: raw.CPU, Wait: raw.Wait, Uptime: raw.Uptime, LoadAvg: raw.LoadAvg, PVEVersion: raw.PVEVersion, CPUInfo: raw.CPUInfo, Memory: raw.Memory, BootInfo: BootInfo{Mode: raw.BootInfo.Mode}}
+	if raw.BootInfo.SecureBoot != nil {
+		on := bool(*raw.BootInfo.SecureBoot)
+		n.BootInfo.SecureBoot = &on
+	}
 	return nil
 }
 
