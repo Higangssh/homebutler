@@ -2,7 +2,15 @@
 
 All notable changes to this project will be documented in this file.
 
-## [Unreleased]
+## [0.40.0](https://github.com/Higangssh/homebutler/compare/v0.39.0...v0.40.0) - 2026-09-28
+
+**1.0 promises that what homebutler answers with will not move under the people who build on it, and until this release most of that promise could not be checked.** The golden file read the fields of three commands and named the type of everything else, so a field renamed inside `docker_list`, a status word dropped from `install_purge`, or a snapshot an older release wrote could all change with the build still green. All of it is under the test now: every tool's answer field by field, the words a status or an argument can hold, the five Proxmox reads, and a snapshot from each release whose format changed.
+
+Settling that turned up what would have been frozen wrong. Six counts were declared as strings or numbers, `schema_version` could not have been added after the freeze, and the Proxmox shape the guest actions read their targets from was recorded as somebody else's. It also turned up three places where homebutler reported something nobody had told it: `report` called an unreadable history a first inspection, `proxmox_node` gave a node zero cores when Proxmox had not said, and `proxmox_status` had never once shown the repository id Proxmox sends.
+
+```bash
+homebutler backup --exclude /mnt/media     # leave a bind mount out of the archive, and say so in it
+```
 
 ### ⚠️ Behavior changes
 
