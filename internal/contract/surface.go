@@ -237,12 +237,55 @@ func jsonLines() []string {
 	}
 
 	var lines []string
+	listed := map[reflect.Type]bool{}
 	for _, t := range types {
+		listed[reflect.TypeOf(t.value)] = true
 		for _, field := range jsonFields(reflect.TypeOf(t.value), map[reflect.Type]bool{}) {
 			lines = append(lines, t.name+"."+field)
 		}
 	}
+
+	// Every tool's answer, not only the three commands above. The outputs
+	// section named each tool's type and stopped there, so a field could be
+	// renamed inside docker_list or watch_list — the answers an agent branches
+	// on most — and nothing failed. #283 added three fields to BackupResult and
+	// the golden did not move. The types above keep their place, so this is
+	// appended rather than merged into them.
+	answers := map[string]reflect.Type{}
+	for _, o := range mcp.ToolOutputs {
+		if o.Frozen == nil {
+			continue
+		}
+		t := reflect.TypeOf(o.Frozen)
+		for t.Kind() == reflect.Slice || t.Kind() == reflect.Pointer {
+			t = t.Elem()
+		}
+		if listed[t] {
+			continue
+		}
+		answers[qualifiedName(t)] = t
+	}
+	names := make([]string, 0, len(answers))
+	for name := range answers {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	for _, name := range names {
+		for _, field := range jsonFields(answers[name], map[reflect.Type]bool{}) {
+			lines = append(lines, name+"."+field)
+		}
+	}
 	return lines
+}
+
+// qualifiedName is the package's own name and the type's, the way the list
+// above spells them by hand.
+func qualifiedName(t reflect.Type) string {
+	pkg := t.PkgPath()
+	if i := strings.LastIndex(pkg, "/"); i >= 0 {
+		pkg = pkg[i+1:]
+	}
+	return pkg + "." + t.Name()
 }
 
 // jsonFields reads the json tags rather than the Go names, because the tag is
@@ -269,6 +312,15 @@ func jsonFields(t reflect.Type, seen map[reflect.Type]bool) []string {
 
 		tag := field.Tag.Get("json")
 		name, opts, _ := strings.Cut(tag, ",")
+
+		// An untagged embedded struct is flattened by encoding/json, so its
+		// fields are the caller's keys and its name is not.
+		if field.Anonymous && name == "" {
+			if nested := structUnder(field.Type); nested != nil {
+				out = append(out, jsonFields(nested, seen)...)
+				continue
+			}
+		}
 		switch name {
 		case "-":
 			continue
