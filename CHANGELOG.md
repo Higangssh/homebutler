@@ -32,6 +32,8 @@ All notable changes to this project will be documented in this file.
 
 - the five Proxmox reads are frozen like every other tool (#290). They were recorded as passing Proxmox's own shape through, which was not true: each one decodes into a struct of ours and writes that struct's keys, and `resources.guests` renames `maxcpu` to `max_cpu` and splits `tags` into a list. The guest actions take their `vmid`, `node` and `type` from that list, so the shape a write depends on was outside the freeze. The values still follow Proxmox; the keys do not
 
+- a snapshot taken while Docker was down is in the repository, and a test holds that the next report skips its containers rather than calling every running one new (#PR). `failed_collectors` is frozen, and none of the snapshots the releases wrote had ever made a report decode it. This one is written by hand from the v0.22.0 file, and its README says what was changed
+
 ## [0.39.0](https://github.com/Higangssh/homebutler/compare/v0.38.0...v0.39.0) - 2026-09-23
 
 **Fourteen things homebutler can do had been waiting on a rule for what a browser must produce before it does them, and while that rule did not exist the dashboard could only look.** 0.35.1 gave it a write surface for *settings* (#154) and decided nothing about running an action, so fourteen capabilities sat in the registry pointing at an issue.

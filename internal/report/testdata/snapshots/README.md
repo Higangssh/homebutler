@@ -11,6 +11,7 @@ the next report has to read it.
 | `v0.22.0` | Added `failed_collectors` (#74) |
 | `v0.26.0` | Added `processes` (#129) |
 | `v0.39.0` | The last release before 1.0 |
+| `v0.22.0-docker-down` | Hand-made; see below |
 
 ## How they were made
 
@@ -35,3 +36,21 @@ was checked to be the same before and after.
 `failed_collectors` does not appear in any of them, because nothing failed
 on that machine. The key is `omitempty`, so a release that has the field
 writes it only when a collector fails.
+
+## `v0.22.0-docker-down` is hand-made
+
+`failed_collectors` is frozen, and none of the snapshots above ever makes a
+report decode it, so this one was written by hand from the `v0.22.0` file to
+look the way v0.22.0 writes a run with the Docker daemon down, following
+that release's `buildSnapshot` and `inventory.Collect`:
+
+- `containers` is `null` and both counts are `0`, because a failed listing
+  leaves the list unset
+- `failed_collectors` is `["docker"]`, and `warnings` holds the
+  `docker: ...` line that goes with it
+- the two port entries for 18081 are gone, since nginx is not listening
+  with the daemon down, and `public_port_count` is `2`
+
+It was serialised by a script rather than by Go, so its whitespace is not
+byte for byte what v0.22.0 would write. What it keeps is the keys, their
+order and the type of every value.
