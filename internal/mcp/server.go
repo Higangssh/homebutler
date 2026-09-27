@@ -686,14 +686,14 @@ func (s *Server) executeTool(name string, args map[string]any) (any, error) {
 		if len(issues) > 0 {
 			// Names the app even when it refuses: a caller reading `app` used
 			// to get nothing on this branch.
-			return InstallResult{Status: "failed", App: appName, Issues: issues}, nil
+			return InstallResult{Status: install.OutcomeFailed, App: appName, Issues: issues}, nil
 		}
 		if err := install.Install(app, opts); err != nil {
 			return nil, err
 		}
 		status, _ := install.Status(app.Name)
 		return InstallResult{
-			Status: "installed",
+			Status: install.OutcomeInstalled,
 			App:    app.Name,
 			Port:   port,
 			Path:   install.AppDir(app.Name),
@@ -714,7 +714,7 @@ func (s *Server) executeTool(name string, args map[string]any) (any, error) {
 			return nil, err
 		}
 		preserved := true
-		return InstallResult{Status: "uninstalled", App: appName, DataPreserved: &preserved}, nil
+		return InstallResult{Status: install.OutcomeUninstalled, App: appName, DataPreserved: &preserved}, nil
 
 	case "install_purge":
 		appName := stringArg(args, "app")
@@ -722,7 +722,7 @@ func (s *Server) executeTool(name string, args map[string]any) (any, error) {
 			return nil, err
 		}
 		purged := false
-		return InstallResult{Status: "purged", App: appName, DataPreserved: &purged}, nil
+		return InstallResult{Status: install.OutcomePurged, App: appName, DataPreserved: &purged}, nil
 
 	default:
 		return nil, fmt.Errorf("unknown tool: %s", name)

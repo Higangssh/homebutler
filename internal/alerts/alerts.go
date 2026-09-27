@@ -11,15 +11,30 @@ type AlertResult struct {
 	Disks  []DiskAlert `json:"disks"`
 }
 
+// Level is how close a resource is to its threshold. It is one of three
+// words and an agent branches on which, so the words are frozen at 1.0.
+type Level string
+
+const (
+	LevelOK       Level = "ok"
+	LevelWarning  Level = "warning"
+	LevelCritical Level = "critical"
+)
+
+// Levels is the whole vocabulary, in rising order.
+func Levels() []Level {
+	return []Level{LevelOK, LevelWarning, LevelCritical}
+}
+
 type AlertItem struct {
-	Status    string  `json:"status"`
+	Status    Level   `json:"status"`
 	Current   float64 `json:"current"`
 	Threshold float64 `json:"threshold"`
 }
 
 type DiskAlert struct {
 	Mount     string  `json:"mount"`
-	Status    string  `json:"status"`
+	Status    Level   `json:"status"`
 	Current   float64 `json:"current"`
 	Threshold float64 `json:"threshold"`
 }
@@ -58,12 +73,12 @@ func CheckWithStatus(cfg *config.AlertConfig, info *system.StatusInfo) *AlertRes
 	return result
 }
 
-func statusFor(current, threshold float64) string {
+func statusFor(current, threshold float64) Level {
 	if current >= threshold {
-		return "critical"
+		return LevelCritical
 	}
 	if current >= threshold*0.9 {
-		return "warning"
+		return LevelWarning
 	}
-	return "ok"
+	return LevelOK
 }

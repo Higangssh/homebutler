@@ -12,6 +12,8 @@ All notable changes to this project will be documented in this file.
 
 - every tool's answer is in the golden file, not only the three commands that print JSON (#286). The outputs section named each tool's type and walked the fields of `report`, `doctor` and `status` alone, so a field renamed inside `docker_list` or `watch_list` — the answers an agent branches on most — passed. #283 added three fields to `BackupResult` and the golden did not move. `docs/compatibility.md` now freezes every tool's answer, with the five Proxmox reads still passthrough
 
+- the words a status can hold are in the golden file, and so are the words an argument accepts (#287). The golden said a result's `status` was a string and not which strings, so `install_purge` could have stopped answering `purged`, or `watch_add` could have stopped taking `pm2`, and nothing failed. The install outcomes had been spelled separately by the MCP tool and the HTTP route. They and four other status sets are now named types with their words declared once. The JSON is unchanged
+
 ## [0.39.0](https://github.com/Higangssh/homebutler/compare/v0.38.0...v0.39.0) - 2026-09-23
 
 **Fourteen things homebutler can do had been waiting on a rule for what a browser must produce before it does them, and while that rule did not exist the dashboard could only look.** 0.35.1 gave it a write surface for *settings* (#154) and decided nothing about running an action, so fourteen capabilities sat in the registry pointing at an issue.

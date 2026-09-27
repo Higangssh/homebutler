@@ -765,6 +765,23 @@ func Purge(appName string) error {
 	return nil
 }
 
+// Outcome is how an install, uninstall or purge went, as the MCP tools and
+// the dashboard's routes both report it. They are two call sites answering
+// the same question, and they used to spell the answer separately.
+type Outcome string
+
+const (
+	OutcomeInstalled   Outcome = "installed"
+	OutcomeFailed      Outcome = "failed"
+	OutcomeUninstalled Outcome = "uninstalled"
+	OutcomePurged      Outcome = "purged"
+)
+
+// Outcomes is the whole vocabulary.
+func Outcomes() []Outcome {
+	return []Outcome{OutcomeInstalled, OutcomeFailed, OutcomeUninstalled, OutcomePurged}
+}
+
 // Status checks if the installed app is running.
 // ErrNotInstalled is what Status answers for an app that is in the catalogue
 // and has never been installed. That is the ordinary state of almost every

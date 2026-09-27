@@ -259,6 +259,23 @@ const (
 	GuestActionReboot   GuestAction = "reboot"
 )
 
+// GuestActions is the whole vocabulary, in the order the tools were added.
+func GuestActions() []GuestAction {
+	return []GuestAction{GuestActionStart, GuestActionShutdown, GuestActionReboot}
+}
+
+// ActionStatus is what a guest action answers with. Proxmox queues the task
+// and hands back a UPID; whether the guest actually changed state is the
+// task's answer, not this one, so the only word is that it was accepted.
+type ActionStatus string
+
+const ActionAccepted ActionStatus = "accepted"
+
+// ActionStatuses is the whole vocabulary.
+func ActionStatuses() []ActionStatus {
+	return []ActionStatus{ActionAccepted}
+}
+
 // TaskStatus is returned by /nodes/{node}/tasks/{upid}/status.
 type TaskStatus struct {
 	UPID       string `json:"upid"`

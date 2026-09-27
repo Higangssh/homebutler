@@ -42,7 +42,7 @@ proxmox_tasks risk=read args=[endpoint:string node:string] required=[node]
 report risk=write args=[keep:number no_save:boolean server:string]
 system_status risk=read args=[server:string]
 wake risk=write args=[broadcast:string target:string] required=[target]
-watch_add risk=write args=[container:string kind:string server:string unit:string] required=[container]
+watch_add risk=write args=[container:string kind:string{docker|pm2|systemd} server:string unit:string] required=[container]
 watch_check risk=write args=[server:string]
 watch_history risk=read args=[container:string include_logs:boolean limit:string server:string]
 watch_list risk=read args=[server:string]
@@ -549,3 +549,12 @@ watch.WatchedTarget.restart_count:int
 report.kind: gone new replaced image state port disk skipped
 doctor.runner: mcp cli shell
 doctor.category: backup config docker exposure incomplete notifications overall proxmox report system watch
+doctor.severity: pass warn fail
+config.severity: error warning
+alerts.status: ok warning critical
+watch.kind: docker systemd pm2
+docker.action.status: ok
+install.status: installed failed uninstalled purged
+wake.status: sent
+proxmox.guest.action: start shutdown reboot
+proxmox.guest.status: accepted

@@ -2,6 +2,7 @@ package mcp
 
 import (
 	"github.com/Higangssh/homebutler/internal/config"
+	"github.com/Higangssh/homebutler/internal/install"
 )
 
 // The shapes a tool returns when there is no type elsewhere to return.
@@ -47,9 +48,8 @@ type WatchRemoveResult struct {
 // about, and the fields that only apply to some outcomes are omitted rather
 // than invented.
 type InstallResult struct {
-	// Status is installed, failed, uninstalled or purged.
-	Status string `json:"status"`
-	App    string `json:"app"`
+	Status install.Outcome `json:"status"`
+	App    string          `json:"app"`
 	// Issues is why a refusal was a refusal. Present only on failed.
 	Issues []string `json:"issues,omitempty"`
 	Port   string   `json:"port,omitempty"`

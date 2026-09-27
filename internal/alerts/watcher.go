@@ -153,31 +153,31 @@ func checkAndEmit(cfg WatchConfig, prev *prevState, ch chan<- Event) {
 func checkResource(prev *prevState, ch chan<- Event, now time.Time, resource string, current, threshold float64, label string) {
 	severity := statusFor(current, threshold)
 
-	if !prev.changed(resource, severity) {
+	if !prev.changed(resource, string(severity)) {
 		return
 	}
 
 	switch severity {
-	case "warning":
+	case LevelWarning:
 		ch <- Event{
 			Time:     now,
-			Severity: "warning",
+			Severity: string(LevelWarning),
 			Resource: resource,
 			Message:  fmt.Sprintf("%-10s %5.1f%% (threshold: %.0f%%)", label, current, threshold),
 			Current:  current,
 		}
-	case "critical":
+	case LevelCritical:
 		ch <- Event{
 			Time:     now,
-			Severity: "critical",
+			Severity: string(LevelCritical),
 			Resource: resource,
 			Message:  fmt.Sprintf("%-10s %5.1f%% (threshold: %.0f%%)", label, current, threshold),
 			Current:  current,
 		}
-	case "ok":
+	case LevelOK:
 		ch <- Event{
 			Time:     now,
-			Severity: "ok",
+			Severity: string(LevelOK),
 			Resource: resource,
 			Message:  fmt.Sprintf("%-10s recovered (%.1f%%)", label, current),
 			Current:  current,

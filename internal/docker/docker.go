@@ -38,9 +38,21 @@ func List() ([]Container, error) {
 
 // ActionResult holds the result of a docker action.
 type ActionResult struct {
-	Action    string `json:"action"`
-	Container string `json:"container"`
-	Status    string `json:"status"`
+	Action    string       `json:"action"`
+	Container string       `json:"container"`
+	Status    ActionStatus `json:"status"`
+}
+
+// ActionStatus is how a docker action went. A failed action is an error, not
+// a status, so today there is one word; it is a type so a second one has to
+// be added here, where the contract lists it, rather than typed at a call site.
+type ActionStatus string
+
+const ActionOK ActionStatus = "ok"
+
+// ActionStatuses is the whole vocabulary.
+func ActionStatuses() []ActionStatus {
+	return []ActionStatus{ActionOK}
 }
 
 func Restart(name string) (*ActionResult, error) {
@@ -51,7 +63,7 @@ func Restart(name string) (*ActionResult, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to restart %s: %s", name, out)
 	}
-	return &ActionResult{Action: "restart", Container: name, Status: "ok"}, nil
+	return &ActionResult{Action: "restart", Container: name, Status: ActionOK}, nil
 }
 
 func Stop(name string) (*ActionResult, error) {
@@ -62,7 +74,7 @@ func Stop(name string) (*ActionResult, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to stop %s: %s", name, out)
 	}
-	return &ActionResult{Action: "stop", Container: name, Status: "ok"}, nil
+	return &ActionResult{Action: "stop", Container: name, Status: ActionOK}, nil
 }
 
 // LogsResult holds docker logs output.
