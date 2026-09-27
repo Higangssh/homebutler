@@ -3,6 +3,7 @@ package tui
 import (
 	"strings"
 
+	"github.com/Higangssh/homebutler/internal/alerts"
 	"github.com/charmbracelet/lipgloss"
 )
 
@@ -74,13 +75,13 @@ func progressBar(percent float64, width int) string {
 }
 
 // alertStyle returns the appropriate style for an alert status.
-func alertStyle(status string) lipgloss.Style {
+func alertStyle(status alerts.Level) lipgloss.Style {
 	switch status {
-	case "ok":
+	case alerts.LevelOK:
 		return okStyle
-	case "warning":
+	case alerts.LevelWarning:
 		return warningStyle
-	case "critical":
+	case alerts.LevelCritical:
 		return criticalStyle
 	default:
 		return dimStyle

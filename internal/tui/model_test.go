@@ -355,7 +355,7 @@ func TestTruncate(t *testing.T) {
 
 func TestAlertStyle(t *testing.T) {
 	// Just ensure no panics and returns non-nil styles
-	styles := []string{"ok", "warning", "critical", "unknown"}
+	styles := []alerts.Level{"ok", "warning", "critical", "unknown"}
 	for _, s := range styles {
 		style := alertStyle(s)
 		_ = style.Render("test")

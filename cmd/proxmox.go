@@ -283,7 +283,7 @@ func newProxmoxGuestActionCmd(action proxmox.GuestAction) *cobra.Command {
 			}
 			result := proxmoxGuestActionResult{
 				Endpoint: endpoint.Name, Node: node, Type: guestType, VMID: vmid,
-				Action: action, Status: "accepted", UPID: upid,
+				Action: action, Status: proxmox.ActionAccepted, UPID: upid,
 			}
 			return writeProxmox(cmd, result, jsonOutput, "Guest action accepted", func(b *strings.Builder) {
 				fmt.Fprintf(b, "Endpoint: %s\nNode: %s\nType: %s\nVMID: %d\nAction: %s\nUPID: %s\n",
@@ -386,13 +386,13 @@ type proxmoxScriptCommandResult struct {
 }
 
 type proxmoxGuestActionResult struct {
-	Endpoint string              `json:"endpoint"`
-	Node     string              `json:"node"`
-	Type     string              `json:"type"`
-	VMID     int                 `json:"vmid"`
-	Action   proxmox.GuestAction `json:"action"`
-	Status   string              `json:"status"`
-	UPID     string              `json:"upid"`
+	Endpoint string               `json:"endpoint"`
+	Node     string               `json:"node"`
+	Type     string               `json:"type"`
+	VMID     int                  `json:"vmid"`
+	Action   proxmox.GuestAction  `json:"action"`
+	Status   proxmox.ActionStatus `json:"status"`
+	UPID     string               `json:"upid"`
 }
 
 type proxmoxTaskStatusResult struct {

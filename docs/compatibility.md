@@ -22,6 +22,8 @@ promise — the golden file there fails the build when any of it moves.
 | **The `kind` vocabulary** | The eight words a change can carry, and what each means |
 | **The `runner` vocabulary** | `mcp`, `cli`, `shell` |
 | **The `category` vocabulary** | The eleven words a `doctor` finding can carry, documented in the README |
+| **Result vocabularies** | The words a result's `status` or `severity` can hold: `doctor` and `config_validate` severities, the `alerts` levels, the install outcomes, the `watch` kinds, the status of a docker, wake or Proxmox guest action, and the Proxmox guest action names. A new word is additive; a word removed or renamed is not |
+| **Argument enums** | Where a tool's input schema lists the words an argument accepts, as `watch_add`'s `kind` does |
 | **`doctor` exit codes** | Including under `--strict` |
 | **Documented config keys** | Everything in [configuration.md](configuration.md) keeps its name and meaning |
 | **HTTP routes and their protection** | The path, the method, and what the tier below asks the caller to bring. A route that quietly stops needing one is the change nobody sees |
@@ -164,6 +166,13 @@ this one has been wrong are worth writing down rather than discovering twice.
 - **Values.** The golden records that `kind` is a string, not that it is one of
   eight words. The vocabularies are frozen in the table above and tested
   separately; the golden is about shape.
+- **A word written at a call site.** The golden records the words each
+  package declares, not the words it emits. Six of the nine vocabularies
+  added for 1.0 are named types, which makes assigning one vocabulary's word
+  to another a compile error. It does not stop `Status: "done"`, because Go
+  converts an untyped string constant to any string type. The `doctor` and
+  `config` severities and the `watch` kinds are plain strings with constants,
+  and the demo data goes through `map[string]any` and is not typed at all.
 - **Meaning.** A field that keeps its name and type and starts meaning
   something else passes. `running_count` returning `0` for a machine whose
   containers were never counted was a change of meaning inside an unchanged

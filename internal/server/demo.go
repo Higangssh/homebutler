@@ -733,17 +733,17 @@ func (s *Server) demoInstallApp(w http.ResponseWriter, r *http.Request) {
 		port = "3001"
 	}
 	writeJSON(w, installResponse{
-		Status: "installed", App: app, Port: port,
+		Status: install.OutcomeInstalled, App: app, Port: port,
 		Path: "/home/demo/.homebutler/apps/" + app, State: "running",
 	})
 }
 
 func (s *Server) demoInstallUninstall(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, installResponse{Status: "uninstalled", App: r.PathValue("app"), DataPreserved: demoBool(true)})
+	writeJSON(w, installResponse{Status: install.OutcomeUninstalled, App: r.PathValue("app"), DataPreserved: demoBool(true)})
 }
 
 func (s *Server) demoInstallPurge(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, installResponse{Status: "purged", App: r.PathValue("app"), DataPreserved: demoBool(false)})
+	writeJSON(w, installResponse{Status: install.OutcomePurged, App: r.PathValue("app"), DataPreserved: demoBool(false)})
 }
 
 func (s *Server) demoWatchAdd(w http.ResponseWriter, r *http.Request) {
@@ -762,7 +762,7 @@ func (s *Server) demoGuestAction(action string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, map[string]any{
 			"endpoint": "pve", "node": bodyString(r, "node"), "type": bodyString(r, "type"),
-			"vmid": r.PathValue("vmid"), "action": action, "status": "accepted",
+			"vmid": r.PathValue("vmid"), "action": action, "status": proxmox.ActionAccepted,
 			"upid": "UPID:pve:00001234:0000ABCD:66000000:" + action + ":100:demo@pve:",
 		})
 	}

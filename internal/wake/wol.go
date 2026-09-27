@@ -15,7 +15,18 @@ type WakeResult struct {
 	Action    string `json:"action"`
 	MAC       string `json:"mac"`
 	Broadcast string `json:"broadcast"`
-	Status    string `json:"status"`
+	Status    Status `json:"status"`
+}
+
+// Status is how a wake went. A magic packet that could not be sent is an
+// error, and one that was sent cannot be confirmed, so there is one word.
+type Status string
+
+const StatusSent Status = "sent"
+
+// Statuses is the whole vocabulary.
+func Statuses() []Status {
+	return []Status{StatusSent}
 }
 
 // Send transmits a Wake-on-LAN magic packet to the given MAC address.
@@ -50,7 +61,7 @@ func Send(mac string, broadcast string) (*WakeResult, error) {
 		return nil, fmt.Errorf("failed to send magic packet: %w", err)
 	}
 
-	return &WakeResult{Action: "wake", MAC: mac, Broadcast: broadcast, Status: "sent"}, nil
+	return &WakeResult{Action: "wake", MAC: mac, Broadcast: broadcast, Status: StatusSent}, nil
 }
 
 func parseMac(mac string) ([]byte, error) {

@@ -7,7 +7,7 @@ func TestStatusFor(t *testing.T) {
 		name      string
 		current   float64
 		threshold float64
-		want      string
+		want      Level
 	}{
 		{"ok-low", 10, 90, "ok"},
 		{"ok-medium", 50, 90, "ok"},

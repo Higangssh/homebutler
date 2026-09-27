@@ -193,16 +193,16 @@ func MultiServer(results []map[string]interface{}) string {
 	return b.String()
 }
 
-func statusIcon(status string) string {
+func statusIcon(status alerts.Level) string {
 	switch status {
-	case "ok":
+	case alerts.LevelOK:
 		return "✅"
-	case "warning":
+	case alerts.LevelWarning:
 		return "⚠️"
-	case "critical":
+	case alerts.LevelCritical:
 		return "🔴"
 	default:
-		return status
+		return string(status)
 	}
 }
 

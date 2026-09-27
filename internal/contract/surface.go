@@ -21,13 +21,19 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/Higangssh/homebutler/internal/alerts"
 	"github.com/Higangssh/homebutler/internal/capability"
 	"github.com/Higangssh/homebutler/internal/config"
+	"github.com/Higangssh/homebutler/internal/docker"
 	"github.com/Higangssh/homebutler/internal/doctor"
+	"github.com/Higangssh/homebutler/internal/install"
 	"github.com/Higangssh/homebutler/internal/mcp"
+	"github.com/Higangssh/homebutler/internal/proxmox"
 	"github.com/Higangssh/homebutler/internal/report"
 	"github.com/Higangssh/homebutler/internal/server"
 	"github.com/Higangssh/homebutler/internal/system"
+	"github.com/Higangssh/homebutler/internal/wake"
+	"github.com/Higangssh/homebutler/internal/watch"
 )
 
 // Surface renders everything 1.0 freezes. The output is sorted rather than
@@ -70,7 +76,29 @@ func Surface() string {
 	b.WriteString("doctor.runner: " + strings.Join([]string{doctor.RunnerMCP, doctor.RunnerCLI, doctor.RunnerShell}, " ") + "\n")
 	b.WriteString("doctor.category: " + strings.Join(doctor.Categories(), " ") + "\n")
 
+	// The words a result field can hold. The golden's json section says these
+	// fields are strings; this says which strings. doctor.severity is also
+	// what doctor's own status field holds.
+	b.WriteString("doctor.severity: " + strings.Join([]string{doctor.SeverityPass, doctor.SeverityWarn, doctor.SeverityFail}, " ") + "\n")
+	b.WriteString("config.severity: " + strings.Join([]string{config.SeverityError, config.SeverityWarning}, " ") + "\n")
+	b.WriteString("alerts.status: " + words(alerts.Levels()) + "\n")
+	b.WriteString("watch.kind: " + strings.Join([]string{watch.KindDocker, watch.KindSystemd, watch.KindPM2}, " ") + "\n")
+	b.WriteString("docker.action.status: " + words(docker.ActionStatuses()) + "\n")
+	b.WriteString("install.status: " + words(install.Outcomes()) + "\n")
+	b.WriteString("wake.status: " + words(wake.Statuses()) + "\n")
+	b.WriteString("proxmox.guest.action: " + words(proxmox.GuestActions()) + "\n")
+	b.WriteString("proxmox.guest.status: " + words(proxmox.ActionStatuses()) + "\n")
+
 	return b.String()
+}
+
+// words renders a typed vocabulary in the order its package declares it.
+func words[T ~string](vocabulary []T) string {
+	out := make([]string, len(vocabulary))
+	for i, word := range vocabulary {
+		out[i] = string(word)
+	}
+	return strings.Join(out, " ")
 }
 
 // toolLines is one line per MCP tool: its name, what calling it may do, and the
@@ -102,11 +130,22 @@ func toolLines() []string {
 // the element type an array of paths and an array of numbers are the same
 // line, so changing one into the other — which breaks every caller — would not
 // show up in the file that exists to show it.
+//
+// An enum is recorded too. `watch_add` takes kind as one of three words, and
+// dropping one breaks the agent that sends it while the type stays "string".
+// The words are sorted: the order a schema lists them in is not something a
+// caller can depend on.
 func argType(property capability.Property) string {
+	typ := property.Type
 	if property.Type == "array" && property.Items != nil {
-		return "array<" + property.Items.Type + ">"
+		typ = "array<" + property.Items.Type + ">"
 	}
-	return property.Type
+	if len(property.Enum) > 0 {
+		words := append([]string(nil), property.Enum...)
+		sort.Strings(words)
+		typ += "{" + strings.Join(words, "|") + "}"
+	}
+	return typ
 }
 
 // routeLines covers what a dashboard, a widget or a script can reach over HTTP,

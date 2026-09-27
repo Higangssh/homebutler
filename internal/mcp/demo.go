@@ -57,7 +57,7 @@ func (s *Server) executeDemoTool(name string, args map[string]any) (any, error) 
 		}
 		return proxmoxGuestActionResult{
 			Endpoint: request.Endpoint, Node: request.Node, Type: request.Type, VMID: request.VMID,
-			Action: request.Action, Status: "accepted", UPID: "UPID:" + request.Node + ":demo",
+			Action: request.Action, Status: proxmox.ActionAccepted, UPID: "UPID:" + request.Node + ":demo",
 		}, nil
 	case "proxmox_task_status":
 		endpoint, err := strictProxmoxStringArg(args, "endpoint")
@@ -120,7 +120,7 @@ func (s *Server) executeDemoTool(name string, args map[string]any) (any, error) 
 		}
 		// WakeResult names the field mac, not target: the demo used to answer
 		// with a key the product does not have.
-		return wake.WakeResult{Action: "wake", MAC: target, Broadcast: "255.255.255.255", Status: "sent"}, nil
+		return wake.WakeResult{Action: "wake", MAC: target, Broadcast: "255.255.255.255", Status: wake.StatusSent}, nil
 	case "open_ports":
 		return ports.Result{Ports: demoPortInfos(server)}, nil
 	case "network_scan":
@@ -298,7 +298,7 @@ func (s *Server) executeDemoTool(name string, args map[string]any) (any, error) 
 			port = p
 		}
 		return InstallResult{
-			Status: "installed",
+			Status: install.OutcomeInstalled,
 			App:    a.Name,
 			Port:   port,
 			Path:   "/home/demo/.homebutler/apps/" + a.Name,
@@ -310,14 +310,14 @@ func (s *Server) executeDemoTool(name string, args map[string]any) (any, error) 
 		if _, ok := install.Registry[app]; !ok {
 			return nil, fmt.Errorf("unknown app %q, use install_list to see available apps", app)
 		}
-		return InstallResult{Status: "uninstalled", App: app, DataPreserved: demoBool(true)}, nil
+		return InstallResult{Status: install.OutcomeUninstalled, App: app, DataPreserved: demoBool(true)}, nil
 
 	case "install_purge":
 		app := stringArg(args, "app")
 		if _, ok := install.Registry[app]; !ok {
 			return nil, fmt.Errorf("unknown app %q, use install_list to see available apps", app)
 		}
-		return InstallResult{Status: "purged", App: app, DataPreserved: demoBool(false)}, nil
+		return InstallResult{Status: install.OutcomePurged, App: app, DataPreserved: demoBool(false)}, nil
 
 	default:
 		return nil, fmt.Errorf("unknown tool: %s", name)
