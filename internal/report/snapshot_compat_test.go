@@ -196,3 +196,51 @@ func TestAnUnreadableSnapshotIsABaselineThatSaysSo(t *testing.T) {
 		t.Errorf("an unreadable history is not a first inspection: %+v", rep.NotableChanges)
 	}
 }
+
+// A snapshot taken while Docker was down records that, and the next report
+// must not read its empty container list as the truth. Diffing against it
+// would call every running container new. The fixture is hand-made from the
+// v0.22.0 one, since no machine the others came from had a failed collector;
+// the README says what was changed.
+func TestASnapshotTakenWhileDockerWasDownIsNotComparedOnContainers(t *testing.T) {
+	path := snapshotFixtures(t)["v0.22.0-docker-down"]
+	if path == "" {
+		t.Fatal("the docker-down fixture is missing")
+	}
+	dir := t.TempDir()
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, filepath.Base(path)), data, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	prev, err := loadLatest(dir)
+	if err != nil {
+		t.Fatalf("loadLatest: %v", err)
+	}
+	if !prev.collectorFailed("docker") {
+		t.Fatalf("failed_collectors was not read: %+v", prev.Failed)
+	}
+
+	rep, err := Run(&config.Config{}, fakeFuncs(fixtureContainers, nil), Options{SnapshotDir: dir, NoSave: true})
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if rep.IsBaseline {
+		t.Fatal("a snapshot with a failed collector is still a snapshot to compare against")
+	}
+	skipped := false
+	for _, c := range rep.NotableChanges {
+		if c.Kind == kindNew && strings.HasPrefix(c.Target, "hb-fixture-") {
+			t.Errorf("%s reported as new against a snapshot whose Docker did not answer", c.Target)
+		}
+		if c.Kind == kindSkipped && c.Target == nounContainers {
+			skipped = true
+		}
+	}
+	if !skipped {
+		t.Errorf("containers were not reported as skipped: %+v", rep.NotableChanges)
+	}
+}
