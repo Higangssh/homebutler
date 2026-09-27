@@ -22,16 +22,9 @@ import (
 // the classification wrong is still possible, leaving it out is not.
 func TestEveryToolDeclaresWhatItAnswersWith(t *testing.T) {
 	for _, c := range capability.Registry {
-		out, ok := ToolOutputs[c.Tool.Name]
-		if !ok {
-			t.Errorf("%s is in the registry and does not say what it answers with: add it to ToolOutputs as frozen(...) or passthrough(...)", c.Tool.Name)
-			continue
-		}
-		switch {
-		case out.Frozen == nil && out.Passthrough == "":
-			t.Errorf("%s declares neither a shape nor whose shape it is", c.Tool.Name)
-		case out.Frozen != nil && out.Passthrough != "":
-			t.Errorf("%s declares both a frozen shape and a passthrough; it is one or the other", c.Tool.Name)
+		answer, ok := ToolOutputs[c.Tool.Name]
+		if !ok || answer == nil {
+			t.Errorf("%s is in the registry and does not say what it answers with: add the type it returns to ToolOutputs", c.Tool.Name)
 		}
 	}
 }
@@ -66,7 +59,8 @@ var demoArgs = map[string]map[string]any{
 	"install_uninstall":      {"app": "uptime-kuma"},
 	"install_purge":          {"app": "uptime-kuma"},
 	"proxmox_node":           {"node": "pve"},
-	"proxmox_task_status":    {"node": "pve", "upid": "UPID:pve:0"},
+	"proxmox_tasks":          {"node": "pve"},
+	"proxmox_task_status":    {"endpoint": "pve", "node": "pve", "upid": "UPID:pve:0"},
 	"proxmox_guest_start":    {"endpoint": "pve", "node": "pve", "type": "qemu", "vmid": 100.0, "confirm": true},
 	"proxmox_guest_reboot":   {"endpoint": "pve", "node": "pve", "type": "qemu", "vmid": 100.0, "confirm": true},
 	"proxmox_guest_shutdown": {"endpoint": "pve", "node": "pve", "type": "qemu", "vmid": 100.0, "confirm": true},
@@ -87,17 +81,14 @@ func TestDemoAnswersWithTheShapeTheToolDeclares(t *testing.T) {
 
 	for _, c := range capability.Registry {
 		name := c.Tool.Name
-		out := ToolOutputs[name]
-		if out.Frozen == nil {
-			continue // not ours to hold a shape for
-		}
+		answer := ToolOutputs[name]
 
 		result, err := s.executeDemoTool(name, demoArgs[name])
 		if err != nil {
 			t.Errorf("%s: demo refused its own arguments: %v", name, err)
 			continue
 		}
-		missing := missingFields(t, out.Frozen, result)
+		missing := missingFields(t, answer, result)
 		if len(missing) > 0 {
 			t.Errorf("%s: the demo answer is missing %v — a caller meeting demo first would learn those fields do not exist", name, missing)
 		}
