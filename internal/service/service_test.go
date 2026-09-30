@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
+	_ "time/tzdata" // Asia/Seoul below, on a machine that may not have it
 )
 
 // The unit has to name the binary that wrote it. Rendering a bare "homebutler"
@@ -244,5 +246,40 @@ func TestParseRunning(t *testing.T) {
 	}
 	if _, _, known = parseRunning(""); known {
 		t.Error("nothing printed was taken as an answer")
+	}
+}
+
+// The default format carries a zone abbreviation, and Go reads one it does not
+// know as UTC under that name. So a time is only trusted in the machine's own
+// zone or in UTC, and anything else is left out rather than written nine hours
+// wrong.
+func TestParseSystemdTime(t *testing.T) {
+	seoul, err := time.LoadLocation("Asia/Seoul")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	want := "2026-09-30T12:46:44Z"
+	for _, c := range []struct {
+		local *time.Location
+		value string
+		want  string
+	}{
+		{time.UTC, "@1790772404", want},                 // --timestamp=unix, systemd 248+
+		{seoul, "Wed 2026-09-30 21:46:44 KST", want},    // the default, in the machine's zone
+		{time.UTC, "Wed 2026-09-30 12:46:44 UTC", want}, // the default on a UTC machine
+		{seoul, "Wed 2026-09-30 12:46:44 UTC", want},    // --timestamp=utc
+		{time.UTC, "Wed 2026-09-30 21:46:44 KST", ""},   // a zone this machine is not in
+		{time.UTC, "n/a", ""},                           // never started
+		{time.UTC, "", ""},
+		{time.UTC, "@0", ""},
+	} {
+		got := ""
+		if at := parseSystemdTimeIn(c.value, c.local); !at.IsZero() {
+			got = at.UTC().Format(time.RFC3339Nano)
+		}
+		if got != c.want {
+			t.Errorf("Local=%s %q read as %q, want %q", c.local, c.value, got, c.want)
+		}
 	}
 }

@@ -267,6 +267,12 @@ var lingering = func(user string) (on, known bool) {
 // a time whose zone is neither the machine's nor UTC is not trusted: an empty
 // field is better than one nine hours out.
 func ParseSystemdTime(value string) time.Time {
+	return parseSystemdTimeIn(value, time.Local)
+}
+
+// parseSystemdTimeIn is ParseSystemdTime for a machine in local. Tests pass
+// the zone rather than set time.Local, which other goroutines read.
+func parseSystemdTimeIn(value string, local *time.Location) time.Time {
 	value = strings.TrimSpace(value)
 	if value == "" || value == "n/a" {
 		return time.Time{}
@@ -278,12 +284,12 @@ func ParseSystemdTime(value string) time.Time {
 		}
 		return time.Unix(n, 0)
 	}
-	t, err := time.ParseInLocation("Mon 2006-01-02 15:04:05 MST", value, time.Local)
+	t, err := time.ParseInLocation("Mon 2006-01-02 15:04:05 MST", value, local)
 	if err != nil {
 		return time.Time{}
 	}
 	name, _ := t.Zone()
-	localName, _ := t.In(time.Local).Zone()
+	localName, _ := t.In(local).Zone()
 	if name != localName && name != "UTC" {
 		return time.Time{}
 	}
