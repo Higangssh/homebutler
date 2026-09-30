@@ -2,7 +2,9 @@
 
 All notable changes to this project will be documented in this file.
 
-## [Unreleased]
+## [0.41.0](https://github.com/Higangssh/homebutler/compare/v0.40.0...v0.41.0) - 2026-09-30
+
+**The first day of running 0.40.0 on a real server found homebutler stating things nobody had told it: a `docker kill` filed as an OOM with high confidence, a restart recorded that never happened, and a command suggested that does not exist.** This release fixes those and nothing else — no behaviour changes, on purpose, because it is the build that runs on that server before 1.0, and 1.0 will be what it does. Each fix makes homebutler say only what the machine reported: `oom` only when Docker sent an `oom` event, a start time only when something started, and in one format whichever of Docker, systemd and pm2 it came from.
 
 ### 🐛 Fixes
 
