@@ -21,6 +21,7 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // Kind names the supervisor a host offers.
@@ -258,6 +259,87 @@ var lingering = func(user string) (on, known bool) {
 		return false, true
 	}
 	return false, false
+}
+
+// ParseSystemdTime reads a systemd timestamp property in either form. The default
+// one is local time with a zone abbreviation — "Wed 2026-09-30 21:46:44 KST"
+// — and Go reads an abbreviation it does not know as UTC under that name, so
+// a time whose zone is neither the machine's nor UTC is not trusted: an empty
+// field is better than one nine hours out.
+func ParseSystemdTime(value string) time.Time {
+	return parseSystemdTimeIn(value, time.Local)
+}
+
+// parseSystemdTimeIn is ParseSystemdTime for a machine in local. Tests pass
+// the zone rather than set time.Local, which other goroutines read.
+func parseSystemdTimeIn(value string, local *time.Location) time.Time {
+	value = strings.TrimSpace(value)
+	if value == "" || value == "n/a" {
+		return time.Time{}
+	}
+	if secs, ok := strings.CutPrefix(value, "@"); ok {
+		n, err := strconv.ParseInt(secs, 10, 64)
+		if err != nil || n <= 0 {
+			return time.Time{}
+		}
+		return time.Unix(n, 0)
+	}
+	t, err := time.ParseInLocation("Mon 2006-01-02 15:04:05 MST", value, local)
+	if err != nil {
+		return time.Time{}
+	}
+	name, _ := t.Zone()
+	localName, _ := t.In(local).Zone()
+	if name != localName && name != "UTC" {
+		return time.Time{}
+	}
+	return t
+}
+
+// Running reports whether the unit is up under the host's supervisor, since
+// when if the supervisor says, and whether it could find out at all.
+//
+// watch list shows LAST CHECKED from the last `watch add` or `watch check`.
+// With the service installed nothing runs either of those, so the column sat
+// at the moment the target was added while the monitor was watching it the
+// whole time. This is what lets the list say so.
+func Running(kind Kind, u Unit) (running bool, since time.Time, known bool) {
+	switch kind {
+	case Systemd:
+		name := u.Label + ".service"
+		out, err := exec.Command("systemctl", "--user", "show", name, "--timestamp=unix", "--property=ActiveState,ActiveEnterTimestamp").Output()
+		if err != nil {
+			out, err = exec.Command("systemctl", "--user", "show", name, "--property=ActiveState,ActiveEnterTimestamp").Output()
+		}
+		if err != nil {
+			return false, time.Time{}, false
+		}
+		return parseRunning(string(out))
+	case Launchd:
+		out, err := exec.Command("launchctl", "print", "gui/"+fmt.Sprint(os.Getuid())+"/"+u.Label).Output()
+		if err != nil {
+			return false, time.Time{}, true // not loaded
+		}
+		return strings.Contains(string(out), "state = running"), time.Time{}, true
+	}
+	return false, time.Time{}, false
+}
+
+func parseRunning(show string) (bool, time.Time, bool) {
+	var state string
+	var since time.Time
+	for _, line := range strings.Split(show, "\n") {
+		if v, ok := strings.CutPrefix(strings.TrimSpace(line), "ActiveState="); ok {
+			state = v
+		}
+		if v, ok := strings.CutPrefix(strings.TrimSpace(line), "ActiveEnterTimestamp="); ok {
+			since = ParseSystemdTime(v)
+		}
+	}
+	if state == "" {
+		return false, time.Time{}, false
+	}
+	return state == "active", since, true
 }
 
 // Write puts the rendered unit at path, creating the directory it belongs in.

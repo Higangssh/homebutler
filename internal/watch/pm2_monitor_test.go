@@ -179,12 +179,12 @@ func TestPM2Monitor_RestartTimeZeroToPositive(t *testing.T) {
 	callCount := 0
 	runner := func(name string, args ...string) (string, error) {
 		callCount++
-		restartTime := 0
+		restartTime, uptime := 0, int64(1790774044807)
 		if callCount > 1 {
-			restartTime = 5 // jump from 0 to 5
+			restartTime, uptime = 5, 1790774047531 // jump from 0 to 5, and a new start
 		}
 		procs := []pm2Process{
-			{Name: "app", PM2Env: pm2Env{RestartTime: restartTime, Status: "online"}},
+			{Name: "app", PM2Env: pm2Env{RestartTime: restartTime, Status: "online", PMUptime: uptime}},
 		}
 		data, _ := json.Marshal(procs)
 		return string(data), nil
@@ -212,11 +212,13 @@ func TestPM2Monitor_RestartTimeZeroToPositive(t *testing.T) {
 		if inc.RestartCount != 5 {
 			t.Errorf("expected RestartCount=5, got %d", inc.RestartCount)
 		}
-		if !strings.Contains(inc.PrevStarted, "0") {
-			t.Errorf("expected prev restart_time 0, got %s", inc.PrevStarted)
+		// The start times, not "restart_time was 0": the count is in
+		// RestartCount already.
+		if inc.PrevStarted != "2026-09-30T13:14:04.807Z" {
+			t.Errorf("PrevStarted = %q, want the run that died", inc.PrevStarted)
 		}
-		if !strings.Contains(inc.CurrStarted, "5") {
-			t.Errorf("expected curr restart_time 5, got %s", inc.CurrStarted)
+		if inc.CurrStarted != "2026-09-30T13:14:07.531Z" {
+			t.Errorf("CurrStarted = %q, want the run after it", inc.CurrStarted)
 		}
 	case <-ctx.Done():
 		t.Fatal("timed out")

@@ -101,10 +101,10 @@ func TestSystemdMonitor_DetectStartChange(t *testing.T) {
 		callCount++
 		if name == "systemctl" {
 			if callCount <= 1 {
-				return "ActiveState=active\nSubState=running\nExecMainStartTimestamp=ts1", nil
+				return "ActiveState=active\nSubState=running\nExecMainStartTimestamp=@1790772404", nil
 			}
 			// Restarted (active but different timestamp)
-			return "ActiveState=active\nSubState=running\nExecMainStartTimestamp=ts2", nil
+			return "ActiveState=active\nSubState=running\nExecMainStartTimestamp=@1790772464", nil
 		}
 		if name == "journalctl" {
 			return "journal log lines", nil
@@ -134,11 +134,11 @@ func TestSystemdMonitor_DetectStartChange(t *testing.T) {
 		if inc.Container != "myunit" {
 			t.Errorf("expected myunit, got %s", inc.Container)
 		}
-		if inc.PrevStarted != "ts1" {
-			t.Errorf("expected PrevStarted=ts1, got %s", inc.PrevStarted)
+		if inc.PrevStarted != "2026-09-30T12:46:44Z" {
+			t.Errorf("PrevStarted = %q", inc.PrevStarted)
 		}
-		if inc.CurrStarted != "ts2" {
-			t.Errorf("expected CurrStarted=ts2, got %s", inc.CurrStarted)
+		if inc.CurrStarted != "2026-09-30T12:47:44Z" {
+			t.Errorf("CurrStarted = %q", inc.CurrStarted)
 		}
 	case <-ctx.Done():
 		t.Fatal("timed out waiting for incident")

@@ -316,7 +316,7 @@ func (dm *DockerMonitor) watchOnce(ctx context.Context, targets []Target, incide
 			if st, ok := inspectState(run, name); ok {
 				oomKilled = oomKilled || st.OOMKilled
 				if !st.StartedAt.After(diedAt) {
-					prevStarted = st.StartedAt.Format(time.RFC3339Nano)
+					prevStarted = StartTime(st.StartedAt)
 				}
 			}
 
@@ -335,7 +335,7 @@ func (dm *DockerMonitor) watchOnce(ctx context.Context, targets []Target, incide
 			// anything had restarted.
 			currStarted := ""
 			if st, ok := inspectState(run, name); ok && st.StartedAt.After(diedAt) {
-				currStarted = st.StartedAt.Format(time.RFC3339Nano)
+				currStarted = StartTime(st.StartedAt)
 			}
 
 			inc := Incident{
