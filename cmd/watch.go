@@ -544,7 +544,8 @@ Docker targets use docker events (real-time). Systemd and PM2 targets use pollin
 					}
 
 					// The exit code is the analyser's highest-confidence signal —
-					// 137 is OOM, 139 a segfault, 143 a SIGTERM — and leaving it
+					// 139 a segfault, 143 a SIGTERM, 137 a SIGKILL that is only
+					// called OOM when OOMKilled says so — and leaving it
 					// unset meant every incident reached `case 0` and was
 					// reported as a clean exit (#108).
 					crashInfo := watch.CrashInfo{

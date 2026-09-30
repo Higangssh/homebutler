@@ -2,6 +2,17 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### 🐛 Fixes
+
+- `watch` recorded `docker kill`, a `docker stop` that ran out of time and `kill -9` as a high-confidence OOM (#PR). All of them end in exit 137, and the analyser called every 137 `oom` with `high` confidence, while the Docker monitor never learned whether the OOM killer had been involved: it subscribed to `die` alone, and the `oom` event Docker sends just before an OOM death never reached it. The monitor now subscribes to `oom` too, and a die that follows its container's `oom` within ten seconds is OOM-killed, with `docker inspect` as a second source. A 137 without that evidence is `unknown`, `low`, signal `SIGKILL`. **An agent that branched on `oom` now receives it only for an OOM.** Found on the 0.40.0 soak: a `docker kill` came back as `oom`/`high` while `docker inspect` said `OOMKilled=false`
+- `watch` wrote sentences into an incident's start times (#PR). A Docker incident's `curr_started_at` said `(post-restart)` whether or not anything had restarted, and `prev_started_at` said `died at event time 1790772824`. Both now hold the container's start time or nothing: `prev_started_at` the run that died, `curr_started_at` the run after it, when there is one
+
+### 🧪 Tests
+
+- `crash_analysis.category` and `confidence` are in the golden file (#PR). They are what an agent branches on after an incident, and they were outside the freeze, which is how a wrong `oom` could have been frozen
+
 ## [0.40.0](https://github.com/Higangssh/homebutler/compare/v0.39.0...v0.40.0) - 2026-09-28
 
 **1.0 promises that what homebutler answers with will not move under the people who build on it, and until this release most of that promise could not be checked.** The golden file read the fields of three commands and named the type of everything else, so a field renamed inside `docker_list`, a status word dropped from `install_purge`, or a snapshot an older release wrote could all change with the build still green. All of it is under the test now: every tool's answer field by field, the words a status or an argument can hold, the five Proxmox reads, and a snapshot from each release whose format changed.

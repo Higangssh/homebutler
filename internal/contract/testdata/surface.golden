@@ -690,6 +690,8 @@ doctor.severity: pass warn fail
 config.severity: error warning
 alerts.status: ok warning critical
 watch.kind: docker systemd pm2
+watch.crash.category: oom segfault sigterm panic dependency fatal_error timeout error clean_restart unknown
+watch.crash.confidence: high medium low
 docker.action.status: ok
 install.status: installed failed uninstalled purged
 wake.status: sent
