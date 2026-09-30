@@ -83,6 +83,8 @@ func Surface() string {
 	b.WriteString("config.severity: " + strings.Join([]string{config.SeverityError, config.SeverityWarning}, " ") + "\n")
 	b.WriteString("alerts.status: " + words(alerts.Levels()) + "\n")
 	b.WriteString("watch.kind: " + strings.Join([]string{watch.KindDocker, watch.KindSystemd, watch.KindPM2}, " ") + "\n")
+	b.WriteString("watch.crash.category: " + strings.Join(watch.CrashCategories(), " ") + "\n")
+	b.WriteString("watch.crash.confidence: " + strings.Join(watch.CrashConfidences(), " ") + "\n")
 	b.WriteString("docker.action.status: " + words(docker.ActionStatuses()) + "\n")
 	b.WriteString("install.status: " + words(install.Outcomes()) + "\n")
 	b.WriteString("wake.status: " + words(wake.Statuses()) + "\n")

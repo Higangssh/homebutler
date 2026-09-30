@@ -57,7 +57,7 @@ func TestAnalyzeUsesTheExitCodeItIsGiven(t *testing.T) {
 		code     int
 		category string
 	}{
-		{137, "oom"},
+		{137, "unknown"}, // SIGKILL; only OOMKilled makes it "oom"
 		{139, "segfault"},
 		{143, "sigterm"},
 		{0, "clean_restart"},

@@ -38,10 +38,35 @@ type DockerMonitor struct {
 }
 
 type dockerEvent struct {
-	Status string           `json:"status"`
-	ID     string           `json:"id"`
-	Actor  dockerEventActor `json:"Actor"`
-	Time   int64            `json:"time"`
+	// Action is what happened. Docker 29 sends it here and leaves the older
+	// status field empty; older daemons send both.
+	Action   string           `json:"Action"`
+	Status   string           `json:"status"`
+	ID       string           `json:"id"`
+	Actor    dockerEventActor `json:"Actor"`
+	Time     int64            `json:"time"`
+	TimeNano int64            `json:"timeNano"`
+}
+
+// action is what the event reports happening. An event with neither field
+// is a die: the stream used to subscribe to nothing else, and the recorded
+// streams this is tested against predate both fields being checked.
+func (e *dockerEvent) action() string {
+	if e.Action != "" {
+		return e.Action
+	}
+	if e.Status != "" {
+		return e.Status
+	}
+	return "die"
+}
+
+// at is when the event happened, as precisely as the daemon said.
+func (e *dockerEvent) at() time.Time {
+	if e.TimeNano != 0 {
+		return time.Unix(0, e.TimeNano)
+	}
+	return time.Unix(e.Time, 0)
 }
 
 type dockerEventActor struct {
@@ -79,6 +104,36 @@ func (e *dockerEvent) containerName() string {
 		}
 	}
 	return e.ID
+}
+
+// oomWindow is how far before a die an oom event can be and still be the
+// reason for it. Measured on a Raspberry Pi with Docker 29: oom arrived 0.46s
+// before die. The OOM killer can also take a single process and leave the
+// container running, so an oom long before a die is not evidence about it.
+const oomWindow = 10 * time.Second
+
+// containerState is what `docker inspect` says about a container's current
+// run. It is read to find out what the die event does not say: whether the
+// kernel's OOM killer did it, and whether anything restarted afterwards.
+type containerState struct {
+	StartedAt time.Time
+	OOMKilled bool
+}
+
+func inspectState(run CommandRunner, name string) (containerState, bool) {
+	out, err := run("docker", "inspect", "-f", "{{.State.StartedAt}}|{{.State.OOMKilled}}", name)
+	if err != nil {
+		return containerState{}, false
+	}
+	started, oom, ok := strings.Cut(strings.TrimSpace(out), "|")
+	if !ok {
+		return containerState{}, false
+	}
+	at, err := time.Parse(time.RFC3339Nano, started)
+	if err != nil {
+		return containerState{}, false
+	}
+	return containerState{StartedAt: at, OOMKilled: oom == "true"}, true
 }
 
 // Watch starts listening to docker die events and sends Incidents for watched containers.
@@ -159,6 +214,7 @@ func (dm *DockerMonitor) watchOnce(ctx context.Context, targets []Target, incide
 			util.EnsureDockerHost()
 			cmd := exec.CommandContext(ctx, "docker", "events",
 				"--filter", "event=die",
+				"--filter", "event=oom",
 				"--format", "{{json .}}")
 			stdout, err := cmd.StdoutPipe()
 			if err != nil {
@@ -208,6 +264,9 @@ func (dm *DockerMonitor) watchOnce(ctx context.Context, targets []Target, incide
 		}
 	}()
 
+	// The last oom event per container, kept until the die it explains.
+	lastOOM := map[string]time.Time{}
+
 	for {
 		select {
 		case <-ctx.Done():
@@ -229,9 +288,37 @@ func (dm *DockerMonitor) watchOnce(ctx context.Context, targets []Target, incide
 			if !watched[name] {
 				continue
 			}
+			if ev.action() == "oom" {
+				lastOOM[name] = ev.at()
+				continue
+			}
+			diedAt := ev.at()
+
+			// Docker's oom event is the evidence the OOM killer was involved.
+			// Inspect is only a second source: a restart policy that brings
+			// the container straight back writes a new State, and with it
+			// OOMKilled goes back to false before this can read it.
+			oomKilled := false
+			if at, ok := lastOOM[name]; ok {
+				gap := diedAt.Sub(at)
+				oomKilled = gap >= 0 && gap <= oomWindow
+				delete(lastOOM, name)
+			}
 
 			// Capture pre-death logs immediately (the container just died)
 			preLogs := captureLogsWithRunner(run, "docker", name, "100")
+
+			// The run that died, if nothing has replaced it yet. A start time
+			// after the die belongs to the next run and says nothing about
+			// this one, so it is left out rather than written in the wrong
+			// field.
+			prevStarted := ""
+			if st, ok := inspectState(run, name); ok {
+				oomKilled = oomKilled || st.OOMKilled
+				if !st.StartedAt.After(diedAt) {
+					prevStarted = st.StartedAt.Format(time.RFC3339Nano)
+				}
+			}
 
 			now := time.Now()
 
@@ -243,20 +330,29 @@ func (dm *DockerMonitor) watchOnce(ctx context.Context, targets []Target, incide
 			case <-ctx.Done():
 			}
 
+			// Only a start after the die is a restart. Without one the field
+			// stays empty: this used to say "(post-restart)" whether or not
+			// anything had restarted.
+			currStarted := ""
+			if st, ok := inspectState(run, name); ok && st.StartedAt.After(diedAt) {
+				currStarted = st.StartedAt.Format(time.RFC3339Nano)
+			}
+
 			inc := Incident{
 				ID:          GenerateIncidentID(name, now),
 				Container:   name,
 				DetectedAt:  now,
-				PrevStarted: fmt.Sprintf("died at event time %d", ev.Time),
-				CurrStarted: "(post-restart)",
+				PrevStarted: prevStarted,
+				CurrStarted: currStarted,
 				PreLogs:     preLogs,
 				PostLogs:    postLogs,
+				OOMKilled:   oomKilled,
 			}
 			if code, ok := ev.exitCode(); ok {
 				inc.ExitCode = &code
-				// 137 is SIGKILL, which the kernel's OOM killer uses. The
-				// analyser distinguishes the two, so this only reports what
-				// the event actually said.
+				// 137 is SIGKILL. The OOM killer sends it, and so do docker
+				// kill, a docker stop that ran out of time and kill -9, so the
+				// code alone does not say which. OOMKilled above does.
 			}
 			if dm.Dir != "" {
 				if err := SaveIncident(dm.Dir, &inc, dm.Keep); err != nil {

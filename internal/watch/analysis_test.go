@@ -21,10 +21,12 @@ func TestAnalyze(t *testing.T) {
 			wantConfidence: "high",
 		},
 		{
+			// SIGKILL alone: docker kill, a timed-out stop and kill -9 all
+			// end this way, so it is not evidence of the OOM killer.
 			name:           "exit code 137 without OOMKilled",
 			info:           CrashInfo{ExitCode: 137, Backend: "systemd"},
-			wantCategory:   "oom",
-			wantConfidence: "high",
+			wantCategory:   "unknown",
+			wantConfidence: "low",
 		},
 		{
 			name:           "exit code 139 segfault",
@@ -79,10 +81,12 @@ func TestAnalyze(t *testing.T) {
 			wantPatterns:   []string{"fatal"},
 		},
 		{
+			// The signal still decides over the log, as 139 and 143 do: the
+			// process was killed from outside, whatever it printed first.
 			name:           "exit code 137 with panic log - exit code wins",
 			info:           CrashInfo{ExitCode: 137, ErrorLog: "panic: something went wrong", Backend: "docker"},
-			wantCategory:   "oom",
-			wantConfidence: "high",
+			wantCategory:   "unknown",
+			wantConfidence: "low",
 		},
 		{
 			name:           "multiple patterns matched",

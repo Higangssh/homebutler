@@ -47,6 +47,18 @@ var logPatterns = []logPattern{
 	{regexp.MustCompile(`(?i)deadline exceeded`), "deadline exceeded", "timeout", 5},
 }
 
+// CrashCategories is every word CrashSummary.Category can hold. An agent
+// branches on it, so it is frozen with the other vocabularies: a watch that
+// filed docker kill under "oom" is how it was found to be outside the freeze.
+func CrashCategories() []string {
+	return []string{"oom", "segfault", "sigterm", "panic", "dependency", "fatal_error", "timeout", "error", "clean_restart", "unknown"}
+}
+
+// CrashConfidences is every word CrashSummary.Confidence can hold.
+func CrashConfidences() []string {
+	return []string{"high", "medium", "low"}
+}
+
 func Analyze(info CrashInfo) CrashSummary {
 	s := CrashSummary{
 		ExitCode: info.ExitCode,
@@ -62,9 +74,13 @@ func Analyze(info CrashInfo) CrashSummary {
 
 	switch info.ExitCode {
 	case 137:
-		s.Category = "oom"
-		s.Reason = "Process received SIGKILL (likely OOM)"
-		s.Confidence = "high"
+		// SIGKILL. The OOM killer sends it, and so do docker kill, a docker
+		// stop that ran out of time and kill -9. OOMKilled was handled above,
+		// so this one has no evidence either way, and calling it OOM with
+		// high confidence told an agent something nobody had said.
+		s.Category = "unknown"
+		s.Reason = "SIGKILL, not reported as OOM-killed"
+		s.Confidence = "low"
 		s.Signal = "SIGKILL"
 		return s
 	case 139:
