@@ -63,6 +63,18 @@ type ContainerState struct {
 	LastChecked  time.Time `json:"last_checked"`
 }
 
+// StartTime is how an incident writes prev_started_at and curr_started_at:
+// RFC 3339 in UTC, or empty when the monitor does not know. Each monitor
+// learns the time in its own shape — Docker's RFC 3339, systemd's local
+// timestamp, pm2's epoch milliseconds — and they used to be written as they
+// came, sentences included, into two fields a caller parses as one thing.
+func StartTime(t time.Time) string {
+	if t.IsZero() {
+		return ""
+	}
+	return t.UTC().Format(time.RFC3339Nano)
+}
+
 type Incident struct {
 	ID           string    `json:"id"`
 	Container    string    `json:"container"`

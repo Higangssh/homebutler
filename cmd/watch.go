@@ -204,6 +204,18 @@ func newWatchListCmd() *cobra.Command {
 				}
 				fmt.Printf("%-25s %-10s %-22s %-10s %s\n", w.Container, w.Kind, w.AddedAt, restarts, lastChecked)
 			}
+			// LAST CHECKED is the last `watch add` or `watch check`. With the
+			// service running, neither happens, and the column stayed at the
+			// moment a target was added while it was being watched throughout.
+			if kind, err := service.Detect(); err == nil {
+				if running, since, known := service.Running(kind, service.Watch); known && running {
+					live := "live"
+					if !since.IsZero() {
+						live = "live since " + since.Local().Format("2006-01-02 15:04:05")
+					}
+					fmt.Printf("\nwatch service: %s. It sees restarts as they happen; LAST CHECKED is the last 'watch check'.\n", live)
+				}
+			}
 			return nil
 		},
 	}

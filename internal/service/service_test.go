@@ -230,3 +230,19 @@ func TestLingerNoteAsksBeforeAdvising(t *testing.T) {
 		}
 	}
 }
+
+// What systemctl --user show prints for the watch unit, read back as running
+// and since when. Recorded on the Pi (systemd 255) with --timestamp=unix.
+func TestParseRunning(t *testing.T) {
+	running, since, known := parseRunning("ActiveState=active\nActiveEnterTimestamp=@1790772472\n")
+	if !known || !running || since.Unix() != 1790772472 {
+		t.Errorf("active: running=%v since=%v known=%v", running, since, known)
+	}
+	running, _, known = parseRunning("ActiveState=inactive\nActiveEnterTimestamp=n/a\n")
+	if !known || running {
+		t.Errorf("inactive: running=%v known=%v", running, known)
+	}
+	if _, _, known = parseRunning(""); known {
+		t.Error("nothing printed was taken as an answer")
+	}
+}

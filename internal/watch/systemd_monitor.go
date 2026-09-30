@@ -7,6 +7,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/Higangssh/homebutler/internal/service"
 )
 
 // SystemdMonitor watches systemd units by polling their state.
@@ -30,7 +32,22 @@ type systemdState struct {
 	ExitStatus  *int
 	ActiveState string
 	SubState    string
-	StartTS     string
+	// StartTS is systemd's text, compared as-is to notice a restart; Started
+	// is the same moment as a time, or zero when it could not be read.
+	StartTS string
+	Started time.Time
+}
+
+// systemdShow reads a unit's state. It asks for unix timestamps, which
+// systemd prints as @1790772404, and falls back to the default format on a
+// systemd older than 248 that does not know --timestamp.
+func systemdShow(run CommandRunner, unit string) (string, error) {
+	const props = "--property=ActiveState,SubState,ExecMainStartTimestamp,ExecMainStatus"
+	out, err := run("systemctl", "show", unit, "--timestamp=unix", props)
+	if err != nil {
+		out, err = run("systemctl", "show", unit, props)
+	}
+	return out, err
 }
 
 func (sm *SystemdMonitor) parseState(output string) systemdState {
@@ -43,6 +60,7 @@ func (sm *SystemdMonitor) parseState(output string) systemdState {
 			s.SubState = strings.TrimPrefix(line, "SubState=")
 		} else if strings.HasPrefix(line, "ExecMainStartTimestamp=") {
 			s.StartTS = strings.TrimPrefix(line, "ExecMainStartTimestamp=")
+			s.Started = service.ParseSystemdTime(s.StartTS)
 		} else if strings.HasPrefix(line, "ExecMainStatus=") {
 			// systemd reports the unit's own exit status here. It is absent
 			// for a unit that has never run, so a parse failure means "not
@@ -78,8 +96,7 @@ func (sm *SystemdMonitor) Watch(ctx context.Context, targets []Target, incidents
 	// Seed initial states
 	for _, t := range targets {
 		unit := t.EffectiveUnit()
-		out, err := run("systemctl", "show", unit,
-			"--property=ActiveState,SubState,ExecMainStartTimestamp,ExecMainStatus")
+		out, err := systemdShow(run, unit)
 		if err != nil {
 			continue
 		}
@@ -96,8 +113,7 @@ func (sm *SystemdMonitor) Watch(ctx context.Context, targets []Target, incidents
 		case <-ticker.C:
 			for _, t := range targets {
 				unit := t.EffectiveUnit()
-				out, err := run("systemctl", "show", unit,
-					"--property=ActiveState,SubState,ExecMainStartTimestamp,ExecMainStatus")
+				out, err := systemdShow(run, unit)
 				if err != nil {
 					continue
 				}
@@ -121,8 +137,8 @@ func (sm *SystemdMonitor) Watch(ctx context.Context, targets []Target, incidents
 						ID:          GenerateIncidentID(t.Container, now),
 						Container:   t.Container,
 						DetectedAt:  now,
-						PrevStarted: old.StartTS,
-						CurrStarted: curr.StartTS,
+						PrevStarted: StartTime(old.Started),
+						CurrStarted: StartTime(curr.Started),
 						PreLogs:     preLogs,
 						PostLogs:    fmt.Sprintf("ActiveState=%s SubState=%s", curr.ActiveState, curr.SubState),
 						ExitCode:    curr.ExitStatus,

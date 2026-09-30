@@ -36,6 +36,17 @@ type pm2Process struct {
 type pm2Env struct {
 	RestartTime int    `json:"restart_time"`
 	Status      string `json:"status"`
+	// PMUptime is when the current process started, in epoch milliseconds.
+	// Checked against pm2 in a container: it moves on every restart.
+	PMUptime int64 `json:"pm_uptime"`
+}
+
+// started is when the current process started, or zero if pm2 did not say.
+func (e pm2Env) started() time.Time {
+	if e.PMUptime <= 0 {
+		return time.Time{}
+	}
+	return time.UnixMilli(e.PMUptime)
 }
 
 func (pm *PM2Monitor) parseProcesses(output string) []pm2Process {
@@ -74,8 +85,10 @@ func (pm *PM2Monitor) Watch(ctx context.Context, targets []Target, incidents cha
 		watchedUnits[t.EffectiveUnit()] = t
 	}
 
-	// Track previous restart counts
+	// Track previous restart counts, and when the run being watched started,
+	// which after a restart is the start of the run that died.
 	prevRestarts := make(map[string]int)
+	prevStarted := make(map[string]time.Time)
 
 	// Seed initial state
 	out, err := run("pm2", "jlist")
@@ -83,6 +96,7 @@ func (pm *PM2Monitor) Watch(ctx context.Context, targets []Target, incidents cha
 		for _, p := range pm.parseProcesses(out) {
 			if _, ok := watchedUnits[p.Name]; ok {
 				prevRestarts[p.Name] = p.PM2Env.RestartTime
+				prevStarted[p.Name] = p.PM2Env.started()
 			}
 		}
 	}
@@ -117,8 +131,8 @@ func (pm *PM2Monitor) Watch(ctx context.Context, targets []Target, incidents cha
 						Container:    t.Container,
 						DetectedAt:   now,
 						RestartCount: p.PM2Env.RestartTime,
-						PrevStarted:  fmt.Sprintf("restart_time was %d", prevCount),
-						CurrStarted:  fmt.Sprintf("restart_time is %d", p.PM2Env.RestartTime),
+						PrevStarted:  StartTime(prevStarted[p.Name]),
+						CurrStarted:  StartTime(p.PM2Env.started()),
 						PreLogs:      preLogs,
 						PostLogs:     fmt.Sprintf("status=%s", p.PM2Env.Status),
 					}
@@ -135,6 +149,7 @@ func (pm *PM2Monitor) Watch(ctx context.Context, targets []Target, incidents cha
 				}
 
 				prevRestarts[p.Name] = p.PM2Env.RestartTime
+				prevStarted[p.Name] = p.PM2Env.started()
 			}
 		}
 	}
