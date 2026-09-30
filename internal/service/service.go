@@ -221,15 +221,43 @@ func StopCommand(kind Kind, path string, u Unit) []string {
 // LingerNote returns the advice a systemd user unit needs to outlive the
 // session, or "" where it does not apply. Reported rather than done: enabling
 // lingering is a change to the user account, not to homebutler's own files.
+//
+// It asks first. The note used to appear whether or not lingering was already
+// on, which reads as a problem to fix when there is none, and it led with sudo,
+// which systemd does not need for a user's own account under its default
+// policy — the 0.40.0 soak enabled it without.
 func LingerNote(kind Kind) string {
 	if kind != Systemd {
 		return ""
 	}
 	user := os.Getenv("USER")
+	if on, known := lingering(user); known && on {
+		return ""
+	}
 	if user == "" {
 		user = "$USER"
 	}
-	return fmt.Sprintf("A user unit stops at logout unless lingering is enabled:\n    sudo loginctl enable-linger %s", user)
+	return fmt.Sprintf("A user unit stops at logout unless lingering is enabled:\n    loginctl enable-linger %s\n    (if that is refused, run it with sudo)", user)
+}
+
+// lingering reports whether systemd keeps the user's units running after
+// logout, and whether it could find out. It is a variable so tests can answer
+// for a machine they are not running on.
+var lingering = func(user string) (on, known bool) {
+	if user == "" {
+		return false, false
+	}
+	out, err := exec.Command("loginctl", "show-user", user, "-p", "Linger", "--value").Output()
+	if err != nil {
+		return false, false
+	}
+	switch strings.TrimSpace(string(out)) {
+	case "yes":
+		return true, true
+	case "no":
+		return false, true
+	}
+	return false, false
 }
 
 // Write puts the rendered unit at path, creating the directory it belongs in.
