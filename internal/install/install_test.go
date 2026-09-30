@@ -941,3 +941,19 @@ func TestInstallDryRun(t *testing.T) {
 		t.Errorf("App directory %s should not exist after dry-run", appDir)
 	}
 }
+
+// The install hint names the container to read logs from, so every app has to
+// say which one that is, and pi-hole is the reason it cannot be assumed.
+func TestEveryAppNamesItsContainer(t *testing.T) {
+	for name, app := range Registry {
+		if !strings.Contains(app.ComposeFile, "container_name:") {
+			t.Errorf("%s has no container_name, so the hint would guess", name)
+		}
+	}
+	if got := Registry["pi-hole"].ContainerName(); got != "pihole" {
+		t.Errorf("pi-hole's container is %q, want pihole", got)
+	}
+	if got := Registry["uptime-kuma"].ContainerName(); got != "uptime-kuma" {
+		t.Errorf("uptime-kuma's container is %q", got)
+	}
+}

@@ -106,6 +106,8 @@ func TestTrimLogLeavesSmallAndMissingFilesAlone(t *testing.T) {
 // it changes the user account rather than homebutler's own files — so it is
 // reported, not done.
 func TestLingerNoteIsSystemdOnly(t *testing.T) {
+	defer func(orig func(string) (bool, bool)) { lingering = orig }(lingering)
+	lingering = func(string) (bool, bool) { return false, true }
 	if got := LingerNote(Systemd); !strings.Contains(got, "enable-linger") {
 		t.Errorf("systemd note does not mention lingering: %q", got)
 	}
@@ -204,6 +206,27 @@ func TestTheTwoServicesAreSeparateUnits(t *testing.T) {
 		}
 		if LogPath(Launchd, "/home/x", serve) == LogPath(Launchd, "/home/x", Watch) {
 			t.Errorf("%s: both services log to the same file", kind)
+		}
+	}
+}
+
+// Only when it is needed, and without sudo up front. The note appeared on a
+// machine where lingering was already on, and told the reader to use sudo for
+// something systemd let the user do.
+func TestLingerNoteAsksBeforeAdvising(t *testing.T) {
+	defer func(orig func(string) (bool, bool)) { lingering = orig }(lingering)
+	t.Setenv("USER", "someone")
+
+	lingering = func(string) (bool, bool) { return true, true }
+	if got := LingerNote(Systemd); got != "" {
+		t.Errorf("lingering is on and the note still says %q", got)
+	}
+
+	for _, state := range []struct{ on, known bool }{{false, true}, {false, false}} {
+		lingering = func(string) (bool, bool) { return state.on, state.known }
+		got := LingerNote(Systemd)
+		if !strings.Contains(got, "\n    loginctl enable-linger someone\n") {
+			t.Errorf("on=%v known=%v: the note does not give the command without sudo: %q", state.on, state.known, got)
 		}
 	}
 }

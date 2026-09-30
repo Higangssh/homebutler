@@ -216,10 +216,10 @@ func runInstallApp(appName string, cmd *cobra.Command) error {
 		}
 		fmt.Fprintf(os.Stderr, "\n💡 Useful commands:\n")
 		fmt.Fprintf(os.Stderr, "  homebutler install status %s\n", app.Name)
-		fmt.Fprintf(os.Stderr, "  homebutler logs %s\n", app.Name)
+		fmt.Fprintf(os.Stderr, "  homebutler docker logs %s\n", app.ContainerName())
 		fmt.Fprintf(os.Stderr, "  homebutler install uninstall %s\n", app.Name)
 	} else {
-		fmt.Fprintf(os.Stderr, "⚠️  Status: %s (check logs with: homebutler logs %s)\n", status, app.Name)
+		fmt.Fprintf(os.Stderr, "⚠️  Status: %s (check logs with: homebutler docker logs %s)\n", status, app.ContainerName())
 	}
 
 	return nil

@@ -105,6 +105,19 @@ type App struct {
 	DataPath      string // container data path
 }
 
+// ContainerName is the name the app's container runs under, read from its
+// compose file. It is usually the app's own name and not always: pi-hole's
+// container is pihole, and a hint that names the app where Docker wants the
+// container sends the reader to "No such container".
+func (a App) ContainerName() string {
+	for _, line := range strings.Split(a.ComposeFile, "\n") {
+		if name, ok := strings.CutPrefix(strings.TrimSpace(line), "container_name:"); ok {
+			return strings.TrimSpace(name)
+		}
+	}
+	return a.Name
+}
+
 // InstallOptions allows user customization of defaults.
 type InstallOptions struct {
 	Port     string // custom host port
