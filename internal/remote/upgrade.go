@@ -194,6 +194,13 @@ func RemoteUpgrade(server *config.ServerConfig, latestVersion string) *UpgradeRe
 	if err := scpUpload(client, data, installPath, 0755); err != nil {
 		result.Status = "error"
 		result.Message = fmt.Sprintf("upload: %v", err)
+		// deploy installs through sudo where the account has it, so since
+		// #304 a remote binary can be root's, and upgrade writes as the login
+		// user. Saying "Permission denied" and stopping leaves the reader to
+		// work out that deploy is the command that can replace it.
+		if strings.Contains(err.Error(), "Permission denied") {
+			result.Message += fmt.Sprintf("\n  %s is not writable by %s; run `homebutler deploy --server %s` to replace it, which uses sudo where the account has it", installPath, server.SSHUser(), server.Name)
+		}
 		return result
 	}
 
