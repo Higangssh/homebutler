@@ -231,13 +231,17 @@ jobs:
         run: |
           TAG=${GITHUB_REF#refs/tags/v}
 
-          for attempt in $(seq 1 30); do
-            if curl -fs -o /dev/null "https://registry.npmjs.org/homebutler/$TAG"; then
+          # The MCP Registry checks the npm package, so it can only be told
+          # about a version npm serves. 0.41.0 took about sixteen minutes to
+          # appear after a publish npm had accepted, and a five-minute wait
+          # failed the release there with every other channel already out.
+          for attempt in $(seq 1 180); do
+            if [ "$(npm view "homebutler@$TAG" version 2>/dev/null)" = "$TAG" ]; then
               echo "npm is serving $TAG after ${attempt} attempt(s)"
               break
             fi
-            if [ "$attempt" -eq 30 ]; then
-              echo "::error::npm has not served $TAG after 5 minutes; the registry would reject it"
+            if [ "$attempt" -eq 180 ]; then
+              echo "::error::npm has not served $TAG after 30 minutes; the registry would reject it"
               exit 1
             fi
             sleep 10
