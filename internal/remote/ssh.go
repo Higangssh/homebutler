@@ -36,9 +36,14 @@ func Run(server *config.ServerConfig, args ...string) ([]byte, error) {
 	defer session.Close()
 
 	// Try configured bin path, then common locations
-	binPath := server.SSHBinPath()
+	// A configured bin may start with ~ or $HOME, and quoting it whole kept the
+	// remote shell from expanding either, the same mistake as #303.
+	binPath, err := quotePath(server.SSHBinPath())
+	if err != nil {
+		return nil, classified(ClassRemote, "[%s] %w", server.Name, err)
+	}
 	// Quote all arguments to prevent shell injection
-	cmd := fmt.Sprintf("export PATH=$HOME/.local/bin:$HOME/bin:$HOME/go/bin:/opt/homebrew/bin:/usr/local/bin:/usr/local/sbin:/snap/bin:$PATH; %s %s", util.ShellQuote(binPath), util.ShellQuoteArgs(args))
+	cmd := fmt.Sprintf("export PATH=$HOME/.local/bin:$HOME/bin:$HOME/go/bin:/opt/homebrew/bin:/usr/local/bin:/usr/local/sbin:/snap/bin:$PATH; %s %s", binPath, util.ShellQuoteArgs(args))
 	out, err := session.CombinedOutput(cmd)
 	if err != nil {
 		return nil, remoteCommandError(server, remoteVersionVia(client), args, out, err)
