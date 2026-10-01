@@ -465,13 +465,15 @@ func TestDetectInstallDirFallbackAndEnsurePath(t *testing.T) {
 			return "", 1
 		case "sudo -n test -w /usr/local/bin 2>/dev/null":
 			return "", 1
-		case "mkdir -p $HOME/.local/bin":
+		case `printf %s "$HOME"`:
+			return "/home/me", 0
+		case "mkdir -p /home/me/.local/bin":
 			return "", 0
 		case `test -f $HOME/.profile`:
 			return "", 0
-		case `grep -qF '$HOME/.local/bin' $HOME/.profile 2>/dev/null`:
+		case `grep -qF -e /home/me/.local/bin -e '$HOME/.local/bin' $HOME/.profile 2>/dev/null`:
 			return "", 1
-		case `echo 'export PATH="$PATH:$HOME/.local/bin"' >> $HOME/.profile`:
+		case `echo 'export PATH="$PATH:/home/me/.local/bin"' >> $HOME/.profile`:
 			return "", 0
 		case `test -f $HOME/.bashrc`:
 			return "", 1
@@ -486,18 +488,20 @@ func TestDetectInstallDirFallbackAndEnsurePath(t *testing.T) {
 	client := dialTestSSHClient(t, server.addr)
 	defer client.Close()
 
-	installDir, err := detectInstallDir(client)
+	// Absolute, not "$HOME/.local/bin": that string reached scp quoted and
+	// unexpanded, and every upload to it failed (#303).
+	installDir, viaSudo, err := detectInstallDir(client)
 	if err != nil {
 		t.Fatalf("detectInstallDir() error = %v", err)
 	}
-	if installDir != "$HOME/.local/bin" {
-		t.Fatalf("detectInstallDir() = %q", installDir)
+	if installDir != "/home/me/.local/bin" || viaSudo {
+		t.Fatalf("detectInstallDir() = %q, sudo=%v", installDir, viaSudo)
 	}
 
 	ensurePath(client, installDir)
 
 	joined := strings.Join(seen, "\n")
-	if !strings.Contains(joined, `echo 'export PATH="$PATH:$HOME/.local/bin"' >> $HOME/.profile`) {
+	if !strings.Contains(joined, `echo 'export PATH="$PATH:/home/me/.local/bin"' >> $HOME/.profile`) {
 		t.Fatalf("ensurePath() did not append export line, commands:\n%s", joined)
 	}
 }
@@ -564,12 +568,12 @@ func TestDetectInstallDirPrefersUsrLocalBin(t *testing.T) {
 	client := dialTestSSHClient(t, server.addr)
 	defer client.Close()
 
-	installDir, err := detectInstallDir(client)
+	installDir, viaSudo, err := detectInstallDir(client)
 	if err != nil {
 		t.Fatalf("detectInstallDir() error = %v", err)
 	}
-	if installDir != "/usr/local/bin" {
-		t.Fatalf("detectInstallDir() = %q", installDir)
+	if installDir != "/usr/local/bin" || viaSudo {
+		t.Fatalf("detectInstallDir() = %q, sudo=%v", installDir, viaSudo)
 	}
 }
 

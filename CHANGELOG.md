@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### 🐛 Fixes
+
+- `deploy` failed on every account that could not write `/usr/local/bin`, and said only `Process exited with status 1` (#303, #PR). Since 0.10.0 quoted remote paths against shell injection, the fallback `$HOME/.local/bin` reached `scp` quoted and unexpanded, and scp was told to write into a directory named `$HOME`. The directory is now read from the remote as an absolute path before anything is quoted, and a test in `internal/remote` fails when a path is quoted without going through the helper that leaves a leading `~` or `$HOME` to the remote shell. The account with passwordless sudo failed too: `deploy` chose `/usr/local/bin` for it and then uploaded there without sudo. It now uploads to a temporary file and moves it in with `sudo -n install`. Reported by @wardbryan3, whose diagnosis pointed at the scp protocol; it was not that, and the same bytes are accepted by OpenSSH 9.6 and 10.5
+- an upload `scp` refused never said why (#PR). The client sent the whole binary without reading scp's answers, so a refusal arrived while twelve megabytes were still being written and the channel closed with the message unread. It now waits for each answer, and `deploy` and `upgrade` report the line scp gave: `scp: /home/bob/.local/bin/homebutler: Permission denied`
+- `deploy` checked the install by running whichever `homebutler` came first on `PATH` (#PR), which on a machine that already had one was not necessarily the binary it had just written. It runs that binary by its path. A configured `bin` that starts with `~` or `$HOME` is expanded on the remote too, where before it was quoted whole
+
 ## [0.41.0](https://github.com/Higangssh/homebutler/compare/v0.40.0...v0.41.0) - 2026-09-30
 
 **The first day of running 0.40.0 on a real server found homebutler stating things nobody had told it: a `docker kill` filed as an OOM with high confidence, a restart recorded that never happened, and a command suggested that does not exist.** This release fixes those and adds nothing new — every change corrects something homebutler said without being told, because it is the build that runs on that server before 1.0, and 1.0 will be what it does. Each fix makes homebutler say only what the machine reported: `oom` only when Docker sent an `oom` event, a start time only when something started, and in one format whichever of Docker, systemd and pm2 it came from.
