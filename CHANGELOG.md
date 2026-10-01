@@ -20,7 +20,7 @@ All notable changes to this project will be documented in this file.
 
 ### ♻️ Internal
 
-- the release waits up to thirty minutes for npm to serve a version before publishing it to the MCP Registry, polling `npm view` (#PR). 0.41.0 took about sixteen minutes to appear on npm after a publish npm had accepted, and the five-minute wait failed the release at its last step with every other channel already out, so the registry still lists 0.40.0. This release puts it back in step
+- the release waits up to thirty minutes for npm to serve a version before publishing it to the MCP Registry, polling `npm view` (#306). 0.41.0 took about sixteen minutes to appear on npm after a publish npm had accepted, and the five-minute wait failed the release at its last step with every other channel already out, so the registry still lists 0.40.0. This release puts it back in step
 
 ## [0.41.0](https://github.com/Higangssh/homebutler/compare/v0.40.0...v0.41.0) - 2026-09-30
 
