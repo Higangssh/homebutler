@@ -2,14 +2,25 @@
 
 All notable changes to this project will be documented in this file.
 
-## [Unreleased]
+## [0.41.1](https://github.com/Higangssh/homebutler/compare/v0.41.0...v0.41.1) - 2026-10-02
+
+**`deploy` had not worked since 0.10.0 for any account that cannot write `/usr/local/bin`, and the only thing it said was `Process exited with status 1`.** A shell-injection fix quoted the fallback install directory, `$HOME/.local/bin`, so that the remote shell never expanded it; the passwordless-sudo account failed separately, and in both cases scp's own reason was lost because the client never read its answers. Reported in #303 by @wardbryan3. Each fix here was checked against two containers, a plain account and one with passwordless sudo: 0.41.0 fails in both, 0.41.1 installs and runs in both.
+
+### ⚠️ Behavior changes
+
+- **A server's `bin` that starts with `~` or `$HOME` now takes effect** (#304). It was quoted whole, so the remote shell looked for a file literally named `~/…`, and every remote command for that server failed. A `bin` like `~/.local/bin/homebutler` now reaches the binary it names
+- **A server's `bin` that uses any other variable is refused** (#304), with an error naming it, rather than quoted into a path that cannot exist. Only a leading `~` or `$HOME` is expanded
 
 ### 🐛 Fixes
 
 - `deploy` failed on every account that could not write `/usr/local/bin`, and said only `Process exited with status 1` (#303, #304). Since 0.10.0 quoted remote paths against shell injection, the fallback `$HOME/.local/bin` reached `scp` quoted and unexpanded, and scp was told to write into a directory named `$HOME`. The directory is now read from the remote as an absolute path before anything is quoted, and a test in `internal/remote` fails when a path is quoted without going through the helper that leaves a leading `~` or `$HOME` to the remote shell. The account with passwordless sudo failed too: `deploy` chose `/usr/local/bin` for it and then uploaded there without sudo. It now uploads to a temporary file and moves it in with `sudo -n install`. Reported by @wardbryan3, whose diagnosis pointed at the scp protocol; it was not that, and the same bytes are accepted by OpenSSH 9.6 and 10.5
 - an upload `scp` refused never said why (#304). The client sent the whole binary without reading scp's answers, so a refusal arrived while twelve megabytes were still being written and the channel closed with the message unread. It now waits for each answer, and `deploy` and `upgrade` report the line scp gave: `scp: /home/bob/.local/bin/homebutler: Permission denied`
-- `deploy` checked the install by running whichever `homebutler` came first on `PATH` (#304), which on a machine that already had one was not necessarily the binary it had just written. It runs that binary by its path. A configured `bin` that starts with `~` or `$HOME` is expanded on the remote too, where before it was quoted whole
+- `deploy` checked the install by running whichever `homebutler` came first on `PATH` (#304), which on a machine that already had one was not necessarily the binary it had just written. It runs that binary by its path, and a shell rc file that already has the old `$HOME/.local/bin` line is not given a second one
 - `upgrade` stopped at `Permission denied` on a remote binary it could not write, without saying what would (#305). Since #304 `deploy` installs through sudo where the account has it, so the binary can be root's, and `upgrade` writes as the login user. It now names the path and the user and points to `homebutler deploy --server <name>`, which replaces it through sudo — checked in a container, where it took a root-owned 0.40.0 to 0.41.0
+
+### ♻️ Internal
+
+- the release waits up to thirty minutes for npm to serve a version before publishing it to the MCP Registry, polling `npm view` (#PR). 0.41.0 took about sixteen minutes to appear on npm after a publish npm had accepted, and the five-minute wait failed the release at its last step with every other channel already out, so the registry still lists 0.40.0. This release puts it back in step
 
 ## [0.41.0](https://github.com/Higangssh/homebutler/compare/v0.40.0...v0.41.0) - 2026-09-30
 
