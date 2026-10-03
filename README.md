@@ -1038,7 +1038,8 @@ for change in report["notable_changes"]:
 ```
 
 Every line carries `text` as well, so a caller that only wants to print it does not have
-to put the sentence back together.
+to put the sentence back together. A run that found nothing returns `"notable_changes": []`,
+so the loop above does nothing on a quiet day.
 
 Nothing above this is homebutler's business: an MCP client, a chat bot, a cron line or a
 person at a terminal all reach the same answer.

@@ -1,6 +1,9 @@
 package watch
 
-import "time"
+import (
+	"encoding/json"
+	"time"
+)
 
 type FlappingConfig struct {
 	ShortWindow    time.Duration `yaml:"short_window" json:"short_window"`
@@ -10,11 +13,52 @@ type FlappingConfig struct {
 }
 
 type FlappingResult struct {
-	IsFlapping bool
-	Level      string
-	Count      int
-	Window     string
-	Since      time.Time
+	IsFlapping bool      `json:"is_flapping"`
+	Level      string    `json:"level"`
+	Count      int       `json:"count"`
+	Window     string    `json:"window"`
+	Since      time.Time `json:"since"`
+}
+
+// UnmarshalJSON also reads the keys this was saved under before it had tags.
+// Incidents are files on disk, and every one written before 0.41.2 says
+// IsFlapping, which the tagged name does not match; without this the flapping
+// record of every older incident would read back as empty.
+func (f *FlappingResult) UnmarshalJSON(data []byte) error {
+	var raw struct {
+		IsFlapping    *bool      `json:"is_flapping"`
+		Level         *string    `json:"level"`
+		Count         *int       `json:"count"`
+		Window        *string    `json:"window"`
+		Since         *time.Time `json:"since"`
+		OldIsFlapping *bool      `json:"IsFlapping"`
+		OldLevel      *string    `json:"Level"`
+		OldCount      *int       `json:"Count"`
+		OldWindow     *string    `json:"Window"`
+		OldSince      *time.Time `json:"Since"`
+	}
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	*f = FlappingResult{
+		IsFlapping: first(raw.IsFlapping, raw.OldIsFlapping),
+		Level:      first(raw.Level, raw.OldLevel),
+		Count:      first(raw.Count, raw.OldCount),
+		Window:     first(raw.Window, raw.OldWindow),
+		Since:      first(raw.Since, raw.OldSince),
+	}
+	return nil
+}
+
+func first[T any](current, legacy *T) T {
+	if current != nil {
+		return *current
+	}
+	if legacy != nil {
+		return *legacy
+	}
+	var zero T
+	return zero
 }
 
 func DefaultFlappingConfig() FlappingConfig {

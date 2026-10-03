@@ -25,6 +25,7 @@ import (
 	"github.com/Higangssh/homebutler/internal/remote"
 	"github.com/Higangssh/homebutler/internal/report"
 	"github.com/Higangssh/homebutler/internal/system"
+	"github.com/Higangssh/homebutler/internal/util"
 	"github.com/Higangssh/homebutler/internal/wake"
 	"github.com/Higangssh/homebutler/internal/watch"
 )
@@ -322,7 +323,7 @@ func (s *Server) handleToolCall(req *jsonRPCRequest) {
 		return
 	}
 
-	data, err := json.Marshal(result)
+	data, err := json.Marshal(util.EmptyLists(result))
 	if err != nil {
 		s.writeResult(req.ID, toolsCallResult{
 			ResultType: "complete",

@@ -113,6 +113,10 @@ it rather than reading the sentence:
 | `disk` | a mount moved by more than half a gigabyte |
 | `skipped` | the comparison could not be made — not an all-clear |
 
+A comparison that found nothing leaves `notable_changes` as `[]`, and
+`needs_attention` and `suggested_actions` are `[]` when there is nothing in them —
+never `null`. An empty list is the all-clear; a `skipped` line is not.
+
 ```json
 {"kind": "replaced", "target": "vaultwarden",
  "detail": "recreated, 4f2a1c → 9b7e03, vaultwarden:1.32 → vaultwarden:1.33",
@@ -280,21 +284,21 @@ agent that installs an unpinned executable cannot say what it ran.
 
 ```bash
 brew install Higangssh/homebutler/homebutler       # pinned formula, our own tap
-go install github.com/Higangssh/homebutler@v0.41.0
+go install github.com/Higangssh/homebutler@v0.41.2
 ```
 
 Taking a release archive instead means checking it against the checksums the
 release publishes:
 
 ```bash
-V=0.41.0
+V=0.41.2
 BASE=https://github.com/Higangssh/homebutler/releases/download/v$V
 curl -fsSLO $BASE/homebutler_${V}_linux_amd64.tar.gz
 curl -fsSLO $BASE/checksums.txt
 sha256sum --check --ignore-missing checksums.txt   # macOS: shasum -a 256 --check …
-# must print: homebutler_0.41.0_linux_amd64.tar.gz: OK
+# must print: homebutler_0.41.2_linux_amd64.tar.gz: OK
 tar xzf homebutler_${V}_linux_amd64.tar.gz
 ```
 
-There is a container image, `ghcr.io/higangssh/homebutler:0.41.0`, pinned the
+There is a container image, `ghcr.io/higangssh/homebutler:0.41.2`, pinned the
 same way.

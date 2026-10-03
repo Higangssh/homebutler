@@ -67,7 +67,7 @@ describe('incidents', () => {
         restart_count: 4,
         exit_code: 137,
         oom_killed: true,
-        flapping: { IsFlapping: true, Count: 4, Window: '10m' },
+        flapping: { is_flapping: true, count: 4, window: '10m' },
       },
     ]);
 

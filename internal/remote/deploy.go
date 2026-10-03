@@ -1,8 +1,11 @@
 package remote
 
 import (
+	"bufio"
+	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -12,7 +15,6 @@ import (
 	"strings"
 
 	"github.com/Higangssh/homebutler/internal/config"
-	"github.com/Higangssh/homebutler/internal/util"
 	"golang.org/x/crypto/ssh"
 )
 
@@ -46,10 +48,11 @@ func Deploy(server *config.ServerConfig, localBin, releaseVersion string) (*Depl
 	result.Arch = remoteOS + "/" + remoteArch
 
 	// Determine install path on remote: try /usr/local/bin, fallback to ~/.local/bin
-	installDir, err := detectInstallDir(client)
+	installDir, viaSudo, err := detectInstallDir(client)
 	if err != nil {
 		return nil, fmt.Errorf("detect install dir on %s: %w", server.Name, err)
 	}
+	target := installDir + "/homebutler"
 
 	if localBin != "" {
 		// Air-gapped: copy local file
@@ -58,7 +61,7 @@ func Deploy(server *config.ServerConfig, localBin, releaseVersion string) (*Depl
 		if err != nil {
 			return nil, fmt.Errorf("read local binary: %w", err)
 		}
-		if err := scpUpload(client, data, installDir+"/homebutler", 0755); err != nil {
+		if err := install(client, data, target, viaSudo); err != nil {
 			return nil, fmt.Errorf("upload to %s: %w", server.Name, err)
 		}
 	} else {
@@ -72,14 +75,19 @@ func Deploy(server *config.ServerConfig, localBin, releaseVersion string) (*Depl
 			return nil, fmt.Errorf("download for %s/%s: %w\n\nFor air-gapped environments, use:\n  homebutler deploy --server %s --local ./homebutler-%s-%s",
 				remoteOS, remoteArch, err, server.Name, remoteOS, remoteArch)
 		}
-		if err := scpUpload(client, data, installDir+"/homebutler", 0755); err != nil {
+		if err := install(client, data, target, viaSudo); err != nil {
 			return nil, fmt.Errorf("upload to %s: %w", server.Name, err)
 		}
 	}
 
-	// Ensure PATH includes install dir and verify
-	verifyCmd := fmt.Sprintf("export PATH=$PATH:%s; homebutler version", installDir)
-	if err := runSession(client, verifyCmd); err != nil {
+	// Verify the binary that was just written, by its path. Going through
+	// PATH would run whichever homebutler came first, which on a machine
+	// that already had one is not necessarily this one.
+	quoted, err := quotePath(target)
+	if err != nil {
+		return nil, err
+	}
+	if err := runSession(client, quoted+" version"); err != nil {
 		result.Status = "error"
 		result.Message = "uploaded but verification failed: " + err.Error()
 		return result, nil
@@ -109,22 +117,65 @@ func ValidateLocalArch(remoteOS, remoteArch string) error {
 	return nil
 }
 
-// detectInstallDir finds the best install location on the remote server.
+// detectInstallDir finds the best install location on the remote server, and
+// whether writing there needs sudo.
 // Priority: /usr/local/bin (writable or via sudo) > ~/.local/bin
-func detectInstallDir(client *ssh.Client) (string, error) {
+//
+// The directory comes back absolute. It used to be "$HOME/.local/bin", and
+// once v0.10.0 quoted remote paths that string reached scp unexpanded (#303).
+func detectInstallDir(client *ssh.Client) (dir string, viaSudo bool, err error) {
 	// Try /usr/local/bin
 	if err := runSession(client, "test -w /usr/local/bin"); err == nil {
-		return "/usr/local/bin", nil
+		return "/usr/local/bin", false, nil
 	}
 	// Try with sudo
 	if err := runSession(client, "sudo -n test -w /usr/local/bin 2>/dev/null"); err == nil {
-		// Prep: sudo copy will be needed
-		runSession(client, "sudo mkdir -p /usr/local/bin")
-		return "/usr/local/bin", nil
+		return "/usr/local/bin", true, nil
 	}
 	// Fallback: ~/.local/bin
-	runSession(client, "mkdir -p $HOME/.local/bin")
-	return "$HOME/.local/bin", nil
+	home, err := runOutput(client, `printf %s "$HOME"`)
+	if err != nil || !strings.HasPrefix(home, "/") {
+		return "", false, fmt.Errorf("could not read the remote home directory (got %q): %v", home, err)
+	}
+	dir = home + "/.local/bin"
+	quoted, err := quotePath(dir)
+	if err != nil {
+		return "", false, err
+	}
+	if err := runSession(client, "mkdir -p "+quoted); err != nil {
+		return "", false, fmt.Errorf("create %s: %w", dir, err)
+	}
+	return dir, false, nil
+}
+
+// install writes the binary to target. Through sudo it is uploaded to a
+// temporary file the login user owns and moved into place by install(1): scp
+// runs as the login user, and the sudo branch used to choose /usr/local/bin and
+// then upload there without sudo, which could only fail.
+func install(client *ssh.Client, data []byte, target string, viaSudo bool) error {
+	if !viaSudo {
+		return scpUpload(client, data, target, 0755)
+	}
+	tmp, err := runOutput(client, "mktemp")
+	if err != nil || !strings.HasPrefix(tmp, "/") {
+		return fmt.Errorf("create a temporary file for the sudo install (got %q): %v", tmp, err)
+	}
+	qtmp, err := quotePath(tmp)
+	if err != nil {
+		return err
+	}
+	defer runSession(client, "rm -f "+qtmp)
+	if err := scpUpload(client, data, tmp, 0600); err != nil {
+		return err
+	}
+	qtarget, err := quotePath(target)
+	if err != nil {
+		return err
+	}
+	if out, err := runCombined(client, "sudo -n install -m 0755 "+qtmp+" "+qtarget); err != nil {
+		return fmt.Errorf("sudo install into %s: %w%s", target, err, reason(out))
+	}
+	return nil
 }
 
 // ensurePath adds installDir to PATH in shell rc files if not already present.
@@ -135,6 +186,12 @@ func ensurePath(client *ssh.Client, installDir string) {
 	}
 
 	exportLine := fmt.Sprintf(`export PATH="$PATH:%s"`, installDir)
+	// Before #303 the line was written with a literal $HOME, so a file that
+	// already has that one is already patched.
+	legacy := installDir
+	if strings.HasSuffix(installDir, "/.local/bin") {
+		legacy = "$HOME/.local/bin"
+	}
 	rcFiles := []string{"$HOME/.profile", "$HOME/.bashrc", "$HOME/.zshrc"}
 
 	for _, rc := range rcFiles {
@@ -144,9 +201,9 @@ func ensurePath(client *ssh.Client, installDir string) {
 			continue
 		}
 		// Skip if already present
-		checkCmd := fmt.Sprintf(`grep -qF %s %s 2>/dev/null`, util.ShellQuote(installDir), rc)
+		checkCmd := fmt.Sprintf(`grep -qF -e %s -e %s %s 2>/dev/null`, quoteLiteral(installDir), quoteLiteral(legacy), rc)
 		if err := runSession(client, checkCmd); err != nil {
-			addCmd := fmt.Sprintf(`echo %s >> %s`, util.ShellQuote(exportLine), rc)
+			addCmd := fmt.Sprintf(`echo %s >> %s`, quoteLiteral(exportLine), rc)
 			runSession(client, addCmd)
 		}
 	}
@@ -276,7 +333,53 @@ func runSession(client *ssh.Client, cmd string) error {
 	return session.Run(cmd)
 }
 
-// scpUpload writes data to a remote file using SCP protocol.
+// runOutput runs cmd and returns its stdout, trimmed.
+func runOutput(client *ssh.Client, cmd string) (string, error) {
+	session, err := client.NewSession()
+	if err != nil {
+		return "", err
+	}
+	defer session.Close()
+	out, err := session.Output(cmd)
+	return strings.TrimSpace(string(out)), err
+}
+
+// runCombined runs cmd and returns everything it printed.
+func runCombined(client *ssh.Client, cmd string) ([]byte, error) {
+	session, err := client.NewSession()
+	if err != nil {
+		return nil, err
+	}
+	defer session.Close()
+	return session.CombinedOutput(cmd)
+}
+
+// reason turns what a remote command printed into the tail of an error. scp
+// reports a failure as a \x01 byte followed by the message, on stdout, and
+// that message — "No such file or directory" in #303 — is the only thing that
+// says why. It used to be discarded, leaving "Process exited with status 1".
+func reason(out []byte) string {
+	text := strings.Map(func(r rune) rune {
+		if r < 0x20 && r != '\n' {
+			return -1
+		}
+		return r
+	}, string(out))
+	text = strings.Join(strings.Fields(text), " ")
+	if text == "" {
+		return ""
+	}
+	return ": " + text
+}
+
+// scpUpload writes data to a remote file using the scp protocol.
+//
+// The receiver answers every step with one byte: 0 to go on, 1 or 2 followed
+// by a line saying why not. This waits for each answer. It used to send the
+// header and the whole file without reading any, so a refusal arrived while
+// twelve megabytes were still being pushed at a process that had stopped
+// reading, and the channel closed with the message unread: the user got
+// "Process exited with status 1" and nothing else (#303).
 func scpUpload(client *ssh.Client, data []byte, remotePath string, mode os.FileMode) error {
 	session, err := client.NewSession()
 	if err != nil {
@@ -284,13 +387,70 @@ func scpUpload(client *ssh.Client, data []byte, remotePath string, mode os.FileM
 	}
 	defer session.Close()
 
-	go func() {
-		w, _ := session.StdinPipe()
-		defer w.Close()
-		fmt.Fprintf(w, "C%04o %d %s\n", mode, len(data), filepath.Base(remotePath))
-		w.Write(data)
-		fmt.Fprint(w, "\x00")
-	}()
+	quoted, err := quotePath(remotePath)
+	if err != nil {
+		return err
+	}
+	stdin, err := session.StdinPipe()
+	if err != nil {
+		return err
+	}
+	stdout, err := session.StdoutPipe()
+	if err != nil {
+		return err
+	}
+	var stderr bytes.Buffer
+	session.Stderr = &stderr
 
-	return session.Run(fmt.Sprintf("scp -t %s", util.ShellQuote(remotePath)))
+	if err := session.Start("scp -t " + quoted); err != nil {
+		return err
+	}
+	answers := bufio.NewReader(stdout)
+	fail := func(step string, err error) error {
+		stdin.Close()
+		_ = session.Wait()
+		return fmt.Errorf("scp %s: %w%s", step, err, reason(stderr.Bytes()))
+	}
+
+	if err := scpAck(answers); err != nil {
+		return fail("start", err)
+	}
+	if _, err := fmt.Fprintf(stdin, "C%04o %d %s\n", mode, len(data), filepath.Base(remotePath)); err != nil {
+		return fail("header", err)
+	}
+	if err := scpAck(answers); err != nil {
+		return fail("header", err)
+	}
+	if _, err := stdin.Write(data); err != nil {
+		return fail("data", err)
+	}
+	if _, err := stdin.Write([]byte{0}); err != nil {
+		return fail("data", err)
+	}
+	if err := scpAck(answers); err != nil {
+		return fail("data", err)
+	}
+	stdin.Close()
+	if err := session.Wait(); err != nil {
+		return fmt.Errorf("%w%s", err, reason(stderr.Bytes()))
+	}
+	return nil
+}
+
+// scpAck reads one answer from an scp receiver: nil for 0, and for 1 or 2 the
+// message that follows it.
+func scpAck(r *bufio.Reader) error {
+	b, err := r.ReadByte()
+	if err != nil {
+		return fmt.Errorf("no answer from the remote scp: %w", err)
+	}
+	if b == 0 {
+		return nil
+	}
+	msg, _ := r.ReadString('\n')
+	msg = strings.TrimSpace(msg)
+	if msg == "" {
+		msg = fmt.Sprintf("refused with code %d", b)
+	}
+	return errors.New(msg)
 }
