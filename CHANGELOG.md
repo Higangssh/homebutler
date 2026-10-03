@@ -2,6 +2,17 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### ⚠️ Behavior changes
+
+- **A report with nothing to say now has an empty `notable_changes`** (#PR). It used to carry one `skipped` line, which by its own definition meant the comparison could not be made: "No significant changes since last report" was filed under the kind for "could not compare". The terminal still prints that sentence; `--json` and the MCP tool now return `[]`. Found on the 0.41.0 soak, whose first quiet day said `skipped`. A first run and an unreadable previous snapshot still carry their `skipped` line, because for them the comparison really was not made
+- **`needs_attention` and `suggested_actions` are `[]` when there is nothing in them, not `null`** (#PR), and so is `notable_changes`. `null` says the field is missing; `[]` says there is nothing in it. A caller that checked `== null` for "nothing to do" now has to check for an empty list
+
+### 🐛 Fixes
+
+- the dashboard's report card showed a bare `skipped` chip on a quiet day (#PR). It now says *No significant changes since last report.* when the list is empty
+
 ## [0.41.1](https://github.com/Higangssh/homebutler/compare/v0.41.0...v0.41.1) - 2026-10-02
 
 **`deploy` had not worked since 0.10.0 for any account that cannot write `/usr/local/bin`, and the only thing it said was `Process exited with status 1`.** A shell-injection fix quoted the fallback install directory, `$HOME/.local/bin`, so that the remote shell never expanded it; the passwordless-sudo account failed separately, and in both cases scp's own reason was lost because the client never read its answers. Reported in #303 by @wardbryan3. Each fix here was checked against two containers, a plain account and one with passwordless sudo: 0.41.0 fails in both, 0.41.1 installs and runs in both.

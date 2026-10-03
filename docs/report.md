@@ -22,6 +22,11 @@ A change is a kind, a subject and a detail, and they have different jobs.
 - **Detail** says what exactly happened, in prose meant for a person. It is free to
   change between releases, and nothing should ever have to parse it.
 
+When nothing changed, `--json` carries no line at all: `notable_changes` is `[]`,
+and the terminal prints *No significant changes since last report.* in its place.
+A `skipped` line is the other case — a comparison that could not be made, on a
+first run or when a collector did not answer — and is never an all-clear.
+
 That split is why `replaced` reads `recreated, 7d4a91f0aa11 → 91be0322bb22` rather
 than the two identifiers alone: the identifiers are the evidence, the sentence is
 what a reader needs.
