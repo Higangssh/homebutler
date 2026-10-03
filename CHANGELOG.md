@@ -8,6 +8,7 @@ All notable changes to this project will be documented in this file.
 
 - **A report with nothing to say now has an empty `notable_changes`** (#308). It used to carry one `skipped` line, which by its own definition meant the comparison could not be made: "No significant changes since last report" was filed under the kind for "could not compare". The terminal still prints that sentence; `--json` and the MCP tool now return `[]`. Found on the 0.40.0 soak, whose first quiet day said `skipped`. A first run and an unreadable previous snapshot still carry their `skipped` line, because for them the comparison really was not made
 - **`needs_attention` and `suggested_actions` are `[]` when there is nothing in them, not `null`** (#308), and so is `notable_changes`. `null` says the field is missing; `[]` says there is nothing in it. A caller that checked `== null` for "nothing to do" now has to check for an empty list
+- **`install_list`, `GET /api/install` and a `watch` incident's `flapping` use snake_case keys** (#309). They were the only answers with capitalised keys: `Name`, `DefaultPort` and the rest for an app, `IsFlapping`, `Count` and the rest for flapping, because neither struct had JSON tags. `install_list` also no longer carries each app's whole compose template. A caller reading the old keys breaks; it breaks now because 1.0 freezes key names, and these would otherwise have been frozen as Go's. Incidents already on disk with the old flapping keys are still read
 
 ### 🐛 Fixes
 

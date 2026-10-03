@@ -4,6 +4,7 @@ import (
 	"flag"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 )
@@ -93,6 +94,33 @@ func TestTheVocabulariesAreTheDocumentedOnes(t *testing.T) {
 	} {
 		if !strings.Contains(surface, want) {
 			t.Errorf("the surface no longer carries %q", want)
+		}
+	}
+}
+
+// Every key a caller receives is snake_case. Two structs without tags went out
+// under their Go names — install.App as Name, DefaultPort and ComposeFile, and
+// a watch incident's flapping as IsFlapping and Count — and the golden
+// recorded them faithfully, which is the trouble with a golden: it froze
+// whatever was there. This asks the question the golden cannot.
+func TestEveryJSONKeyIsSnakeCase(t *testing.T) {
+	key := regexp.MustCompile(`^[a-z][a-z0-9_]*$`)
+	inJSON := false
+	for _, line := range strings.Split(Surface(), "\n") {
+		switch {
+		case strings.HasPrefix(line, "## "):
+			inJSON = line == "## json"
+			continue
+		case !inJSON || line == "":
+			continue
+		}
+		path, _, _ := strings.Cut(line, ":")
+		parts := strings.Split(path, ".")
+		for _, part := range parts[2:] { // past "package.Type"
+			name := strings.TrimSuffix(part, "?")
+			if !key.MatchString(name) {
+				t.Errorf("%s: key %q is not snake_case", line, name)
+			}
 		}
 	}
 }
