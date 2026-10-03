@@ -14,7 +14,7 @@
   // install.App has no json tags on the Go side, so the catalogue arrives with
   // Go field names. Adding tags would change what install_list returns to
   // every MCP caller, which is not this view's decision to make — the same
-  // reason WatchCard reads incident.flapping.IsFlapping.
+  // reason WatchCard reads incident.flapping.is_flapping.
   let apps = $state(null);
   let error = $state('');
 
@@ -40,19 +40,19 @@
   });
 
   async function open(app) {
-    if (openApp === app.Name) {
+    if (openApp === app.name) {
       openApp = '';
       return;
     }
-    openApp = app.Name;
+    openApp = app.name;
     status = null;
     statusError = '';
     actionError = '';
     result = null;
     purging = '';
-    port = app.DefaultPort || '';
+    port = app.default_port || '';
     try {
-      status = await getInstallStatus(app.Name);
+      status = await getInstallStatus(app.name);
     } catch (err) {
       statusError = err.message;
     }
@@ -73,30 +73,30 @@
 
   async function install(app) {
     result = null;
-    const answer = await run('install', () => installApp(app.Name, port));
+    const answer = await run('install', () => installApp(app.name, port));
     if (!answer) return;
     result = answer;
     // A refused pre-flight answers 200 with status "failed" and the reasons.
     // It is not a failure of the request: the port is taken, the operator
     // picks another and asks again, so it belongs beside the field.
     if (answer.status !== 'failed') {
-      status = await getInstallStatus(app.Name).catch(() => null);
+      status = await getInstallStatus(app.name).catch(() => null);
     }
   }
 
   async function uninstall(app) {
-    const answer = await run('uninstall', () => uninstallApp(app.Name));
+    const answer = await run('uninstall', () => uninstallApp(app.name));
     if (!answer) return;
     result = answer;
-    status = await getInstallStatus(app.Name).catch(() => null);
+    status = await getInstallStatus(app.name).catch(() => null);
   }
 
   async function purge(app) {
-    const answer = await run('purge', () => purgeApp(app.Name));
+    const answer = await run('purge', () => purgeApp(app.name));
     if (!answer) return;
     result = answer;
     purging = '';
-    status = await getInstallStatus(app.Name).catch(() => null);
+    status = await getInstallStatus(app.name).catch(() => null);
   }
 </script>
 
@@ -118,14 +118,14 @@
 
       <div class="app-list">
         {#each apps as app}
-          <div class="app" class:open={openApp === app.Name}>
-            <button class="app-head" onclick={() => open(app)} aria-expanded={openApp === app.Name}>
-              <span class="name">{app.Name}</span>
-              <span class="detail">{app.Description}</span>
-              <span class="port">:{app.DefaultPort}</span>
+          <div class="app" class:open={openApp === app.name}>
+            <button class="app-head" onclick={() => open(app)} aria-expanded={openApp === app.name}>
+              <span class="name">{app.name}</span>
+              <span class="detail">{app.description}</span>
+              <span class="port">:{app.default_port}</span>
             </button>
 
-            {#if openApp === app.Name}
+            {#if openApp === app.name}
               <div class="app-body">
                 {#if statusError}
                   <p class="error">{statusError}</p>
@@ -139,15 +139,15 @@
 
                 {#if canAct && status && !status.installed}
                   <div class="row">
-                    <label for="port-{app.Name}">Host port</label>
-                    <input id="port-{app.Name}" bind:value={port} disabled={!!busy} />
+                    <label for="port-{app.name}">Host port</label>
+                    <input id="port-{app.name}" bind:value={port} disabled={!!busy} />
                     <button onclick={() => install(app)} disabled={!!busy || !port.trim()}>
                       {busy === 'install' ? 'Installing…' : 'Install'}
                     </button>
                   </div>
                   <p class="note">
-                    It binds {port || app.DefaultPort} on this host to
-                    {app.ContainerPort} in the container. The check runs first and
+                    It binds {port || app.default_port} on this host to
+                    {app.container_port} in the container. The check runs first and
                     says so if something already has that port.
                   </p>
                 {/if}
@@ -175,8 +175,8 @@
                     </button>
                     <button
                       class="danger"
-                      aria-label="Remove {app.Name} and its data"
-                      onclick={() => (purging = purging === app.Name ? '' : app.Name)}
+                      aria-label="Remove {app.name} and its data"
+                      onclick={() => (purging = purging === app.name ? '' : app.name)}
                       disabled={!!busy}
                     >Remove with data</button>
                   </div>
@@ -186,10 +186,10 @@
                   </p>
                 {/if}
 
-                {#if purging === app.Name}
+                {#if purging === app.name}
                   <ConfirmByName
-                    name={app.Name}
-                    what="{app.Name} and everything it has stored will be deleted."
+                    name={app.name}
+                    what="{app.name} and everything it has stored will be deleted."
                     busy={busy === 'purge'}
                     onconfirm={() => purge(app)}
                     oncancel={() => (purging = '')}

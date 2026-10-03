@@ -1,6 +1,7 @@
 package install
 
 import (
+	"encoding/json"
 	"io"
 	"os"
 	"path/filepath"
@@ -955,5 +956,20 @@ func TestEveryAppNamesItsContainer(t *testing.T) {
 	}
 	if got := Registry["uptime-kuma"].ContainerName(); got != "uptime-kuma" {
 		t.Errorf("uptime-kuma's container is %q", got)
+	}
+}
+
+// install_list answers with these, and it used to carry each app's whole
+// compose template under the key ComposeFile.
+func TestAnAppIsListedWithoutItsComposeTemplate(t *testing.T) {
+	out, err := json.Marshal(Registry["uptime-kuma"])
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(out), "services:") || strings.Contains(string(out), "ompose") {
+		t.Errorf("the compose template is in the listing: %s", out)
+	}
+	if !strings.Contains(string(out), `"default_port":"3001"`) {
+		t.Errorf("listing = %s", out)
 	}
 }

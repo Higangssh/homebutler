@@ -112,7 +112,7 @@
   // names. Adding tags would change what `watch history --json` and the MCP
   // tool return, which is not this view's decision to make.
   function flapping(incident) {
-    return incident.flapping?.IsFlapping ? incident.flapping : null;
+    return incident.flapping?.is_flapping ? incident.flapping : null;
   }
 </script>
 
@@ -234,7 +234,7 @@
                 <span class="container">{incident.container}</span>
                 <span class="tags">
                   {#if flapping(incident)}
-                    <span class="tag flap">flapping · {incident.flapping.Count} in {incident.flapping.Window}</span>
+                    <span class="tag flap">flapping · {incident.flapping.count} in {incident.flapping.window}</span>
                   {/if}
                   {#if incident.oom_killed}
                     <span class="tag oom">OOM killed</span>

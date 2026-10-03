@@ -96,13 +96,17 @@ func GetInstalledPath(appName string) string {
 }
 
 // App defines a self-hosted application that can be installed.
+// App is a catalogue entry, and install_list and GET /api/install answer with
+// it. It had no tags, so it went out as Name, DefaultPort and the rest, the only
+// capitalised keys in any answer, with the whole compose template alongside;
+// 1.0 would have frozen both.
 type App struct {
-	Name          string
-	Description   string
-	ComposeFile   string // go template for docker-compose.yml
-	DefaultPort   string // default host port
-	ContainerPort string // container port (fixed)
-	DataPath      string // container data path
+	Name          string `json:"name"`
+	Description   string `json:"description"`
+	ComposeFile   string `json:"-"`              // go template for docker-compose.yml
+	DefaultPort   string `json:"default_port"`   // default host port
+	ContainerPort string `json:"container_port"` // container port (fixed)
+	DataPath      string `json:"data_path"`      // container data path
 }
 
 // ContainerName is the name the app's container runs under, read from its
