@@ -118,7 +118,7 @@ func TestVolatileStatusIsSuppressed(t *testing.T) {
 
 	r := buildReport(curr, prev)
 	got := strings.Join(changeTexts(r.NotableChanges), " | ")
-	if !strings.Contains(got, "No significant changes") {
+	if len(r.NotableChanges) != 0 {
 		t.Errorf("an uptime string change earned a line: %s", got)
 	}
 }
@@ -242,7 +242,7 @@ func TestLoopbackToWildcardIsReported(t *testing.T) {
 
 	r := buildReport(curr, prev)
 	got := strings.Join(changeTexts(r.NotableChanges), " | ")
-	if strings.Contains(got, "No significant changes") {
+	if len(r.NotableChanges) == 0 {
 		t.Fatalf("a port that became public was reported as no change: %s", got)
 	}
 	if !strings.Contains(got, "gone: 127.0.0.1:8080/tcp") || !strings.Contains(got, "new: :8080/tcp") {
@@ -262,7 +262,7 @@ func TestSamePortDifferentAddressesDoNotCollide(t *testing.T) {
 
 	r := buildReport(snapshotWith(nil, reordered), snapshotWith(nil, listeners))
 	got := strings.Join(changeTexts(r.NotableChanges), " | ")
-	if !strings.Contains(got, "No significant changes") {
+	if len(r.NotableChanges) != 0 {
 		t.Errorf("reordering the collector's output invented a change: %s", got)
 	}
 }

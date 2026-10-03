@@ -118,6 +118,10 @@
               <span class="detail">{change.detail}</span>
             {/if}
           </li>
+        {:else}
+          <!-- An empty list is a comparison that found nothing; a comparison
+               that could not be made arrives as a skipped line instead. -->
+          <li class="quiet">No significant changes since last report.</li>
         {/each}
       </ul>
 

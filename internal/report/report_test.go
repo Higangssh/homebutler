@@ -391,3 +391,50 @@ func TestTheReportEmitsTheValuesItsSentencesAreMadeOf(t *testing.T) {
 		t.Fatal("the status lines are gone")
 	}
 }
+
+// A comparison that found nothing says so with empty lists, not with a line.
+// The line it used to carry was kind skipped, which means the comparison could
+// not be made — the 0.40.0 soak's first quiet day told an agent exactly that.
+// And empty, not null: null says the field is missing.
+func TestAQuietReportHasEmptyListsNotASkippedLine(t *testing.T) {
+	dir := t.TempDir()
+	containers := []docker.Container{{ID: "a", Name: "web", Image: "nginx", State: "running"}}
+	fns := fakeFuncs(containers, nil)
+	fns.ProcessesFn = func() ([]system.ProcessInfo, error) {
+		return []system.ProcessInfo{{Name: "sshd", Command: "sshd -D", Elapsed: time.Hour}}, nil
+	}
+	if _, err := Run(&config.Config{}, fns, Options{SnapshotDir: dir, Keep: 3}); err != nil {
+		t.Fatal(err)
+	}
+	rep, err := Run(&config.Config{}, fns, Options{SnapshotDir: dir, Keep: 3})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rep.IsBaseline {
+		t.Fatal("the second run should compare")
+	}
+	out, err := json.Marshal(rep)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{`"notable_changes":[]`, `"needs_attention":[]`, `"suggested_actions":[]`} {
+		if !strings.Contains(string(out), want) {
+			t.Errorf("quiet report JSON lacks %s: %s", want, out)
+		}
+	}
+	if human := FormatHuman(rep); !strings.Contains(human, "No significant changes since last report.") {
+		t.Errorf("the human report lost its sentence:\n%s", human)
+	}
+}
+
+// The baseline is a comparison that could not be made, so skipped is right
+// for it and stays.
+func TestABaselineStillSaysItSkipped(t *testing.T) {
+	rep, err := Run(&config.Config{}, fakeFuncs(nil, nil), Options{SnapshotDir: t.TempDir(), NoSave: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rep.NotableChanges) != 1 || rep.NotableChanges[0].Kind != kindSkipped {
+		t.Errorf("baseline notable_changes = %+v", rep.NotableChanges)
+	}
+}

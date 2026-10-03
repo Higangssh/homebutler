@@ -113,6 +113,10 @@ it rather than reading the sentence:
 | `disk` | a mount moved by more than half a gigabyte |
 | `skipped` | the comparison could not be made — not an all-clear |
 
+A comparison that found nothing leaves `notable_changes` as `[]`, and
+`needs_attention` and `suggested_actions` are `[]` when there is nothing in them —
+never `null`. An empty list is the all-clear; a `skipped` line is not.
+
 ```json
 {"kind": "replaced", "target": "vaultwarden",
  "detail": "recreated, 4f2a1c → 9b7e03, vaultwarden:1.32 → vaultwarden:1.33",
