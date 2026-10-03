@@ -174,7 +174,7 @@ func actionTexts(actions []Action) []string {
 //
 // "No significant changes" is not one of these. It used to be, and on a quiet
 // day an agent reading kind was told the comparison had not been made when it
-// had and found nothing — the 0.41.0 soak's first quiet report. A comparison
+// had and found nothing — the 0.40.0 soak's first quiet report. A comparison
 // with nothing to say now leaves the list empty, and the sentence is the human
 // renderer's.
 func note(text string) ChangeLine {

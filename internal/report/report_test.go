@@ -394,7 +394,7 @@ func TestTheReportEmitsTheValuesItsSentencesAreMadeOf(t *testing.T) {
 
 // A comparison that found nothing says so with empty lists, not with a line.
 // The line it used to carry was kind skipped, which means the comparison could
-// not be made — the 0.41.0 soak's first quiet day told an agent exactly that.
+// not be made — the 0.40.0 soak's first quiet day told an agent exactly that.
 // And empty, not null: null says the field is missing.
 func TestAQuietReportHasEmptyListsNotASkippedLine(t *testing.T) {
 	dir := t.TempDir()
