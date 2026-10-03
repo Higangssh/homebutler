@@ -31,6 +31,7 @@ import (
 	"github.com/Higangssh/homebutler/internal/remote"
 	"github.com/Higangssh/homebutler/internal/service"
 	"github.com/Higangssh/homebutler/internal/system"
+	"github.com/Higangssh/homebutler/internal/util"
 	"github.com/Higangssh/homebutler/internal/wake"
 	"github.com/Higangssh/homebutler/internal/watch"
 )
@@ -1090,7 +1091,7 @@ func frontendHandler(web fs.FS) http.Handler {
 
 func writeJSON(w http.ResponseWriter, data any) {
 	w.Header().Set("Content-Type", "application/json")
-	if err := json.NewEncoder(w).Encode(data); err != nil {
+	if err := json.NewEncoder(w).Encode(util.EmptyLists(data)); err != nil {
 		log.Printf("json encode error: %v", err)
 	}
 }
