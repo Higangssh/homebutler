@@ -1,6 +1,7 @@
 package watch
 
 import (
+	"encoding/json"
 	"testing"
 	"time"
 )
@@ -188,4 +189,30 @@ func TestFlapping(t *testing.T) {
 			t.Fatalf("expected count 3, got %d", r.Count)
 		}
 	})
+}
+
+// An incident is a file on disk, and every one saved before 0.41.2 wrote the
+// flapping record as IsFlapping, Count and the rest. Reading those back must
+// still find them; the new name alone would not.
+func TestFlappingReadsKeysSavedBeforeTheRename(t *testing.T) {
+	old := `{"IsFlapping":true,"Level":"acute","Count":4,"Window":"short","Since":"2026-09-30T12:00:00Z"}`
+	var got FlappingResult
+	if err := json.Unmarshal([]byte(old), &got); err != nil {
+		t.Fatal(err)
+	}
+	if !got.IsFlapping || got.Level != "acute" || got.Count != 4 || got.Window != "short" || got.Since.IsZero() {
+		t.Errorf("an incident saved by 0.41.1 read back as %+v", got)
+	}
+
+	out, err := json.Marshal(got)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(out) != `{"is_flapping":true,"level":"acute","count":4,"window":"short","since":"2026-09-30T12:00:00Z"}` {
+		t.Errorf("written as %s", out)
+	}
+	var again FlappingResult
+	if err := json.Unmarshal(out, &again); err != nil || again != got {
+		t.Errorf("the new keys did not read back: %+v, %v", again, err)
+	}
 }

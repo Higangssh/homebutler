@@ -168,9 +168,15 @@ func actionTexts(actions []Action) []string {
 	return out
 }
 
-// note is a line with nothing to branch on: the baseline message, and "no
-// significant changes". They are changes in the sense that they occupy the
-// section, so they carry the kind that says there was nothing to compare.
+// note is a line saying the comparison could not be made: a first run, or a
+// previous snapshot that could not be read. It carries skipped, which is what
+// the kind means.
+//
+// "No significant changes" is not one of these. It used to be, and on a quiet
+// day an agent reading kind was told the comparison had not been made when it
+// had and found nothing — the 0.40.0 soak's first quiet report. A comparison
+// with nothing to say now leaves the list empty, and the sentence is the human
+// renderer's.
 func note(text string) ChangeLine {
 	return ChangeLine{Kind: kindSkipped, Text: text}
 }
@@ -310,10 +316,16 @@ func countPublicPorts(pp []ports.PortInfo) int {
 }
 
 func buildReport(snap *Snapshot, prev *Snapshot) *Report {
+	// Empty, not nil. The three lists have no omitempty, so nil went out as
+	// null, and null says the field is missing where [] says there is nothing
+	// in it. A quiet day is the second.
 	r := &Report{
-		Timestamp:  snap.Timestamp,
-		ServerName: snap.ServerName,
-		Warnings:   snap.Warnings,
+		Timestamp:        snap.Timestamp,
+		ServerName:       snap.ServerName,
+		Warnings:         snap.Warnings,
+		NeedsAttention:   []Finding{},
+		NotableChanges:   []ChangeLine{},
+		SuggestedActions: []Action{},
 	}
 	if prev != nil {
 		r.ComparedTo = prev.Timestamp
@@ -464,10 +476,6 @@ func buildReport(snap *Snapshot, prev *Snapshot) *Report {
 		r.NotableChanges = append(r.NotableChanges, c.line())
 	}
 
-	if len(r.NotableChanges) == 0 {
-		r.NotableChanges = append(r.NotableChanges, note("No significant changes since last report."))
-	}
-
 	// Suggested actions, built from what changed rather than from counts. A
 	// count cannot say which port or which container, and a port that changed
 	// hands without changing the count produced no action at all.
@@ -511,7 +519,9 @@ func FormatHuman(r *Report) string {
 	}
 
 	fmt.Fprintf(&b, "%s\n", style.Section("Notable Changes"))
-	if len(r.changes) > 0 {
+	if len(r.NotableChanges) == 0 {
+		b.WriteString("   No significant changes since last report.\n")
+	} else if len(r.changes) > 0 {
 		b.WriteString(changeBlock(groupChanges(r.changes), "   "))
 	} else {
 		b.WriteString(style.LabelledBlock(changeTexts(r.NotableChanges), "   "))

@@ -15,7 +15,7 @@ vi.mock('./api.js', () => ({
 // Go field names. The fixture uses them for the same reason the component
 // reads them.
 const catalogue = [
-  { Name: 'portainer', Description: 'Docker management GUI', DefaultPort: '9443', ContainerPort: '9443' },
+  { name: 'portainer', description: 'Docker management GUI', default_port: '9443', container_port: '9443' },
 ];
 
 async function show(props = {}, status = { app: 'portainer', installed: true, state: 'running' }) {

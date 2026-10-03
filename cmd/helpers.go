@@ -45,7 +45,7 @@ func output(data any, jsonOut bool) error {
 	if jsonOut {
 		enc := json.NewEncoder(os.Stdout)
 		enc.SetIndent("", "  ")
-		return enc.Encode(data)
+		return enc.Encode(util.EmptyLists(data))
 	}
 
 	switch v := data.(type) {
@@ -129,7 +129,7 @@ func output(data any, jsonOut bool) error {
 	default:
 		enc := json.NewEncoder(os.Stdout)
 		enc.SetIndent("", "  ")
-		return enc.Encode(data)
+		return enc.Encode(util.EmptyLists(data))
 	}
 	return nil
 }
