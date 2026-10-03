@@ -35,7 +35,7 @@ jobs:
       # older local copy and failed here. Upgrading is a pull request, where
       # the new findings are somebody's decision rather than a surprise.
       - name: golangci-lint
-        uses: golangci/golangci-lint-action@v7
+        uses: golangci/golangci-lint-action@v9
         with:
           version: v2.13.2
 
