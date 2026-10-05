@@ -132,7 +132,7 @@ func SelfUpgrade(currentVersion, latestVersion string) *UpgradeResult {
 
 	result.Status = "upgraded"
 	result.NewVersion = latestVersion
-	result.Message = fmt.Sprintf("v%s → v%s", currentVersion, latestVersion)
+	result.Message = fmt.Sprintf("%s → %s", vtag(currentVersion), vtag(latestVersion))
 	return result
 }
 
@@ -216,7 +216,7 @@ func RemoteUpgrade(server *config.ServerConfig, latestVersion string) *UpgradeRe
 
 	result.Status = "upgraded"
 	result.NewVersion = newVersion
-	result.Message = fmt.Sprintf("v%s → v%s (%s/%s)", remoteVersion, newVersion, remoteOS, remoteArch)
+	result.Message = fmt.Sprintf("%s → %s (%s/%s)", vtag(remoteVersion), vtag(newVersion), remoteOS, remoteArch)
 	return result
 }
 
@@ -267,10 +267,10 @@ func remoteWhich(client *ssh.Client) (string, error) {
 func upToDateMessage(current, latest string) (message string, stop bool) {
 	order, ok := compareVersions(current, latest)
 	if current == latest || (ok && order == 0) {
-		return fmt.Sprintf("already v%s", current), true
+		return "already " + vtag(current), true
 	}
 	if ok && order > 0 {
-		return fmt.Sprintf("v%s is newer than v%s", current, latest), true
+		return fmt.Sprintf("%s is newer than %s", vtag(current), vtag(latest)), true
 	}
 	return "", false
 }
@@ -448,4 +448,11 @@ func cmpInt(a, b int) int {
 	default:
 		return 0
 	}
+}
+
+// vtag writes a version with exactly one leading v. A make build is stamped by
+// git describe, which already starts with one, so formatting "v%s" printed
+// "already vv0.41.2".
+func vtag(version string) string {
+	return "v" + strings.TrimPrefix(version, "v")
 }

@@ -6,7 +6,8 @@ All notable changes to this project will be documented in this file.
 
 ### 🐛 Fixes
 
-- `upgrade` replaced a binary that was already newer than the latest GitHub release (#307). It treated any version string that was not exactly that release as out of date, so a source build stamped `0.41.1-dev` was moved to `v0.41.0`, and a machine already on a newer tag was moved back while the latest release was still the previous one. A higher `MAJOR.MINOR.PATCH` is left in place, including one with a suffix, and the line for that machine says it is newer; the summary still counts it as up to date. The same numbers with a prerelease are still upgraded once that release is out, and a local `dev` build with no numbers is still refused
+- `upgrade` replaced a binary that was already newer than the latest GitHub release (#307, #312). It treated any version string that was not exactly that release as out of date, so a source build stamped `0.41.1-dev` was moved to `v0.41.0`, and a machine already on a newer tag was moved back while the latest release was still the previous one. A higher `MAJOR.MINOR.PATCH` is left in place, including one with a suffix, and the line for that machine says it is newer; the summary still counts it as up to date. A `make build` is stamped by `git describe`, and `v0.41.2-2-gc180322` or `v0.41.2-dirty` counts as after its tag, so it is left alone too. A real prerelease with the same numbers, such as `-rc.1`, is still upgraded once that release is out, and a local `dev` build with no numbers is still refused
+- `upgrade` printed two `v`s in front of a version that already had one (#PR): `already vv0.41.2` for every `make build` exactly at a tag, since `git describe` stamps the `v` itself
 
 ## [0.41.2](https://github.com/Higangssh/homebutler/compare/v0.41.1...v0.41.2) - 2026-10-03
 
