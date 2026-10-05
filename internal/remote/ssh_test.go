@@ -747,7 +747,14 @@ func TestCompareVersions(t *testing.T) {
 		{"0.41.0-dev", "0.41.0", -1, true},
 		{"0.41.0", "0.41.2", -1, true},
 		{"0.9.0", "0.10.0", -1, true},
-		{"v0.41.2-3-gabcdef", "0.41.2", -1, true},
+		{"v0.41.2-3-gabcdef", "0.41.2", 1, true},
+		{"v0.41.2-dirty", "0.41.2", 1, true},
+		{"v0.41.2-1-g4e42fce", "0.41.2", 1, true},
+		{"v0.41.2-1-g4e42fce-dirty", "0.41.2", 1, true},
+		{"v0.41.2-dirty", "0.41.3", -1, true},
+		{"v0.41.2-1-g4e42fce-dirty", "0.41.3", -1, true},
+		{"0.41.2", "v0.41.2-dirty", -1, true},
+		{"0.41.2-rc.1-dirty", "0.41.2", -1, true},
 		{"0.41.1-1", "0.41.1-dev", -1, true},
 		{"v0.41.2", "0.41.2", 0, true},
 		{"1.0.0", "1.0.0", 0, true},
@@ -759,6 +766,9 @@ func TestCompareVersions(t *testing.T) {
 		order, ok := compareVersions(tc.current, tc.latest)
 		if ok != tc.ok || order != tc.order {
 			t.Errorf("compareVersions(%q, %q) = (%d, %v), want (%d, %v)", tc.current, tc.latest, order, ok, tc.order, tc.ok)
+		}
+		if _, stop := upToDateMessage(tc.current, tc.latest); stop != (tc.ok && tc.order >= 0) {
+			t.Errorf("upToDateMessage(%q, %q) stop = %v, want %v", tc.current, tc.latest, stop, tc.ok && tc.order >= 0)
 		}
 	}
 }

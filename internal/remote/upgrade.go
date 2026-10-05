@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"strconv"
 	"strings"
@@ -302,6 +303,8 @@ type parsedVersion struct {
 	pre                 []string // nil when this is a release, not a prerelease
 }
 
+var gitDescribeSuffix = regexp.MustCompile(`^(dirty|[0-9]+-g[0-9a-f]+(-dirty)?)$`)
+
 func parseVersion(raw string) (parsedVersion, bool) {
 	s := strings.TrimPrefix(raw, "v")
 	if cut, _, found := strings.Cut(s, "+"); found {
@@ -345,6 +348,14 @@ func parseVersion(raw string) (parsedVersion, bool) {
 // comparePrerelease follows semver precedence. A release is newer than the
 // same triple with a prerelease. A longer run of equal identifiers is newer.
 func comparePrerelease(a, b []string) int {
+	aDescribe := len(a) == 1 && gitDescribeSuffix.MatchString(a[0])
+	bDescribe := len(b) == 1 && gitDescribeSuffix.MatchString(b[0])
+	if aDescribe && !bDescribe {
+		return 1
+	}
+	if bDescribe && !aDescribe {
+		return -1
+	}
 	switch {
 	case len(a) == 0 && len(b) == 0:
 		return 0
