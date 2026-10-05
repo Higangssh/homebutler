@@ -697,8 +697,8 @@ func TestSelfUpgrade_AlreadyUpToDate(t *testing.T) {
 		t.Errorf("expected 'already v1.0.0', got %s", result.Message)
 	}
 
-	// make build stamps the leading v from git describe. The already line is
-	// `already v%s` with that raw string, same as an exact match.
+	// make build stamps the leading v from git describe, and the line used to
+	// put a second one in front of it.
 	result = SelfUpgrade("v0.41.2", "0.41.2")
 	if result.Status != "up-to-date" {
 		t.Errorf("Status = %q, want up-to-date", result.Status)
@@ -706,8 +706,13 @@ func TestSelfUpgrade_AlreadyUpToDate(t *testing.T) {
 	if result.NewVersion != "v0.41.2" {
 		t.Errorf("NewVersion = %q, want v0.41.2", result.NewVersion)
 	}
-	if result.Message != "already vv0.41.2" {
-		t.Errorf("message = %q, want already vv0.41.2", result.Message)
+	if result.Message != "already v0.41.2" {
+		t.Errorf("message = %q, want already v0.41.2", result.Message)
+	}
+
+	result = SelfUpgrade("v0.41.2-2-gc180322", "0.41.2")
+	if result.Message != "v0.41.2-2-gc180322 is newer than v0.41.2" {
+		t.Errorf("message = %q", result.Message)
 	}
 }
 
