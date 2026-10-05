@@ -554,6 +554,66 @@ func TestRunSuccessAndFailure(t *testing.T) {
 	}
 }
 
+func TestRemoteUpgrade_LeavesNewerAndCurrent(t *testing.T) {
+	const versionCmd = "homebutler version 2>/dev/null || $HOME/.local/bin/homebutler version"
+	cases := []struct {
+		installed string
+		latest    string
+		message   string
+	}{
+		{"0.41.1-dev", "0.41.0", "v0.41.1-dev is newer than v0.41.0"},
+		{"0.41.0", "0.41.0", "already v0.41.0"},
+	}
+	for _, tc := range cases {
+		var cmds []string
+		server := startTestSSHServer(t, func(cmd string) (string, uint32) {
+			cmds = append(cmds, cmd)
+			if cmd == versionCmd {
+				return fmt.Sprintf("homebutler %s (built test)\n", tc.installed), 0
+			}
+			return "", 1
+		})
+		defer server.cleanup()
+		writeKnownHostsForTest(t, server)
+
+		host, portStr, err := net.SplitHostPort(server.addr)
+		if err != nil {
+			t.Fatal(err)
+		}
+		port, err := strconv.Atoi(portStr)
+		if err != nil {
+			t.Fatal(err)
+		}
+		srv := &config.ServerConfig{
+			Name:     "test",
+			Host:     host,
+			Port:     port,
+			User:     "tester",
+			AuthMode: "password",
+			Password: "secret",
+		}
+
+		result := RemoteUpgrade(srv, tc.latest)
+		if result.Status != "up-to-date" {
+			t.Fatalf("RemoteUpgrade(%q) status = %q, want up-to-date (%s)", tc.installed, result.Status, result.Message)
+		}
+		if result.NewVersion != tc.installed {
+			t.Fatalf("NewVersion = %q, want %q", result.NewVersion, tc.installed)
+		}
+		if result.Message != tc.message {
+			t.Fatalf("message = %q, want %q", result.Message, tc.message)
+		}
+		for _, cmd := range cmds {
+			if strings.Contains(cmd, "uname -s -m") || strings.Contains(cmd, "which") {
+				t.Fatalf("handler saw %q", cmd)
+			}
+		}
+		if len(cmds) != 1 || cmds[0] != versionCmd {
+			t.Fatalf("commands = %q, want only the version check", cmds)
+		}
+	}
+}
+
 func TestDetectInstallDirPrefersUsrLocalBin(t *testing.T) {
 	server := startTestSSHServer(t, func(cmd string) (string, uint32) {
 		switch cmd {
@@ -633,8 +693,83 @@ func TestSelfUpgrade_AlreadyUpToDate(t *testing.T) {
 	if result.NewVersion != "1.0.0" {
 		t.Errorf("expected version 1.0.0, got %s", result.NewVersion)
 	}
-	if !strings.Contains(result.Message, "already") {
-		t.Errorf("expected 'already' in message, got %s", result.Message)
+	if result.Message != "already v1.0.0" {
+		t.Errorf("expected 'already v1.0.0', got %s", result.Message)
+	}
+
+	// make build stamps the leading v from git describe. The already line is
+	// `already v%s` with that raw string, same as an exact match.
+	result = SelfUpgrade("v0.41.2", "0.41.2")
+	if result.Status != "up-to-date" {
+		t.Errorf("Status = %q, want up-to-date", result.Status)
+	}
+	if result.NewVersion != "v0.41.2" {
+		t.Errorf("NewVersion = %q, want v0.41.2", result.NewVersion)
+	}
+	if result.Message != "already vv0.41.2" {
+		t.Errorf("message = %q, want already vv0.41.2", result.Message)
+	}
+}
+
+func TestSelfUpgrade_NewerThanLatest(t *testing.T) {
+	// No HTTP server: a download would leave the machine and come back error
+	// or upgraded, either of which means the newer binary was not left alone.
+	for _, current := range []string{"0.41.1-dev", "0.41.2"} {
+		result := SelfUpgrade(current, "0.41.0")
+		if result.Status != "up-to-date" {
+			t.Fatalf("SelfUpgrade(%q, %q) status = %q, want up-to-date", current, "0.41.0", result.Status)
+		}
+		if result.NewVersion != current {
+			t.Fatalf("NewVersion = %q, want %q", result.NewVersion, current)
+		}
+		want := fmt.Sprintf("v%s is newer than v%s", current, "0.41.0")
+		if result.Message != want {
+			t.Fatalf("message = %q, want %q", result.Message, want)
+		}
+	}
+}
+
+func TestCompareVersions(t *testing.T) {
+	tests := []struct {
+		current, latest string
+		order           int
+		ok              bool
+	}{
+		{"0.41.10", "0.41.9", 1, true},
+		{"1.0.0", "0.41.2", 1, true},
+		{"0.41.1-rc.2", "0.41.1-rc.1", 1, true},
+		{"0.41.1-rc.1", "0.41.1-dev", 1, true},
+		{"0.41.1-rc.10", "0.41.1-rc.2", 1, true},
+		{"0.41.1-rc.1", "0.41.1-rc", 1, true},
+		{"0.41.1-dev", "0.41.0", 1, true},
+		{"0.41.2", "0.41.0", 1, true},
+		{"0.41.1-dev", "0.41.1", -1, true},
+		{"0.41.0-dev", "0.41.0", -1, true},
+		{"0.41.0", "0.41.2", -1, true},
+		{"0.9.0", "0.10.0", -1, true},
+		{"v0.41.2-3-gabcdef", "0.41.2", 1, true},
+		{"v0.41.2-dirty", "0.41.2", 1, true},
+		{"v0.41.2-1-g4e42fce", "0.41.2", 1, true},
+		{"v0.41.2-1-g4e42fce-dirty", "0.41.2", 1, true},
+		{"v0.41.2-dirty", "0.41.3", -1, true},
+		{"v0.41.2-1-g4e42fce-dirty", "0.41.3", -1, true},
+		{"0.41.2", "v0.41.2-dirty", -1, true},
+		{"0.41.2-rc.1-dirty", "0.41.2", -1, true},
+		{"0.41.1-1", "0.41.1-dev", -1, true},
+		{"v0.41.2", "0.41.2", 0, true},
+		{"1.0.0", "1.0.0", 0, true},
+		{"1.0.0+sha", "1.0.0", 0, true},
+		{"dev", "1.0.0", 0, false},
+		{"abcdef", "0.41.0", 0, false},
+	}
+	for _, tc := range tests {
+		order, ok := compareVersions(tc.current, tc.latest)
+		if ok != tc.ok || order != tc.order {
+			t.Errorf("compareVersions(%q, %q) = (%d, %v), want (%d, %v)", tc.current, tc.latest, order, ok, tc.order, tc.ok)
+		}
+		if _, stop := upToDateMessage(tc.current, tc.latest); stop != (tc.ok && tc.order >= 0) {
+			t.Errorf("upToDateMessage(%q, %q) stop = %v, want %v", tc.current, tc.latest, stop, tc.ok && tc.order >= 0)
+		}
 	}
 }
 

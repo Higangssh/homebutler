@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### 🐛 Fixes
+
+- `upgrade` replaced a binary that was already newer than the latest GitHub release (#307). It treated any version string that was not exactly that release as out of date, so a source build stamped `0.41.1-dev` was moved to `v0.41.0`, and a machine already on a newer tag was moved back while the latest release was still the previous one. A higher `MAJOR.MINOR.PATCH` is left in place, including one with a suffix, and the line for that machine says it is newer; the summary still counts it as up to date. The same numbers with a prerelease are still upgraded once that release is out, and a local `dev` build with no numbers is still refused
+
 ## [0.41.2](https://github.com/Higangssh/homebutler/compare/v0.41.1...v0.41.2) - 2026-10-03
 
 **On the first quiet day of the soak, `report --json` said the comparison could not be made, because "no significant changes" was filed under the kind that means exactly that.** This release makes an empty answer look empty: a comparison that found nothing returns `[]`, no list anywhere comes back as `null`, and the two answers that used Go's field names as JSON keys use snake_case like every other. All of it changes what a caller receives, which is why it ships before 1.0 rather than after: 1.0 freezes these shapes, and they would have been frozen saying the wrong thing. A test now fails on a capitalised key, and another on a list that would reach a caller as `null`, so neither can come back.
