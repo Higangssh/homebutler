@@ -2,7 +2,9 @@
 
 All notable changes to this project will be documented in this file.
 
-## [Unreleased]
+## [0.41.3](https://github.com/Higangssh/homebutler/compare/v0.41.2...v0.41.3) - 2026-10-08
+
+**The soak's day with a deliberate image change reported the change correctly and then also told the operator that a port had been taken over by the container that had held it all along.** It was the one false line left in the 0.41.2 soak's reports, and this release removes it along with its duplicate. It also stops `upgrade` from replacing a build that is newer than the latest release with that release — the build from `make` included, which is stamped by `git describe` — in a fix contributed by @mvanhorn. And it is the first release built by `release.yml` with the v4 Docker actions, so that 1.0 is not their first run.
 
 ### 🐛 Fixes
 
@@ -10,6 +12,10 @@ All notable changes to this project will be documented in this file.
 - `upgrade` printed two `v`s in front of a version that already had one (#313): `already vv0.41.2` for every `make build` exactly at a tag, since `git describe` stamps the `v` itself
 - `report` said a port had a new owner when only its container's image had changed (#314). A Docker container owns a port under the label `name (image)`, and the comparison used the whole label, so a container whose image tag moved — or one recreated on a new image — was reported as `port: :8082/tcp — it-tools (corentinth/it-tools:latest) → it-tools (8b8128748339)`, with a `needs_attention` item saying the port "was not" answered by it at the last report. The image change is already the `image` line, and a recreated container is `replaced`. A port now changes hands only when the process or the container's name does. Found on the 0.41.2 soak, the day after an image tag was moved deliberately
 - a port reachable on both `0.0.0.0` and `[::]` that changed hands produced its `needs_attention` item and its suggested action twice (#314), once per listener. `notable_changes` already counted it once
+
+### 📦 Distribution
+
+- the release workflow uses `docker/setup-buildx-action` and `docker/login-action` v4 (#301, #302). They were held back because `release.yml` runs only on a tag, so CI never exercises them; this release is their first run, ahead of 1.0
 
 ## [0.41.2](https://github.com/Higangssh/homebutler/compare/v0.41.1...v0.41.2) - 2026-10-03
 
