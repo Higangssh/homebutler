@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### ♻️ Internal
+
+- a release checks its npm and Homebrew credentials before it builds anything (#317), and a Credentials workflow runs the same check from the Actions tab. v0.41.3 found its npm token had expired at the last step, with the binaries, the image and the tap already published, and a tag cannot be published twice. Running the Credentials workflow after replacing a secret shows whether the new one works without cutting a tag
+
 ## [0.41.3](https://github.com/Higangssh/homebutler/compare/v0.41.2...v0.41.3) - 2026-10-08
 
 **The soak's day with a deliberate image change reported the change correctly and then also told the operator that a port had been taken over by the container that had held it all along.** It was the one false line left in the 0.41.2 soak's reports, and this release removes it along with its duplicate. It also stops `upgrade` from replacing a build that is newer than the latest release with that release — the build from `make` included, which is stamped by `git describe` — in a fix contributed by @mvanhorn. And it is the first release built by `release.yml` with the v4 Docker actions, so that 1.0 is not their first run.

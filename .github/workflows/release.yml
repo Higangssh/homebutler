@@ -26,6 +26,15 @@ jobs:
         with:
           node-version: "22"
 
+      # Before anything is built, let alone published: v0.41.3 found its npm
+      # token had expired at the last step, with the binaries, the image and the
+      # tap already out. The Credentials workflow runs the same check by hand.
+      - name: Check the release credentials
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+        run: scripts/check-credentials.sh
+
       - name: Build web frontend
         run: make build-web
 
