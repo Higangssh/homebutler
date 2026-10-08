@@ -6,7 +6,9 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"regexp"
 	"runtime"
+	"strconv"
 	"strings"
 
 	"github.com/Higangssh/homebutler/internal/config"
@@ -72,10 +74,10 @@ func SelfUpgrade(currentVersion, latestVersion string) *UpgradeResult {
 		return result
 	}
 
-	if currentVersion == latestVersion {
+	if message, stop := upToDateMessage(currentVersion, latestVersion); stop {
 		result.Status = "up-to-date"
 		result.NewVersion = currentVersion
-		result.Message = fmt.Sprintf("already v%s", currentVersion)
+		result.Message = message
 		return result
 	}
 
@@ -130,7 +132,7 @@ func SelfUpgrade(currentVersion, latestVersion string) *UpgradeResult {
 
 	result.Status = "upgraded"
 	result.NewVersion = latestVersion
-	result.Message = fmt.Sprintf("v%s → v%s", currentVersion, latestVersion)
+	result.Message = fmt.Sprintf("%s → %s", vtag(currentVersion), vtag(latestVersion))
 	return result
 }
 
@@ -159,10 +161,10 @@ func RemoteUpgrade(server *config.ServerConfig, latestVersion string) *UpgradeRe
 	}
 	result.PrevVersion = remoteVersion
 
-	if remoteVersion == latestVersion {
+	if message, stop := upToDateMessage(remoteVersion, latestVersion); stop {
 		result.Status = "up-to-date"
 		result.NewVersion = remoteVersion
-		result.Message = fmt.Sprintf("already v%s", remoteVersion)
+		result.Message = message
 		return result
 	}
 
@@ -214,7 +216,7 @@ func RemoteUpgrade(server *config.ServerConfig, latestVersion string) *UpgradeRe
 
 	result.Status = "upgraded"
 	result.NewVersion = newVersion
-	result.Message = fmt.Sprintf("v%s → v%s (%s/%s)", remoteVersion, newVersion, remoteOS, remoteArch)
+	result.Message = fmt.Sprintf("%s → %s (%s/%s)", vtag(remoteVersion), vtag(newVersion), remoteOS, remoteArch)
 	return result
 }
 
@@ -257,4 +259,200 @@ func remoteWhich(client *ssh.Client) (string, error) {
 		return "", fmt.Errorf("cannot locate homebutler")
 	}
 	return path, nil
+}
+
+// upToDateMessage reports the status line when the installed version should
+// be left in place. stop is false when latest should be downloaded, including
+// when either string is not a version (a dev build, a commit hash).
+func upToDateMessage(current, latest string) (message string, stop bool) {
+	order, ok := compareVersions(current, latest)
+	if current == latest || (ok && order == 0) {
+		return "already " + vtag(current), true
+	}
+	if ok && order > 0 {
+		return fmt.Sprintf("%s is newer than %s", vtag(current), vtag(latest)), true
+	}
+	return "", false
+}
+
+// compareVersions compares an installed version with the latest release.
+// order is positive when current is newer, negative when it is older, and
+// zero when they are the same version. ok is false when either string is not
+// MAJOR.MINOR.PATCH, with an optional leading v, an optional -prerelease,
+// and an optional +build suffix that is ignored.
+func compareVersions(current, latest string) (order int, ok bool) {
+	cur, curOK := parseVersion(current)
+	lat, latOK := parseVersion(latest)
+	if !curOK || !latOK {
+		return 0, false
+	}
+	if cur.major != lat.major {
+		return cmpInt(cur.major, lat.major), true
+	}
+	if cur.minor != lat.minor {
+		return cmpInt(cur.minor, lat.minor), true
+	}
+	if cur.patch != lat.patch {
+		return cmpInt(cur.patch, lat.patch), true
+	}
+	return comparePrerelease(cur.pre, lat.pre), true
+}
+
+type parsedVersion struct {
+	major, minor, patch int
+	pre                 []string // nil when this is a release, not a prerelease
+}
+
+var gitDescribeSuffix = regexp.MustCompile(`^(dirty|[0-9]+-g[0-9a-f]+(-dirty)?)$`)
+
+func parseVersion(raw string) (parsedVersion, bool) {
+	s := strings.TrimPrefix(raw, "v")
+	if cut, _, found := strings.Cut(s, "+"); found {
+		s = cut
+	}
+	var preRaw string
+	if cut, after, found := strings.Cut(s, "-"); found {
+		s = cut
+		preRaw = after
+		if preRaw == "" {
+			return parsedVersion{}, false
+		}
+	}
+	parts := strings.Split(s, ".")
+	if len(parts) != 3 {
+		return parsedVersion{}, false
+	}
+	nums := [3]int{}
+	for i, part := range parts {
+		if !isDigits(part) {
+			return parsedVersion{}, false
+		}
+		n, err := strconv.Atoi(part)
+		if err != nil {
+			return parsedVersion{}, false
+		}
+		nums[i] = n
+	}
+	if preRaw == "" {
+		return parsedVersion{major: nums[0], minor: nums[1], patch: nums[2]}, true
+	}
+	ids := strings.Split(preRaw, ".")
+	for _, id := range ids {
+		if !validIdent(id) {
+			return parsedVersion{}, false
+		}
+	}
+	return parsedVersion{major: nums[0], minor: nums[1], patch: nums[2], pre: ids}, true
+}
+
+// comparePrerelease follows semver precedence. A release is newer than the
+// same triple with a prerelease. A longer run of equal identifiers is newer.
+func comparePrerelease(a, b []string) int {
+	aDescribe := len(a) == 1 && gitDescribeSuffix.MatchString(a[0])
+	bDescribe := len(b) == 1 && gitDescribeSuffix.MatchString(b[0])
+	if aDescribe && !bDescribe {
+		return 1
+	}
+	if bDescribe && !aDescribe {
+		return -1
+	}
+	switch {
+	case len(a) == 0 && len(b) == 0:
+		return 0
+	case len(a) == 0:
+		return 1
+	case len(b) == 0:
+		return -1
+	}
+	n := len(a)
+	if len(b) < n {
+		n = len(b)
+	}
+	for i := 0; i < n; i++ {
+		if c := compareIdent(a[i], b[i]); c != 0 {
+			return c
+		}
+	}
+	return cmpInt(len(a), len(b))
+}
+
+// compareIdent compares one prerelease identifier. Numeric identifiers compare
+// as integers and sort before non-numeric ones; everything else is byte order.
+func compareIdent(a, b string) int {
+	aNum, bNum := isDigits(a), isDigits(b)
+	if aNum && bNum {
+		return compareNumeric(a, b)
+	}
+	if aNum {
+		return -1
+	}
+	if bNum {
+		return 1
+	}
+	return strings.Compare(a, b)
+}
+
+func compareNumeric(a, b string) int {
+	a = trimLeadingZeros(a)
+	b = trimLeadingZeros(b)
+	if len(a) != len(b) {
+		return cmpInt(len(a), len(b))
+	}
+	return strings.Compare(a, b)
+}
+
+func trimLeadingZeros(s string) string {
+	i := 0
+	for i+1 < len(s) && s[i] == '0' {
+		i++
+	}
+	return s[i:]
+}
+
+func isDigits(s string) bool {
+	if s == "" {
+		return false
+	}
+	for i := 0; i < len(s); i++ {
+		if s[i] < '0' || s[i] > '9' {
+			return false
+		}
+	}
+	return true
+}
+
+func validIdent(s string) bool {
+	if s == "" {
+		return false
+	}
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		switch {
+		case c >= '0' && c <= '9':
+		case c >= 'A' && c <= 'Z':
+		case c >= 'a' && c <= 'z':
+		case c == '-':
+		default:
+			return false
+		}
+	}
+	return true
+}
+
+func cmpInt(a, b int) int {
+	switch {
+	case a > b:
+		return 1
+	case a < b:
+		return -1
+	default:
+		return 0
+	}
+}
+
+// vtag writes a version with exactly one leading v. A make build is stamped by
+// git describe, which already starts with one, so formatting "v%s" printed
+// "already vv0.41.2".
+func vtag(version string) string {
+	return "v" + strings.TrimPrefix(version, "v")
 }
