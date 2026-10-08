@@ -26,8 +26,8 @@ jobs:
         with:
           node-version: "22"
 
-      # Before anything is built, let alone published: v0.41.3 found its npm
-      # token had expired at the last step, with the binaries, the image and the
+      # Before anything is built, let alone published: v0.41.3 found at its last
+      # step that npm refused its token, with the binaries, the image and the
       # tap already out. The Credentials workflow runs the same check by hand.
       - name: Check the release credentials
         env:
