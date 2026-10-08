@@ -158,7 +158,7 @@ func diffPorts(prev, curr []ports.PortInfo) []Change {
 			changes = append(changes, Change{Kind: kindGone, Subject: portSubject(p), Detail: describeOwner("was ", p), noun: nounPorts})
 			continue
 		}
-		if owner(p) != owner(c) && owner(p) != "" && owner(c) != "" {
+		if ownerIdentity(p) != ownerIdentity(c) && owner(p) != "" && owner(c) != "" {
 			changes = append(changes, Change{Kind: kindPort, Subject: portSubject(p), Detail: owner(p) + " → " + owner(c), noun: nounPorts})
 		}
 	}
@@ -332,6 +332,21 @@ func owner(p ports.PortInfo) string {
 	// Docker, because root's docker-proxy holds it. The container that
 	// published it was collected in the same run.
 	return p.Container
+}
+
+// ownerIdentity is what has to differ for a port to have changed hands: the
+// process, or for a port Docker published, the container's name. owner() is
+// "name (image)" for a container, and comparing that called a port taken over
+// when the same container had only had its image tag move — the 0.41.2 soak
+// reported "answered by it-tools now, and was not at the last report" about
+// the container that had answered it all along. The image change is the
+// image kind's to report, and a recreated container is replaced's.
+func ownerIdentity(p ports.PortInfo) string {
+	if p.Process != "" {
+		return p.Process
+	}
+	name, _, _ := strings.Cut(p.Container, " (")
+	return name
 }
 
 // unidentified is what to say when neither the operating system nor the
@@ -723,12 +738,16 @@ func actionsFromChanges(prev, snap *Snapshot) []Action {
 func publicPortsChangedHands(prev, curr []ports.PortInfo) []ports.PortInfo {
 	before := indexPorts(prev)
 	var out []ports.PortInfo
+	// 0.0.0.0 and [::] are two listeners for one port a reader thinks of as
+	// one, and each produced its own finding and its own action.
+	seen := map[string]bool{}
 	for key, c := range indexPorts(curr) {
 		p, existed := before[key]
-		if !existed || !ports.IsPublicBind(c.Address) {
+		if !existed || !ports.IsPublicBind(c.Address) || seen[c.Port+"/"+c.Protocol] {
 			continue
 		}
-		if owner(p) != "" && owner(c) != "" && owner(p) != owner(c) {
+		if owner(p) != "" && owner(c) != "" && ownerIdentity(p) != ownerIdentity(c) {
+			seen[c.Port+"/"+c.Protocol] = true
 			out = append(out, c)
 		}
 	}
