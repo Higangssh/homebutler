@@ -797,3 +797,76 @@ func TestUncollectedContainersRaiseNoStoppedFinding(t *testing.T) {
 		}
 	}
 }
+
+// The 0.41.2 soak's third day: it-tools's image tag moved under the running
+// container, which answers :8082 on both 0.0.0.0 and [::]. The report said
+// image, correctly, and then also said the port had a new owner that "was not
+// at the last report" — twice, in needs_attention and in suggested_actions.
+func TestAnImageChangeIsNotANewPortOwner(t *testing.T) {
+	listen := func(image string) []ports.PortInfo {
+		owner := "it-tools (" + image + ")"
+		return []ports.PortInfo{
+			{Protocol: "tcp", Address: "0.0.0.0", Port: "8082", Container: owner},
+			{Protocol: "tcp", Address: "[::]", Port: "8082", Container: owner},
+		}
+	}
+	prev := snapshotWith([]docker.Container{{ID: "12b0babe096d", Name: "it-tools", Image: "corentinth/it-tools:latest", State: "running"}}, listen("corentinth/it-tools:latest"))
+	curr := snapshotWith([]docker.Container{{ID: "12b0babe096d", Name: "it-tools", Image: "8b8128748339", State: "running"}}, listen("8b8128748339"))
+
+	r := buildReport(curr, prev)
+	got := strings.Join(changeTexts(r.NotableChanges), " | ")
+	if got != "image: it-tools — corentinth/it-tools:latest → 8b8128748339" {
+		t.Errorf("notable_changes = %s", got)
+	}
+	if len(r.NeedsAttention) != 0 || len(r.SuggestedActions) != 0 {
+		t.Errorf("an image change raised attention %+v and actions %+v", r.NeedsAttention, r.SuggestedActions)
+	}
+}
+
+// Recreating a container is replaced's to report, with or without a new
+// image; the port it publishes did not change hands.
+func TestARecreatedContainerIsNotANewPortOwner(t *testing.T) {
+	for _, newImage := range []string{"filebrowser/filebrowser:latest", "filebrowser/filebrowser:v2"} {
+		prev := snapshotWith([]docker.Container{{ID: "a45ce03c0d31", Name: "filebrowser", Image: "filebrowser/filebrowser:latest", State: "running"}},
+			[]ports.PortInfo{{Protocol: "tcp", Address: "0.0.0.0", Port: "8081", Container: "filebrowser (filebrowser/filebrowser:latest)"}})
+		curr := snapshotWith([]docker.Container{{ID: "6651497ca3a2", Name: "filebrowser", Image: newImage, State: "running"}},
+			[]ports.PortInfo{{Protocol: "tcp", Address: "0.0.0.0", Port: "8081", Container: "filebrowser (" + newImage + ")"}})
+		r := buildReport(curr, prev)
+		for _, c := range r.NotableChanges {
+			if c.Kind == kindPort {
+				t.Errorf("image %s: %s", newImage, c.Text)
+			}
+		}
+		for _, f := range r.NeedsAttention {
+			if f.Kind == kindPort {
+				t.Errorf("image %s: attention %s", newImage, f.Text)
+			}
+		}
+	}
+}
+
+// A port that really changed hands is still reported, and once, though two
+// listeners carry it.
+func TestAPortThatChangedHandsIsReportedOnce(t *testing.T) {
+	listen := func(owner string) []ports.PortInfo {
+		return []ports.PortInfo{
+			{Protocol: "tcp", Address: "0.0.0.0", Port: "8080", Container: owner},
+			{Protocol: "tcp", Address: "[::]", Port: "8080", Container: owner},
+		}
+	}
+	r := buildReport(snapshotWith(nil, listen("caddy (caddy:2)")), snapshotWith(nil, listen("nginx (nginx:1.27)")))
+	var lines, findings int
+	for _, c := range r.NotableChanges {
+		if c.Kind == kindPort {
+			lines++
+		}
+	}
+	for _, f := range r.NeedsAttention {
+		if f.Kind == kindPort {
+			findings++
+		}
+	}
+	if lines != 1 || findings != 1 || len(r.SuggestedActions) != 1 {
+		t.Errorf("a takeover on two listeners gave %d lines, %d findings, %d actions; want 1 each", lines, findings, len(r.SuggestedActions))
+	}
+}
