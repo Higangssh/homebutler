@@ -6,7 +6,7 @@ All notable changes to this project will be documented in this file.
 
 ### ♻️ Internal
 
-- a release checks its npm and Homebrew credentials before it builds anything (#317), and a Credentials workflow runs the same check from the Actions tab. v0.41.3 found its npm token had expired at the last step, with the binaries, the image and the tap already published, and a tag cannot be published twice. Running the Credentials workflow after replacing a secret shows whether the new one works without cutting a tag
+- a release checks its npm and Homebrew credentials before it builds anything (#317), and a Credentials workflow runs the same check from the Actions tab. v0.41.3 found at the last step that npm refused its token, with the binaries, the image and the tap already published, and a tag cannot be published twice. Running the Credentials workflow after replacing a secret shows whether the new one works without cutting a tag
 
 ## [0.41.3](https://github.com/Higangssh/homebutler/compare/v0.41.2...v0.41.3) - 2026-10-08
 

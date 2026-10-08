@@ -3,10 +3,11 @@
 # is published.
 #
 # v0.41.3 built its binaries, pushed its image and updated the tap, and then
-# npm answered the publish with a 404: NPM_TOKEN had been set 93 days earlier,
-# past npm's 90-day limit. The release stopped with half its channels out, the
-# same state v0.41.0 was left in, and a tag cannot be published twice. A dead
-# token is cheap to find at the start and expensive to find at the end.
+# npm answered the publish with a 404: NPM_TOKEN, set 93 days earlier, was
+# refused (whoami returns 401), whether expired or revoked. The release
+# stopped with half its channels out, the same state v0.41.0 was left in, and
+# a tag cannot be published twice. A dead token is cheap to find at the start
+# and expensive to find at the end.
 #
 # The release runs this first. .github/workflows/credentials.yml runs it on
 # demand, so a replaced secret can be checked without cutting a tag.
@@ -28,7 +29,7 @@ else
   if user="$(npm whoami --registry https://registry.npmjs.org/ --userconfig "$npmrc" 2>&1 | grep -v 'complete log' | tr '\n' ' ' | sed 's/ *$//'; exit "${PIPESTATUS[0]}")"; then
     echo "npm: token works, signed in as ${user}"
   else
-    echo "::error::npm: NPM_TOKEN does not work (${user}). npm granular tokens expire after at most 90 days; replace the secret and run the Credentials workflow."
+    echo "::error::npm: NPM_TOKEN was refused (${user}); it may have expired or been revoked. Replace the secret and run the Credentials workflow."
     failed=1
   fi
 fi
