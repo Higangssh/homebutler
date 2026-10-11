@@ -2,6 +2,7 @@ package install
 
 import (
 	"encoding/json"
+	"errors"
 	"io"
 	"os"
 	"path/filepath"
@@ -992,5 +993,35 @@ func TestParseVolumeNames(t *testing.T) {
 	}
 	if got := parseVolumeNames(""); len(got) != 0 {
 		t.Fatalf("a container with only bind mounts has no volumes, got %v", got)
+	}
+}
+
+// Only Docker's own "no such volume" counts as removed. A volume that still
+// answers is kept; a failure for any other reason is not evidence either way.
+func TestClassifyVolumesCountsOnlyNoSuchVolumeAsRemoved(t *testing.T) {
+	answers := map[string]struct {
+		out string
+		err error
+	}{
+		"gone":     {"Error response from daemon: get gone: no such volume", errors.New("exit status 1")},
+		"external": {`[{"Name": "external"}]`, nil},
+		"daemon":   {"Cannot connect to the Docker daemon at unix:///var/run/docker.sock", errors.New("exit status 1")},
+		"denied":   {"permission denied while trying to connect to the Docker daemon socket", errors.New("exit status 1")},
+	}
+	r := classifyVolumes([]string{"gone", "external", "daemon", "denied"}, func(name string) (string, error) {
+		a := answers[name]
+		return a.out, a.err
+	})
+	if len(r.Removed) != 1 || r.Removed[0] != "gone" {
+		t.Errorf("removed: want [gone], got %v", r.Removed)
+	}
+	if len(r.Kept) != 1 || r.Kept[0] != "external" {
+		t.Errorf("kept: want [external], got %v", r.Kept)
+	}
+	if len(r.Unchecked) != 2 || r.Unchecked[0] != "daemon" || r.Unchecked[1] != "denied" {
+		t.Errorf("unchecked: want [daemon denied], got %v", r.Unchecked)
+	}
+	if r.Complete() {
+		t.Error("a purge that left a volume is not complete")
 	}
 }

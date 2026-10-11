@@ -757,10 +757,28 @@ func Uninstall(appName string) error {
 	return nil
 }
 
+// PurgeResult says which of an app's Docker volumes a purge removed and which
+// are still there. A volume is only counted as removed when Docker answers
+// that it does not exist.
+type PurgeResult struct {
+	Removed []string
+	// Kept holds volumes Docker says still exist after `down -v`: external,
+	// or in use by a container outside the app. Saying the data was deleted
+	// while one of these remains would be the claim #324 was about.
+	Kept []string
+	// Unchecked holds volumes Docker could not be asked about afterwards,
+	// because the daemon or permissions failed. They may or may not be gone.
+	Unchecked []string
+}
+
+// Complete reports whether every volume the app used is confirmed gone.
+func (r PurgeResult) Complete() bool {
+	return len(r.Kept) == 0 && len(r.Unchecked) == 0
+}
+
 // Purge stops an app, removes its containers together with the Docker volumes
-// they used, and deletes its directory. It returns the volumes that were
-// removed, confirmed gone after the fact, so a caller can say what "data"
-// meant.
+// they used, and deletes its directory. It returns what happened to each
+// volume, checked after the fact, so a caller can say what "data" meant.
 //
 // The volumes matter because the app directory is not all of the data. An
 // image can declare a VOLUME its compose file does not map, and Docker then
@@ -771,14 +789,14 @@ func Uninstall(appName string) error {
 // declares; none in the catalogue declares one, and a volume marked external
 // is never removed by compose. Uninstall keeps running plain `down`, because
 // keeping the data is the difference between the two.
-func Purge(appName string) ([]string, error) {
+func Purge(appName string) (PurgeResult, error) {
 	if err := ValidateAppName(appName); err != nil {
-		return nil, err
+		return PurgeResult{}, err
 	}
 	appDir := GetInstalledPath(appName)
 	composeFile := filepath.Join(appDir, "docker-compose.yml")
 	if _, err := os.Stat(composeFile); os.IsNotExist(err) {
-		return nil, fmt.Errorf("%s is not installed", appName)
+		return PurgeResult{}, fmt.Errorf("%s is not installed", appName)
 	}
 
 	// Read before the containers go, since they are what names the volumes.
@@ -792,10 +810,10 @@ func Purge(appName string) ([]string, error) {
 	}
 
 	if _, err := util.DockerCmd("compose", "-f", composeFile, "down", "-v"); err != nil {
-		return nil, fmt.Errorf("failed to stop %s: %w", appName, err)
+		return PurgeResult{}, fmt.Errorf("failed to stop %s: %w", appName, err)
 	}
 	if err := removeInstalled(appName); err != nil {
-		return nil, err
+		return PurgeResult{}, err
 	}
 	// Try normal remove first
 	err := os.RemoveAll(appDir)
@@ -803,19 +821,34 @@ func Purge(appName string) ([]string, error) {
 		// Docker may create files as root — try passwordless sudo
 		_, sudoErr := util.RunCmd("sudo", "-n", "rm", "-rf", appDir)
 		if sudoErr != nil {
-			return nil, fmt.Errorf("permission denied. Docker creates files as root.\n"+
+			return PurgeResult{}, fmt.Errorf("permission denied. Docker creates files as root.\n"+
 				"    Run: sudo rm -rf %s", appDir)
 		}
 	}
 
-	// Only a volume Docker no longer knows is reported as removed.
-	var removed []string
-	for _, v := range volumes {
-		if _, err := util.DockerCmd("volume", "inspect", v); err != nil {
-			removed = append(removed, v)
+	return classifyVolumes(volumes, func(name string) (string, error) {
+		return util.DockerCmd("volume", "inspect", name)
+	}), nil
+}
+
+// classifyVolumes asks Docker about each volume after the purge. Only an
+// answer of "no such volume" counts as removed: inspect also fails when the
+// daemon is unreachable or permission is refused, and reading that as gone
+// would report a deletion nobody checked.
+func classifyVolumes(names []string, inspect func(string) (string, error)) PurgeResult {
+	var r PurgeResult
+	for _, v := range names {
+		out, err := inspect(v)
+		switch {
+		case err == nil:
+			r.Kept = append(r.Kept, v)
+		case strings.Contains(strings.ToLower(out), "no such volume"):
+			r.Removed = append(r.Removed, v)
+		default:
+			r.Unchecked = append(r.Unchecked, v)
 		}
 	}
-	return removed, nil
+	return r
 }
 
 // volumeMountsFormat prints one Docker volume name per line for each
