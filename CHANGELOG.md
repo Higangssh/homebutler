@@ -2,7 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
-## [Unreleased]
+## [1.1.0](https://github.com/Higangssh/homebutler/compare/v1.0.0...v1.1.0) - 2026-10-11
+
+**Recreating a container is now reported once, as the container, instead of again as the processes that ran inside it — and `install purge` removes the data it says it removed.**
+
+Both were found while recording the README's demo with 1.0.0. On a day when two containers were recreated and one of them changed image, `report` printed seven lines. Five of them repeated those two changes through the process table: each container's `containerd-shim` with its new ID, the process inside uptime-kuma that its new image renamed, and the image's entrypoint with a different command line. This release prints the two `replaced` lines. The first report after upgrading compares against a snapshot 1.0 wrote, which still holds every container's processes. If a container was recreated between that snapshot and the upgrade, its old processes are reported `gone` that one time. Clearing up the demo machine then turned up the second problem. `install purge filebrowser` had said `Completely removed` and left filebrowser's database and settings in two Docker volumes, there and on the soak machine before it.
+
 
 ### ⚠️ Behavior changes
 
