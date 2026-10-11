@@ -120,10 +120,11 @@ func newInstallPurgeCmd() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			appName := args[0]
 			fmt.Fprintf(os.Stderr, "⚠️  Purging %s (containers + data)...\n", appName)
-			if err := install.Purge(appName); err != nil {
+			result, err := install.Purge(appName)
+			if err != nil {
 				return err
 			}
-			fmt.Fprintln(os.Stderr, "✅ Completely removed")
+			fmt.Fprint(os.Stderr, purgeSummary(result))
 			return nil
 		},
 	}
@@ -223,4 +224,26 @@ func runInstallApp(appName string, cmd *cobra.Command) error {
 	}
 
 	return nil
+}
+
+// purgeSummary is what the CLI says after a purge. "Completely removed" is
+// only printed when every volume the app used is confirmed gone; otherwise the
+// first line says what was not, before listing what was.
+func purgeSummary(r install.PurgeResult) string {
+	var b strings.Builder
+	if r.Complete() {
+		b.WriteString("✅ Completely removed\n")
+	} else {
+		b.WriteString("⚠️  Removed, except:\n")
+		for _, v := range r.Kept {
+			fmt.Fprintf(&b, "   kept volume %s (still exists)\n", v)
+		}
+		for _, v := range r.Unchecked {
+			fmt.Fprintf(&b, "   volume %s (could not check whether it was removed)\n", v)
+		}
+	}
+	for _, v := range r.Removed {
+		fmt.Fprintf(&b, "   removed volume %s\n", v)
+	}
+	return b.String()
 }

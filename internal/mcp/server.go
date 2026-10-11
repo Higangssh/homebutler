@@ -723,7 +723,7 @@ func (s *Server) executeTool(name string, args map[string]any) (any, error) {
 
 	case "install_purge":
 		appName := stringArg(args, "app")
-		if err := install.Purge(appName); err != nil {
+		if _, err := install.Purge(appName); err != nil {
 			return nil, err
 		}
 		purged := false

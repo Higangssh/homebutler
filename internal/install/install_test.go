@@ -2,6 +2,7 @@ package install
 
 import (
 	"encoding/json"
+	"errors"
 	"io"
 	"os"
 	"path/filepath"
@@ -878,7 +879,7 @@ func TestPathTraversalBlocked(t *testing.T) {
 		if err := Uninstall(name); err == nil {
 			t.Errorf("Uninstall(%q) should return error", name)
 		}
-		if err := Purge(name); err == nil {
+		if _, err := Purge(name); err == nil {
 			t.Errorf("Purge(%q) should return error", name)
 		}
 	}
@@ -971,5 +972,56 @@ func TestAnAppIsListedWithoutItsComposeTemplate(t *testing.T) {
 	}
 	if !strings.Contains(string(out), `"default_port":"3001"`) {
 		t.Errorf("listing = %s", out)
+	}
+}
+
+// What `docker inspect` prints for filebrowser's container with
+// volumeMountsFormat: its two anonymous volumes, one per line. A second
+// container sharing a volume must not list it twice.
+func TestParseVolumeNames(t *testing.T) {
+	out := "a7f3f9cd0d27e62b693aa245225984f2c68a829b53b724117f96626d7bbeae78\n" +
+		"b4c6060d009ba1759fdc2d6a17e6d30b44af6157acebef7441c48fc4ff08dd0e\n" +
+		"\n" +
+		"a7f3f9cd0d27e62b693aa245225984f2c68a829b53b724117f96626d7bbeae78\n"
+	got := parseVolumeNames(out)
+	want := []string{
+		"a7f3f9cd0d27e62b693aa245225984f2c68a829b53b724117f96626d7bbeae78",
+		"b4c6060d009ba1759fdc2d6a17e6d30b44af6157acebef7441c48fc4ff08dd0e",
+	}
+	if len(got) != len(want) || got[0] != want[0] || got[1] != want[1] {
+		t.Fatalf("want %v, got %v", want, got)
+	}
+	if got := parseVolumeNames(""); len(got) != 0 {
+		t.Fatalf("a container with only bind mounts has no volumes, got %v", got)
+	}
+}
+
+// Only Docker's own "no such volume" counts as removed. A volume that still
+// answers is kept; a failure for any other reason is not evidence either way.
+func TestClassifyVolumesCountsOnlyNoSuchVolumeAsRemoved(t *testing.T) {
+	answers := map[string]struct {
+		out string
+		err error
+	}{
+		"gone":     {"Error response from daemon: get gone: no such volume", errors.New("exit status 1")},
+		"external": {`[{"Name": "external"}]`, nil},
+		"daemon":   {"Cannot connect to the Docker daemon at unix:///var/run/docker.sock", errors.New("exit status 1")},
+		"denied":   {"permission denied while trying to connect to the Docker daemon socket", errors.New("exit status 1")},
+	}
+	r := classifyVolumes([]string{"gone", "external", "daemon", "denied"}, func(name string) (string, error) {
+		a := answers[name]
+		return a.out, a.err
+	})
+	if len(r.Removed) != 1 || r.Removed[0] != "gone" {
+		t.Errorf("removed: want [gone], got %v", r.Removed)
+	}
+	if len(r.Kept) != 1 || r.Kept[0] != "external" {
+		t.Errorf("kept: want [external], got %v", r.Kept)
+	}
+	if len(r.Unchecked) != 2 || r.Unchecked[0] != "daemon" || r.Unchecked[1] != "denied" {
+		t.Errorf("unchecked: want [daemon denied], got %v", r.Unchecked)
+	}
+	if r.Complete() {
+		t.Error("a purge that left a volume is not complete")
 	}
 }
