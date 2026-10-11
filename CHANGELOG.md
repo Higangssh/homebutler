@@ -2,11 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
-## [Unreleased]
+## [1.1.1](https://github.com/Higangssh/homebutler/compare/v1.1.0...v1.1.1) - 2026-10-11
+
+**An idle Linux machine read `CPU 0.0%` because it was measured over a fifth of a second, which on four cores cannot show anything between 0% and about 1.2%.**
+
+The README's new recording showed it first: the Raspberry Pi it was recorded on averages 0.65% over half a minute, and `status` read 0 five times running.
+
 
 ### 🐛 Fixes
 
-- CPU usage on Linux is measured over one second instead of 200 ms (#332). A Raspberry Pi averaging 0.65% read `0.0%` every time: 200 ms on four cores is about 80 of the kernel's ticks, so the reading could only be 0% or about 1.2%, printed to two decimal places. A second gives steps of 0.25%, the same span macOS already samples over. An idle machine can still read 0.0% for a second that really was idle. `status`, the dashboard and the alerts watcher each wait 0.8 s longer for the number
+- CPU usage on Linux is measured over one second instead of 200 ms (#332). A Raspberry Pi averaging 0.65% read `0.0%` every time: 200 ms on four cores is about 80 of the kernel's ticks, so the reading could only be 0% or about 1.2%, printed to two decimal places. A second gives steps of 0.25%, the same span macOS already samples over. An idle machine can still read 0.0% for a second that really was idle. `status`, the dashboard and the alerts watcher each wait 0.8 s longer for the number. `status --all` and the dashboard's server overview ask every server at once, so that is 0.8 s per call, not per server
 
 ## [1.1.0](https://github.com/Higangssh/homebutler/compare/v1.0.0...v1.1.0) - 2026-10-11
 
