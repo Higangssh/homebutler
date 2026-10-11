@@ -2,7 +2,7 @@ Output report-demo.gif
 
 Set Shell zsh
 Set FontSize 15
-Set Width 1240
+Set Width 760
 Set Height 370
 Set Padding 18
 Set Theme "Catppuccin Mocha"

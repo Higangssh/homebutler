@@ -45,10 +45,10 @@ showing a sentence the binary no longer printed.
 
 The recording at the top of the README. **It is `homebutler report` running,
 not a picture of it.** `report-demo.tape` is a [VHS](https://github.com/charmbracelet/vhs)
-tape that types the command into a terminal, and the command is the 1.1.0
-release binary running on a Raspberry Pi with two real containers.
+tape that types the command into an 80-column terminal, and the command is
+the 1.1.1 release binary running on a Raspberry Pi with two real containers.
 
-Recorded on 2026-10-11:
+Recorded on 2026-10-11, in UTC as the frame shows it:
 
 1. In a home directory of its own on the Pi, `homebutler install filebrowser`
    and `homebutler install uptime-kuma`. The first `report` ran after both had
@@ -72,12 +72,16 @@ that is not committed, because it names the host:
   as `11;rgb:1e1e/…`. That is not homebutler output, and a terminal running
   homebutler directly never shows it.
 
-**Do not edit the output to make a cleaner picture.** The first two recordings
-were thrown away, not touched up. The first had `new systemd` and `(sd-pam)`,
+**Do not edit the output to make a cleaner picture.** Three recordings were
+thrown away, not touched up. The first had `new systemd` and `(sd-pam)`,
 which came from the baseline being taken too soon. The second, on 1.0.0, had
 five process lines repeating the two container changes, and that one was fixed
-in the product (1.1.0, #325) rather than in the image. If a recording shows a
-line that should not be there, the image is not where it gets fixed.
+in the product (1.1.0, #325) rather than in the image. The third, on 1.1.0, was
+clean but showed `CPU 0.0%` on a machine averaging 0.65%, because CPU was
+sampled over 200 ms. That was fixed in 1.1.1 (#333). If a recording shows a line
+that should not be there, or a number that is not true, the image is not where
+it gets fixed. Nor is picking the take where the number looks nicest: an idle
+second really can read 0.0%.
 
 To record it again, recreate the setup above, write a wrapper that defines
 `homebutler` as the ssh call (with the two substitutions above) and sets
@@ -87,8 +91,11 @@ To record it again, recreate the setup above, write a wrapper that defines
 HB_DEMO_ENV=/path/to/wrapper.sh vhs assets/report-demo.tape
 ```
 
-It is 1240x370 and about 75 KB, ten seconds long. The README shows it at
-820 wide.
+It is 760x370 (80 columns at size 15), about 72 KB, and ten seconds long.
+At 80 columns the uptime-kuma line wraps, as it would in a real terminal of that
+width. That is what keeps it legible on a phone: rendered in Chromium with a
+Pixel 7 profile, at 412 CSS pixels wide, the text is small but readable. The
+1240-wide first take was not.
 
 ## demo.gif
 
