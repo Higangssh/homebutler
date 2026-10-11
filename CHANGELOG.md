@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### 🐛 Fixes
+
+- `install purge` left the volumes of an app whose container had ever been recreated (#335). Compose carries a container's anonymous volumes over to its replacement, and `down -v` does not remove volumes that were carried over, so any app updated with `docker compose up` kept filebrowser's database through a purge. 1.1.0 at least said so (`kept volume … (still exists)`) rather than `Completely removed`. Purge now also removes the volumes this app's containers used that Docker labels anonymous and no container uses any more. A named, external or in-use volume is still left, and listed
+
 ## [1.1.1](https://github.com/Higangssh/homebutler/compare/v1.1.0...v1.1.1) - 2026-10-11
 
 **An idle Linux machine read `CPU 0.0%` because it was measured over a fifth of a second, which on four cores cannot show anything between 0% and about 1.2%.**

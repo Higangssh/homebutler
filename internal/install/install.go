@@ -812,6 +812,19 @@ func Purge(appName string) (PurgeResult, error) {
 	if _, err := util.DockerCmd("compose", "-f", composeFile, "down", "-v"); err != nil {
 		return PurgeResult{}, fmt.Errorf("failed to stop %s: %w", appName, err)
 	}
+	// `down -v` misses the anonymous volumes of a container that was ever
+	// recreated: compose carries them over to the new container, and Docker
+	// then does not count them as that container's own (#335). Remove the
+	// ones this app's containers used that are anonymous and now unused.
+	// Docker's own label marks them; a named, external or in-use volume is
+	// never touched here.
+	if len(volumes) > 0 {
+		if out, err := util.DockerCmd("volume", "ls", "-q", "--filter", "dangling=true", "--filter", "label=com.docker.volume.anonymous"); err == nil {
+			for _, v := range orphanedAnonymous(volumes, out) {
+				_, _ = util.DockerCmd("volume", "rm", v)
+			}
+		}
+	}
 	if err := removeInstalled(appName); err != nil {
 		return PurgeResult{}, err
 	}
@@ -829,6 +842,24 @@ func Purge(appName string) (PurgeResult, error) {
 	return classifyVolumes(volumes, func(name string) (string, error) {
 		return util.DockerCmd("volume", "inspect", name)
 	}), nil
+}
+
+// orphanedAnonymous returns the volumes in listed that also appear in the
+// output of `docker volume ls -q --filter dangling=true --filter
+// label=com.docker.volume.anonymous`: this app's, anonymous, and used by no
+// container.
+func orphanedAnonymous(listed []string, danglingAnonymous string) []string {
+	candidates := map[string]bool{}
+	for _, name := range strings.Fields(danglingAnonymous) {
+		candidates[name] = true
+	}
+	var out []string
+	for _, v := range listed {
+		if candidates[v] {
+			out = append(out, v)
+		}
+	}
+	return out
 }
 
 // classifyVolumes asks Docker about each volume after the purge. Only an

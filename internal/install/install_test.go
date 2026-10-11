@@ -1025,3 +1025,18 @@ func TestClassifyVolumesCountsOnlyNoSuchVolumeAsRemoved(t *testing.T) {
 		t.Error("a purge that left a volume is not complete")
 	}
 }
+
+// After a recreate, `down -v` leaves the app's anonymous volumes behind. Only
+// those that are the app's own and anonymous and unused may be removed: an
+// unrelated dangling volume on the same machine is not this purge's to delete.
+func TestOrphanedAnonymousOnlyPicksTheAppsOwnVolumes(t *testing.T) {
+	listed := []string{"cc2451e1e42a", "5f7777ed4d8d", "named-data"}
+	dangling := "cc2451e1e42a\nsomeone-elses-volume\n5f7777ed4d8d\n"
+	got := orphanedAnonymous(listed, dangling)
+	if len(got) != 2 || got[0] != "cc2451e1e42a" || got[1] != "5f7777ed4d8d" {
+		t.Fatalf("want the app's two anonymous volumes, got %v", got)
+	}
+	if got := orphanedAnonymous(listed, ""); len(got) != 0 {
+		t.Fatalf("nothing dangling means nothing to remove, got %v", got)
+	}
+}
