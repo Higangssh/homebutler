@@ -41,6 +41,55 @@ suggested action — so a format change fails a test rather than quietly dating
 the image. It pinned only the change block once, and the card spent a release
 showing a sentence the binary no longer printed.
 
+## report-demo.gif / report-demo.tape
+
+The recording at the top of the README. **It is `homebutler report` running,
+not a picture of it.** `report-demo.tape` is a [VHS](https://github.com/charmbracelet/vhs)
+tape that types the command into a terminal, and the command is the 1.1.0
+release binary running on a Raspberry Pi with two real containers.
+
+Recorded on 2026-10-11:
+
+1. In a home directory of its own on the Pi, `homebutler install filebrowser`
+   and `homebutler install uptime-kuma`. The first `report` ran after both had
+   been up for over a minute, from a short ssh session. A process younger than
+   a minute is left out of a snapshot and would turn up later as `new` (#315).
+2. Two hours later, filebrowser was recreated with `docker compose up -d
+   --force-recreate`, and uptime-kuma's image changed from `:1` to `:2`.
+3. The tape ran `report --no-save`, so it can be recorded again without moving
+   the baseline.
+
+Two things sit between the binary and the frame, and both are in a wrapper
+that is not committed, because it names the host:
+
+- **The host name is replaced with `homelab`.** The Pi's name is printed in the
+  header and the Host line, homebutler has no setting for it, and the Pi does
+  not allow the unprivileged namespace that would rename it. `sed` swaps that
+  one word in the output stream. No other byte is changed.
+- **The terminal's reply to a colour query is discarded.** The styling library
+  asks the terminal for its background colour. Through ssh, the answer arrives
+  after the remote program has exited, and it used to land on the next prompt
+  as `11;rgb:1e1e/…`. That is not homebutler output, and a terminal running
+  homebutler directly never shows it.
+
+**Do not edit the output to make a cleaner picture.** The first two recordings
+were thrown away, not touched up. The first had `new systemd` and `(sd-pam)`,
+which came from the baseline being taken too soon. The second, on 1.0.0, had
+five process lines repeating the two container changes, and that one was fixed
+in the product (1.1.0, #325) rather than in the image. If a recording shows a
+line that should not be there, the image is not where it gets fixed.
+
+To record it again, recreate the setup above, write a wrapper that defines
+`homebutler` as the ssh call (with the two substitutions above) and sets
+`PS1='$ '`, then run:
+
+```bash
+HB_DEMO_ENV=/path/to/wrapper.sh vhs assets/report-demo.tape
+```
+
+It is 1240x370 and about 75 KB, ten seconds long. The README shows it at
+820 wide.
+
 ## demo.gif
 
 The run-through at the top of the README, and the same frames as the video it

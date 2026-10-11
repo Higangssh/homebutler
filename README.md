@@ -30,7 +30,7 @@
 </p>
 
 <p align="center">
-  <img src="assets/report-card.svg" alt="homebutler report output: a port answered by a different service flagged under Needs Attention, then what changed since the last report — a container gone, one new, one recreated behind the same name, a process running a different invocation, a port that changed owner — then current status and the command to verify the port" width="620">
+  <img src="assets/report-demo.gif" alt="homebutler report run on a home server the evening two containers were changed: filebrowser recreated and uptime-kuma moved from version 1 to 2. The report names exactly those two as replaced, with the old and new container IDs and both image tags, compared with the snapshot from two hours earlier, then the current status" width="820">
 </p>
 
 ```bash
@@ -50,6 +50,10 @@ time, decides what is worth saying, and says it — six containers before and si
 is not "no change" when one of them is a different container.
 
 ### Reading a change
+
+<p align="center">
+  <img src="assets/report-card.svg" alt="homebutler report output: a port answered by a different service flagged under Needs Attention, then what changed since the last report — a container gone, one new, one recreated behind the same name, a process running a different invocation, a port that changed owner — then current status and the command to verify the port" width="620">
+</p>
 
 Every line is three columns: **what kind of change**, **what it happened to**, and
 **what exactly happened**. The kind is one of eight words, and it is the same word in
