@@ -1,0 +1,45 @@
+{
+    "name": "homebutler",
+    "slug": "homebutler",
+    "categories": [
+        9
+    ],
+    "date_created": "2026-10-11",
+    "type": "ct",
+    "updateable": true,
+    "privileged": false,
+    "interface_port": 8080,
+    "documentation": "https://github.com/Higangssh/homebutler#readme",
+    "website": "https://homebutler.dev",
+    "repository": "https://github.com/Higangssh/homebutler",
+    "logo": "https://cdn.jsdelivr.net/gh/selfhst/icons@main/webp/homebutler.webp",
+    "description": "homebutler tells you what changed on your servers since the last time it looked, and only what is worth telling: a container recreated, an image changed, a port answered by something new. A single Go binary with a web dashboard, CLI and MCP server, no database, and no agent or daemon on the machines it watches.",
+    "install_methods": [
+        {
+            "type": "default",
+            "script": "ct/homebutler.sh",
+            "config_path": "/root/.config/homebutler/config.yaml",
+            "resources": {
+                "cpu": 1,
+                "ram": 512,
+                "hdd": 2,
+                "os": "Debian",
+                "version": "13"
+            }
+        }
+    ],
+    "default_credentials": {
+        "username": null,
+        "password": null
+    },
+    "notes": [
+        {
+            "text": "The dashboard's API needs the token generated at install: web.token in /root/.config/homebutler/config.yaml.",
+            "type": "info"
+        },
+        {
+            "text": "Inside this container homebutler sees the container, not the Proxmox host. Add the node under proxmox: in the config with a read-only API token to see the host and its guests, and other machines under servers: over SSH. See https://github.com/Higangssh/homebutler/blob/main/docs/proxmox.md",
+            "type": "warning"
+        }
+    ]
+}
