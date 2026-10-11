@@ -131,6 +131,18 @@ The counts come from `summary`, which the HTTP response adds for exactly this:
 field to a value has no way to take the length of one — pointed at the lists
 themselves it renders `NaN`.
 
+Checked against Homepage 2.3.0: pasted as it is, with only the address and the
+token filled in, the card shows the server name and both counts, and they match
+`GET /api/report` at the same moment.
+
+Homepage makes the request from its own server, not from the browser, so the
+token in `headers` never reaches the page. Nothing Homepage served to the
+browser in that check contained it.
+
+`your-server` is an address the Homepage container can reach. If Homepage runs
+in Docker on the same machine as `serve`, `localhost` is the container itself;
+use the machine's LAN address, or `host.docker.internal` on Docker Desktop.
+
 `serve` has to be reachable from wherever the widget runs, which means binding
 beyond `127.0.0.1`. The token then crosses the network, so put it behind a
 reverse proxy with TLS or a tunnel; the settings screen says so when it sees a
