@@ -241,3 +241,30 @@ func TestKernelThreadsSurviveToTheFilter(t *testing.T) {
 		}
 	}
 }
+
+// The three shapes of `ps -eo pid=,ppid=,etime=,args=` homebutler meets:
+// procps pads the numbers, macOS adds days, busybox prints short times.
+func TestParseInvocationsReadsTheParent(t *testing.T) {
+	out := strings.Join([]string{
+		"2953965       1    01:12:03 /usr/bin/containerd-shim-runc-v2 -namespace moby -id 13ce1ac7fd3b",
+		"2953988 2953965    01:12:02 /usr/bin/dumb-init -- node server/server.js",
+		"   92     1 34-11:18:32 /usr/libexec/logd",
+		"    7     1  0:01   ps -eo pid,ppid,etime,args",
+		"garbage line",
+		"",
+	}, "\n")
+	got := parseInvocations(out)
+
+	if len(got) != 4 {
+		t.Fatalf("want 4 processes, got %d: %v", len(got), got)
+	}
+	if d := got[2953988]; d.ppid != 2953965 || d.command != "/usr/bin/dumb-init -- node server/server.js" || d.elapsed != time.Hour+12*time.Minute+2*time.Second {
+		t.Errorf("procps line read as %+v", d)
+	}
+	if d := got[92]; d.ppid != 1 || d.elapsed != 34*24*time.Hour+11*time.Hour+18*time.Minute+32*time.Second {
+		t.Errorf("macOS line read as %+v", d)
+	}
+	if d := got[7]; d.ppid != 1 || d.command != "ps -eo pid,ppid,etime,args" {
+		t.Errorf("busybox line read as %+v", d)
+	}
+}

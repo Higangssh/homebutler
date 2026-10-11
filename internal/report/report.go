@@ -37,6 +37,13 @@ type Snapshot struct {
 	RunningCount    int      `json:"running_count"`
 	StoppedCount    int      `json:"stopped_count"`
 	PublicPortCount int      `json:"public_port_count"`
+
+	// The processes this run left out as belonging to a container or to the
+	// watch process, and those it kept. Never written: they exist so that
+	// comparing against a snapshot from before the split can leave the same
+	// processes out of the older side. A snapshot read from disk has neither.
+	ownedProcesses []system.ProcessInfo
+	keptProcesses  []system.ProcessInfo
 }
 
 // ChangeLine is one change as a caller acts on it: the kind to branch on, the
@@ -272,13 +279,14 @@ func updateBaselineWording(r *Report, noSave, unreadable bool) {
 }
 
 func buildSnapshot(inv *inventory.Inventory) *Snapshot {
+	kept, owned := splitOwnedProcesses(inv.Processes)
 	snap := &Snapshot{
 		Timestamp:  time.Now().UTC().Format(time.RFC3339),
 		ServerName: inv.ServerName,
 		System:     inv.System,
 		Containers: inv.Containers,
 		Ports:      inv.Ports,
-		Processes:  processIdentities(inv.Processes),
+		Processes:  processIdentities(kept),
 		Warnings:   inv.Warnings,
 		Failed:     inv.Failed,
 	}
@@ -291,6 +299,7 @@ func buildSnapshot(inv *inventory.Inventory) *Snapshot {
 		}
 	}
 	snap.PublicPortCount = countPublicPorts(inv.Ports)
+	snap.ownedProcesses, snap.keptProcesses = owned, kept
 	return snap
 }
 
@@ -456,7 +465,8 @@ func buildReport(snap *Snapshot, prev *Snapshot) *Report {
 			noun:    nounProcesses,
 		})
 	default:
-		changes = append(changes, diffProcesses(prev.Processes, snap.Processes)...)
+		older := withoutOwned(prev.Processes, snap.ownedProcesses, snap.keptProcesses)
+		changes = append(changes, diffProcesses(older, snap.Processes)...)
 	}
 	if collectorAnswered(prev, snap, inventory.CollectorPorts) {
 		changes = append(changes, diffPorts(prev.Ports, snap.Ports)...)

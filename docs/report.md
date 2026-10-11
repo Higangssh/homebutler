@@ -75,6 +75,18 @@ A report nobody reads is worse than no report. These are excluded on purpose:
   and `new sed` — the shell pipeline that was reading the report. Cron jobs and
   package managers arrive the same way. A process held back is not lost; it is
   reported on the next run, by which time it has earned the word "new".
+- **Processes that belong to a container, or to `watch`.** Anything running
+  inside a container, Docker's per-container `containerd-shim` and
+  `docker-proxy`, and the helpers `homebutler watch start` runs are left out of
+  the process comparison; a process is placed by walking its parents. The
+  container line already says when one is recreated or changes image, and
+  saying it again through the process table turned one recreated container
+  into seven lines. What this gives up is a command line changing inside a
+  container that kept running, which `report` no longer sees. A process
+  restarting with the same command line was never a change here, since a
+  process is its name and invocation, and a container that stops or is killed
+  is what `watch` is for. The `watch` process itself is still compared:
+  it stopping is news.
 - **The command line itself.** A snapshot keeps the executable name and a
   twelve-character hash of the invocation, never the arguments. Command lines
   carry secrets in flags, and `~/.homebutler/reports/snapshots/` has never had
