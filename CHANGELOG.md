@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### 🐛 Fixes
+
+- CPU usage on Linux is measured over one second instead of 200 ms (#332). A Raspberry Pi averaging 0.65% read `0.0%` every time: 200 ms on four cores is about 80 of the kernel's ticks, so the reading could only be 0% or about 1.2%, printed to two decimal places. A second gives steps of 0.25%, the same span macOS already samples over. An idle machine can still read 0.0% for a second that really was idle. `status`, the dashboard and the alerts watcher each wait 0.8 s longer for the number
+
 ## [1.1.0](https://github.com/Higangssh/homebutler/compare/v1.0.0...v1.1.0) - 2026-10-11
 
 **Recreating a container is now reported once, as the container, instead of again as the processes that ran inside it — and `install purge` removes the data it says it removed.**

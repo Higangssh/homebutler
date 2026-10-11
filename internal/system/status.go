@@ -131,9 +131,8 @@ func getCPU() CPUInfo {
 			}
 		}
 	case "linux":
-		// Read /proc/stat twice with 200ms delta for instant CPU usage
 		t1 := readLinuxCPUTimes()
-		time.Sleep(200 * time.Millisecond)
+		time.Sleep(linuxCPUWindow)
 		t2 := readLinuxCPUTimes()
 		if t1 != nil && t2 != nil {
 			usage = cpuDelta(t1, t2)
@@ -149,6 +148,13 @@ func getCPU() CPUInfo {
 		Cores:        cores,
 	}
 }
+
+// linuxCPUWindow is how long CPU usage is measured over on Linux. /proc/stat
+// counts in ticks, a hundred a second per core, so the window sets the
+// resolution: 200ms on four cores is about 80 ticks, steps of 1.25%, and an
+// idle Raspberry Pi at half a percent read 0.0% (#332). A second is about 400
+// ticks, steps of 0.25%, and the same span macOS samples with `iostat -c 2`.
+const linuxCPUWindow = time.Second
 
 // cpuTimes holds cumulative CPU tick counts.
 type cpuTimes struct {
