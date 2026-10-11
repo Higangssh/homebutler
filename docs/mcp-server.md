@@ -129,7 +129,7 @@ Omissions worth stating, so they read as decisions rather than gaps.
 
 **`upgrade`** replaces the running binary. **`serve`**, **`init`**, **`watch start`** and **`watch tui`** are daemons or interactive; neither shape fits a stdio request and response.
 
-**`deploy`** is deferred past 1.0. Remote install is the highest-risk surface here and should not be frozen into the first stable tool set.
+**`deploy`** is not part of the 1.0 surface. Remote install is the highest-risk surface here, and it was kept out of the tool set that 1.0 froze. If it comes, it comes as a new tool, which [compatibility.md](compatibility.md) allows without a major release.
 
 ## How It Works
 

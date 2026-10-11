@@ -2,7 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
-## [Unreleased]
+## [1.0.0](https://github.com/Higangssh/homebutler/compare/v0.41.3...v1.0.0) - 2026-10-11
+
+**From this release, what homebutler answers with is a promise: a tool, a field, a word an agent branches on or a route a script calls does not change before 2.0, and the build fails when something tries.** [docs/compatibility.md](docs/compatibility.md) lists what is frozen and what may still be added; `go test ./internal/contract` is the check that holds it.
+
+Before the tag, homebutler ran on a Raspberry Pi with three apps, a watch service and a daily `report --json` for eleven days, from 2026-09-30 to 2026-10-11 — starting on 0.40.0, with each fix going back onto the same machine as 0.41.0 through 0.41.3. Most of what changed in between came from what that server showed: a `docker kill` filed as an OOM and a restart recorded that never happened (0.41.0), a quiet day reported as a comparison that could not be made and lists that came back `null` (0.41.2), and a changed image reported as a port taken over (0.41.3). The last three reports, from 0.41.3, named the image change made on purpose and a system service that had exited, then two quiet days with every list empty. Three of the 0.41 fixes changed what an answer looks like: incident start times, the keys of two answers, and lists that were `null`. They went out before the freeze for that reason. The days on 0.41.3 needed no change at all. Apart from the release workflow below, 1.0.0 is 0.41.3's code.
 
 ### ♻️ Internal
 

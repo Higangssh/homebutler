@@ -28,11 +28,11 @@ fix is going to take a while, you will hear why rather than nothing.
 | Latest release | Yes |
 | Everything else | No |
 
-homebutler is pre-1.0, releases every few weeks, and has no branch other than
-`main`. Nothing is backported. Claiming a support window that is not honoured
-would be worse than admitting there is only one version.
-
-This is worth revisiting at 1.0. Not before.
+homebutler has no branch other than `main`, and security fixes ship in the
+next 1.x release. Nothing is backported. Upgrading within 1.x is promised not
+to break anything that [docs/compatibility.md](docs/compatibility.md) freezes,
+so the latest release is always one you can move to, and a support window that
+one maintainer could not honour would be worse than saying so.
 
 ## What counts as a vulnerability
 

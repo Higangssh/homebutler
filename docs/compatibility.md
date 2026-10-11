@@ -1,22 +1,22 @@
-# What 1.0 freezes
+# What 1.0 promises
 
-homebutler is pre-1.0, and until the tag lands anything may change. 1.0 is the
-point where that stops being true for the parts other people build on: an agent
-branching on a change's `kind`, a cron job reading `doctor`'s exit code, a
-widget polling `/api/report`, a compose file naming config keys.
+From 1.0, the parts other people build on do not change without a major
+release: an agent branching on a change's `kind`, a cron job reading
+`doctor`'s exit code, a widget polling `/api/report`, a compose file naming
+config keys.
 
 This file says which of those are frozen. `internal/contract` holds the same
 answer in a form a test can check, because a promise nobody can verify is not a
 promise — the golden file there fails the build when any of it moves.
 
-## Frozen at 1.0
+## Frozen since 1.0
 
 | | |
 | --- | --- |
 | **MCP tool names** | A tool is not renamed or removed outside a major release |
 | **Tool input schemas** | Argument names, their types, and which are required |
 | **Tool risk classes** | `read`, `write`, `destructive`. An agent decides what it may do unattended from these, so a reclassification is a breaking change even though nothing about the call changes |
-| **JSON field names and types** | What every MCP tool answers with, and what `report --json`, `doctor --json` and `status --json` return. A field that changes from a string to an object breaks a caller as thoroughly as one that disappears |
+| **JSON field names and types** | What every MCP tool answers with, and what `report --json`, `doctor --json` and `status --json` return. A field that changes from a string to an object breaks a caller as thoroughly as one that disappears. Every key is snake_case, including any added later; `TestEveryJSONKeyIsSnakeCase` fails on one that is not |
 | **Incident start times** | A `watch` incident's `prev_started_at` and `curr_started_at` are RFC 3339 in UTC, or an empty string when the monitor does not know, whichever of Docker, systemd and pm2 it came from. The golden records that they are strings; `internal/watch`'s tests hold the format |
 | **Lists are never `null`** | A list or map field without `omitempty` is `[]` or `{}` when it has nothing in it, through MCP, the HTTP routes and `--json` alike, at any depth, and an answer that is itself a list is `[]` when empty. `null` is kept for what is genuinely absent: a nil pointer, such as `running_count` when Docker did not answer |
 | **`schema_version`** | `report`, `doctor` and `status` carry `schema_version: 1` at the top level. It changes only with a major release. The `system` object nested inside `report` and `inventory_scan` has none: a version is the document's, not a part's |
