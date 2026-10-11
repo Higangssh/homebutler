@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### ⚠️ Behavior changes
+
+- **`report` no longer compares the processes that belong to a container or to `watch`** (#315). Recreating one container used to produce seven lines where two said anything. Each container's `containerd-shim` carries the container's ID, so every recreation read as a new process, and the processes inside the container came and went with it. The container line already says the container was recreated, with its image. A process is placed by walking its parents, which `ps` gives on Linux, macOS and busybox alike. The `docker events` helper `watch start` runs is left out too, so an upgrade that changes its arguments is no longer `replaced: docker`. The `watch` process itself is still compared. What `report` gives up is a command line changing inside a container that kept running. The first report after upgrading compares against a snapshot that still holds every container's process, and those are matched and left out of it as well, except for a container recreated between the two runs, whose old processes are reported `gone` that once
+
 ## [1.0.0](https://github.com/Higangssh/homebutler/compare/v0.41.3...v1.0.0) - 2026-10-11
 
 **From this release, what homebutler answers with is a promise: a tool, a field, a word an agent branches on or a route a script calls does not change before 2.0, and the build fails when something tries.** [docs/compatibility.md](docs/compatibility.md) lists what is frozen and what may still be added; `go test ./internal/contract` is the check that holds it.

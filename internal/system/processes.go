@@ -28,6 +28,12 @@ type ProcessInfo struct {
 	// for the processes command's output.
 	Elapsed time.Duration `json:"-"`
 
+	// PPID is the parent's pid, filled in with Command and excluded from
+	// JSON with it. A caller comparing runs uses it to tell whose a process
+	// is: a container's processes descend from that container's shim, and
+	// a report that compared them would say every container change twice.
+	PPID int `json:"-"`
+
 	// Command is the full invocation, used to tell two processes sharing an
 	// executable name apart. It is excluded from JSON deliberately: command
 	// lines carry secrets in flags, and nothing that reads this struct over
@@ -185,30 +191,12 @@ func AllProcesses() ([]ProcessInfo, error) {
 // no command, and identity falls back to its name.
 func fillCommands(procs []ProcessInfo) error {
 	// etime rather than etimes: etimes is Linux-only, and this has to parse
-	// on macOS too.
-	out, err := util.RunCmd("ps", "-eo", "pid=,etime=,args=")
+	// on macOS too. ppid is in procps, BSD ps and busybox alike.
+	out, err := util.RunCmd("ps", "-eo", "pid=,ppid=,etime=,args=")
 	if err != nil {
 		return fmt.Errorf("reading process invocations: %w", err)
 	}
-	type detail struct {
-		command string
-		elapsed time.Duration
-	}
-	details := make(map[int]detail, len(procs))
-	for _, line := range strings.Split(out, "\n") {
-		fields := strings.Fields(line)
-		if len(fields) < 3 {
-			continue
-		}
-		pid, err := strconv.Atoi(fields[0])
-		if err != nil {
-			continue
-		}
-		details[pid] = detail{
-			command: strings.Join(fields[2:], " "),
-			elapsed: parseElapsed(fields[1]),
-		}
-	}
+	details := parseInvocations(out)
 	var matched int
 	for i := range procs {
 		d, ok := details[procs[i].PID]
@@ -219,6 +207,7 @@ func fillCommands(procs []ProcessInfo) error {
 		matched++
 		procs[i].Command = d.command
 		procs[i].Elapsed = d.elapsed
+		procs[i].PPID = d.ppid
 	}
 
 	// A join that matched nothing means the output was not in the shape this
@@ -228,6 +217,39 @@ func fillCommands(procs []ProcessInfo) error {
 		return fmt.Errorf("no process invocations matched by pid")
 	}
 	return nil
+}
+
+type invocation struct {
+	command string
+	elapsed time.Duration
+	ppid    int
+}
+
+// parseInvocations reads `ps -eo pid=,ppid=,etime=,args=` into a map by pid.
+// A line that does not start with two numbers is skipped rather than guessed
+// at; the join reports the pid as unmatched, which callers already handle.
+func parseInvocations(out string) map[int]invocation {
+	details := map[int]invocation{}
+	for _, line := range strings.Split(out, "\n") {
+		fields := strings.Fields(line)
+		if len(fields) < 4 {
+			continue
+		}
+		pid, err := strconv.Atoi(fields[0])
+		if err != nil {
+			continue
+		}
+		ppid, err := strconv.Atoi(fields[1])
+		if err != nil {
+			continue
+		}
+		details[pid] = invocation{
+			command: strings.Join(fields[3:], " "),
+			elapsed: parseElapsed(fields[2]),
+			ppid:    ppid,
+		}
+	}
+	return details
 }
 
 // parseElapsed reads ps's etime format: [[dd-]hh:]mm:ss. An unparseable

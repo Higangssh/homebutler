@@ -477,11 +477,7 @@ func processIdentities(procs []system.ProcessInfo) []ProcessIdentity {
 		if p.Elapsed >= 0 && p.Elapsed < minProcessAge {
 			continue
 		}
-		id := ProcessIdentity{Name: p.Name}
-		if p.Command != "" {
-			sum := sha256.Sum256([]byte(p.Command))
-			id.Hash = hex.EncodeToString(sum[:])[:12]
-		}
+		id := identityOf(p)
 		if seen[id] {
 			continue
 		}
@@ -495,6 +491,16 @@ func processIdentities(procs []system.ProcessInfo) []ProcessIdentity {
 		return out[i].Hash < out[j].Hash
 	})
 	return out
+}
+
+// identityOf is what a snapshot keeps of one process.
+func identityOf(p system.ProcessInfo) ProcessIdentity {
+	id := ProcessIdentity{Name: p.Name}
+	if p.Command != "" {
+		sum := sha256.Sum256([]byte(p.Command))
+		id.Hash = hex.EncodeToString(sum[:])[:12]
+	}
+	return id
 }
 
 // diffProcesses compares two runs by executable name, then by invocation.
