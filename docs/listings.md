@@ -39,6 +39,7 @@ wrong.
 |---|---|
 | `punkpeye/awesome-mcp-servers` | PR against the Monitoring section |
 | `charm-and-friends/charm-in-the-wild` | PR against System Management, alphabetical |
+| `awesome-selfhosted/awesome-selfhosted` | the description is `software/homebutler.yml` in `awesome-selfhosted-data`, and only a PR there changes it. A bot refreshes the stars, latest release and commit history in that file every few days, so the file looks maintained while the sentence in it is not |
 | Glama | rebuilds itself from the README — the one entry here a commit still fixes |
 | GitHub repository description and topics | repository settings, not a file |
 | ClawHub | `skills/SKILL.md` published as `@higangssh/homebutler`; a new version has to be pushed |
