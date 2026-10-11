@@ -74,3 +74,23 @@ The container gets the release binary in `/opt/homebutler`, a random token in
 - The archive's `README.md`, `LICENSE` and `CHANGELOG.md` land in
   `/opt/homebutler` beside the binary. Harmless, noted because `prebuild`
   deploys the whole archive.
+
+## Before submitting
+
+**Not eligible yet.** DevScripts' PR template requires 600+ GitHub stars for a new
+script; homebutler had 298 on 2026-10-11. The other bars are met: the project is more
+than six months old (created 2026-02-23), maintained, and publishes release tarballs.
+
+**AI disclosure is required.** The template asks whether AI was used, and if so for
+confirmation that AGENTS.md and `.github/agents/pve-script-creator.agent.md` were
+followed and the output reviewed and corrected, with the model and reasoning level
+named. This draft was written with an AI assistant, so whoever submits ticks
+"AI was used" and says which model, honestly. Unrevised AI scripts may be closed
+without review, so run it on Proxmox first and tick only what was actually tested.
+
+**One checklist gap.** The agent file wants persistent state in `/opt/homebutler_data`.
+This draft keeps the config and token in `/root/.config/homebutler/` and snapshots in
+`/root/.homebutler/`. Both are outside `/opt/homebutler`, so a clean redeploy does not
+wipe them, but it is not the prescribed location. Moving it means pointing `--config`
+and the snapshot directory there, and the snapshot directory follows `$HOME`, so check
+whether homebutler can be told where to keep it before changing this.
