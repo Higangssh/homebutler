@@ -1,6 +1,6 @@
 ---
 name: homebutler
-description: Tells an agent what changed on a server since it last looked - plus status, Docker, backups, Proxmox. 44 MCP tools, each classed read, write or destructive.
+description: Tells an agent what changed on a server since it last looked - plus status, Docker, backups, Proxmox. Every tool is classed read, write or destructive, so an agent can tell a look from a change before it makes the call.
 metadata:
   {
     "openclaw": {
