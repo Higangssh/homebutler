@@ -757,17 +757,45 @@ func Uninstall(appName string) error {
 	return nil
 }
 
-// Purge removes the app directory including data.
-func Purge(appName string) error {
+// Purge stops an app, removes its containers together with the Docker volumes
+// they used, and deletes its directory. It returns the volumes that were
+// removed, confirmed gone after the fact, so a caller can say what "data"
+// meant.
+//
+// The volumes matter because the app directory is not all of the data. An
+// image can declare a VOLUME its compose file does not map, and Docker then
+// gives each container an anonymous volume that `compose down` leaves behind.
+// filebrowser keeps its database and settings in two of them, so purge said
+// "Completely removed" and left both — on the soak machine and again on the
+// demo host (#324). `down -v` removes those and any volume the compose file
+// declares; none in the catalogue declares one, and a volume marked external
+// is never removed by compose. Uninstall keeps running plain `down`, because
+// keeping the data is the difference between the two.
+func Purge(appName string) ([]string, error) {
 	if err := ValidateAppName(appName); err != nil {
-		return err
+		return nil, err
 	}
 	appDir := GetInstalledPath(appName)
-	if err := Uninstall(appName); err != nil {
-		return err
+	composeFile := filepath.Join(appDir, "docker-compose.yml")
+	if _, err := os.Stat(composeFile); os.IsNotExist(err) {
+		return nil, fmt.Errorf("%s is not installed", appName)
+	}
+
+	// Read before the containers go, since they are what names the volumes.
+	// Best effort: a purge that cannot list them still removes them.
+	var volumes []string
+	if ids, err := util.DockerCmd("compose", "-f", composeFile, "ps", "-a", "-q"); err == nil && strings.TrimSpace(ids) != "" {
+		args := append([]string{"inspect", "--format", volumeMountsFormat}, strings.Fields(ids)...)
+		if out, err := util.DockerCmd(args...); err == nil {
+			volumes = parseVolumeNames(out)
+		}
+	}
+
+	if _, err := util.DockerCmd("compose", "-f", composeFile, "down", "-v"); err != nil {
+		return nil, fmt.Errorf("failed to stop %s: %w", appName, err)
 	}
 	if err := removeInstalled(appName); err != nil {
-		return err
+		return nil, err
 	}
 	// Try normal remove first
 	err := os.RemoveAll(appDir)
@@ -775,11 +803,39 @@ func Purge(appName string) error {
 		// Docker may create files as root — try passwordless sudo
 		_, sudoErr := util.RunCmd("sudo", "-n", "rm", "-rf", appDir)
 		if sudoErr != nil {
-			return fmt.Errorf("permission denied. Docker creates files as root.\n"+
+			return nil, fmt.Errorf("permission denied. Docker creates files as root.\n"+
 				"    Run: sudo rm -rf %s", appDir)
 		}
 	}
-	return nil
+
+	// Only a volume Docker no longer knows is reported as removed.
+	var removed []string
+	for _, v := range volumes {
+		if _, err := util.DockerCmd("volume", "inspect", v); err != nil {
+			removed = append(removed, v)
+		}
+	}
+	return removed, nil
+}
+
+// volumeMountsFormat prints one Docker volume name per line for each
+// container inspected; bind mounts are left out.
+const volumeMountsFormat = `{{range .Mounts}}{{if eq .Type "volume"}}{{.Name}}{{"\n"}}{{end}}{{end}}`
+
+// parseVolumeNames reads volumeMountsFormat's output: one name per line,
+// in order, each once.
+func parseVolumeNames(out string) []string {
+	seen := map[string]bool{}
+	var names []string
+	for _, line := range strings.Split(out, "\n") {
+		name := strings.TrimSpace(line)
+		if name == "" || seen[name] {
+			continue
+		}
+		seen[name] = true
+		names = append(names, name)
+	}
+	return names
 }
 
 // Outcome is how an install, uninstall or purge went, as the MCP tools and

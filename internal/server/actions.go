@@ -125,7 +125,7 @@ func (s *Server) handleInstallUninstall(w http.ResponseWriter, r *http.Request) 
 
 func (s *Server) handleInstallPurge(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("app")
-	if err := install.Purge(name); err != nil {
+	if _, err := install.Purge(name); err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}

@@ -120,10 +120,14 @@ func newInstallPurgeCmd() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			appName := args[0]
 			fmt.Fprintf(os.Stderr, "⚠️  Purging %s (containers + data)...\n", appName)
-			if err := install.Purge(appName); err != nil {
+			volumes, err := install.Purge(appName)
+			if err != nil {
 				return err
 			}
 			fmt.Fprintln(os.Stderr, "✅ Completely removed")
+			for _, v := range volumes {
+				fmt.Fprintf(os.Stderr, "   volume %s\n", v)
+			}
 			return nil
 		},
 	}

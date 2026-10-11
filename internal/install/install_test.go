@@ -878,7 +878,7 @@ func TestPathTraversalBlocked(t *testing.T) {
 		if err := Uninstall(name); err == nil {
 			t.Errorf("Uninstall(%q) should return error", name)
 		}
-		if err := Purge(name); err == nil {
+		if _, err := Purge(name); err == nil {
 			t.Errorf("Purge(%q) should return error", name)
 		}
 	}
@@ -971,5 +971,26 @@ func TestAnAppIsListedWithoutItsComposeTemplate(t *testing.T) {
 	}
 	if !strings.Contains(string(out), `"default_port":"3001"`) {
 		t.Errorf("listing = %s", out)
+	}
+}
+
+// What `docker inspect` prints for filebrowser's container with
+// volumeMountsFormat: its two anonymous volumes, one per line. A second
+// container sharing a volume must not list it twice.
+func TestParseVolumeNames(t *testing.T) {
+	out := "a7f3f9cd0d27e62b693aa245225984f2c68a829b53b724117f96626d7bbeae78\n" +
+		"b4c6060d009ba1759fdc2d6a17e6d30b44af6157acebef7441c48fc4ff08dd0e\n" +
+		"\n" +
+		"a7f3f9cd0d27e62b693aa245225984f2c68a829b53b724117f96626d7bbeae78\n"
+	got := parseVolumeNames(out)
+	want := []string{
+		"a7f3f9cd0d27e62b693aa245225984f2c68a829b53b724117f96626d7bbeae78",
+		"b4c6060d009ba1759fdc2d6a17e6d30b44af6157acebef7441c48fc4ff08dd0e",
+	}
+	if len(got) != len(want) || got[0] != want[0] || got[1] != want[1] {
+		t.Fatalf("want %v, got %v", want, got)
+	}
+	if got := parseVolumeNames(""); len(got) != 0 {
+		t.Fatalf("a container with only bind mounts has no volumes, got %v", got)
 	}
 }
