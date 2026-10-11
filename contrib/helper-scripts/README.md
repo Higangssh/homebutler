@@ -16,10 +16,12 @@ The container gets the release binary in `/opt/homebutler`, a random token in
   right on a shared machine and wrong in a single-app LXC: DevScripts runs
   everything as root under a system unit, and a user unit would depend on
   root's user manager and lingering.
-- **`var_arm64` is left unset.** The release has `linux_arm64` assets and the
-  binary runs on an arm64 Raspberry Pi, but DevScripts allows `yes` only when
-  the script itself has run on arm64, and it has not. Unset makes the user
-  confirm before trying. `architectures` is omitted from the JSON to match.
+- **`var_arm64` is `yes`.** DevScripts decides it from the release assets:
+  `yes` when the project publishes arm64 assets, unset only when that cannot be
+  told. The release has `linux_arm64` next to `linux_amd64`, and that binary has
+  run for eleven days on an arm64 Raspberry Pi. `architectures` in the JSON
+  lists both. (The first draft left it unset on the reading that `yes` needed
+  the script itself run on arm64; AGENTS.md does not say that.)
 - **The token is `openssl rand -hex 32`**, which their anti-pattern list names
   as the form for hex tokens; `random_password` is for passwords.
 - **Category 9, Monitoring & Analytics.** 512 MB, 1 core, 2 GB disk: one Go
@@ -59,7 +61,7 @@ The container gets the release binary in `/opt/homebutler`, a random token in
 - What the dashboard shows in an unprivileged LXC with no Docker: expected to be
   the container's own status with `docker` listed as a failed collector, not
   checked.
-- arm64 containers (hence `var_arm64` unset).
+- An arm64 container. The binary is checked on arm64; this script in one is not.
 
 ## Gaps against DevScripts rules
 

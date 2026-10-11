@@ -15,9 +15,8 @@ var_ram="${var_ram:-512}"
 var_disk="${var_disk:-2}"
 var_os="${var_os:-debian}"
 var_version="${var_version:-13}"
-# linux_arm64 release assets exist and the binary runs on an arm64 Raspberry Pi,
-# but this script has never been run in an arm64 container.
-#var_arm64="${var_arm64:-no}" # unset = ask the user; set yes/no only when verified
+# The release publishes linux_arm64 alongside linux_amd64.
+var_arm64="${var_arm64:-yes}"
 var_unprivileged="${var_unprivileged:-1}"
 
 header_info "$APP"
