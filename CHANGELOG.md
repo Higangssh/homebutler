@@ -2,7 +2,10 @@
 
 All notable changes to this project will be documented in this file.
 
-## [Unreleased]
+## [1.1.2](https://github.com/Higangssh/homebutler/compare/v1.1.1...v1.1.2) - 2026-10-12
+
+**`install purge` now removes the database of an app that has been updated, which 1.1.0's purge fix still left behind.**
+
 
 ### 🐛 Fixes
 
