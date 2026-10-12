@@ -642,3 +642,27 @@ func TestSaveFillsASectionThatWasLeftEmpty(t *testing.T) {
 		t.Fatalf("the file has more than one notify section:\n%s", saved)
 	}
 }
+
+// A threshold saved from the dashboard keeps the alerts keys it does not
+// edit: the ignore list from #338, and the rules watch reads.
+func TestSavingAThresholdKeepsIgnoreAndRules(t *testing.T) {
+	body := "alerts:\n  cpu: 90\n  ignore:\n    - nightly-job\n  rules:\n    - name: web\n      metric: container\n      watch: [nginx]\n      action: notify\n"
+	path := writeSaveFixture(t, body)
+	saveOne(t, path, Patch{Alerts: &AlertsPatch{CPU: f64(75)}})
+
+	after, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := strings.Replace(body, "cpu: 90", "cpu: 75", 1)
+	if string(after) != want {
+		t.Fatalf("want only the cpu line changed:\n%s\ngot:\n%s", want, after)
+	}
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(cfg.Alerts.Ignore) != 1 || cfg.Alerts.Ignore[0] != "nightly-job" {
+		t.Fatalf("ignore read back as %v", cfg.Alerts.Ignore)
+	}
+}
