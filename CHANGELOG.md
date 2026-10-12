@@ -2,7 +2,15 @@
 
 All notable changes to this project will be documented in this file.
 
-## [Unreleased]
+## [1.2.0](https://github.com/Higangssh/homebutler/compare/v1.1.1...v1.2.0) - 2026-10-12
+
+**Every alert `watch` sent was dated the year 1, and a container stopped on purpose had no way to stay out of them.**
+
+Every container and threshold alert from `watch start` reached its channel stamped `0001-01-01 00:00:00`, on every provider. It turned up while checking #338 against a real webhook on the Raspberry Pi. `alerts.ignore` comes from that report, by @2lach: containers a cron job stops and starts every night paged them on each stop and each recovery. The watcher already reported each change once rather than every check, so the stops were real, and what was missing was a way to say they were intended. `install purge` now also removes the volumes of an app whose container had been recreated, which 1.1.0's purge fix still left behind. `config validate` no longer reports a working `alerts.rules` block as an unknown key with no effect.
+
+### ⚠️ Behavior changes
+
+- **`install purge` removes the anonymous volumes of an updated app** (#335, #336). Before this release they survived the purge whenever Compose had recreated the container, which happens on every `docker compose up` after an image update. Data that a purge used to leave behind by mistake is now deleted, as purge says it is. 1.1.0's purge fix (#326) had only been checked against freshly installed containers. Its own report gave the gap away: purging the README demo's filebrowser printed `Removed, except: kept volume … (still exists)` twice rather than `Completely removed`. Purge now also removes the volumes this app's containers used that Docker labels anonymous and that no container still uses. A named, external or in-use volume is still left, and listed
 
 ### ✨ Features
 
@@ -12,7 +20,6 @@ All notable changes to this project will be documented in this file.
 
 - every container and threshold alert from `watch start` reached its channel stamped `0001-01-01 00:00:00` (#341). `watch` passed the time as RFC 3339, the conversion only parsed the rules engine's layout, and the error was dropped. Both forms are read now. Found while checking #338 against a real webhook
 - `config validate` warned that `alerts.rules` was an unknown key with no effect, while `watch` was acting on those rules (#338). The validator checked against a schema that has no rules field, and `watch` reads them through a different struct. It now checks each rule against the type `watch` decodes into: a misspelt key inside a rule is reported at its line, and a rule `watch` would refuse is reported as an error. A test fails if `watch` reads a key that `validate` does not accept
-- `install purge` still left the database of any app that had been updated (#335). 1.1.0's purge fix (#326) was checked only against freshly installed containers. When Compose recreates a container, as `docker compose up` does after an image update, it carries the anonymous volumes over to the new container, and `down -v` does not remove carried-over volumes. So an updated filebrowser kept its database through a purge. What 1.1.0 did get right is that it said so: purging the README demo's filebrowser printed `Removed, except: kept volume … (still exists)` twice, not `Completely removed`. Purge now also removes the volumes this app's containers used that Docker labels anonymous and that no container uses any more. A named, external or in-use volume is still left in place, and listed
 
 ## [1.1.1](https://github.com/Higangssh/homebutler/compare/v1.1.0...v1.1.1) - 2026-10-11
 
