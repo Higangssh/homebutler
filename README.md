@@ -30,7 +30,7 @@
 </p>
 
 <p align="center">
-  <img src="assets/report-demo.gif" alt="homebutler report run on a home server two hours after two containers were changed: filebrowser recreated and uptime-kuma moved from version 1 to 2. The report names exactly those two as replaced, with the old and new container IDs and both image tags, then the current status" width="760">
+  <img src="assets/report-demo.gif" alt="homebutler report run on a home server two hours after two containers were changed: filebrowser recreated and uptime-kuma moved from version 1 to 2. The report names exactly those two as replaced, with the old and new container IDs and both image tags, and the 2.3 GB the new image added to the disk, then the current status" width="760">
 </p>
 
 ```bash

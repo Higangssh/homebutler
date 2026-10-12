@@ -19,4 +19,4 @@ Sleep 600ms
 Type "homebutler report"
 Sleep 500ms
 Enter
-Sleep 9s
+Sleep 6s
