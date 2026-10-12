@@ -6,6 +6,7 @@ All notable changes to this project will be documented in this file.
 
 ### 🐛 Fixes
 
+- `config validate` warned that `alerts.rules` was an unknown key with no effect, while `watch` was acting on those rules (#338). The validator checked against a schema that has no rules field, and `watch` reads them through a different struct. It now checks each rule against the type `watch` decodes into: a misspelt key inside a rule is reported at its line, and a rule `watch` would refuse is reported as an error. A test fails if `watch` reads a key that `validate` does not accept
 - `install purge` still left the database of any app that had been updated (#335). 1.1.0's purge fix (#326) was checked only against freshly installed containers. When Compose recreates a container, as `docker compose up` does after an image update, it carries the anonymous volumes over to the new container, and `down -v` does not remove carried-over volumes. So an updated filebrowser kept its database through a purge. What 1.1.0 did get right is that it said so: purging the README demo's filebrowser printed `Removed, except: kept volume … (still exists)` twice, not `Completely removed`. Purge now also removes the volumes this app's containers used that Docker labels anonymous and that no container uses any more. A named, external or in-use volume is still left in place, and listed
 
 ## [1.1.1](https://github.com/Higangssh/homebutler/compare/v1.1.0...v1.1.1) - 2026-10-11
