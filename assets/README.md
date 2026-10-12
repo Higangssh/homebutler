@@ -44,58 +44,71 @@ showing a sentence the binary no longer printed.
 ## report-demo.gif / report-demo.tape
 
 The recording at the top of the README. **It is `homebutler report` running,
-not a picture of it.** `report-demo.tape` is a [VHS](https://github.com/charmbracelet/vhs)
-tape that types the command into an 80-column terminal, and the command is
-the 1.1.1 release binary running on a Raspberry Pi with two real containers.
+at the speed it runs, not a picture of it.** `report-demo.tape` is a
+[VHS](https://github.com/charmbracelet/vhs) tape that types the command into an
+80-column terminal, and the command is the 1.2.0 release binary running on a
+Raspberry Pi with two real containers. From Enter to the full report is about
+1.5 seconds, most of it the one-second CPU sample.
 
-Recorded on 2026-10-11, in UTC as the frame shows it:
+Recorded on 2026-10-12, in UTC as the frame shows it:
 
 1. In a home directory of its own on the Pi, `homebutler install filebrowser`
    and `homebutler install uptime-kuma`. The first `report` ran after both had
    been up for over a minute, from a short ssh session. A process younger than
    a minute is left out of a snapshot and would turn up later as `new` (#315).
-2. Two hours later, filebrowser was recreated with `docker compose up -d
-   --force-recreate`, and uptime-kuma's image changed from `:1` to `:2`.
+2. An hour later, filebrowser was recreated with `docker compose up -d
+   --force-recreate`, and uptime-kuma's image changed from `:1` to `:2`. The
+   `:2` image had to be pulled, which is the `disk` line.
 3. The tape ran `report --no-save`, so it can be recorded again without moving
    the baseline.
 
-Two things sit between the binary and the frame, and both are in a wrapper
-that is not committed, because it names the host:
+**One thing sits between the binary and the frame: the host name is replaced
+with `homelab`.** The Pi's name is printed in the header and the Host line,
+homebutler has no setting for it, and the Pi does not allow the unprivileged
+namespace that would rename it. A filter in a wrapper that is not committed,
+because it names the host, swaps that one word in the output stream. No other
+byte is changed.
 
-- **The host name is replaced with `homelab`.** The Pi's name is printed in the
-  header and the Host line, homebutler has no setting for it, and the Pi does
-  not allow the unprivileged namespace that would rename it. `sed` swaps that
-  one word in the output stream. No other byte is changed.
-- **The terminal's reply to a colour query is discarded.** The styling library
-  asks the terminal for its background colour. Through ssh, the answer arrives
-  after the remote program has exited, and it used to land on the next prompt
-  as `11;rgb:1e1e/…`. That is not homebutler output, and a terminal running
-  homebutler directly never shows it.
+The filter has to pass bytes through as they arrive, not line by line. The
+styling library asks the terminal for its background colour when homebutler
+starts, and the question has no newline. A line-based `sed` held it until
+homebutler gave up five seconds later. That is where the 6.7 s blank in the
+1.1.1 recording came from, and the stray `11;rgb:…` it left on the prompt.
+Run directly, over ssh or locally, `report` takes 1.1 to 1.4 s. On a terminal
+that never answers the question, every command does wait those five seconds
+(#344).
 
-**Do not edit the output to make a cleaner picture.** Three recordings were
-thrown away, not touched up. The first had `new systemd` and `(sd-pam)`,
-which came from the baseline being taken too soon. The second, on 1.0.0, had
-five process lines repeating the two container changes, and that one was fixed
-in the product (1.1.0, #325) rather than in the image. The third, on 1.1.0, was
-clean but showed `CPU 0.0%` on a machine averaging 0.65%, because CPU was
-sampled over 200 ms. That was fixed in 1.1.1 (#333). If a recording shows a line
-that should not be there, or a number that is not true, the image is not where
-it gets fixed. Nor is picking the take where the number looks nicest: an idle
-second really can read 0.0%.
+**Do not edit the output to make a cleaner picture.** Four recordings were
+thrown away, not touched up:
+- The first had `new systemd` and `(sd-pam)`, because the baseline was taken
+  too soon.
+- The second, on 1.0.0, had five process lines repeating the two container
+  changes. That was fixed in the product (1.1.0, #325) rather than in the
+  image.
+- The third, on 1.1.0, was clean but showed `CPU 0.0%` on a machine averaging
+  0.65%, because CPU was sampled over 200 ms. Fixed in 1.1.1 (#333).
+- The fourth, on 1.1.1, waited 6.7 s on a blank screen. That was the
+  recording's own filter.
 
-To record it again, recreate the setup above, write a wrapper that defines
-`homebutler` as the ssh call (with the two substitutions above) and sets
-`PS1='$ '`, then run:
+If a recording shows a line that should not be there, a number that is not
+true, or a wait the product does not have, the image is not where it gets
+fixed. Nor is picking the take where the number looks nicest: an idle second
+really can read 0.0%.
+
+To record it again, recreate the setup above and write a wrapper that defines
+`homebutler` as the ssh call through a byte-wise filter (for example
+`perl -e '$|=1; while (sysread(STDIN, my $b, 65536)) { $b =~ s/HOSTNAME/homelab/g; print $b }'`)
+and sets `PS1='$ '`. Then run:
 
 ```bash
 HB_DEMO_ENV=/path/to/wrapper.sh vhs assets/report-demo.tape
 ```
 
-It is 760x370 (80 columns at size 15), about 72 KB, and ten seconds long.
-At 80 columns the uptime-kuma line wraps, as it would in a real terminal of that
-width. That is what keeps it legible on a phone: rendered in Chromium with a
-Pixel 7 profile, at 412 CSS pixels wide, the text is small but readable. The
-1240-wide first take was not.
+It is 760x370 (80 columns at size 15), about 72 KB, and about eight seconds
+long. At 80 columns the uptime-kuma line wraps, as it would in a real terminal
+of that width. That is what keeps it legible on a phone: rendered in Chromium
+with a Pixel 7 profile, at 412 CSS pixels wide, the text is small but
+readable.
 
 ## demo.gif
 
