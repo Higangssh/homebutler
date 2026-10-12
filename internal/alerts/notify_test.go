@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 )
 
 func testEvent() NotifyEvent {
@@ -156,5 +157,17 @@ func TestResolveNotifyConfig_Empty(t *testing.T) {
 	nc := ResolveNotifyConfig(cfg)
 	if nc != nil {
 		t.Errorf("expected nil for empty config, got %+v", nc)
+	}
+}
+
+// watch start passes the event time as RFC 3339. It used to be parsed with
+// only the rules engine's layout, fail, and reach every channel as 0001-01-01.
+func TestToEventKeepsTheTimeInEitherFormat(t *testing.T) {
+	when := time.Date(2026, 10, 12, 9, 19, 0, 0, time.Local)
+	for _, s := range []string{when.Format(time.RFC3339), when.Format("2006-01-02 15:04:05")} {
+		got := toEvent(NotifyEvent{Time: s}).Time
+		if !got.Equal(when) {
+			t.Errorf("%q became %v, want %v", s, got, when)
+		}
 	}
 }

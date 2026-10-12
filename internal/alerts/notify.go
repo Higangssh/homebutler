@@ -57,7 +57,13 @@ func TestEvent() NotifyEvent {
 
 // toEvent is the one place the alerts event shape becomes a notify event.
 func toEvent(event NotifyEvent) notify.Event {
-	t, _ := time.Parse("2006-01-02 15:04:05", event.Time)
+	// watch start sends RFC 3339 and the rules engine sends the layout below.
+	// Only the second used to parse, and the error was dropped, so every
+	// container and threshold alert from watch went out stamped 0001-01-01.
+	t, err := time.Parse(time.RFC3339, event.Time)
+	if err != nil {
+		t, _ = time.ParseInLocation("2006-01-02 15:04:05", event.Time, time.Local)
+	}
 	return notify.Event{
 		Source:  "alerts",
 		Name:    event.RuleName,
