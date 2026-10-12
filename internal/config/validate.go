@@ -140,6 +140,7 @@ func Validate(explicit string) *ValidationResult {
 
 	r.checkUnknownKeys(data)
 	r.checkWatchKeys(rawTop)
+	r.checkAlertRules(rawTop)
 	r.Sections = describeSections(rawTop, cfg)
 	r.checkPermissions(path, cfg)
 	r.checkServers(cfg)
@@ -172,8 +173,41 @@ func (r *ValidationResult) checkUnknownKeys(data []byte) {
 	}
 
 	for _, msg := range typeErr.Errors {
+		// alerts.rules is read by the alerts package, not into AlertConfig,
+		// and checkAlertRules checks it against the struct that reads it.
+		if strings.Contains(msg, "field rules not found in type config.AlertConfig") {
+			continue
+		}
 		field, hint := unknownFieldHint(msg)
 		r.add(SeverityWarning, field, cleanYAMLError(msg), hint)
+	}
+}
+
+// alertRulesCheck checks the alerts.rules node. The rules are decoded by the
+// alerts package, into its own Rule type, and that package imports this one;
+// so it registers the check rather than this package importing it. Without it
+// validate called every rules block an unknown key that "has no effect" while
+// watch was acting on it (#338).
+var alertRulesCheck func(node *yaml.Node) []Finding
+
+// RegisterAlertRulesCheck is called by the alerts package at init.
+func RegisterAlertRulesCheck(check func(node *yaml.Node) []Finding) {
+	alertRulesCheck = check
+}
+
+func (r *ValidationResult) checkAlertRules(rawTop map[string]yaml.Node) {
+	alerts, ok := rawTop["alerts"]
+	if !ok || alerts.Kind != yaml.MappingNode {
+		return
+	}
+	for i := 0; i+1 < len(alerts.Content); i += 2 {
+		if alerts.Content[i].Value != "rules" {
+			continue
+		}
+		if alertRulesCheck == nil {
+			return
+		}
+		r.Findings = append(r.Findings, alertRulesCheck(alerts.Content[i+1])...)
 	}
 }
 
