@@ -311,6 +311,11 @@ type AlertConfig struct {
 	CPU    float64 `yaml:"cpu"`
 	Memory float64 `yaml:"memory"`
 	Disk   float64 `yaml:"disk"`
+	// Ignore names containers whose stopping and starting is intended, such
+	// as one a cron job stops every night. The watcher reports neither their
+	// going down nor their recovery (#338). Every other container is still
+	// watched, as before.
+	Ignore []string `yaml:"ignore,omitempty"`
 }
 
 // Source identifies which resolution rule produced the config path.

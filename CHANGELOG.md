@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### ✨ Features
+
+- `alerts.ignore` names containers whose stopping and starting is intended, such as one a cron job stops every night (#338). `watch start` and `alerts --watch` report neither their going down nor their recovery. Nothing else changes: every other container is still reported, once per stop and once per recovery, as before. `config validate` lists the ignored names, and saving a threshold from the dashboard keeps the list
+
 ### 🐛 Fixes
 
 - `config validate` warned that `alerts.rules` was an unknown key with no effect, while `watch` was acting on those rules (#338). The validator checked against a schema that has no rules field, and `watch` reads them through a different struct. It now checks each rule against the type `watch` decodes into: a misspelt key inside a rule is reported at its line, and a rule `watch` would refuse is reported as an error. A test fails if `watch` reads a key that `validate` does not accept

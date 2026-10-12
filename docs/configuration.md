@@ -172,6 +172,21 @@ alerts:
   disk: 85
 ```
 
+### Containers stopping and starting
+
+`watch start` and `alerts --watch` also tell you when a container stops and when it comes back. They report the change, not the state. A container that stays stopped is reported once, when it stops, and once more if it is already stopped when the watcher starts. It is not reported again on every check. Each later stop and start is a new change, and each is reported.
+
+A container you stop on purpose, such as one a cron job stops every night, therefore notifies you every time it does. List it under `ignore`, and neither its stopping nor its recovery is reported:
+
+```yaml
+alerts:
+  ignore:
+    - nightly-backup
+    - scheduled-report
+```
+
+Names are container names exactly as `docker ps` shows them. Every container not listed is still watched. Rules under `alerts.rules` are separate and are not affected by `ignore`. `homebutler config validate` lists the ignored names under `alerts`.
+
 ## Backup Directory
 
 ```yaml

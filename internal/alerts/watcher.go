@@ -3,6 +3,7 @@ package alerts
 import (
 	"context"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -115,38 +116,8 @@ func checkAndEmit(cfg WatchConfig, prev *prevState, ch chan<- Event) {
 	}
 
 	// Docker container checks
-	containers, err := docker.List()
-	if err == nil {
-		// Track which containers still exist to prune stale entries
-		seen := make(map[string]bool, len(containers))
-		for _, c := range containers {
-			status := strings.ToLower(c.State)
-			name := c.Name
-			seen[name] = true
-			if prev.containerChanged(name, status) {
-				if status != "running" {
-					ch <- Event{
-						Time:     now,
-						Severity: "critical",
-						Resource: fmt.Sprintf("container:%s", name),
-						Message:  fmt.Sprintf("Container '%s' is %s", name, status),
-					}
-				} else {
-					ch <- Event{
-						Time:     now,
-						Severity: "ok",
-						Resource: fmt.Sprintf("container:%s", name),
-						Message:  fmt.Sprintf("Container '%s' recovered (running)", name),
-					}
-				}
-			}
-		}
-		// Prune containers that no longer exist
-		for name := range prev.containers {
-			if !seen[name] {
-				delete(prev.containers, name)
-			}
-		}
+	if containers, err := docker.List(); err == nil {
+		emitContainerChanges(cfg, prev, containers, now, ch)
 	}
 }
 
@@ -381,5 +352,45 @@ func actionDescription(rule Rule) string {
 		return rule.Exec
 	default:
 		return rule.Action
+	}
+}
+
+// emitContainerChanges reports each container whose state changed since the
+// last check: down when it leaves running, recovered when it returns. A
+// container that stays stopped is reported once, not on every check. Names in
+// cfg.Alert.Ignore are skipped in both directions.
+func emitContainerChanges(cfg WatchConfig, prev *prevState, containers []docker.Container, now time.Time, ch chan<- Event) {
+	// Track which containers still exist to prune stale entries
+	seen := make(map[string]bool, len(containers))
+	for _, c := range containers {
+		status := strings.ToLower(c.State)
+		name := c.Name
+		if slices.Contains(cfg.Alert.Ignore, name) {
+			continue
+		}
+		seen[name] = true
+		if prev.containerChanged(name, status) {
+			if status != "running" {
+				ch <- Event{
+					Time:     now,
+					Severity: "critical",
+					Resource: fmt.Sprintf("container:%s", name),
+					Message:  fmt.Sprintf("Container '%s' is %s", name, status),
+				}
+			} else {
+				ch <- Event{
+					Time:     now,
+					Severity: "ok",
+					Resource: fmt.Sprintf("container:%s", name),
+					Message:  fmt.Sprintf("Container '%s' recovered (running)", name),
+				}
+			}
+		}
+	}
+	// Prune containers that no longer exist
+	for name := range prev.containers {
+		if !seen[name] {
+			delete(prev.containers, name)
+		}
 	}
 }

@@ -411,6 +411,9 @@ func sectionSummary(name string, present bool, cfg *Config) string {
 
 	case "alerts":
 		s := fmt.Sprintf("cpu %g%% · memory %g%% · disk %g%%", cfg.Alerts.CPU, cfg.Alerts.Memory, cfg.Alerts.Disk)
+		if n := len(cfg.Alerts.Ignore); n > 0 {
+			s += fmt.Sprintf(" · ignoring %d container(s): %s", n, strings.Join(cfg.Alerts.Ignore, ", "))
+		}
 		if !present {
 			return s + " (defaults)"
 		}
@@ -682,6 +685,12 @@ func (r *ValidationResult) checkAlerts(cfg *Config) {
 		case t.value == 0:
 			r.add(SeverityWarning, field, "Threshold is 0, which alerts on every check.",
 				"Omit the key to use the default instead.")
+		}
+	}
+	for i, name := range cfg.Alerts.Ignore {
+		if strings.TrimSpace(name) == "" {
+			r.add(SeverityWarning, fmt.Sprintf("alerts.ignore[%d]", i), "An empty name in alerts.ignore matches no container.",
+				"Remove the entry, or write the container name as docker ps shows it.")
 		}
 	}
 }

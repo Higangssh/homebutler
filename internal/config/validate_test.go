@@ -821,3 +821,32 @@ func TestValidateNeverPrintsTheWebToken(t *testing.T) {
 		}
 	}
 }
+
+func TestValidateShowsIgnoredContainersAndFlagsAnEmptyName(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.yaml")
+	if err := os.WriteFile(path, []byte("alerts:\n  ignore: [nightly-job, \"\"]\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	r := Validate(path)
+	var summary string
+	for _, s := range r.Sections {
+		if s.Name == "alerts" {
+			summary = s.Summary
+		}
+	}
+	if !strings.Contains(summary, "ignoring 2 container(s): nightly-job, ") {
+		t.Errorf("alerts summary should list what is ignored, got %q", summary)
+	}
+	var empty, unknown bool
+	for _, f := range r.Findings {
+		if f.Field == "alerts.ignore[1]" {
+			empty = true
+		}
+		if strings.Contains(f.Message, "not found") {
+			unknown = true
+		}
+	}
+	if !empty || unknown {
+		t.Errorf("want the empty name flagged and ignore accepted as a key: empty=%v unknown=%v %+v", empty, unknown, r.Findings)
+	}
+}
