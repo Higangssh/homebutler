@@ -33,23 +33,23 @@
   <img src="assets/report-card.svg" alt="homebutler report output: a port answered by a different service flagged under Needs Attention, then what changed since the last report — a container gone, one new, one recreated behind the same name, a process running a different invocation, a port that changed owner — then current status and the command to verify the port" width="680">
 </p>
 
-<p align="center"><sub>A real run of it on a Raspberry Pi is under <a href="#-butler-report">Butler Report</a>.</sub></p>
-
-```bash
-brew install Higangssh/homebutler/homebutler     # or: curl -fsSL https://raw.githubusercontent.com/Higangssh/homebutler/main/install.sh | sh
-homebutler report                                # first run saves a baseline; the second tells you what moved
-```
-
-Or as a container, reaching your machines over SSH — [docs/docker.md](docs/docker.md):
-`docker run -v ~/.config/homebutler:/config -v ~/.ssh:/root/.ssh:ro ghcr.io/higangssh/homebutler`
-
-Section rules, labels, and severities are colour-coded in a terminal. Colour is
-dropped automatically when output is piped, redirected, or run from cron.
-
 That is the whole idea. Most homelab tools show you a graph of right now, and leave
 "does this matter?" to you. HomeButler remembers what your server looked like last
 time, decides what is worth saying, and says it — six containers before and six after
 is not "no change" when one of them is a different container.
+
+## Reading a report
+
+```bash
+homebutler report
+homebutler report --keep 7      # retain only the latest 7 snapshots
+homebutler report --no-save     # preview without writing a snapshot
+```
+
+`report` gives you a concise butler-style summary of your homelab: current health, warnings, notable changes since the previous snapshot, and suggested next commands. On the first run, HomeButler creates a baseline under `~/.homebutler/reports/snapshots/`; later runs compare against the latest snapshot. Old snapshots are pruned automatically (`--keep 30` by default) so reports do not grow forever.
+
+Section rules, labels, and severities are colour-coded in a terminal. Colour is
+dropped automatically when output is piped, redirected, or run from cron.
 
 ### Reading a change
 
@@ -81,6 +81,17 @@ ambiguous about the window it covers.
 
 📖 **[What earns a line, and what is deliberately suppressed →](docs/report.md)**
 
+## See it run
+
+<p align="center">
+  <img src="assets/demo.gif" alt="a run through homebutler: report naming what moved since the last snapshot — a container gone, a port answered by something new, one recreated behind the same name — then the same answer as JSON with the kind as a field, then doctor listing what is exposed and what has never been backed up with the command for each, then a backup drill booting the archive in its own container and requiring an HTTP health check, then the same report on a phone, then the settings screen editing notification channels" width="820" />
+</p>
+<p align="center">
+  <em>The whole thing in half a minute · <a href="https://www.youtube.com/watch?v=jwRuFoxNWOY">watch it full size</a></em>
+</p>
+
+## Why homebutler?
+
 HomeButler helps you answer the boring but painful questions every homelab eventually creates:
 
 - What is running on my server right now?
@@ -93,63 +104,6 @@ HomeButler helps you answer the boring but painful questions every homelab event
 No daemon required, no database. Run it from a terminal, cron, a web dashboard you start when you want one, or an AI agent.
 
 The design goal is simple: give humans and agents a narrow, structured interface to the server. HomeButler returns readable summaries and JSON instead of asking you to trust a black-box shell session.
-
-<p align="center">
-  <img src="assets/demo.gif" alt="a run through homebutler: report naming what moved since the last snapshot — a container gone, a port answered by something new, one recreated behind the same name — then the same answer as JSON with the kind as a field, then doctor listing what is exposed and what has never been backed up with the command for each, then a backup drill booting the archive in its own container and requiring an HTTP health check, then the same report on a phone, then the settings screen editing notification channels" width="820" />
-</p>
-<p align="center">
-  <em>The whole thing in half a minute · <a href="https://www.youtube.com/watch?v=jwRuFoxNWOY">watch it full size</a></em>
-</p>
-
-## Quick Start
-
-```bash
-# One-line install (auto-detects OS/arch)
-curl -fsSL https://raw.githubusercontent.com/Higangssh/homebutler/main/install.sh | sh
-
-# Or via Homebrew
-brew install Higangssh/homebutler/homebutler
-
-# Or as a container — the hub that reaches your machines over SSH
-docker run -d -p 8080:8080 -v ~/.config/homebutler:/config -v ~/.ssh:/root/.ssh:ro \
-  ghcr.io/higangssh/homebutler serve --host 0.0.0.0 --token "$(openssl rand -hex 16)"
-
-# Interactive setup — add your servers in seconds
-homebutler init
-```
-
-Use it right away:
-
-```bash
-homebutler status                    # CPU, memory, disk, uptime
-homebutler docker list               # running containers
-homebutler inventory scan            # containers + ports + topology
-homebutler report                    # butler-style health report + change summary
-homebutler install uptime-kuma       # deploy a self-hosted app
-homebutler backup drill uptime-kuma  # verify a backup actually restores
-homebutler watch tui                 # terminal dashboard
-homebutler serve                     # web dashboard at http://localhost:8080
-```
-
-Machine-readable output is available everywhere:
-
-```bash
-homebutler status --json
-homebutler inventory scan --json
-homebutler report --json
-```
-
-## What it does
-
-- **Install apps** — deploy Uptime Kuma, Jellyfin, Pi-hole, Gitea, Portainer, and more with one command
-- **Map your server** — see containers, exposed ports, system ports, and service topology
-- **Run a doctor check** — diagnose resource pressure, stopped containers, public ports, backup hygiene, notifications, report baseline readiness, and configured Proxmox endpoint reachability
-- **Catch crashes** — save logs before/after Docker, systemd, or PM2 restarts and detect flapping loops
-- **Verify backups** — boot backups in isolated containers before you trust them
-- **See a Proxmox cluster** — nodes, QEMU and LXC guests, storage, task status, and honest dashboard freshness, with power actions that name their target explicitly
-- **Use it anywhere** — CLI, JSON, web dashboard, or MCP for AI agents without giving them SSH
-
-## Why homebutler?
 
 Self-hosting is not hard because one `docker compose up` is hard. It is hard because the maintenance never ends: ports collide, containers restart silently, backups look fine until restore day, and every server becomes a slightly different snowflake.
 
@@ -172,25 +126,58 @@ HomeButler answers the question none of them ask: **what is different from last 
   ✅ DRILL PASSED
   ```
 
-## Core workflows
-
-### 🧾 Butler Report
-
-A real run: two containers changed on a Raspberry Pi, and the report names those two. The third line is the disk the new image used.
-
-<p align="center">
-  <img src="assets/report-demo.gif" alt="homebutler report run on a home server an hour after two containers were changed: filebrowser recreated and uptime-kuma moved from version 1 to 2. The report names exactly those two as replaced, with the old and new container IDs and both image tags, and the 2.3 GB the new image added to the disk, then the current status" width="760">
-</p>
+## Quick Start
 
 ```bash
-homebutler report
-homebutler report --keep 7      # retain only the latest 7 snapshots
-homebutler report --no-save     # preview without writing a snapshot
+# One-line install (auto-detects OS/arch)
+curl -fsSL https://raw.githubusercontent.com/Higangssh/homebutler/main/install.sh | sh
+
+# Or via Homebrew
+brew install Higangssh/homebutler/homebutler
+
+# Or as a container — the hub that reaches your machines over SSH
+docker run -d -p 8080:8080 -v ~/.config/homebutler:/config -v ~/.ssh:/root/.ssh:ro \
+  ghcr.io/higangssh/homebutler serve --host 0.0.0.0 --token "$(openssl rand -hex 16)"
+
+# Interactive setup — add your servers in seconds
+homebutler init
 ```
 
-`report` gives you a concise butler-style summary of your homelab: current health, warnings, notable changes since the previous snapshot, and suggested next commands. On the first run, HomeButler creates a baseline under `~/.homebutler/reports/snapshots/`; later runs compare against the latest snapshot. Old snapshots are pruned automatically (`--keep 30` by default) so reports do not grow forever.
+Or as a container, reaching your machines over SSH — [docs/docker.md](docs/docker.md):
+`docker run -v ~/.config/homebutler:/config -v ~/.ssh:/root/.ssh:ro ghcr.io/higangssh/homebutler`
 
-### 🩺 Doctor Check
+Use it right away:
+
+```bash
+homebutler status                    # CPU, memory, disk, uptime
+homebutler docker list               # running containers
+homebutler inventory scan            # containers + ports + topology
+homebutler report                    # butler-style health report + change summary
+homebutler install uptime-kuma       # deploy a self-hosted app
+homebutler backup drill uptime-kuma  # verify a backup actually restores
+homebutler watch tui                 # terminal dashboard
+homebutler serve                     # web dashboard at http://localhost:8080
+```
+
+Machine-readable output is available everywhere:
+
+```bash
+homebutler status --json
+homebutler inventory scan --json
+homebutler report --json
+```
+
+## What else it does
+
+- **Install apps** — deploy Uptime Kuma, Jellyfin, Pi-hole, Gitea, Portainer, and more with one command
+- **Map your server** — see containers, exposed ports, system ports, and service topology
+- **Run a doctor check** — diagnose resource pressure, stopped containers, public ports, backup hygiene, notifications, report baseline readiness, and configured Proxmox endpoint reachability
+- **Catch crashes** — save logs before/after Docker, systemd, or PM2 restarts and detect flapping loops
+- **Verify backups** — boot backups in isolated containers before you trust them
+- **See a Proxmox cluster** — nodes, QEMU and LXC guests, storage, task status, and honest dashboard freshness, with power actions that name their target explicitly
+- **Use it anywhere** — CLI, JSON, web dashboard, or MCP for AI agents without giving them SSH
+
+## 🩺 Doctor Check
 
 ```bash
 homebutler doctor
@@ -250,120 +237,7 @@ Findings
       → Did you mean "notify"? Unrecognised keys are ignored silently.
 ```
 
-### 📦 One-Command App Install
-
-```
-$ homebutler install list
-📦 Available apps (15):
-
-  uptime-kuma          A self-hosted monitoring tool
-  vaultwarden          Lightweight Bitwarden-compatible password manager
-  jellyfin             Free software media system for streaming movies, TV, and music
-  pi-hole              Network-wide ad blocking via DNS filtering
-  …
-```
-
-> **`homebutler install uptime-kuma`** — Deploy self-hosted apps in seconds. Pre-checks Docker, ports, and duplicates. Generates `docker-compose.yml` automatically. [See all available apps →](#app-install)
-
-### 🗺️ Inventory & Topology
-
-```bash
-homebutler inventory scan
-homebutler inventory show --filter exposed
-homebutler inventory export --format mermaid
-homebutler --json inventory scan
-```
-
-`inventory scan` gives you a quick map of what is running on a server: system health, Docker containers, app ports, and system ports. Docker-published ports are connected back to the container that owns them, so local forwarding details like Colima/Lima stay understandable.
-
-```text
-🏠 Home Network
-   Server  homelab (192.168.1.10)
-   Summary ✅ 1 running · ⚪ 1 stopped · 🌍 2 public ports · 🔒 4 local ports
-
-📦 Containers (2)
-   ├─ ⚪ vaultwarden · not started
-   │  └─ image vaultwarden/server:latest
-   └─ ✅ api-server · running
-      ├─ image my-api:latest
-      └─ exposes :8080 → 8080/tcp
-
-🌐 App Ports (1)
-   └─ 🌍 :8080/tcp · api-server
-```
-
-To answer "what is reachable from outside my machine/network?" without reading the whole tree, filter the scan to exposed ports only:
-
-```bash
-homebutler inventory scan --filter exposed
-```
-
-```text
-🏠 Home Network
-   Server  homelab
-
-🌐 Exposed Ports
-   ├─ :8080/tcp · api-server
-   └─ :8443/tcp · dashboard
-```
-
-Only ports listening on all interfaces (`0.0.0.0`, `::`, `*`) are shown. Anything bound to a specific address is hidden, including loopback and LAN addresses. Unsupported filter values return an error, as does combining `--filter` with `--json`; the default `inventory scan` output is unchanged.
-
-Use Mermaid export when you want a diagram for GitHub, Obsidian, docs, or an AI assistant:
-
-```mermaid
-graph TD
-  home["🏠 Home Network"] --> homelab["🖥 homelab<br/>192.168.1.10"]
-  homelab --> c1["📦 api-server<br/>running"]
-  homelab --> p1["🌍 :8080/tcp<br/>api-server"]
-  c1 -. exposes .-> p1
-```
-
-## Demo
-
-### 🌐 Web Dashboard
-
-<p align="center">
-  <img src="assets/web-dashboard.png" alt="homebutler web dashboard" width="900">
-</p>
-
-> **`homebutler serve`** — A web dashboard embedded in the single binary via `go:embed`. Servers, Docker containers, open ports, alerts and Wake-on-LAN from any browser. With `--token` it also edits the config: thresholds, notification channels, servers, Proxmox endpoints and wake devices.
-
-### The Report tab, where you actually read it
-
-<p align="center">
-  <img src="assets/report-tab.png" alt="the Report tab on a phone: what needs attention first — a container recreated and not running, a port answered by something new — then the changes with their kind word, including a container replaced behind the same name and a comparison that could not be made, then doctor's findings ordered by severity with the command to run for each" width="380">
-</p>
-
-The screen somebody opens after a notification. What needs attention first, then
-what moved with the kind word each change carries, then the snapshot being
-compared against and how old it is. A comparison that could not be made says so
-rather than reading as an all-clear.
-
-Loading it saves nothing — a page that took a snapshot every time it was opened
-would prune the baseline you wanted to compare against. Saving one is a button.
-
-<details>
-<summary>✨ Web Dashboard Highlights</summary>
-
-- **Server Overview** — See all servers at a glance with color-coded status (green = online, red = offline)
-- **System Metrics** — CPU, memory, disk usage with progress bars and color thresholds
-- **Docker Containers** — Running/stopped status with friendly labels ("Running · 4d", "Stopped · 6h ago")
-- **Top Processes** — Top processes sorted by CPU/memory with zombie detection
-- **Resource Warnings** — Visual CPU, memory, and disk thresholds in the dashboard
-- **Network Ports** — Open ports with process names and bind addresses
-- **Wake-on-LAN** — One-click wake buttons for configured devices
-- **Server Switching** — Dropdown to switch between local and remote servers
-- **Zero dependencies** — No Node.js runtime needed. Frontend is compiled into the Go binary at build time
-
-```bash
-homebutler serve              # Start on port 8080
-homebutler serve --port 3000  # Custom port
-homebutler serve --demo       # Demo mode with realistic sample data
-homebutler serve install      # Let the host keep it running
-```
-
-</details>
+## Watch and alerts
 
 ### 🔄 Process Restart Watch
 
@@ -561,51 +435,90 @@ homebutler watch remove nginx           # Stop watching
 homebutler watch check                  # One-shot check (no continuous monitoring)
 ```
 
-### 🧊 Proxmox VE
+### Alert Thresholds (Advanced)
+
+`alerts` still exists for CPU, memory, and disk threshold checks, but it is an advanced flow and not the recommended first step for new users.
 
 ```bash
-homebutler proxmox status
-homebutler proxmox guests --status running
-homebutler proxmox guest shutdown --node pve1 --type lxc --vmid 105 --confirm
-homebutler proxmox task UPID:pve1:... --node pve1
+homebutler alerts --watch                  # default: 30s interval
+homebutler alerts --watch --interval 10s   # check every 10 seconds
+homebutler alerts history                  # view alert history
+homebutler notify test                     # test your notification channels
 ```
 
-A Proxmox endpoint is its own kind of target, configured under `proxmox:` with an
-API token rather than SSH, so it does not join the `--server` or `--all` fan-out.
-TLS verification stays on: trust comes from a pinned SHA-256 fingerprint, then a
-CA file, and only then an explicit `insecure` fallback.
+Default thresholds: CPU 90%, Memory 85%, Disk 90%. Start with `watch`, then add `alerts` only if you specifically want threshold-based checks.
 
-Reads are plain. Power actions are not: every one of them takes an explicit
-endpoint, node, guest type and VMID, and refuses to run without `--confirm`,
-which is checked before any credential is read. They also need their own
-`action_token_id` (plus `action_token` or `action_token_file`) configured on
-the endpoint — the read token alone will not start, reboot, or shut down a
-guest; see [Proxmox setup →](docs/proxmox.md) for creating that second token.
-`shutdown` asks the guest to shut down cleanly — it is not Proxmox's hard
-`stop`, which cuts power and can leave a filesystem behind it. A successful
-action reports the task it submitted, not that the guest finished; `proxmox
-task` answers that separately.
+## Backup & Restore
 
-`proxmox script` prints the install command for a Community Script pinned to one
-commit, along with a warning that the script is not reviewed by homebutler and
-runs as root. It never fetches or runs it — see [#62](https://github.com/Higangssh/homebutler/issues/62)
-for why that line is where it is.
+One-command Docker backup — volumes, compose files, and env variables.
 
-📖 **[Proxmox setup, tokens, and TLS →](docs/proxmox.md)**
+```bash
+homebutler backup                          # backup everything
+homebutler backup --service jellyfin       # specific service
+homebutler backup --to /mnt/nas/backups/   # custom destination
+homebutler backup list                     # list backups
+homebutler restore ./backup.tar.gz         # restore
+```
 
-### 🖥️ TUI Dashboard
+> ⚠️ Database services should be paused before backup for data consistency.
 
-<p align="center">
-  <img src="demo/demo-tui.gif" alt="homebutler TUI dashboard" width="800">
-</p>
+📖 **[Full backup documentation →](docs/backup.md)** — how it works, archive structure, security notes.
 
-> **`homebutler watch tui`** — A terminal-based dashboard powered by Bubble Tea. Monitors all configured servers with real-time updates, color-coded resource bars, and Docker container status. No browser needed.
+### 🔍 Backup Drill
 
-### 🧠 AI-Powered Management (MCP)
+**"Having a backup" and "being able to restore" are different things.**
 
-> **Use natural language when you want automation.** MCP clients can call homebutler tools to check server status, list Docker containers, inspect ports, or run operational workflows. [See screenshots & setup →](#mcp-server)
+Backup Drill boots your backup in an isolated Docker environment and verifies the app actually responds — like a fire drill for your data. A failed drill exits non-zero.
+
+```bash
+homebutler backup drill uptime-kuma        # verify one app
+homebutler backup drill --all              # verify all apps
+homebutler backup drill --json             # machine-readable output
+homebutler backup drill --archive ./file   # use a specific backup
+```
+
+Full walkthrough, including what a passing drill does *not* prove: [docs/backup.md](docs/backup.md#drill-proving-the-backup-comes-back).
+
+**What happens:**
+1. Finds the latest backup archive
+2. Verifies archive integrity (`tar` validation)
+3. Creates an isolated Docker network + random port
+4. Boots the app from backup data
+5. Runs an HTTP health check
+6. Reports pass/fail and cleans up everything
+
+```
+🔍 Backup Drill — uptime-kuma
+
+  📦 Backup: ~/.homebutler/backups/backup_2026-04-04_1711.tar.gz
+  📏 Size: 18.6 MB
+  🔐 Integrity: ✅ tar valid (8 files)
+
+  🚀 Boot: ✅ container started in 0s
+  🌐 Health: ✅ HTTP 200 on port 58574
+  ⏱️  Total: 2s
+
+  ✅ DRILL PASSED
+```
+
+**Zero risk** — runs in a completely isolated environment. Your running services are never touched.
+
+Supports health checks for: `nginx-proxy-manager`, `vaultwarden`, `uptime-kuma`, `pi-hole`, `gitea`, `jellyfin`, `plex`, `portainer`, `homepage`, `adguard-home`.
 
 ## App Install
+
+```
+$ homebutler install list
+📦 Available apps (15):
+
+  uptime-kuma          A self-hosted monitoring tool
+  vaultwarden          Lightweight Bitwarden-compatible password manager
+  jellyfin             Free software media system for streaming movies, TV, and music
+  pi-hole              Network-wide ad blocking via DNS filtering
+  …
+```
+
+> **`homebutler install uptime-kuma`** — Deploy self-hosted apps in seconds. Pre-checks Docker, ports, and duplicates. Generates `docker-compose.yml` automatically. [See all available apps →](#available-apps)
 
 Deploy self-hosted apps with a single command. Each app runs via **docker compose** with automatic pre-checks, health verification, and clean lifecycle management.
 
@@ -697,6 +610,201 @@ homebutler install <app> --port 9999
 - **Post-install tips** — DNS setup, HTTPS access, default credential warnings
 
 > Want more apps? [Open an issue](https://github.com/Higangssh/homebutler/issues) or see [Contributing](CONTRIBUTING.md).
+
+## Dashboards
+
+### 🌐 Web Dashboard
+
+<p align="center">
+  <img src="assets/web-dashboard.png" alt="homebutler web dashboard" width="900">
+</p>
+
+> **`homebutler serve`** — A web dashboard embedded in the single binary via `go:embed`. Servers, Docker containers, open ports, alerts and Wake-on-LAN from any browser. With `--token` it also edits the config: thresholds, notification channels, servers, Proxmox endpoints and wake devices.
+
+### The Report tab, where you actually read it
+
+<p align="center">
+  <img src="assets/report-tab.png" alt="the Report tab on a phone: what needs attention first — a container recreated and not running, a port answered by something new — then the changes with their kind word, including a container replaced behind the same name and a comparison that could not be made, then doctor's findings ordered by severity with the command to run for each" width="380">
+</p>
+
+The screen somebody opens after a notification. What needs attention first, then
+what moved with the kind word each change carries, then the snapshot being
+compared against and how old it is. A comparison that could not be made says so
+rather than reading as an all-clear.
+
+Loading it saves nothing — a page that took a snapshot every time it was opened
+would prune the baseline you wanted to compare against. Saving one is a button.
+
+<details>
+<summary>✨ Web Dashboard Highlights</summary>
+
+- **Server Overview** — See all servers at a glance with color-coded status (green = online, red = offline)
+- **System Metrics** — CPU, memory, disk usage with progress bars and color thresholds
+- **Docker Containers** — Running/stopped status with friendly labels ("Running · 4d", "Stopped · 6h ago")
+- **Top Processes** — Top processes sorted by CPU/memory with zombie detection
+- **Resource Warnings** — Visual CPU, memory, and disk thresholds in the dashboard
+- **Network Ports** — Open ports with process names and bind addresses
+- **Wake-on-LAN** — One-click wake buttons for configured devices
+- **Server Switching** — Dropdown to switch between local and remote servers
+- **Zero dependencies** — No Node.js runtime needed. Frontend is compiled into the Go binary at build time
+
+```bash
+homebutler serve              # Start on port 8080
+homebutler serve --port 3000  # Custom port
+homebutler serve --demo       # Demo mode with realistic sample data
+homebutler serve install      # Let the host keep it running
+```
+
+</details>
+
+### 🖥️ TUI Dashboard
+
+<p align="center">
+  <img src="demo/demo-tui.gif" alt="homebutler TUI dashboard" width="800">
+</p>
+
+> **`homebutler watch tui`** — A terminal-based dashboard powered by Bubble Tea. Monitors all configured servers with real-time updates, color-coded resource bars, and Docker container status. No browser needed.
+
+## 🗺️ Inventory & Topology
+
+```bash
+homebutler inventory scan
+homebutler inventory show --filter exposed
+homebutler inventory export --format mermaid
+homebutler --json inventory scan
+```
+
+`inventory scan` gives you a quick map of what is running on a server: system health, Docker containers, app ports, and system ports. Docker-published ports are connected back to the container that owns them, so local forwarding details like Colima/Lima stay understandable.
+
+```text
+🏠 Home Network
+   Server  homelab (192.168.1.10)
+   Summary ✅ 1 running · ⚪ 1 stopped · 🌍 2 public ports · 🔒 4 local ports
+
+📦 Containers (2)
+   ├─ ⚪ vaultwarden · not started
+   │  └─ image vaultwarden/server:latest
+   └─ ✅ api-server · running
+      ├─ image my-api:latest
+      └─ exposes :8080 → 8080/tcp
+
+🌐 App Ports (1)
+   └─ 🌍 :8080/tcp · api-server
+```
+
+To answer "what is reachable from outside my machine/network?" without reading the whole tree, filter the scan to exposed ports only:
+
+```bash
+homebutler inventory scan --filter exposed
+```
+
+```text
+🏠 Home Network
+   Server  homelab
+
+🌐 Exposed Ports
+   ├─ :8080/tcp · api-server
+   └─ :8443/tcp · dashboard
+```
+
+Only ports listening on all interfaces (`0.0.0.0`, `::`, `*`) are shown. Anything bound to a specific address is hidden, including loopback and LAN addresses. Unsupported filter values return an error, as does combining `--filter` with `--json`; the default `inventory scan` output is unchanged.
+
+Use Mermaid export when you want a diagram for GitHub, Obsidian, docs, or an AI assistant:
+
+```mermaid
+graph TD
+  home["🏠 Home Network"] --> homelab["🖥 homelab<br/>192.168.1.10"]
+  homelab --> c1["📦 api-server<br/>running"]
+  homelab --> p1["🌍 :8080/tcp<br/>api-server"]
+  c1 -. exposes .-> p1
+```
+
+## 🧊 Proxmox VE
+
+```bash
+homebutler proxmox status
+homebutler proxmox guests --status running
+homebutler proxmox guest shutdown --node pve1 --type lxc --vmid 105 --confirm
+homebutler proxmox task UPID:pve1:... --node pve1
+```
+
+A Proxmox endpoint is its own kind of target, configured under `proxmox:` with an
+API token rather than SSH, so it does not join the `--server` or `--all` fan-out.
+TLS verification stays on: trust comes from a pinned SHA-256 fingerprint, then a
+CA file, and only then an explicit `insecure` fallback.
+
+Reads are plain. Power actions are not: every one of them takes an explicit
+endpoint, node, guest type and VMID, and refuses to run without `--confirm`,
+which is checked before any credential is read. They also need their own
+`action_token_id` (plus `action_token` or `action_token_file`) configured on
+the endpoint — the read token alone will not start, reboot, or shut down a
+guest; see [Proxmox setup →](docs/proxmox.md) for creating that second token.
+`shutdown` asks the guest to shut down cleanly — it is not Proxmox's hard
+`stop`, which cuts power and can leave a filesystem behind it. A successful
+action reports the task it submitted, not that the guest finished; `proxmox
+task` answers that separately.
+
+`proxmox script` prints the install command for a Community Script pinned to one
+commit, along with a warning that the script is not reviewed by homebutler and
+runs as root. It never fetches or runs it — see [#62](https://github.com/Higangssh/homebutler/issues/62)
+for why that line is where it is.
+
+📖 **[Proxmox setup, tokens, and TLS →](docs/proxmox.md)**
+
+## Installation
+
+### Homebrew (Recommended)
+
+```bash
+brew install Higangssh/homebutler/homebutler
+```
+
+Automatically installs to PATH. Works on macOS and Linux.
+
+### One-line Install
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Higangssh/homebutler/main/install.sh | sh
+```
+
+Auto-detects OS/architecture, downloads the latest release, and installs to PATH.
+
+### npm (MCP server)
+
+```bash
+npm install -g homebutler
+```
+
+Downloads the Go binary automatically. This package publishes one command,
+`homebutler-mcp`, and it starts the MCP server — `npx -y homebutler@latest`
+launches that, not the CLI. For the command line, use one of the other
+installs above.
+
+### Go Install
+
+```bash
+go install github.com/Higangssh/homebutler@latest
+```
+
+### Build from Source
+
+```bash
+git clone https://github.com/Higangssh/homebutler.git
+cd homebutler
+make build-all
+```
+
+`make build-all` compiles the web dashboard into the binary and needs Node
+installed. `make build` skips it — the CLI is complete either way, and
+`homebutler serve` then says the dashboard is missing and names the two ways
+to get it.
+
+### Uninstall
+
+```bash
+rm $(which homebutler)           # Remove binary
+rm -rf ~/.config/homebutler      # Remove config (optional)
+```
 
 ## Usage
 
@@ -835,76 +943,6 @@ user on the machine.
 
 </details>
 
-## Backup & Restore
-
-One-command Docker backup — volumes, compose files, and env variables.
-
-```bash
-homebutler backup                          # backup everything
-homebutler backup --service jellyfin       # specific service
-homebutler backup --to /mnt/nas/backups/   # custom destination
-homebutler backup list                     # list backups
-homebutler restore ./backup.tar.gz         # restore
-```
-
-> ⚠️ Database services should be paused before backup for data consistency.
-
-📖 **[Full backup documentation →](docs/backup.md)** — how it works, archive structure, security notes.
-
-### Alert Thresholds (Advanced)
-
-`alerts` still exists for CPU, memory, and disk threshold checks, but it is an advanced flow and not the recommended first step for new users.
-
-```bash
-homebutler alerts --watch                  # default: 30s interval
-homebutler alerts --watch --interval 10s   # check every 10 seconds
-homebutler alerts history                  # view alert history
-homebutler notify test                     # test your notification channels
-```
-
-Default thresholds: CPU 90%, Memory 85%, Disk 90%. Start with `watch`, then add `alerts` only if you specifically want threshold-based checks.
-
-### 🔍 Backup Drill
-
-**"Having a backup" and "being able to restore" are different things.**
-
-Backup Drill boots your backup in an isolated Docker environment and verifies the app actually responds — like a fire drill for your data. A failed drill exits non-zero.
-
-```bash
-homebutler backup drill uptime-kuma        # verify one app
-homebutler backup drill --all              # verify all apps
-homebutler backup drill --json             # machine-readable output
-homebutler backup drill --archive ./file   # use a specific backup
-```
-
-Full walkthrough, including what a passing drill does *not* prove: [docs/backup.md](docs/backup.md#drill-proving-the-backup-comes-back).
-
-**What happens:**
-1. Finds the latest backup archive
-2. Verifies archive integrity (`tar` validation)
-3. Creates an isolated Docker network + random port
-4. Boots the app from backup data
-5. Runs an HTTP health check
-6. Reports pass/fail and cleans up everything
-
-```
-🔍 Backup Drill — uptime-kuma
-
-  📦 Backup: ~/.homebutler/backups/backup_2026-04-04_1711.tar.gz
-  📏 Size: 18.6 MB
-  🔐 Integrity: ✅ tar valid (8 files)
-
-  🚀 Boot: ✅ container started in 0s
-  🌐 Health: ✅ HTTP 200 on port 58574
-  ⏱️  Total: 2s
-
-  ✅ DRILL PASSED
-```
-
-**Zero risk** — runs in a completely isolated environment. Your running services are never touched.
-
-Supports health checks for: `nginx-proxy-manager`, `vaultwarden`, `uptime-kuma`, `pi-hole`, `gitea`, `jellyfin`, `plex`, `portainer`, `homepage`, `adguard-home`.
-
 ## Configuration
 
 ```bash
@@ -931,6 +969,7 @@ homebutler upgrade                 # upgrade all servers
 ## MCP Server
 
 Built-in [MCP](https://modelcontextprotocol.io/) server — an agent gets the same report as typed JSON, kind, target and detail rather than a sentence to parse, and every tool is classed read, write or destructive.
+> **Use natural language when you want automation.** MCP clients can call homebutler tools to check server status, list Docker containers, inspect ports, or run operational workflows.
 
 ```json
 {
@@ -946,61 +985,6 @@ Built-in [MCP](https://modelcontextprotocol.io/) server — an agent gets the sa
 Works with Claude Desktop, ChatGPT, Cursor, Windsurf, and any MCP client.
 
 📖 **[MCP server setup →](docs/mcp-server.md)** — supported clients, available tools, agent skills.
-
-## Installation
-
-### Homebrew (Recommended)
-
-```bash
-brew install Higangssh/homebutler/homebutler
-```
-
-Automatically installs to PATH. Works on macOS and Linux.
-
-### One-line Install
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/Higangssh/homebutler/main/install.sh | sh
-```
-
-Auto-detects OS/architecture, downloads the latest release, and installs to PATH.
-
-### npm (MCP server)
-
-```bash
-npm install -g homebutler
-```
-
-Downloads the Go binary automatically. This package publishes one command,
-`homebutler-mcp`, and it starts the MCP server — `npx -y homebutler@latest`
-launches that, not the CLI. For the command line, use one of the other
-installs above.
-
-### Go Install
-
-```bash
-go install github.com/Higangssh/homebutler@latest
-```
-
-### Build from Source
-
-```bash
-git clone https://github.com/Higangssh/homebutler.git
-cd homebutler
-make build-all
-```
-
-`make build-all` compiles the web dashboard into the binary and needs Node
-installed. `make build` skips it — the CLI is complete either way, and
-`homebutler serve` then says the dashboard is missing and names the two ways
-to get it.
-
-## Uninstall
-
-```bash
-rm $(which homebutler)           # Remove binary
-rm -rf ~/.config/homebutler      # Remove config (optional)
-```
 
 ## Architecture
 
@@ -1053,8 +1037,6 @@ Nothing above this is homebutler's business: an MCP client, a chat bot, a cron l
 person at a terminal all reach the same answer.
 
 **No ports opened by default.** CLI and MCP use stdin/stdout only. The web dashboard is opt-in (`homebutler serve`, binds `127.0.0.1`).
-
-
 
 ## Contributing
 
