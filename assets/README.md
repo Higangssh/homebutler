@@ -43,7 +43,11 @@ showing a sentence the binary no longer printed.
 
 ## report-demo.gif / report-demo.tape
 
-The recording at the top of the README. **It is `homebutler report` running,
+It is no longer in the README, which opens with `report-card.svg` instead
+(2026-10-16). The file, the tape and this section stay, because posts about the
+1.2.0 release point at it and the steps below are how to record it again.
+
+The recording that was at the top of the README. **It is `homebutler report` running,
 at the speed it runs, not a picture of it.** `report-demo.tape` is a
 [VHS](https://github.com/charmbracelet/vhs) tape that types the command into an
 80-column terminal, and the command is the 1.2.0 release binary running on a
