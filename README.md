@@ -30,8 +30,10 @@
 </p>
 
 <p align="center">
-  <img src="assets/report-demo.gif" alt="homebutler report run on a home server two hours after two containers were changed: filebrowser recreated and uptime-kuma moved from version 1 to 2. The report names exactly those two as replaced, with the old and new container IDs and both image tags, and the 2.3 GB the new image added to the disk, then the current status" width="760">
+  <img src="assets/report-card.svg" alt="homebutler report output: a port answered by a different service flagged under Needs Attention, then what changed since the last report — a container gone, one new, one recreated behind the same name, a process running a different invocation, a port that changed owner — then current status and the command to verify the port" width="680">
 </p>
+
+<p align="center"><sub>A real run of it on a Raspberry Pi is under <a href="#-butler-report">Butler Report</a>.</sub></p>
 
 ```bash
 brew install Higangssh/homebutler/homebutler     # or: curl -fsSL https://raw.githubusercontent.com/Higangssh/homebutler/main/install.sh | sh
@@ -51,11 +53,7 @@ is not "no change" when one of them is a different container.
 
 ### Reading a change
 
-<p align="center">
-  <img src="assets/report-card.svg" alt="homebutler report output: a port answered by a different service flagged under Needs Attention, then what changed since the last report — a container gone, one new, one recreated behind the same name, a process running a different invocation, a port that changed owner — then current status and the command to verify the port" width="620">
-</p>
-
-Every line is three columns: **what kind of change**, **what it happened to**, and
+Every change line, like those in the card at the top, is three columns: **what kind of change**, **what it happened to**, and
 **what exactly happened**. The kind is one of eight words, and it is the same word in
 `--json`, so an agent branches on it without reading prose:
 
@@ -177,6 +175,12 @@ HomeButler answers the question none of them ask: **what is different from last 
 ## Core workflows
 
 ### 🧾 Butler Report
+
+A real run: two containers changed on a Raspberry Pi, and the report names those two. The third line is the disk the new image used.
+
+<p align="center">
+  <img src="assets/report-demo.gif" alt="homebutler report run on a home server an hour after two containers were changed: filebrowser recreated and uptime-kuma moved from version 1 to 2. The report names exactly those two as replaced, with the old and new container IDs and both image tags, and the 2.3 GB the new image added to the disk, then the current status" width="760">
+</p>
 
 ```bash
 homebutler report
