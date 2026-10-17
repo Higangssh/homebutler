@@ -2,7 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
-## [Unreleased]
+## [1.3.0](https://github.com/Higangssh/homebutler/compare/v1.2.0...v1.3.0) - 2026-10-17
+
+**With `homebutler mcp --max-risk read`, an agent can look at your servers and change nothing through this process.**
+
+Two boundaries come with that sentence. Read mode stops changes, not reading: `docker_logs` and `docker_inspect` show whatever a container printed or was configured with, and `network_scan` pings the whole subnet. It also covers this MCP process only, so the CLI and `homebutler serve` on the same machine are unaffected. `report` stays available in read mode and never saves a snapshot there, so an agent can still be asked what changed. Without the flag, the server offers every tool, as before.
+
 
 ### ✨ Features
 
