@@ -230,7 +230,20 @@ func (s *Server) allowed(name string) (bool, map[string]any) {
 	if !ok {
 		return true, nil // unknown names fail in executeTool as before
 	}
-	if riskRank[c.Risk] <= riskRank[s.maxRisk] {
+	return s.allowedFor(name, c.Risk)
+}
+
+// allowedFor decides for a tool of the given class. A class this server does
+// not know — empty, or misspelt in the registry — counts as destructive, so
+// it is offered only when everything is: a permission boundary that meets a
+// value it cannot place has to close, not open, and a missing map key would
+// otherwise rank the same as read.
+func (s *Server) allowedFor(name string, risk capability.Risk) (bool, map[string]any) {
+	rank, known := riskRank[risk]
+	if !known {
+		rank = riskRank[capability.RiskDestructive]
+	}
+	if rank <= riskRank[s.maxRisk] {
 		return true, nil
 	}
 	if s.maxRisk == capability.RiskRead {

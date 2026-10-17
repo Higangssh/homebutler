@@ -222,3 +222,22 @@ func TestOnlyTheFullListIsPublicToCaches(t *testing.T) {
 		}
 	}
 }
+
+// A tool whose class is empty or misspelt is treated as destructive: offered
+// only when everything is. Read as a map lookup it would rank with read and
+// be allowed in read mode.
+func TestAnUnknownClassIsTreatedAsDestructive(t *testing.T) {
+	for _, risk := range []capability.Risk{"", "reed", "Read"} {
+		for ceiling, want := range map[capability.Risk]bool{
+			capability.RiskRead:        false,
+			capability.RiskWrite:       false,
+			capability.RiskDestructive: true,
+		} {
+			s, _ := newTestServer()
+			_ = s.SetMaxRisk(ceiling)
+			if got, _ := s.allowedFor("made_up_tool", risk); got != want {
+				t.Errorf("class %q under --max-risk %s: allowed=%v, want %v", risk, ceiling, got, want)
+			}
+		}
+	}
+}
