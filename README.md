@@ -984,6 +984,8 @@ Built-in [MCP](https://modelcontextprotocol.io/) server — an agent gets the sa
 
 Works with Claude Desktop, ChatGPT, Cursor, Windsurf, and any MCP client.
 
+To let an agent look without being able to change anything, add `"--max-risk", "read"` to `args`. Tools that change something are not offered and are refused if called by name, and `report` runs without saving a snapshot. Read mode stops changes, not reading: logs and container details are still visible. [What read mode covers →](docs/mcp-server.md#read-only-mode)
+
 📖 **[MCP server setup →](docs/mcp-server.md)** — supported clients, available tools, agent skills.
 
 ## Architecture

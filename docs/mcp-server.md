@@ -72,6 +72,55 @@ Add this to `.mcp.json` (Claude Code / Cursor) or your MCP client config (Claude
 
 Restart your AI client — homebutler tools will appear automatically.
 
+## Read-only mode
+
+To let an agent look at your servers without being able to change anything
+through homebutler, start the server with `--max-risk read`:
+
+```json
+{
+  "mcpServers": {
+    "homebutler": {
+      "command": "npx",
+      "args": ["-y", "homebutler@latest", "--max-risk", "read"]
+    }
+  }
+}
+```
+
+With an installed binary, use `"args": ["mcp", "--max-risk", "read"]`.
+
+Every tool is classed `read`, `write` or `destructive`, and the table below
+shows which. `--max-risk` sets the highest class this server offers: `read`,
+`write`, or `destructive` (the default, which offers everything). A tool above
+the ceiling is left out of `tools/list`, and calling it by name is refused
+with an error that names the ceiling and the tool's class. Both are needed,
+because a client that knows a tool's name can call it without listing it.
+
+`report` is classed `write` because it saves a snapshot. In read mode it is
+still offered, and it always runs as `no_save`: it compares against the last
+snapshot that was saved, by cron or by hand, and writes nothing. Whatever
+`no_save` or `keep` the agent sends is overridden. With no saved snapshot yet,
+it says so rather than creating one.
+
+What read mode does and does not mean:
+
+- **It stops changes, not reading.** A read tool can still show you, and the
+  agent, whatever it reads: `docker_logs` returns log lines, `docker_inspect`
+  returns a container's configuration, and either can contain a credential
+  that something printed. Read mode decides what the agent can do, not what it
+  can see.
+- **"Read" means no state changes on this machine or a remote one. It includes
+  asking things outside them.** `network_scan` pings every address on the
+  local subnet to fill the ARP table before reading it. The Proxmox reads and
+  `doctor`'s endpoint check make HTTP requests to the Proxmox API you
+  configured. `proxmox_script_command` returns a `curl … | bash` line for a
+  community script and never runs it. None of these changes anything, but they
+  are not silent.
+- **It covers this MCP server, nothing else.** The same machine still has the
+  CLI, `homebutler serve` and anything else installed. Read mode limits what
+  an agent can do through this process.
+
 ## Available Tools
 
 | Tool                     | Description                                                                                                            |

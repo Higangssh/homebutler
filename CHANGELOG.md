@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### ✨ Features
+
+- `homebutler mcp --max-risk read|write|destructive` sets the highest tool class the MCP server offers (#348). With `read`, an agent can look but this server changes nothing: tools above the ceiling are left out of `tools/list` and refused when called by name, with an error naming the ceiling, and `report` always runs as `no_save` against the last snapshot saved by cron or by hand. The default is `destructive`, every tool, as before. Read mode stops changes, not reading, and `docs/mcp-server.md` says which read tools ask things outside the machine (`network_scan` pings the subnet). A reduced `tools/list` is marked `cacheScope: private` so a shared cache cannot hand it to another client
+
 ## [1.2.0](https://github.com/Higangssh/homebutler/compare/v1.1.1...v1.2.0) - 2026-10-12
 
 **Every alert `watch` sent was dated the year 1, and a container stopped on purpose had no way to stay out of them.**
