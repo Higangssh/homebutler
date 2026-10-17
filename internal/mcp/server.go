@@ -190,8 +190,93 @@ type Server struct {
 	cfgPath string
 	version string
 	demo    bool
+	maxRisk capability.Risk
 	in      io.Reader
 	out     io.Writer
+}
+
+// riskRank orders the classes so a ceiling can be compared against them.
+var riskRank = map[capability.Risk]int{
+	capability.RiskRead:        0,
+	capability.RiskWrite:       1,
+	capability.RiskDestructive: 2,
+}
+
+// SetMaxRisk limits the server to tools at or below risk. A tool above it is
+// left out of tools/list and refused by tools/call, both: a client that knows
+// a tool's name can call it without having listed it, so hiding it alone would
+// be a suggestion rather than a limit. The default is destructive, every tool.
+func (s *Server) SetMaxRisk(risk capability.Risk) error {
+	if _, ok := riskRank[risk]; !ok {
+		return fmt.Errorf("--max-risk must be read, write or destructive, not %q", risk)
+	}
+	s.maxRisk = risk
+	return nil
+}
+
+// readModeTools are tools above read that a read-only server still offers, with
+// the arguments that keep them from changing anything. report is classed write
+// because it saves a snapshot; with no_save it compares against the last one
+// saved, by cron or by hand, and writes nothing. Without it a read-only agent
+// could not be asked the one question homebutler exists to answer.
+var readModeTools = map[string]map[string]any{
+	"report": {"no_save": true},
+}
+
+// allowed reports whether name may be listed and called, and the arguments to
+// force on it when it is offered only under readModeTools.
+func (s *Server) allowed(name string) (bool, map[string]any) {
+	c, ok := capability.For(name)
+	if !ok {
+		return true, nil // unknown names fail in executeTool as before
+	}
+	return s.allowedFor(name, c.Risk)
+}
+
+// allowedFor decides for a tool of the given class. A class this server does
+// not know — empty, or misspelt in the registry — counts as destructive, so
+// it is offered only when everything is: a permission boundary that meets a
+// value it cannot place has to close, not open, and a missing map key would
+// otherwise rank the same as read.
+func (s *Server) allowedFor(name string, risk capability.Risk) (bool, map[string]any) {
+	rank, known := riskRank[risk]
+	if !known {
+		rank = riskRank[capability.RiskDestructive]
+	}
+	if rank <= riskRank[s.maxRisk] {
+		return true, nil
+	}
+	if s.maxRisk == capability.RiskRead {
+		if forced, ok := readModeTools[name]; ok {
+			return true, forced
+		}
+	}
+	return false, nil
+}
+
+// toolsCacheScope is "public" for the full list, which is the same for every
+// homebutler of a version, and "private" for a reduced one. MCP lets a shared
+// gateway serve a public result to any caller; a list that depends on how this
+// process was started must not reach a client of another. tools/call refuses
+// anything above the ceiling regardless, so this keeps the list honest rather
+// than keeping the server safe.
+func (s *Server) toolsCacheScope() string {
+	if s.maxRisk == capability.RiskDestructive {
+		return "public"
+	}
+	return "private"
+}
+
+// listedTools is tools/list for this server's ceiling.
+func (s *Server) listedTools() []toolDef {
+	all := capability.Definitions()
+	out := make([]toolDef, 0, len(all))
+	for _, d := range all {
+		if ok, _ := s.allowed(d.Name); ok {
+			out = append(out, d)
+		}
+	}
+	return out
 }
 
 // SetConfigPath records the --config path this server was started with.
@@ -209,6 +294,7 @@ func NewServer(cfg *config.Config, version string, demo ...bool) *Server {
 		cfg:     cfg,
 		version: version,
 		demo:    d,
+		maxRisk: capability.RiskDestructive,
 		in:      os.Stdin,
 		out:     os.Stdout,
 	}
@@ -291,9 +377,9 @@ func (s *Server) handleRequest(req *jsonRPCRequest) {
 	case "tools/list":
 		s.writeResult(req.ID, toolsListResult{
 			ResultType: "complete",
-			Tools:      capability.Definitions(),
+			Tools:      s.listedTools(),
 			TTLMS:      toolsListTTLMS,
-			CacheScope: "public",
+			CacheScope: s.toolsCacheScope(),
 			Meta:       responseMeta{ServerInfo: serverInfo{Name: "homebutler", Version: s.version}},
 		})
 	case "tools/call":
@@ -310,6 +396,30 @@ func (s *Server) handleToolCall(req *jsonRPCRequest) {
 	if err := json.Unmarshal(req.Params, &params); err != nil {
 		s.writeError(req.ID, -32602, "invalid params")
 		return
+	}
+
+	ok, forced := s.allowed(params.Name)
+	if !ok {
+		c, _ := capability.For(params.Name)
+		s.writeResult(req.ID, toolsCallResult{
+			ResultType: "complete",
+			Content: []contentItem{{Type: "text", Text: fmt.Sprintf(
+				"tool %q is not available: this server was started with --max-risk %s, and %s is classed %s",
+				params.Name, s.maxRisk, params.Name, c.Risk)}},
+			IsError: true,
+			Meta:    responseMeta{ServerInfo: serverInfo{Name: "homebutler", Version: s.version}},
+		})
+		return
+	}
+	if len(forced) > 0 {
+		args := make(map[string]any, len(params.Arguments)+len(forced))
+		for k, v := range params.Arguments {
+			args[k] = v
+		}
+		for k, v := range forced {
+			args[k] = v
+		}
+		params.Arguments = args
 	}
 
 	result, toolErr := s.executeTool(params.Name, params.Arguments)
