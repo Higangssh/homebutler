@@ -233,7 +233,7 @@ func loadAlertsConfig(alertsConfigPath string) (*alerts.AlertsConfig, error) {
 		}
 	}
 	if alertsConfigPath != "" {
-		return alerts.LoadRules(alertsConfigPath)
+		return loadRulesFile(alertsConfigPath)
 	}
 	home, err := os.UserHomeDir()
 	if err != nil {
@@ -244,7 +244,26 @@ func loadAlertsConfig(alertsConfigPath string) (*alerts.AlertsConfig, error) {
 		return nil, nil
 	}
 	fmt.Fprintln(os.Stderr, "warning: ~/.homebutler/alerts.yaml is deprecated, move rules/notify into config.yaml")
-	return alerts.LoadRules(defaultPath)
+	return loadRulesFile(defaultPath)
+}
+
+// rulesFileError is a failure to load a standalone alerts file rather than
+// config.yaml's rules. Only then are that file's notification channels lost
+// with its rules, which watch start's warning needs to tell apart.
+type rulesFileError struct {
+	path string
+	err  error
+}
+
+func (e *rulesFileError) Error() string { return e.err.Error() }
+func (e *rulesFileError) Unwrap() error { return e.err }
+
+func loadRulesFile(path string) (*alerts.AlertsConfig, error) {
+	rules, err := alerts.LoadRules(path)
+	if err != nil {
+		return nil, &rulesFileError{path: path, err: err}
+	}
+	return rules, nil
 }
 
 func runAlertsWatch(intervalStr, alertsConfigPath string) error {
