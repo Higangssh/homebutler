@@ -19,6 +19,12 @@ func init() {
 	config.RegisterAlertRulesCheck(checkRulesNode)
 }
 
+// ChecksStillRun is what keeps working when the rules do not load: the
+// threshold and container watcher reads config.yaml's alerts block directly and
+// never sees the rules. config validate's hint and watch start's warning both
+// say it, and share it so they cannot drift apart.
+const ChecksStillRun = "the CPU, memory, disk and container checks still run"
+
 // ruleKeys are the yaml keys a rule accepts, read from Rule's own tags so the
 // list cannot fall behind the struct.
 func ruleKeys() []string {
@@ -65,7 +71,7 @@ func checkRulesNode(node *yaml.Node) []config.Finding {
 			Severity: config.SeverityError,
 			Field:    "alerts.rules",
 			Message:  fmt.Sprintf("Line %d: alerts.rules cannot be read: %v", node.Line, err),
-			Hint:     "watch starts without these rules when this fails; the CPU, memory, disk and container checks still run.",
+			Hint:     "watch starts without these rules when this fails; " + ChecksStillRun + ".",
 		})
 	}
 	if err := validateRules(rules); err != nil {
@@ -73,7 +79,7 @@ func checkRulesNode(node *yaml.Node) []config.Finding {
 			Severity: config.SeverityError,
 			Field:    "alerts.rules",
 			Message:  "alerts.rules: " + err.Error(),
-			Hint:     "watch starts without these rules when this fails; the CPU, memory, disk and container checks still run.",
+			Hint:     "watch starts without these rules when this fails; " + ChecksStillRun + ".",
 		})
 	}
 	return findings
