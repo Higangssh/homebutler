@@ -3,6 +3,7 @@ package cmd
 import (
 	"bufio"
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"os/signal"
@@ -373,7 +374,7 @@ Docker targets use docker events (real-time). Systemd and PM2 targets use pollin
 			// fail to start because remediation rules do not parse.
 			alertsCfg, alertsErr := loadAlertsConfig("")
 			if alertsErr != nil {
-				fmt.Fprintf(os.Stderr, "warning: cannot load alerts configuration: %v; continuing without thresholds or rules\n", alertsErr)
+				fmt.Fprintln(os.Stderr, alertsLoadWarning(alertsErr))
 			}
 
 			providers := &alerts.NotifyConfig{}
@@ -840,4 +841,19 @@ func isValidTargetName(name string) bool {
 		}
 	}
 	return true
+}
+
+// alertsLoadWarning is what watch start prints when loadAlertsConfig fails.
+// Only the rules are lost: the threshold watcher reads cfg.Alerts, which
+// loadConfig has already loaded, so it starts either way. Notification
+// channels are lost too only when the failure is in a standalone alerts file,
+// which loadAlertsConfig reads only when config.yaml has neither rules nor
+// channels of its own.
+func alertsLoadWarning(err error) string {
+	msg := fmt.Sprintf("warning: cannot load alerts configuration: %v; continuing without these rules; %s", err, alerts.ChecksStillRun)
+	var fileErr *rulesFileError
+	if errors.As(err, &fileErr) {
+		msg += fmt.Sprintf(" (notification channels in %s are skipped too)", fileErr.path)
+	}
+	return msg
 }
