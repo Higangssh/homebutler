@@ -833,16 +833,24 @@ func (s *Server) executeTool(name string, args map[string]any) (any, error) {
 
 	case "install_purge":
 		appName := stringArg(args, "app")
-		if _, err := install.Purge(appName); err != nil {
+		result, err := purgeApp(appName)
+		if err != nil {
 			return nil, err
 		}
 		purged := false
-		return InstallResult{Status: install.OutcomePurged, App: appName, DataPreserved: &purged}, nil
+		return InstallResult{
+			Status: install.OutcomePurged, App: appName, DataPreserved: &purged,
+			KeptVolumes: result.Kept, UncheckedVolumes: result.Unchecked,
+		}, nil
 
 	default:
 		return nil, fmt.Errorf("unknown tool: %s", name)
 	}
 }
+
+// purgeApp is install.Purge, held in a variable so a test can answer for
+// Docker with a volume that was kept.
+var purgeApp = install.Purge
 
 // resolveIncidentCap resolves the incident retention cap the same way the
 // watch commands do: config.yaml wins over watch/config.json, and an unset

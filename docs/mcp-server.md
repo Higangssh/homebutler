@@ -168,7 +168,7 @@ What read mode does and does not mean:
 | `install_app`            | Install an app via generated docker-compose.yml                                                                        |
 | `install_status`         | Check installed app status                                                                                             |
 | `install_uninstall`      | Stop an app while preserving data                                                                                      |
-| `install_purge`          | Stop an app and delete all data                                                                                        |
+| `install_purge`          | Stop an app and delete all data. Names any volume left behind in `kept_volumes` or `unchecked_volumes`                  |
 | `processes`              | Top processes by CPU or memory, with zombies broken out separately                                                     |
 | `config_validate`        | Check the config file this server is running on                                                                        |
 | `proxmox_status`         | Proxmox VE version, cluster status, and resources                                                                      |

@@ -165,7 +165,19 @@
                 {:else if result && result.status === 'uninstalled'}
                   <p class="ok">Stopped and removed. Its data is still on disk.</p>
                 {:else if result && result.status === 'purged'}
-                  <p class="ok">Removed, with its data.</p>
+                  <!-- data_preserved is false on every purge: it names the
+                       operation. What is actually left is in these two. -->
+                  {#if result.kept_volumes?.length || result.unchecked_volumes?.length}
+                    <div class="partial">
+                      <strong>Removed, except:</strong>
+                      <ul>
+                        {#each result.kept_volumes ?? [] as v}<li>volume {v} (still exists)</li>{/each}
+                        {#each result.unchecked_volumes ?? [] as v}<li>volume {v} (could not check whether it was removed)</li>{/each}
+                      </ul>
+                    </div>
+                  {:else}
+                    <p class="ok">Removed, with its data.</p>
+                  {/if}
                 {/if}
 
                 {#if canAct && status && status.installed}
@@ -369,6 +381,17 @@
   .ok {
     font-size: 0.75rem;
     color: var(--green);
+  }
+
+  .partial {
+    font-size: 0.75rem;
+    color: var(--yellow);
+  }
+
+  .partial ul {
+    margin: 0;
+    padding-left: 1rem;
+    word-break: break-all;
   }
 
   .error {

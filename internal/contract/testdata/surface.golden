@@ -419,10 +419,12 @@ mcp.ConfigValidateResult.warnings:int
 mcp.InstallResult.app:string
 mcp.InstallResult.data_preserved?:?bool
 mcp.InstallResult.issues?:[]string
+mcp.InstallResult.kept_volumes?:[]string
 mcp.InstallResult.path?:string
 mcp.InstallResult.port?:string
 mcp.InstallResult.state?:string
 mcp.InstallResult.status:string
+mcp.InstallResult.unchecked_volumes?:[]string
 mcp.InstallStatusResult.app:string
 mcp.InstallStatusResult.state:string
 mcp.InventoryExportResult.content:string

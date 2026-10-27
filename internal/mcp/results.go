@@ -58,6 +58,13 @@ type InstallResult struct {
 	// DataPreserved distinguishes uninstall from purge, and is absent for the
 	// outcomes where the question does not arise.
 	DataPreserved *bool `json:"data_preserved,omitempty"`
+	// KeptVolumes and UncheckedVolumes are a purge's install.PurgeResult Kept
+	// and Unchecked: volumes Docker says still exist after it, and volumes
+	// Docker could not be asked about. They are what `install purge` lists
+	// under "Removed, except:", and present only when non-empty, so a purge
+	// that removed everything answers with the shape it always had.
+	KeptVolumes      []string `json:"kept_volumes,omitempty"`
+	UncheckedVolumes []string `json:"unchecked_volumes,omitempty"`
 }
 
 // InstallStatusResult is what `install_status` answers with. It is a read and
