@@ -11,6 +11,9 @@ import (
 	"github.com/Higangssh/homebutler/internal/config"
 	"github.com/Higangssh/homebutler/internal/docker"
 	"github.com/Higangssh/homebutler/internal/system"
+
+	// Settles the background colour before bubbletea's init can query it.
+	_ "github.com/Higangssh/homebutler/internal/termbg"
 )
 
 const refreshInterval = 2 * time.Second
