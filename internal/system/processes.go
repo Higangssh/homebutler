@@ -40,6 +40,11 @@ type ProcessInfo struct {
 	// the wire has ever had to be handled as a credential. Callers that need
 	// to compare invocations across runs should hash it.
 	Command string `json:"-"`
+
+	// OnDemand says the process belongs to a systemd service that runs only
+	// when something asks for it; see MarkOnDemand. False is also every
+	// process whose service could not be determined.
+	OnDemand bool `json:"-"`
 }
 
 // ProcessResult holds the process list and summary metadata.

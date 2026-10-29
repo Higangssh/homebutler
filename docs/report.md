@@ -93,6 +93,23 @@ A report nobody reads is worse than no report. These are excluded on purpose:
   logrotate does, gets the same line, and it is true of it. A crash loop that
   changes its command line each time is a different invocation each time,
   and shows as `gone` once rather than `restarting`.
+- **Daemons systemd starts on demand, appearing or leaving.** Some services
+  are started over D-Bus when something asks them a question and exit once
+  idle: `fwupd` and `packagekit` on Ubuntu are two. Whether one is running
+  when a report is taken is chance, so it gets no `new` or `gone` line. On
+  Linux, a process's service is read from `/proc/<pid>/cgroup`, and every
+  service found is asked about in one `systemctl show` call. A service is on
+  demand when its unit file is `static`, nothing wants or requires it, and a
+  D-Bus name, a socket, a path or a timer starts it. `udisks2` has a bus name
+  too, but it is enabled and wanted by `graphical.target`, so it is still
+  reported. A different command line under the same name is still
+  `replaced`, and one restarting at every report is still `restarting`.
+  Whenever the service cannot be determined — macOS, no systemd, a process in
+  a user's session or a container, a cgroup that cannot be read, a
+  `systemctl` that fails or takes longer than two seconds — the process is
+  compared as before. The snapshot records it as `on_demand: true` on the
+  process, because a `gone` is judged from the older snapshot: the process
+  is not running at the newer one to be asked about.
 - **Processes that belong to a container, or to `watch`.** Anything running
   inside a container, Docker's per-container `containerd-shim` and
   `docker-proxy`, and the helpers `homebutler watch start` runs are left out of
