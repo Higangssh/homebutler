@@ -29,7 +29,13 @@ type Snapshot struct {
 	Containers []docker.Container `json:"containers"`
 	Ports      []ports.PortInfo   `json:"ports"`
 	Processes  []ProcessIdentity  `json:"processes,omitempty"`
-	Warnings   []string           `json:"warnings,omitempty"`
+	// ProcessesReadAt is when the process list was read, to the nanosecond.
+	// A process's age is measured then, so the time between two of these is
+	// what says whether a process started after the last list or before it.
+	// The timestamp above is taken after every collector has answered, and
+	// rounded to the second.
+	ProcessesReadAt string   `json:"processes_read_at,omitempty"`
+	Warnings        []string `json:"warnings,omitempty"`
 	// Failed records which collectors did not answer when this snapshot was
 	// taken. A diff that does not know this would report every container as
 	// having disappeared when Docker was simply down at collection time.
@@ -216,12 +222,22 @@ func DefaultCollectFuncs() CollectFuncs {
 
 // Run collects current state, compares against previous snapshot, and produces a report.
 func Run(cfg *config.Config, fns CollectFuncs, opts Options) (*Report, error) {
+	var readAt time.Time
+	if collect := fns.ProcessesFn; collect != nil {
+		fns.ProcessesFn = func() ([]system.ProcessInfo, error) {
+			readAt = now()
+			return collect()
+		}
+	}
 	inv, err := inventory.Collect(cfg, fns)
 	if err != nil {
 		return nil, fmt.Errorf("collecting inventory: %w", err)
 	}
 
 	snap := buildSnapshot(inv)
+	if !readAt.IsZero() && !snap.collectorFailed(inventory.CollectorProcesses) {
+		snap.ProcessesReadAt = readAt.UTC().Format(time.RFC3339Nano)
+	}
 
 	snapshotDir := opts.SnapshotDir
 	if snapshotDir == "" {
@@ -242,6 +258,10 @@ func Run(cfg *config.Config, fns CollectFuncs, opts Options) (*Report, error) {
 
 	if opts.Keep < 1 {
 		opts.Keep = 1
+	}
+
+	if processesCompared(prev, snap) {
+		snap.Processes = settleProcesses(snap.Processes, prev.Processes)
 	}
 
 	if !opts.NoSave {
@@ -278,10 +298,31 @@ func updateBaselineWording(r *Report, noSave, unreadable bool) {
 	r.NotableChanges = []ChangeLine{note("First inspection — baseline snapshot created.")}
 }
 
+// now is the clock a snapshot is stamped with. Tests that run several reports
+// in a row advance it, so each run writes its own snapshot and reads back the
+// one before rather than overwriting a file named for the same second.
+var now = time.Now
+
+// timeBetween is how long before snap's process list prev's was read, or zero
+// when either was not recorded, as in a snapshot from an earlier release.
+// Zero says nothing restarted since, which is the direction that adds no
+// line.
+func timeBetween(prev, snap *Snapshot) time.Duration {
+	from, err := time.Parse(time.RFC3339Nano, prev.ProcessesReadAt)
+	if err != nil {
+		return 0
+	}
+	to, err := time.Parse(time.RFC3339Nano, snap.ProcessesReadAt)
+	if err != nil {
+		return 0
+	}
+	return to.Sub(from)
+}
+
 func buildSnapshot(inv *inventory.Inventory) *Snapshot {
 	kept, owned := splitOwnedProcesses(inv.Processes)
 	snap := &Snapshot{
-		Timestamp:  time.Now().UTC().Format(time.RFC3339),
+		Timestamp:  now().UTC().Format(time.RFC3339),
 		ServerName: inv.ServerName,
 		System:     inv.System,
 		Containers: inv.Containers,
@@ -312,6 +353,14 @@ func (s *Snapshot) collectorFailed(name string) bool {
 		}
 	}
 	return false
+}
+
+// processesCompared reports whether this run's processes are compared
+// against prev's. When they are not, this run is the processes' baseline,
+// whatever else it was compared against, and keeps its young processes as
+// unconfirmed rather than settling them.
+func processesCompared(prev, snap *Snapshot) bool {
+	return prev != nil && collectorAnswered(prev, snap, inventory.CollectorProcesses) && len(prev.Processes) > 0
 }
 
 func countPublicPorts(pp []ports.PortInfo) int {
@@ -447,6 +496,9 @@ func buildReport(snap *Snapshot, prev *Snapshot) *Report {
 		})
 	}
 	switch {
+	case processesCompared(prev, snap):
+		older := withoutOwned(prev.Processes, snap.ownedProcesses, snap.keptProcesses)
+		changes = append(changes, diffProcesses(older, snap.Processes, timeBetween(prev, snap))...)
 	case !collectorAnswered(prev, snap, inventory.CollectorProcesses):
 		changes = append(changes, Change{
 			Kind:    kindSkipped,
@@ -464,9 +516,6 @@ func buildReport(snap *Snapshot, prev *Snapshot) *Report {
 			Detail:  "not compared — the previous snapshot has none",
 			noun:    nounProcesses,
 		})
-	default:
-		older := withoutOwned(prev.Processes, snap.ownedProcesses, snap.keptProcesses)
-		changes = append(changes, diffProcesses(older, snap.Processes)...)
 	}
 	if collectorAnswered(prev, snap, inventory.CollectorPorts) {
 		changes = append(changes, diffPorts(prev.Ports, snap.Ports)...)
