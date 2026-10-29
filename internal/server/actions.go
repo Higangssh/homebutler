@@ -125,13 +125,21 @@ func (s *Server) handleInstallUninstall(w http.ResponseWriter, r *http.Request) 
 
 func (s *Server) handleInstallPurge(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("app")
-	if _, err := install.Purge(name); err != nil {
+	result, err := purgeApp(name)
+	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 	gone := false
-	writeJSON(w, installResponse{Status: install.OutcomePurged, App: name, DataPreserved: &gone})
+	writeJSON(w, installResponse{
+		Status: install.OutcomePurged, App: name, DataPreserved: &gone,
+		KeptVolumes: result.Kept, UncheckedVolumes: result.Unchecked,
+	})
 }
+
+// purgeApp is install.Purge, held in a variable so a test can answer for
+// Docker with a volume that was kept.
+var purgeApp = install.Purge
 
 // installResponse is the same shape the MCP tool answers with, named here so
 // the two surfaces cannot drift into describing the same outcome differently.
@@ -143,6 +151,10 @@ type installResponse struct {
 	Path          string          `json:"path,omitempty"`
 	State         string          `json:"state,omitempty"`
 	DataPreserved *bool           `json:"data_preserved,omitempty"`
+	// What `install purge` lists under "Removed, except:". See the MCP
+	// InstallResult.
+	KeptVolumes      []string `json:"kept_volumes,omitempty"`
+	UncheckedVolumes []string `json:"unchecked_volumes,omitempty"`
 }
 
 func (s *Server) handleWatchAdd(w http.ResponseWriter, r *http.Request) {

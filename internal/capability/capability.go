@@ -875,7 +875,7 @@ var Registry = []Capability{
 		HTTP:    HTTP{Method: "POST", Path: "/api/install/{app}/purge", Protection: ProtectionTokenAndName, Target: "install_list"},
 		Tool: Definition{
 			Name:        "install_purge",
-			Description: "Stop an installed app and delete all data including containers, config, and volumes. Nothing here restores it and no backup is taken first: take one before calling if the data matters",
+			Description: "Stop an installed app and delete all data including containers, config, and volumes. Nothing here restores it and no backup is taken first: take one before calling if the data matters. A volume that still exists afterwards (external, or used by another container) is listed in kept_volumes, and one Docker could not be asked about in unchecked_volumes",
 			InputSchema: Schema{
 				Type: "object",
 				Properties: map[string]Property{
