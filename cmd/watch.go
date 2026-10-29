@@ -306,6 +306,12 @@ func newWatchCheckCmd() *cobra.Command {
 	}
 }
 
+// monitorStopTimeout bounds how long watch start waits for its monitors to
+// stop after a signal. They normally stop at once; this is for one stuck in a
+// command that will not return. It stays well inside systemd's default
+// TimeoutStopSec of 90s.
+const monitorStopTimeout = 10 * time.Second
+
 func newWatchStartCmd() *cobra.Command {
 	var interval string
 
@@ -520,8 +526,10 @@ Docker targets use docker events (real-time). Systemd and PM2 targets use pollin
 			}
 
 			// Close incCh when all monitors are done
+			monitorsDone := make(chan struct{})
 			go func() {
 				wg.Wait()
+				close(monitorsDone)
 				close(incCh)
 			}()
 
@@ -620,6 +628,17 @@ Docker targets use docker events (real-time). Systemd and PM2 targets use pollin
 				case <-sig:
 					fmt.Println("\nStopping all monitors.")
 					cancel()
+					// Cancelling only asks: exec.CommandContext kills docker
+					// events from its own goroutine, and returning here let the
+					// process exit first, leaving the child reparented to pid 1
+					// (#360). Wait for the monitors, but not for ever, and let
+					// a second signal cut the wait short.
+					select {
+					case <-monitorsDone:
+					case <-sig:
+					case <-time.After(monitorStopTimeout):
+						fmt.Fprintf(os.Stderr, "warning: monitors did not stop within %s; exiting anyway\n", monitorStopTimeout)
+					}
 					return nil
 				}
 			}

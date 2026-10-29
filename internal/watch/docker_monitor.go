@@ -264,24 +264,27 @@ func (dm *DockerMonitor) watchOnce(ctx context.Context, targets []Target, incide
 		}
 	}()
 
+	// Every return goes through here. Cancelling kills the docker events
+	// child, the scanner ends when its stdout closes, and cleanup reaps it.
+	// A return that skipped cleanup left the child killed but never waited
+	// for, and watch start exiting soon after took that as its cue (#360).
+	defer func() {
+		cancel()
+		<-scanDone
+		if cleanup != nil {
+			cleanup()
+		}
+	}()
+
 	// The last oom event per container, kept until the die it explains.
 	lastOOM := map[string]time.Time{}
 
 	for {
 		select {
 		case <-ctx.Done():
-			cancel()
-			// Wait for the scanner goroutine to finish before calling cleanup
-			<-scanDone
-			if cleanup != nil {
-				cleanup()
-			}
 			return ctx.Err()
 		case ev, ok := <-eventCh:
 			if !ok {
-				if cleanup != nil {
-					cleanup()
-				}
 				return fmt.Errorf("docker events stream ended")
 			}
 			name := ev.containerName()
@@ -333,9 +336,13 @@ func (dm *DockerMonitor) watchOnce(ctx context.Context, targets []Target, incide
 			// Only a start after the die is a restart. Without one the field
 			// stays empty: this used to say "(post-restart)" whether or not
 			// anything had restarted.
+			// Stopping skips the second inspect: the incident is still
+			// saved, with what was gathered before the stop.
 			currStarted := ""
-			if st, ok := inspectState(run, name); ok && st.StartedAt.After(diedAt) {
-				currStarted = StartTime(st.StartedAt)
+			if ctx.Err() == nil {
+				if st, ok := inspectState(run, name); ok && st.StartedAt.After(diedAt) {
+					currStarted = StartTime(st.StartedAt)
+				}
 			}
 
 			inc := Incident{
@@ -365,9 +372,6 @@ func (dm *DockerMonitor) watchOnce(ctx context.Context, targets []Target, incide
 				return ctx.Err()
 			}
 		case err := <-errCh:
-			if cleanup != nil {
-				cleanup()
-			}
 			return fmt.Errorf("docker events read: %w", err)
 		}
 	}
