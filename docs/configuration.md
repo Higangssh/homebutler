@@ -225,7 +225,7 @@ homebutler alerts --json
 ## Security
 
 - **No network listener by default** — CLI and MCP modes never open ports. `homebutler serve` starts a local-only dashboard (127.0.0.1) on demand
-- **Read-only by default** — Status commands don't modify anything
+- **Read-only by default** — Status commands don't modify anything. What they print is still about your machines — hostnames, addresses, open ports, usernames, host paths, and log lines from `docker logs` — so mind where the output is pasted
 - **Explicit actions only** — Destructive commands require exact container/service names
 - **SSH for remote** — Multi-server uses standard SSH (key-based auth recommended)
 - **No telemetry** — Zero data collection, zero phone-home

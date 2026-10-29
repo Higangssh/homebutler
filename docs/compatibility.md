@@ -15,7 +15,7 @@ promise — the golden file there fails the build when any of it moves.
 | --- | --- |
 | **MCP tool names** | A tool is not renamed or removed outside a major release |
 | **Tool input schemas** | Argument names, their types, and which are required |
-| **Tool risk classes** | `read`, `write`, `destructive`. An agent decides what it may do unattended from these, so a reclassification is a breaking change even though nothing about the call changes |
+| **Tool risk classes** | `read`, `write`, `destructive`. An agent decides from these what it may do without asking — they say what a call does to the machine, not what it returns — so a reclassification is a breaking change even though nothing about the call changes |
 | **JSON field names and types** | What every MCP tool answers with, and what `report --json`, `doctor --json` and `status --json` return. A field that changes from a string to an object breaks a caller as thoroughly as one that disappears. Every key is snake_case, including any added later; `TestEveryJSONKeyIsSnakeCase` fails on one that is not |
 | **Incident start times** | A `watch` incident's `prev_started_at` and `curr_started_at` are RFC 3339 in UTC, or an empty string when the monitor does not know, whichever of Docker, systemd and pm2 it came from. The golden records that they are strings; `internal/watch`'s tests hold the format |
 | **Lists are never `null`** | A list or map field without `omitempty` is `[]` or `{}` when it has nothing in it, through MCP, the HTTP routes and `--json` alike, at any depth, and an answer that is itself a list is `[]` when empty. `null` is kept for what is genuinely absent: a nil pointer, such as `running_count` when Docker did not answer |
