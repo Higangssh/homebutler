@@ -450,38 +450,95 @@ func collectorFailed(s *Snapshot, collector string) bool {
 type ProcessIdentity struct {
 	Name string `json:"name"`
 	Hash string `json:"hash,omitempty"`
+
+	// Young says the process had been running for less than minProcessAge
+	// when the snapshot was taken, and what was known about it then:
+	// youngUnconfirmed or youngRestarted. Empty is a process that had been
+	// running for longer, which is every process in a snapshot written
+	// before this field existed: those releases kept only old ones.
+	Young string `json:"young,omitempty"`
+
+	// age is how long the oldest process sharing this identity had been
+	// running, on this run. It is never written; it is what tells a process
+	// that started again since the last report from one that has not.
+	age time.Duration
 }
 
-// minProcessAge is how long a process has to have been running before it is
-// worth recording. Measured rather than guessed: two runs thirty seconds
-// apart on an idle machine reported "new head" and "new sed" — the shell
-// pipeline that was reading the report. Cron jobs, package managers and
+// What a young process in a snapshot was known to be.
+const (
+	// youngUnconfirmed was there when the processes were first compared, and
+	// has not yet been seen running for a minute. It staying is not new, and
+	// it leaving is not gone: until a snapshot has seen it a minute old,
+	// nothing says it was more than passing through. A shell, a pipeline or
+	// a job that runs for a few seconds every so often stays here for good,
+	// and never gets a line.
+	youngUnconfirmed = "unconfirmed"
+	// youngRestarted had been seen running for a minute, and was under a
+	// minute old again. Once is a restart, which is not a change; doing it
+	// again before the next report is.
+	youngRestarted = "restarted"
+)
+
+// key is the identity without what this run knew about its age, which is
+// what two snapshots are matched on.
+func (p ProcessIdentity) key() ProcessIdentity {
+	return ProcessIdentity{Name: p.Name, Hash: p.Hash}
+}
+
+// minProcessAge is how long a process has to have been running before a
+// report will say it started or stopped. Measured rather than guessed: two runs thirty
+// seconds apart on an idle machine reported "new head" and "new sed" — the
+// shell pipeline that was reading the report. Cron jobs, package managers and
 // anything else that lives for a moment would arrive the same way.
 //
-// A process held back here is not lost. It is simply reported on the next
-// run, by which time it has earned the word "new".
+// The rule is about what a comparison may say, not about what a snapshot
+// keeps. It used to be both, and a baseline taken half a minute after a
+// container was recreated left that container's processes out, so the next
+// report called them new though they had been running all along. A young
+// process is now kept, marked young; see settleProcesses for what a snapshot
+// that is not a baseline does with one.
 const minProcessAge = time.Minute
+
+// isYoung reports a process that has been running for less than
+// minProcessAge. An unknown age is not young: holding it back would make a
+// running daemon vanish from one comparison and return in the next, and on a
+// ps whose elapsed time cannot be read it would be every process.
+func isYoung(p system.ProcessInfo) bool {
+	return p.Elapsed >= 0 && p.Elapsed < minProcessAge
+}
 
 // processIdentities reduces a process list to the set of distinct identities.
 //
 // Duplicates are collapsed on purpose: eight workers sharing one invocation
 // are one thing running, and a pool growing or shrinking is a resource
-// signal rather than something appearing or disappearing.
+// signal rather than something appearing or disappearing. An identity is
+// young only when every process sharing it is: one old worker is enough to
+// say the invocation was already running. A young identity starts out
+// unconfirmed, which is what a baseline keeps.
 func processIdentities(procs []system.ProcessInfo) []ProcessIdentity {
-	seen := map[ProcessIdentity]bool{}
-	var out []ProcessIdentity
+	byKey := map[ProcessIdentity]*ProcessIdentity{}
+	var order []ProcessIdentity
 	for _, p := range procs {
-		// An unknown age is kept. Dropping it would make a running daemon
-		// vanish from this snapshot and return in the next one, a pair of
-		// changes for something that never stopped.
-		if p.Elapsed >= 0 && p.Elapsed < minProcessAge {
-			continue
+		key := identityOf(p)
+		id, seen := byKey[key]
+		if !seen {
+			order = append(order, key)
+			id = &ProcessIdentity{Name: key.Name, Hash: key.Hash, Young: youngUnconfirmed}
+			byKey[key] = id
 		}
-		id := identityOf(p)
-		if seen[id] {
-			continue
+		if !isYoung(p) {
+			id.Young = ""
 		}
-		seen[id] = true
+		if p.Elapsed > id.age {
+			id.age = p.Elapsed
+		}
+	}
+	out := make([]ProcessIdentity, 0, len(order))
+	for _, key := range order {
+		id := *byKey[key]
+		if id.Young == "" {
+			id.age = 0
+		}
 		out = append(out, id)
 	}
 	sort.Slice(out, func(i, j int) bool {
@@ -490,6 +547,50 @@ func processIdentities(procs []system.ProcessInfo) []ProcessIdentity {
 		}
 		return out[i].Hash < out[j].Hash
 	})
+	return out
+}
+
+// settleProcesses is what a snapshot keeps of this run's processes once they
+// have been compared against prev, the older snapshot's.
+//
+// A young process the older snapshot did not have is left out, as it always
+// was: it started since the last report, and the next report says so if it is
+// still running a minute later. Keeping it as unconfirmed would hide that,
+// because an unconfirmed process becoming old is what a baseline's young
+// processes do, and that is not news. One the older snapshot had is a restart
+// if it had been seen running for a minute. If all it was is unconfirmed, it
+// stays unconfirmed only while it can be the same process the older snapshot
+// saw. A later instance of the same command, such as an hourly job caught
+// running at every hourly report, is an arrival like any other: left out, so
+// that the one which hangs and is still there an hour later is new.
+//
+// A baseline does not come through here, and keeps every young process as
+// unconfirmed: nothing before it can say whether they are new.
+func settleProcesses(curr, prev []ProcessIdentity, since time.Duration) []ProcessIdentity {
+	before := make(map[ProcessIdentity]ProcessIdentity, len(prev))
+	for _, p := range prev {
+		before[p.key()] = p
+	}
+	out := make([]ProcessIdentity, 0, len(curr))
+	for _, c := range curr {
+		if c.Young == "" {
+			out = append(out, c)
+			continue
+		}
+		p, existed := before[c.key()]
+		if !existed {
+			continue
+		}
+		if p.Young == youngUnconfirmed {
+			if startedSince(c, since) {
+				continue
+			}
+			c.Young = youngUnconfirmed
+		} else {
+			c.Young = youngRestarted
+		}
+		out = append(out, c)
+	}
 	return out
 }
 
@@ -512,11 +613,22 @@ func identityOf(p system.ProcessInfo) ProcessIdentity {
 // python3 invocations exits would describe something that did not happen.
 // Those are reported as what they are, an arrival and a departure under a
 // name that is still running.
-func diffProcesses(prev, curr []ProcessIdentity) []Change {
-	prevByName := groupProcessesByName(prev)
-	currByName := groupProcessesByName(curr)
+//
+// A young identity is left out when the other side does not have it: young
+// now and absent before is held back until it has run for a minute, and
+// unconfirmed before and absent now was never seen running long enough to
+// have been a change. A restarted one that is absent now is gone.
+//
+// since is how long before this run's process list the previous one was
+// read. A process that had restarted just before the last report and has
+// started again since is reported as restarting, which is the one thing a
+// crash loop shows the process table: otherwise every restart keeps its
+// place and nothing is ever said.
+func diffProcesses(prev, curr []ProcessIdentity, since time.Duration) []Change {
+	prevByName := groupProcessesByName(withoutUnmatched(prev, curr, youngUnconfirmed))
+	currByName := groupProcessesByName(withoutUnmatched(curr, prev, ""))
 
-	var changes []Change
+	changes := restarting(prev, curr, since)
 	for name, prevHashes := range prevByName {
 		currHashes, ok := currByName[name]
 		if !ok {
@@ -576,6 +688,74 @@ func invocationCount(n int) string {
 		return "1 invocation"
 	}
 	return strconv.Itoa(n) + " invocations"
+}
+
+// withoutUnmatched returns list without the young identities other does not
+// have: those marked only, or any young one when only is empty.
+func withoutUnmatched(list, other []ProcessIdentity, only string) []ProcessIdentity {
+	has := make(map[ProcessIdentity]bool, len(other))
+	for _, o := range other {
+		has[o.key()] = true
+	}
+	out := make([]ProcessIdentity, 0, len(list))
+	for _, id := range list {
+		held := id.Young != "" && (only == "" || id.Young == only)
+		if held && !has[id.key()] {
+			continue
+		}
+		out = append(out, id)
+	}
+	return out
+}
+
+// etimeSlack is how much younger than the time between two process lists a
+// process has to be to have started after the first. ps prints whole
+// seconds, and the clock is read just before ps runs, so a process that
+// started a moment before the last list could otherwise look as if it had
+// started after it, and one restart would be counted twice.
+const etimeSlack = 2 * time.Second
+
+// startedSince reports a young process that cannot be the one a process list
+// read since earlier saw: it is younger than the time between the two, with
+// etimeSlack to spare. An unknown interval says it can be.
+func startedSince(c ProcessIdentity, since time.Duration) bool {
+	return since > 0 && c.Young != "" && c.age+etimeSlack < since
+}
+
+// restarting reports the processes that have restarted at least twice: under
+// a minute old at the last report, after having been seen running for
+// longer, and started again since. A process that restarts once with the
+// same command line, as an upgrade does, is the process it was; one that
+// keeps doing it is the line a crash loop gets.
+//
+// It says restarting rather than crashing, because the process table cannot
+// tell the two apart. A daemon something reloads on a schedule just before
+// every report, as logrotate does, gets the line as well, and the line is
+// true of it. A crash loop that changes its command line each time is a
+// different invocation, and is gone once rather than restarting.
+func restarting(prev, curr []ProcessIdentity, since time.Duration) []Change {
+	if since <= 0 {
+		return nil
+	}
+	restarted := map[ProcessIdentity]bool{}
+	for _, p := range prev {
+		if p.Young == youngRestarted {
+			restarted[p.key()] = true
+		}
+	}
+	var out []Change
+	for _, c := range curr {
+		if !startedSince(c, since) || !restarted[c.key()] {
+			continue
+		}
+		out = append(out, Change{
+			Kind:    kindState,
+			Subject: c.Name,
+			Detail:  "restarting — under a minute old at this report and the last",
+			noun:    nounProcesses,
+		})
+	}
+	return out
 }
 
 func groupProcessesByName(list []ProcessIdentity) map[string]map[string]bool {

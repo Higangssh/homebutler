@@ -110,7 +110,7 @@ func withoutOwned(prev []ProcessIdentity, owned, kept []system.ProcessInfo) []Pr
 	}
 	out := make([]ProcessIdentity, 0, len(prev))
 	for _, id := range prev {
-		if isContainerRuntime(id.Name) || ownedIDs[id] {
+		if isContainerRuntime(id.Name) || ownedIDs[id.key()] {
 			continue
 		}
 		out = append(out, id)

@@ -203,9 +203,11 @@ func TestParseElapsed(t *testing.T) {
 		"01:30":       90 * time.Second,
 		"02:01:30":    2*time.Hour + time.Minute + 30*time.Second,
 		"01-01:53:03": 25*time.Hour + 53*time.Minute + 3*time.Second,
-		"garbage":     0,
-		"":            0,
-		"1:2:3:4":     0,
+		"garbage":     ElapsedUnknown,
+		"":            ElapsedUnknown,
+		"1:2:3:4":     ElapsedUnknown,
+		"x-01:00":     ElapsedUnknown,
+		"01:xx":       ElapsedUnknown,
 	}
 	for in, want := range cases {
 		if got := parseElapsed(in); got != want {

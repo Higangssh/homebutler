@@ -42,7 +42,7 @@ after is not "no change" when one of them is a different container.
 | `new` | one that is there and was not |
 | `replaced` | the same name, a different container underneath |
 | `image` | the same container, a different image |
-| `state` | the same container, running where it was stopped or the reverse |
+| `state` | the same container, running where it was stopped or the reverse; or a process restarting, started again since a report at which it had just restarted |
 | `port` | the same port, a different process answering on it |
 | `disk` | a mount whose usage moved by more than half a gigabyte |
 
@@ -74,7 +74,25 @@ A report nobody reads is worse than no report. These are excluded on purpose:
   guessed: two runs thirty seconds apart on an idle machine reported `new head`
   and `new sed` — the shell pipeline that was reading the report. Cron jobs and
   package managers arrive the same way. A process held back is not lost; it is
-  reported on the next run, by which time it has earned the word "new".
+  reported on the next run, by which time it has earned the word "new". The
+  rule decides what a comparison says, not what a baseline remembers: the
+  first report keeps its young processes as `unconfirmed`, so something that
+  started half a minute before it — a container just recreated, the tmux
+  session the report was run from — is not called new the next day. A process
+  counts once a snapshot has seen it running for a minute. Until then it is
+  neither new nor gone, so the report's own ssh session, shell and `| jq` get
+  no line as long as they are under a minute old at each report, and nor does
+  a job that runs for a few seconds every so often. A shell that has been open
+  longer is the operator's, and is `gone` once it is closed. The
+  cost is that something never seen running for a minute that then stops is
+  not reported either. A daemon that restarted with the same command line just
+  before a report is the same daemon, and is neither gone nor new. One that
+  had restarted just before the last report and has started again since is
+  `state: restarting`, which is what a crash loop looks like from the process
+  table. A daemon reloaded on a schedule shortly before every report, as
+  logrotate does, gets the same line, and it is true of it. A crash loop that
+  changes its command line each time is a different invocation each time,
+  and shows as `gone` once rather than `restarting`.
 - **Processes that belong to a container, or to `watch`.** Anything running
   inside a container, Docker's per-container `containerd-shim` and
   `docker-proxy`, and the helpers `homebutler watch start` runs are left out of

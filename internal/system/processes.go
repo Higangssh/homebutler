@@ -156,9 +156,9 @@ func allProcesses() ([]ProcessInfo, error) {
 
 // ElapsedUnknown marks a process the invocation lookup did not match — it
 // exited between the two ps calls, or ps printed it in a shape this does not
-// parse. It is distinct from a young process: dropping an unknown-age daemon
-// from a snapshot makes it disappear and come back, a pair of changes for
-// something that never stopped.
+// parse — or one whose elapsed time could not be read. It is distinct from a
+// young process: holding an unknown-age daemon back makes it disappear and
+// come back, a pair of changes for something that never stopped.
 const ElapsedUnknown = time.Duration(-1)
 
 // AllProcesses returns every running process except kernel threads, with the
@@ -253,29 +253,30 @@ func parseInvocations(out string) map[int]invocation {
 }
 
 // parseElapsed reads ps's etime format: [[dd-]hh:]mm:ss. An unparseable
-// value returns zero, which callers treat as "too young to report" — the
-// safer direction, since a process wrongly held back appears on the next run
-// and one wrongly reported is noise forever.
+// value is ElapsedUnknown, not zero. Zero is a process that has only just
+// started, which a report holds back from what it says, and on a ps whose
+// etime this cannot read that would be every process: a report silent about
+// the whole machine. An unknown age is compared as an old one.
 func parseElapsed(value string) time.Duration {
 	days := 0
 	if before, after, found := strings.Cut(value, "-"); found {
 		d, err := strconv.Atoi(before)
 		if err != nil {
-			return 0
+			return ElapsedUnknown
 		}
 		days, value = d, after
 	}
 
 	parts := strings.Split(value, ":")
 	if len(parts) < 2 || len(parts) > 3 {
-		return 0
+		return ElapsedUnknown
 	}
 	units := []time.Duration{time.Second, time.Minute, time.Hour}
 	total := time.Duration(days) * 24 * time.Hour
 	for i := range parts {
 		n, err := strconv.Atoi(parts[len(parts)-1-i])
 		if err != nil {
-			return 0
+			return ElapsedUnknown
 		}
 		total += time.Duration(n) * units[i]
 	}
