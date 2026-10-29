@@ -17,7 +17,52 @@ type Definition struct {
 	Name        string `json:"name"`
 	Description string `json:"description"`
 	InputSchema Schema `json:"inputSchema"`
+	// Annotations are filled in by Capability.Definition from the class and,
+	// for a write, from Erases. A registry entry leaves this nil.
+	Annotations *ToolAnnotations `json:"annotations,omitempty"`
 }
+
+// ToolAnnotations are the MCP tool hints, as the 2025-03-26 revision added them
+// and every later one keeps them. A client may use them in its own approval
+// prompt, for example to ask before a destructive call. They are hints: a
+// client may ignore them, and --max-risk is what this server enforces.
+//
+// Both are always sent. The spec defines destructiveHint only when
+// readOnlyHint is false, but a client that reads destructiveHint without
+// checking readOnlyHint first would otherwise see the default, true, on every
+// read.
+//
+// Two hints are left out on purpose, so a client reads the spec's default.
+// idempotentHint (default false) is not true of every tool in any class:
+// docker_restart restarts again and backup_create writes another archive,
+// while docker_stop on a stopped container does nothing more. openWorldHint
+// (default true) is about what a tool talks to, not what it may change:
+// network_scan pings the whole subnet and notify_test posts to a chat service,
+// and getting it right is a per-tool decision nobody has made yet.
+type ToolAnnotations struct {
+	ReadOnlyHint    bool `json:"readOnlyHint"`
+	DestructiveHint bool `json:"destructiveHint"`
+}
+
+// Erasure is a write's answer to whether one call can delete or overwrite
+// something that was already there. The class cannot answer it: write holds
+// docker_restart, which loses nothing, and install_uninstall, which removes an
+// app's containers. A hint taken from the class alone told a client the second
+// was safer than docker_stop.
+//
+// Every write states one, and TestEveryWriteSaysWhetherItErases fails on one
+// that does not. A read and a destructive tool leave it empty: neither class
+// has a second answer.
+type Erasure string
+
+const (
+	// Adds something, or changes something that returns to how it was without
+	// anyone acting. Nothing that was there before is gone after the call.
+	ErasesNothing Erasure = "nothing"
+	// Can delete or overwrite something that was there before, including
+	// housekeeping such as a retention cap pruning old records.
+	ErasesSomething Erasure = "something"
+)
 
 type Schema struct {
 	Type       string              `json:"type"`
@@ -44,6 +89,14 @@ const (
 	RiskWrite       Risk = "write"
 	RiskDestructive Risk = "destructive"
 )
+
+// Risks is every class, least to most dangerous. It is the list --max-risk
+// ranks against and the list annotations are checked against, so a class
+// added to one is added to both. TestEveryRiskClassHasAnnotations fails when a
+// class here has no hints, or a registry entry uses a class not here.
+func Risks() []Risk {
+	return []Risk{RiskRead, RiskWrite, RiskDestructive}
+}
 
 // TargetKind is what a tool can be pointed at. A bool could only ask "is this a
 // named SSH server from servers:", which is the only kind of target homebutler
@@ -168,6 +221,8 @@ type Capability struct {
 	Risk    Risk
 	Targets []TargetKind
 	HTTP    HTTP
+	// Erases is set on every write and on nothing else. See Erasure.
+	Erases Erasure
 }
 
 // supports reports whether the tool can be pointed at kind.
@@ -190,10 +245,56 @@ func For(name string) (Capability, bool) {
 	return Capability{}, false
 }
 
+// annotationsFor is the one place a tool's class, and a write's Erases, become
+// MCP hints. The hints are a claim about what one call can do, and they are
+// never less cautious than the class:
+//
+//   - read: read-only, not destructive.
+//   - write: not read-only, and destructive exactly when it says it erases
+//     something. A write that has not said is annotated destructive.
+//   - destructive: not read-only, destructive.
+//
+// A class it does not know is reported unmapped and annotated destructive, so
+// a client meeting it asks first. That is the direction --max-risk fails in
+// too.
+func annotationsFor(risk Risk, erases Erasure) (ToolAnnotations, bool) {
+	switch risk {
+	case RiskRead:
+		return ToolAnnotations{ReadOnlyHint: true}, true
+	case RiskWrite:
+		return ToolAnnotations{DestructiveHint: erases != ErasesNothing}, true
+	case RiskDestructive:
+		return ToolAnnotations{DestructiveHint: true}, true
+	}
+	return ToolAnnotations{DestructiveHint: true}, false
+}
+
+// ReadOnlyAnnotations are the hints of a read, for a tool a read-only server
+// offers with arguments that keep it from changing anything.
+func ReadOnlyAnnotations() ToolAnnotations {
+	a, _ := annotationsFor(RiskRead, "")
+	return a
+}
+
+// Annotations returns the MCP hints for this capability.
+func (c Capability) Annotations() ToolAnnotations {
+	a, _ := annotationsFor(c.Risk, c.Erases)
+	return a
+}
+
+// Definition is the tool as tools/list sends it: the registry entry's name,
+// description and schema, with its annotations.
+func (c Capability) Definition() Definition {
+	d := c.Tool
+	a := c.Annotations()
+	d.Annotations = &a
+	return d
+}
+
 func Definitions() []Definition {
 	defs := make([]Definition, 0, len(Registry))
 	for _, c := range Registry {
-		defs = append(defs, c.Tool)
+		defs = append(defs, c.Definition())
 	}
 	sort.Slice(defs, func(i, j int) bool { return defs[i].Name < defs[j].Name })
 	return defs
@@ -268,6 +369,7 @@ var Registry = []Capability{
 	},
 	{
 		Risk:    RiskWrite,
+		Erases:  ErasesNothing, // starts a stopped guest; nothing that was there is gone
 		Targets: []TargetKind{TargetProxmox},
 		HTTP:    HTTP{Method: "POST", Path: "/api/proxmox/guests/{vmid}/start", Protection: ProtectionToken, Target: "proxmox_guests"},
 		Tool: Definition{
@@ -278,6 +380,7 @@ var Registry = []Capability{
 	},
 	{
 		Risk:    RiskWrite,
+		Erases:  ErasesNothing, // the guest comes back by itself; its disks are untouched
 		Targets: []TargetKind{TargetProxmox},
 		HTTP:    HTTP{Method: "POST", Path: "/api/proxmox/guests/{vmid}/reboot", Protection: ProtectionToken, Target: "proxmox_guests"},
 		Tool: Definition{
@@ -349,6 +452,7 @@ var Registry = []Capability{
 	},
 	{
 		Risk:    RiskWrite,
+		Erases:  ErasesNothing, // docker restart: the same container comes back with its data
 		Targets: []TargetKind{TargetLocal, TargetServer},
 		HTTP:    HTTP{Method: "POST", Path: "/api/docker/{name}/restart", Protection: ProtectionToken, Target: "docker_list"},
 		Tool: Definition{
@@ -450,6 +554,7 @@ var Registry = []Capability{
 	},
 	{
 		Risk:    RiskWrite,
+		Erases:  ErasesNothing, // sends a magic packet and writes nothing
 		Targets: []TargetKind{TargetLocal},
 		HTTP:    HTTP{Method: "POST", Path: "/api/wake/{name}", Protection: ProtectionToken, Target: TargetFromConfig},
 		Tool: Definition{
@@ -544,6 +649,7 @@ var Registry = []Capability{
 		// cannot prune the baseline somebody wanted. This entry is the write —
 		// the one that saves.
 		Risk:    RiskWrite,
+		Erases:  ErasesSomething, // prunes snapshots past keep, which the caller sets: keep 1 leaves one
 		Targets: []TargetKind{TargetLocal, TargetServer},
 		HTTP:    HTTP{Method: "POST", Path: "/api/report/snapshot", Protection: ProtectionToken},
 		Tool: Definition{
@@ -580,6 +686,7 @@ var Registry = []Capability{
 		// and saves any incident it detects, so a caller cannot treat this as a
 		// free query the way system_status is.
 		Risk:    RiskWrite,
+		Erases:  ErasesSomething, // prunes the oldest incidents past the retention cap
 		Targets: []TargetKind{TargetLocal, TargetServer},
 		HTTP:    HTTP{Method: "POST", Path: "/api/watch/check", Protection: ProtectionToken},
 		Tool: Definition{
@@ -666,6 +773,7 @@ var Registry = []Capability{
 		// directory. No privilege is taken and nothing is installed, which is
 		// what separates it from watch_install (#157).
 		Risk:    RiskWrite,
+		Erases:  ErasesNothing, // refuses a target already watched; only adds
 		Targets: []TargetKind{TargetLocal, TargetServer},
 		HTTP:    HTTP{Method: "POST", Path: "/api/watch/targets", Protection: ProtectionToken},
 		Tool: Definition{
@@ -687,6 +795,7 @@ var Registry = []Capability{
 		// Removing a target stops future checks. Recorded incidents are left
 		// alone, so nothing already observed is lost.
 		Risk:    RiskWrite,
+		Erases:  ErasesSomething, // deletes the target's entry from the watch list
 		Targets: []TargetKind{TargetLocal, TargetServer},
 		HTTP:    HTTP{Method: "POST", Path: "/api/watch/targets/{name}/remove", Protection: ProtectionToken, Target: "watch_list"},
 		Tool: Definition{
@@ -707,6 +816,7 @@ var Registry = []Capability{
 		// write in the sense that matters: something leaves the machine and
 		// arrives on someone's phone.
 		Risk:    RiskWrite,
+		Erases:  ErasesNothing, // sends a message to each channel and changes nothing here
 		Targets: []TargetKind{TargetLocal, TargetServer},
 		HTTP:    HTTP{Method: "POST", Path: "/api/notify/test", Protection: ProtectionToken},
 		Tool: Definition{
@@ -737,6 +847,7 @@ var Registry = []Capability{
 	},
 	{
 		Risk:    RiskWrite,
+		Erases:  ErasesSomething, // prunes older archives when retention is configured
 		Targets: []TargetKind{TargetLocal, TargetServer},
 		HTTP:    HTTP{Method: "POST", Path: "/api/backup", Protection: ProtectionToken},
 		Tool: Definition{
@@ -774,6 +885,7 @@ var Registry = []Capability{
 	},
 	{
 		Risk:    RiskWrite,
+		Erases:  ErasesSomething, // prunes drill records past the newest 50
 		Targets: []TargetKind{TargetLocal, TargetServer},
 		HTTP:    HTTP{Method: "POST", Path: "/api/backup/drill", Protection: ProtectionToken},
 		Tool: Definition{
@@ -822,6 +934,7 @@ var Registry = []Capability{
 	},
 	{
 		Risk:    RiskWrite,
+		Erases:  ErasesSomething, // rewrites docker-compose.yml over an existing one, edits and all
 		Targets: []TargetKind{TargetLocal},
 		HTTP:    HTTP{Method: "POST", Path: "/api/install/{app}", Protection: ProtectionToken, Target: "install_list"},
 		Tool: Definition{
@@ -855,6 +968,7 @@ var Registry = []Capability{
 	},
 	{
 		Risk:    RiskWrite,
+		Erases:  ErasesSomething, // compose down removes the containers, and filebrowser's database with them (#327)
 		Targets: []TargetKind{TargetLocal},
 		HTTP:    HTTP{Method: "POST", Path: "/api/install/{app}/uninstall", Protection: ProtectionToken, Target: "install_list"},
 		Tool: Definition{
