@@ -17,23 +17,38 @@ import (
 // taken is chance.
 //
 // A service is on demand when its unit file is static, no loaded unit wants
-// or requires it, and it is started by a D-Bus name, a socket, a path or a
-// timer. That separates fwupd from udisks2, which has a bus name too but is
-// enabled and wanted by graphical.target.
+// or requires it, and it is started by a D-Bus name or a socket. That
+// separates fwupd from udisks2, which has a bus name too but is enabled and
+// wanted by graphical.target.
+//
+// A timer or a path unit does not make a service on demand. apt-daily,
+// fstrim and the rest are static and wanted by nothing too, and what they
+// start is a job: one still there a minute later is the hung run a report
+// exists to call new.
+//
+// The rule cannot see whether a daemon exits once idle. systemd records how
+// a service is started, not whether it stops by itself, and nothing in the
+// unit says which. polkit is static and started over D-Bus like fwupd, and
+// on a host where nothing requires it, it is on demand by this rule though it
+// stays up once started, so it stopping is not reported either.
 type UnitLookup struct {
 	// Cgroup returns the contents of /proc/<pid>/cgroup.
 	Cgroup func(pid int) (string, error)
 	// Systemctl runs systemctl with args and gives up when ctx is done.
 	Systemctl func(ctx context.Context, args ...string) (string, error)
-	// Timeout bounds the one systemctl call.
+	// Timeout is how long the one systemctl call has before it is killed.
 	Timeout time.Duration
 }
 
-// unitTimeout is how long a report waits for systemctl. Asking about every
-// running service takes a few tens of milliseconds on a Raspberry Pi; a
-// systemctl that has not answered in two seconds is not going to, and report
-// runs from cron.
-const unitTimeout = 2 * time.Second
+// unitTimeout and unitWaitDelay together are the longest a report waits for
+// systemctl: two seconds. Asking about every running service takes a few tens
+// of milliseconds on a Raspberry Pi; a systemctl that has not answered by
+// then is not going to, and report runs from cron. unitWaitDelay is how long
+// a killed systemctl gets to let go of its output.
+const (
+	unitTimeout   = 1500 * time.Millisecond
+	unitWaitDelay = 500 * time.Millisecond
+)
 
 var defaultUnits = UnitLookup{
 	Cgroup: func(pid int) (string, error) {
@@ -42,7 +57,7 @@ var defaultUnits = UnitLookup{
 	},
 	Systemctl: func(ctx context.Context, args ...string) (string, error) {
 		cmd := exec.CommandContext(ctx, "systemctl", args...)
-		cmd.WaitDelay = time.Second
+		cmd.WaitDelay = unitWaitDelay
 		out, err := cmd.Output()
 		return string(out), err
 	},
@@ -125,7 +140,18 @@ func isOnDemand(props map[string]string) bool {
 	return props["LoadState"] == "loaded" &&
 		props["UnitFileState"] == "static" &&
 		props["WantedBy"] == "" && props["RequiredBy"] == "" &&
-		(props["BusName"] != "" || props["TriggeredBy"] != "")
+		(props["BusName"] != "" || triggeredBySocket(props["TriggeredBy"]))
+}
+
+// triggeredBySocket reports a TriggeredBy list naming a socket unit. A timer
+// or a path unit is not one; see UnitLookup.
+func triggeredBySocket(triggers string) bool {
+	for _, t := range strings.Fields(triggers) {
+		if strings.HasSuffix(t, ".socket") {
+			return true
+		}
+	}
+	return false
 }
 
 // serviceOf reads the system service a process runs in from its

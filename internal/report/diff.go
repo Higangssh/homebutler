@@ -641,7 +641,7 @@ func identityOf(p system.ProcessInfo) ProcessIdentity {
 // place and nothing is ever said.
 func diffProcesses(prev, curr []ProcessIdentity, since time.Duration) []Change {
 	older := withoutUnmatched(prev, curr, youngUnconfirmed)
-	newer := withoutUnmatched(curr, prev, "")
+	newer := append(withoutUnmatched(curr, prev, ""), youngReplacements(curr, prev, older)...)
 	prevByName := groupProcessesByName(withoutOnDemand(older, newer))
 	currByName := groupProcessesByName(withoutOnDemand(newer, older))
 
@@ -705,6 +705,37 @@ func invocationCount(n int) string {
 		return "1 invocation"
 	}
 	return strconv.Itoa(n) + " invocations"
+}
+
+// youngReplacements returns the young on-demand identities in curr that
+// prev did not have, under a name older has an identity curr does not. That
+// is an on-demand daemon started again with a different command line, and
+// it is reported as replaced now. Held back until it had run for a minute,
+// it would never be: the snapshot does not keep a young arrival, so by the
+// next report the old command line is forgotten, and an on-demand daemon on
+// its own is not new.
+func youngReplacements(curr, prev, older []ProcessIdentity) []ProcessIdentity {
+	inPrev := make(map[ProcessIdentity]bool, len(prev))
+	for _, p := range prev {
+		inPrev[p.key()] = true
+	}
+	inCurr := make(map[ProcessIdentity]bool, len(curr))
+	for _, c := range curr {
+		inCurr[c.key()] = true
+	}
+	departed := map[string]bool{}
+	for _, o := range older {
+		if !inCurr[o.key()] {
+			departed[o.Name] = true
+		}
+	}
+	var out []ProcessIdentity
+	for _, c := range curr {
+		if c.Young != "" && c.OnDemand && !inPrev[c.key()] && departed[c.Name] {
+			out = append(out, c)
+		}
+	}
+	return out
 }
 
 // withoutOnDemand returns list without the on-demand identities other does
@@ -781,6 +812,10 @@ func startedSince(c ProcessIdentity, since time.Duration) bool {
 // every report, as logrotate does, gets the line as well, and the line is
 // true of it. A crash loop that changes its command line each time is a
 // different invocation, and is gone once rather than restarting.
+//
+// An on-demand daemon is left out. It is started when something asks for it
+// and exits once idle, so two reports that each come shortly after it was
+// asked something see it young twice, and that is it working as designed.
 func restarting(prev, curr []ProcessIdentity, since time.Duration) []Change {
 	if since <= 0 {
 		return nil
@@ -793,7 +828,7 @@ func restarting(prev, curr []ProcessIdentity, since time.Duration) []Change {
 	}
 	var out []Change
 	for _, c := range curr {
-		if !startedSince(c, since) || !restarted[c.key()] {
+		if c.OnDemand || !startedSince(c, since) || !restarted[c.key()] {
 			continue
 		}
 		out = append(out, Change{

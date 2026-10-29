@@ -100,16 +100,26 @@ A report nobody reads is worse than no report. These are excluded on purpose:
   Linux, a process's service is read from `/proc/<pid>/cgroup`, and every
   service found is asked about in one `systemctl show` call. A service is on
   demand when its unit file is `static`, nothing wants or requires it, and a
-  D-Bus name, a socket, a path or a timer starts it. `udisks2` has a bus name
-  too, but it is enabled and wanted by `graphical.target`, so it is still
-  reported. A different command line under the same name is still
-  `replaced`, and one restarting at every report is still `restarting`.
+  D-Bus name or a socket starts it. `udisks2` has a bus name too, but it is
+  enabled and wanted by `graphical.target`, so it is still reported. A service
+  a timer or a path unit starts is not on demand: `apt-daily` and `fstrim`
+  run jobs, and one still there a minute later has hung, which is `new`. A
+  different command line under the same name is still `replaced`, on the
+  report that first sees it. An on-demand daemon young at two reports in a
+  row is not `restarting`, since being started again is what it does.
   Whenever the service cannot be determined — macOS, no systemd, a process in
   a user's session or a container, a cgroup that cannot be read, a
-  `systemctl` that fails or takes longer than two seconds — the process is
-  compared as before. The snapshot records it as `on_demand: true` on the
+  `systemctl` that fails or has not answered within two seconds — the process
+  is compared as before. The snapshot records it as `on_demand: true` on the
   process, because a `gone` is judged from the older snapshot: the process
   is not running at the newer one to be asked about.
+
+  The cost is a daemon started the same way that stays up once started.
+  systemd records how a service is started, not whether it exits by itself,
+  and nothing in the unit says which. `polkit` is the usual one: static and
+  started over D-Bus like `fwupd`, so on a host where nothing requires it,
+  `polkitd` stopping is not reported either. Where something does require
+  it, as `ModemManager` does on Ubuntu, it is compared as before.
 - **Processes that belong to a container, or to `watch`.** Anything running
   inside a container, Docker's per-container `containerd-shim` and
   `docker-proxy`, and the helpers `homebutler watch start` runs are left out of

@@ -13,7 +13,10 @@ import (
 // packagekit are started over D-Bus and exit when idle; udisks2 has a bus name
 // too but is enabled; polkit is static and D-Bus activated, but ModemManager
 // requires it; dbus is static and socket activated, but wanted by
-// multi-user.target; ssh is socket activated and disabled.
+// multi-user.target; ssh is socket activated and disabled. uuidd is static,
+// socket activated and wanted by nothing. apt-daily and apport-autoreport are
+// static and wanted by nothing too, but a timer and a path unit start them,
+// and what those start is a job that can hang.
 const systemctlShow = `BusName=org.freedesktop.fwupd
 Id=fwupd.service
 RequiredBy=
@@ -69,6 +72,22 @@ WantedBy=
 TriggeredBy=apt-daily.timer
 LoadState=loaded
 UnitFileState=static
+
+BusName=
+Id=apport-autoreport.service
+RequiredBy=
+WantedBy=
+TriggeredBy=apport-autoreport.path
+LoadState=loaded
+UnitFileState=static
+
+BusName=
+Id=uuidd.service
+RequiredBy=
+WantedBy=
+TriggeredBy=uuidd.socket
+LoadState=loaded
+UnitFileState=static
 `
 
 type fakeSystemctl struct {
@@ -122,6 +141,8 @@ func piProcesses() []ProcessInfo {
 		{PID: 18, Name: "fwupd-helper"},
 		{PID: 19, Name: "sleep"},
 		{PID: 20, Name: "gone-already"},
+		{PID: 21, Name: "uuidd"},
+		{PID: 22, Name: "whoopsie-upload-all"},
 	}
 }
 
@@ -140,24 +161,27 @@ var piCgroups = map[int]string{
 	// A user unit has the same name as an on-demand system one. It is not
 	// the system manager's, and is not asked about.
 	19: "0::/user.slice/user-1000.slice/user@1000.service/app.slice/fwupd.service\n",
+	21: "0::/system.slice/uuidd.service\n",
+	22: "0::/system.slice/apport-autoreport.service\n",
 }
 
 // #363: fwupd and packagekit are started over D-Bus and exit once idle, so
 // whether one is running at a report is chance. udisks2 has a bus name too,
-// and is enabled.
+// and is enabled. apt-get under apt-daily is a timer's job, and one that is
+// still there at the next report has hung, which is news.
 func TestOnDemandServicesAreTheStaticOnesNothingWantsAndSomethingActivates(t *testing.T) {
 	sc := &fakeSystemctl{out: systemctlShow}
 	procs := piProcesses()
 	UnitLookup{Cgroup: cgroups(piCgroups), Systemctl: sc.run, Timeout: time.Second}.Mark(procs)
 
-	if got, want := onDemandPIDs(procs), []int{10, 11, 16, 18}; !reflect.DeepEqual(got, want) {
-		t.Errorf("on demand: got pids %v, want %v (fwupd, packagekitd, apt-get, fwupd's helper)", got, want)
+	if got, want := onDemandPIDs(procs), []int{10, 11, 18, 21}; !reflect.DeepEqual(got, want) {
+		t.Errorf("on demand: got pids %v, want %v (fwupd, packagekitd, fwupd's helper, uuidd)", got, want)
 	}
 	if len(sc.calls) != 1 {
 		t.Fatalf("want one systemctl call for every unit, got %d", len(sc.calls))
 	}
 	want := []string{"show", "--no-pager", "--property=Id,LoadState,UnitFileState,WantedBy,RequiredBy,BusName,TriggeredBy", "--",
-		"apt-daily.service", "dbus.service", "fwupd.service", "packagekit.service", "polkit.service", "ssh.service", "udisks2.service"}
+		"apport-autoreport.service", "apt-daily.service", "dbus.service", "fwupd.service", "packagekit.service", "polkit.service", "ssh.service", "udisks2.service", "uuidd.service"}
 	if !reflect.DeepEqual(sc.calls[0], want) {
 		t.Errorf("systemctl args:\n got %q\nwant %q", sc.calls[0], want)
 	}

@@ -1,6 +1,7 @@
 package report
 
 import (
+	"context"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -218,4 +219,91 @@ func savedOnDemand(s Snapshot) map[string]bool {
 		out[p.Name] = p.OnDemand
 	}
 	return out
+}
+
+// A different command line is replaced on the report that sees it, young or
+// not. Held back for a minute it would never be reported: the young arrival
+// is not saved, and by the next report the old command line is forgotten.
+func TestAnOnDemandDaemonStartedWithADifferentCommandLineJustNowIsReplaced(t *testing.T) {
+	r := newReports(t)
+	r.after(0, aged(time.Hour, sshd, fwupd))
+	changed := fwupd
+	changed.Command = "/usr/libexec/fwupd/fwupd --verbose"
+	got := changeTargets(r.after(time.Hour, with(aged(2*time.Hour, sshd), aged(10*time.Second, changed))))
+	if !reflect.DeepEqual(got, []string{"replaced fwupd"}) {
+		t.Fatalf("want fwupd replaced, got %v", got)
+	}
+	if got := changeTargets(r.after(time.Hour, aged(3*time.Hour, sshd, changed))); len(got) != 0 {
+		t.Fatalf("the replacement was reported again: %v", got)
+	}
+}
+
+// An on-demand daemon asked something shortly before two reports in a row is
+// young at both. That is what it is for, not a crash loop.
+func TestAnOnDemandDaemonActivatedBeforeEveryReportIsNotRestarting(t *testing.T) {
+	r := newReports(t)
+	r.after(0, aged(time.Hour, sshd, fwupd))
+	for i := range 3 {
+		run := with(aged(time.Duration(i+2)*time.Hour, sshd), aged(20*time.Second, fwupd))
+		if got := changeTargets(r.after(time.Hour, run)); len(got) != 0 {
+			t.Fatalf("report %d: an on-demand daemon activated again was reported: %v", i+2, got)
+		}
+	}
+}
+
+// A timer's job is not on demand. hbjob.service is static and wanted by
+// nothing, as fwupd is, but hbjob.timer starts it, and a run still there 100
+// seconds later has hung. The rule runs here as the report runs it, on what
+// systemctl says.
+func TestAHungTimerJobIsStillNew(t *testing.T) {
+	job := system.ProcessInfo{PID: 3500, PPID: 1, Name: "hbjob", Command: "/usr/local/bin/hbjob"}
+	daemon := unmarked(fwupd)
+	cgroup := map[int]string{
+		sshd.PID:   "0::/system.slice/ssh.service\n",
+		job.PID:    "0::/system.slice/hbjob.service\n",
+		daemon.PID: "0::/system.slice/fwupd.service\n",
+	}
+	systemctl := `Id=ssh.service
+LoadState=loaded
+UnitFileState=enabled
+WantedBy=multi-user.target
+
+Id=hbjob.service
+LoadState=loaded
+UnitFileState=static
+WantedBy=
+RequiredBy=
+BusName=
+TriggeredBy=hbjob.timer
+
+Id=fwupd.service
+LoadState=loaded
+UnitFileState=static
+WantedBy=
+RequiredBy=
+BusName=org.freedesktop.fwupd
+TriggeredBy=
+`
+	lookup := system.UnitLookup{
+		Cgroup: func(pid int) (string, error) {
+			c, ok := cgroup[pid]
+			if !ok {
+				return "", os.ErrNotExist
+			}
+			return c, nil
+		},
+		Systemctl: func(context.Context, ...string) (string, error) { return systemctl, nil },
+		Timeout:   time.Second,
+	}
+	marked := func(list []system.ProcessInfo) []system.ProcessInfo {
+		lookup.Mark(list)
+		return list
+	}
+
+	r := newReports(t)
+	r.after(0, marked(aged(time.Hour, sshd)))
+	got := changeTargets(r.after(time.Hour, marked(with(aged(2*time.Hour, sshd), aged(100*time.Second, job, daemon)))))
+	if !reflect.DeepEqual(got, []string{"new hbjob"}) {
+		t.Fatalf("want the hung timer job new and fwupd not, got %v", got)
+	}
 }
