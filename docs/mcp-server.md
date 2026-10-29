@@ -137,6 +137,59 @@ What read mode does and does not mean:
   CLI, `homebutler serve` and anything else installed. Read mode limits what
   an agent can do through this process.
 
+### Tool annotations
+
+Each tool in `tools/list` carries MCP `annotations`, so a client can use them
+in its own approval prompt, for example asking before a destructive call. Both
+`readOnlyHint` and `destructiveHint` are sent on every tool. They are a claim
+about what one call to that tool can do, and they are never less cautious than
+its class:
+
+- A `read` tool is `{"readOnlyHint": true, "destructiveHint": false}`. Like
+  the class, that says what a call does to the machine, not what it returns:
+  the list above still applies.
+- A `destructive` tool is `{"readOnlyHint": false, "destructiveHint": true}`.
+- A `write` tool is `"readOnlyHint": false`, and `destructiveHint` is true when
+  one call can delete or overwrite something that was already there.
+
+`destructiveHint: false` on a write means a call only adds something, or
+changes something that comes back without anyone acting: `docker_restart`,
+`proxmox_guest_start`, `proxmox_guest_reboot`, `wake`, `watch_add` and
+`notify_test`. It does not mean the call is harmless or invisible. A restart
+still interrupts whoever is using the container, and `notify_test` sends a real
+message to every channel.
+
+Three writes are annotated destructive although their class is not, because of
+something a call can take with it:
+
+- `install_uninstall` runs `compose down`, which removes the app's containers.
+  The app directory stays, but filebrowser's accounts and settings do not:
+  reinstalling it starts a new database
+  ([#327](https://github.com/Higangssh/homebutler/issues/327)).
+- `report` prunes saved snapshots down to `keep`, which the caller sets. `keep:
+  1` leaves one, and the history every later comparison is measured against is
+  gone.
+- `backup_create` prunes older archives when `backup.retention` is configured.
+
+`watch_check` (which prunes incidents past the retention cap), `watch_remove`
+(which deletes a watch-list entry), `backup_drill` (which prunes drill records
+past the newest 50) and `install_app` (which rewrites an existing
+`docker-compose.yml`, edits and all) are annotated destructive for the same
+reason.
+
+In read mode `report` is annotated as a read, and its description says it
+never saves a snapshot, because it runs as `no_save` there.
+
+`idempotentHint` and `openWorldHint` are not sent, so a client reads the spec's
+defaults: not idempotent, and may reach things outside the machine. Neither is
+true of a whole class. `docker_stop` twice does nothing more and
+`docker_restart` twice restarts twice; `network_scan` pings the subnet and
+`notify_test` posts to a chat service while `docker_list` asks only Docker.
+
+Annotations are hints. A client may ignore them, and a server's hints are only
+as trustworthy as the server. They do not replace `--max-risk`: a tool above
+the ceiling is refused by this server whatever the client does with its hints.
+
 ## Available Tools
 
 | Tool                     | Description                                                                                                            |
@@ -218,7 +271,10 @@ is rejected because the two opening modes contradict each other.
 
 For a tools-only stdio server these revisions describe the same tool surface.
 Modern `tools/list` responses include `resultType`, a five-minute `ttlMs` hint,
-`cacheScope: "public"`, and a deterministic tool order. What the later
+`cacheScope: "public"`, and a deterministic tool order. Every tool carries
+the `annotations` described under [Tool annotations](#tool-annotations), on
+every revision. `2024-11-05` predates them, so to a client of that revision
+they are an unknown field, as `ttlMs` already is. What the later
 revisions added is either out of scope here — resources, prompts, sampling,
 roots, elicitation, tasks, and everything about Streamable HTTP — or already
 how homebutler behaves.

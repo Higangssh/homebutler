@@ -16,6 +16,7 @@
 package contract
 
 import (
+	"encoding/json"
 	"fmt"
 	"reflect"
 	"sort"
@@ -48,6 +49,11 @@ func Surface() string {
 
 	b.WriteString("\n## tools\n")
 	for _, line := range toolLines() {
+		b.WriteString(line + "\n")
+	}
+
+	b.WriteString("\n## annotations\n")
+	for _, line := range annotationLines() {
 		b.WriteString(line + "\n")
 	}
 
@@ -123,6 +129,24 @@ func toolLines() []string {
 			line += " required=[" + strings.Join(required, " ") + "]"
 		}
 		lines = append(lines, line)
+	}
+	sort.Strings(lines)
+	return lines
+}
+
+// annotationLines records the MCP hints each tool goes out with in the default
+// tools/list, as the JSON a client reads. One line per tool rather than per
+// class: a write's hints already depend on what that tool can erase, and a
+// tool's hints changing is a change to the approval prompt of every client
+// that reads them.
+func annotationLines() []string {
+	lines := make([]string, 0, len(capability.Registry))
+	for _, c := range capability.Registry {
+		raw, err := json.Marshal(c.Annotations())
+		if err != nil {
+			panic(err)
+		}
+		lines = append(lines, fmt.Sprintf("%s %s", c.Tool.Name, raw))
 	}
 	sort.Strings(lines)
 	return lines

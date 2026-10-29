@@ -195,12 +195,16 @@ type Server struct {
 	out     io.Writer
 }
 
-// riskRank orders the classes so a ceiling can be compared against them.
-var riskRank = map[capability.Risk]int{
-	capability.RiskRead:        0,
-	capability.RiskWrite:       1,
-	capability.RiskDestructive: 2,
-}
+// riskRank orders the classes so a ceiling can be compared against them. It is
+// built from capability.Risks(), the same list annotations are checked
+// against, so a class cannot be ranked here and unannotated there.
+var riskRank = func() map[capability.Risk]int {
+	rank := map[capability.Risk]int{}
+	for i, risk := range capability.Risks() {
+		rank[risk] = i
+	}
+	return rank
+}()
 
 // SetMaxRisk limits the server to tools at or below risk. A tool above it is
 // left out of tools/list and refused by tools/call, both: a client that knows
@@ -221,6 +225,13 @@ func (s *Server) SetMaxRisk(risk capability.Risk) error {
 // could not be asked the one question homebutler exists to answer.
 var readModeTools = map[string]map[string]any{
 	"report": {"no_save": true},
+}
+
+// readModeDescriptions replace a readModeTools entry's description in a
+// read-only server's tools/list. The registry's says what the arguments do,
+// and in read mode the arguments it describes are overridden.
+var readModeDescriptions = map[string]string{
+	"report": "Generate a butler-style health report with snapshot comparison, warnings, notable changes, and suggested actions. This server was started with --max-risk read, so it never saves a snapshot: it compares against the last one saved, by cron or by hand, and no_save and keep are ignored",
 }
 
 // allowed reports whether name may be listed and called, and the arguments to
@@ -268,13 +279,26 @@ func (s *Server) toolsCacheScope() string {
 }
 
 // listedTools is tools/list for this server's ceiling.
+//
+// A tool offered only because readModeTools forces arguments on it is listed
+// as the read it is with those arguments: read hints, and a description that
+// does not promise the arguments it overrides.
 func (s *Server) listedTools() []toolDef {
 	all := capability.Definitions()
 	out := make([]toolDef, 0, len(all))
 	for _, d := range all {
-		if ok, _ := s.allowed(d.Name); ok {
-			out = append(out, d)
+		ok, forced := s.allowed(d.Name)
+		if !ok {
+			continue
 		}
+		if len(forced) > 0 {
+			a := capability.ReadOnlyAnnotations()
+			d.Annotations = &a
+			if desc := readModeDescriptions[d.Name]; desc != "" {
+				d.Description = desc
+			}
+		}
+		out = append(out, d)
 	}
 	return out
 }
