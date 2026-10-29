@@ -458,6 +458,14 @@ type ProcessIdentity struct {
 	// before this field existed: those releases kept only old ones.
 	Young string `json:"young,omitempty"`
 
+	// OnDemand says every process sharing this identity belonged to a systemd
+	// service that runs only when something asks for it, such as fwupd, which
+	// D-Bus starts and which exits once idle. Whether one is running when a
+	// report is taken is chance, so it appearing or leaving is not a change.
+	// Absent is a process whose service is not known to be on demand, which
+	// is every process in a snapshot written before this field existed.
+	OnDemand bool `json:"on_demand,omitempty"`
+
 	// age is how long the oldest process sharing this identity had been
 	// running, on this run. It is never written; it is what tells a process
 	// that started again since the last report from one that has not.
@@ -514,7 +522,9 @@ func isYoung(p system.ProcessInfo) bool {
 // signal rather than something appearing or disappearing. An identity is
 // young only when every process sharing it is: one old worker is enough to
 // say the invocation was already running. A young identity starts out
-// unconfirmed, which is what a baseline keeps.
+// unconfirmed, which is what a baseline keeps. It is on demand only when every
+// process sharing it is, for the same reason: one systemd could not place is
+// compared as it always was.
 func processIdentities(procs []system.ProcessInfo) []ProcessIdentity {
 	byKey := map[ProcessIdentity]*ProcessIdentity{}
 	var order []ProcessIdentity
@@ -523,11 +533,14 @@ func processIdentities(procs []system.ProcessInfo) []ProcessIdentity {
 		id, seen := byKey[key]
 		if !seen {
 			order = append(order, key)
-			id = &ProcessIdentity{Name: key.Name, Hash: key.Hash, Young: youngUnconfirmed}
+			id = &ProcessIdentity{Name: key.Name, Hash: key.Hash, Young: youngUnconfirmed, OnDemand: true}
 			byKey[key] = id
 		}
 		if !isYoung(p) {
 			id.Young = ""
+		}
+		if !p.OnDemand {
+			id.OnDemand = false
 		}
 		if p.Elapsed > id.age {
 			id.age = p.Elapsed
@@ -617,7 +630,9 @@ func identityOf(p system.ProcessInfo) ProcessIdentity {
 // A young identity is left out when the other side does not have it: young
 // now and absent before is held back until it has run for a minute, and
 // unconfirmed before and absent now was never seen running long enough to
-// have been a change. A restarted one that is absent now is gone.
+// have been a change. A restarted one that is absent now is gone. An
+// on-demand one is left out when the other side does not have it, whatever
+// its age, unless it ran with a different command line; see withoutOnDemand.
 //
 // since is how long before this run's process list the previous one was
 // read. A process that had restarted just before the last report and has
@@ -625,8 +640,10 @@ func identityOf(p system.ProcessInfo) ProcessIdentity {
 // crash loop shows the process table: otherwise every restart keeps its
 // place and nothing is ever said.
 func diffProcesses(prev, curr []ProcessIdentity, since time.Duration) []Change {
-	prevByName := groupProcessesByName(withoutUnmatched(prev, curr, youngUnconfirmed))
-	currByName := groupProcessesByName(withoutUnmatched(curr, prev, ""))
+	older := withoutUnmatched(prev, curr, youngUnconfirmed)
+	newer := append(withoutUnmatched(curr, prev, ""), youngReplacements(curr, prev, older)...)
+	prevByName := groupProcessesByName(withoutOnDemand(older, newer))
+	currByName := groupProcessesByName(withoutOnDemand(newer, older))
 
 	changes := restarting(prev, curr, since)
 	for name, prevHashes := range prevByName {
@@ -690,6 +707,68 @@ func invocationCount(n int) string {
 	return strconv.Itoa(n) + " invocations"
 }
 
+// youngReplacements returns the young on-demand identities in curr that
+// prev did not have, under a name older has an identity curr does not. That
+// is an on-demand daemon started again with a different command line, and
+// it is reported as replaced now. Held back until it had run for a minute,
+// it would never be: the snapshot does not keep a young arrival, so by the
+// next report the old command line is forgotten, and an on-demand daemon on
+// its own is not new.
+func youngReplacements(curr, prev, older []ProcessIdentity) []ProcessIdentity {
+	inPrev := make(map[ProcessIdentity]bool, len(prev))
+	for _, p := range prev {
+		inPrev[p.key()] = true
+	}
+	inCurr := make(map[ProcessIdentity]bool, len(curr))
+	for _, c := range curr {
+		inCurr[c.key()] = true
+	}
+	departed := map[string]bool{}
+	for _, o := range older {
+		if !inCurr[o.key()] {
+			departed[o.Name] = true
+		}
+	}
+	var out []ProcessIdentity
+	for _, c := range curr {
+		if c.Young != "" && c.OnDemand && !inPrev[c.key()] && departed[c.Name] {
+			out = append(out, c)
+		}
+	}
+	return out
+}
+
+// withoutOnDemand returns list without the on-demand identities other does
+// not have, which are an on-demand daemon having been started or having
+// exited. One is kept when other has an identity under the same name that
+// list does not, because that is the daemon running with a different command
+// line, and the hash exists to see that.
+//
+// Whether an identity is on demand is read from list: for a departure that is
+// the older snapshot, which is the only one that saw the process.
+func withoutOnDemand(list, other []ProcessIdentity) []ProcessIdentity {
+	inList := make(map[ProcessIdentity]bool, len(list))
+	for _, id := range list {
+		inList[id.key()] = true
+	}
+	inOther := make(map[ProcessIdentity]bool, len(other))
+	changed := map[string]bool{}
+	for _, o := range other {
+		inOther[o.key()] = true
+		if !inList[o.key()] {
+			changed[o.Name] = true
+		}
+	}
+	out := make([]ProcessIdentity, 0, len(list))
+	for _, id := range list {
+		if id.OnDemand && !inOther[id.key()] && !changed[id.Name] {
+			continue
+		}
+		out = append(out, id)
+	}
+	return out
+}
+
 // withoutUnmatched returns list without the young identities other does not
 // have: those marked only, or any young one when only is empty.
 func withoutUnmatched(list, other []ProcessIdentity, only string) []ProcessIdentity {
@@ -733,6 +812,10 @@ func startedSince(c ProcessIdentity, since time.Duration) bool {
 // every report, as logrotate does, gets the line as well, and the line is
 // true of it. A crash loop that changes its command line each time is a
 // different invocation, and is gone once rather than restarting.
+//
+// An on-demand daemon is left out. It is started when something asks for it
+// and exits once idle, so two reports that each come shortly after it was
+// asked something see it young twice, and that is it working as designed.
 func restarting(prev, curr []ProcessIdentity, since time.Duration) []Change {
 	if since <= 0 {
 		return nil
@@ -745,7 +828,7 @@ func restarting(prev, curr []ProcessIdentity, since time.Duration) []Change {
 	}
 	var out []Change
 	for _, c := range curr {
-		if !startedSince(c, since) || !restarted[c.key()] {
+		if c.OnDemand || !startedSince(c, since) || !restarted[c.key()] {
 			continue
 		}
 		out = append(out, Change{

@@ -213,10 +213,20 @@ type CollectFuncs = inventory.CollectFuncs
 
 // DefaultCollectFuncs returns real system/docker/ports functions, plus the
 // process collector: report is the only caller that compares runs, so it is
-// the only one that asks for it.
+// the only one that asks for it, and for which of them systemd starts on
+// demand.
 func DefaultCollectFuncs() CollectFuncs {
 	fns := inventory.DefaultCollectFuncs()
-	fns.ProcessesFn = system.AllProcesses
+	fns.ProcessesFn = func() ([]system.ProcessInfo, error) {
+		procs, err := system.AllProcesses()
+		if err != nil {
+			return nil, err
+		}
+		// Right after ps, while the processes it listed are still there to
+		// have their cgroups read.
+		system.MarkOnDemand(procs)
+		return procs, nil
+	}
 	return fns
 }
 
