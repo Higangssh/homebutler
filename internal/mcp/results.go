@@ -65,6 +65,12 @@ type InstallResult struct {
 	// that removed everything answers with the shape it always had.
 	KeptVolumes      []string `json:"kept_volumes,omitempty"`
 	UncheckedVolumes []string `json:"unchecked_volumes,omitempty"`
+	// Warning is what install_app or install_uninstall has to say about state
+	// an earlier install left in anonymous Docker volumes with no container
+	// left to copy it from (#327): the install started without it, or the
+	// uninstall's data_preserved does not cover it. Present only when there is
+	// something to say. data_preserved still names the operation.
+	Warning string `json:"warning,omitempty"`
 }
 
 // InstallStatusResult is what `install_status` answers with. It is a read and

@@ -876,7 +876,7 @@ func TestPathTraversalBlocked(t *testing.T) {
 		if _, err := Status(name); err == nil {
 			t.Errorf("Status(%q) should return error", name)
 		}
-		if err := Uninstall(name); err == nil {
+		if _, err := Uninstall(name); err == nil {
 			t.Errorf("Uninstall(%q) should return error", name)
 		}
 		if _, err := Purge(name); err == nil {
@@ -917,7 +917,7 @@ func TestInstallDryRun(t *testing.T) {
 	r, w, _ := os.Pipe()
 	os.Stdout = w
 
-	err := Install(app, opts)
+	_, err := Install(app, opts)
 
 	w.Close()
 	os.Stdout = oldStdout

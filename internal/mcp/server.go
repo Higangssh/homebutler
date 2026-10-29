@@ -821,22 +821,24 @@ func (s *Server) executeTool(name string, args map[string]any) (any, error) {
 		if opts.Port != "" {
 			port = opts.Port
 		}
-		issues := install.PreCheck(app, port)
+		issues := preCheckApp(app, port)
 		if len(issues) > 0 {
 			// Names the app even when it refuses: a caller reading `app` used
 			// to get nothing on this branch.
 			return InstallResult{Status: install.OutcomeFailed, App: appName, Issues: issues}, nil
 		}
-		if err := install.Install(app, opts); err != nil {
+		carried, err := installApp(app, opts)
+		if err != nil {
 			return nil, err
 		}
 		status, _ := install.Status(app.Name)
 		return InstallResult{
-			Status: install.OutcomeInstalled,
-			App:    app.Name,
-			Port:   port,
-			Path:   install.AppDir(app.Name),
-			State:  status,
+			Status:  install.OutcomeInstalled,
+			App:     app.Name,
+			Port:    port,
+			Path:    install.AppDir(app.Name),
+			State:   status,
+			Warning: carried.InstallWarning(app.Name),
 		}, nil
 
 	case "install_status":
@@ -849,11 +851,16 @@ func (s *Server) executeTool(name string, args map[string]any) (any, error) {
 
 	case "install_uninstall":
 		appName := stringArg(args, "app")
-		if err := install.Uninstall(appName); err != nil {
+		appDir := install.GetInstalledPath(appName)
+		carried, err := uninstallApp(appName)
+		if err != nil {
 			return nil, err
 		}
 		preserved := true
-		return InstallResult{Status: install.OutcomeUninstalled, App: appName, DataPreserved: &preserved}, nil
+		return InstallResult{
+			Status: install.OutcomeUninstalled, App: appName, DataPreserved: &preserved,
+			Warning: carried.UninstallWarning(appName, appDir),
+		}, nil
 
 	case "install_purge":
 		appName := stringArg(args, "app")
@@ -875,6 +882,15 @@ func (s *Server) executeTool(name string, args map[string]any) (any, error) {
 // purgeApp is install.Purge, held in a variable so a test can answer for
 // Docker with a volume that was kept.
 var purgeApp = install.Purge
+
+// installApp, uninstallApp and preCheckApp are install.Install, Uninstall and
+// PreCheck, for the same reason: a test can answer with state an earlier
+// install stranded, on a machine without Docker.
+var (
+	installApp   = install.Install
+	uninstallApp = install.Uninstall
+	preCheckApp  = install.PreCheck
+)
 
 // resolveIncidentCap resolves the incident retention cap the same way the
 // watch commands do: config.yaml wins over watch/config.json, and an unset

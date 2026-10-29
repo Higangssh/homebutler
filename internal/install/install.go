@@ -4,9 +4,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
+	"regexp"
 	"runtime"
+	"slices"
 	"strconv"
 	"strings"
 	"text/template"
@@ -107,6 +110,22 @@ type App struct {
 	DefaultPort   string `json:"default_port"`   // default host port
 	ContainerPort string `json:"container_port"` // container port (fixed)
 	DataPath      string `json:"data_path"`      // container data path
+	// StateDirs are the app's own state, kept beside data/ in the app
+	// directory and bound into the container by the compose file. Install
+	// creates them before compose up: Docker would create a missing bind
+	// source as root, and an image that runs as a non-root user then cannot
+	// write to it.
+	StateDirs []StateDir `json:"-"`
+	// ImageUser is the uid:gid the image runs as by itself. Install hands
+	// the state dirs to it when it runs as root and leaves user: out.
+	ImageUser string `json:"-"`
+}
+
+// StateDir is one directory of an app's state: Name under the app
+// directory, bound to Path in the container.
+type StateDir struct {
+	Name string
+	Path string
 }
 
 // ContainerName is the name the app's container runs under, read from its
@@ -132,9 +151,11 @@ type InstallOptions struct {
 // composeContext is passed to the compose template.
 type composeContext struct {
 	Port         string
+	AppDir       string
 	DataDir      string
 	UID          int
 	GID          int
+	User         string // user: for an app with state dirs; see containerUser
 	MediaDir     string
 	DockerSocket string
 }
@@ -203,19 +224,31 @@ var Registry = map[string]App{
 	},
 	"filebrowser": {
 		Name:          "filebrowser",
-		Description:   "Web-based file manager",
+		Description:   "Web-based file manager. Its upstream project is archived and gets no further releases or security fixes",
 		DefaultPort:   "8081",
 		ContainerPort: "80",
 		DataPath:      "/srv",
+		// The image declares /config and /database as volumes as well as
+		// /srv. Left unmapped, each new container got fresh anonymous
+		// volumes, and filebrowser.db did not survive an uninstall (#327).
+		// They sit beside data/, not in it, because data/ is /srv and
+		// everything under /srv can be browsed and downloaded. The image
+		// runs as uid 1000; containerUser decides who owns the directories
+		// Install creates and who the container runs as.
+		StateDirs: []StateDir{{Name: "config", Path: "/config"}, {Name: "database", Path: "/database"}},
+		ImageUser: "1000:1000",
 		ComposeFile: `services:
   filebrowser:
     image: filebrowser/filebrowser:latest
     container_name: filebrowser
-    restart: unless-stopped
+    restart: unless-stopped{{if .User}}
+    user: "{{.User}}"{{end}}
     ports:
       - "{{.Port}}:80"
     volumes:
       - "{{.DataDir}}:/srv"
+      - "{{.AppDir}}/config:/config"
+      - "{{.AppDir}}/database:/database"
 `,
 	},
 	"it-tools": {
@@ -491,6 +524,7 @@ var dnsApps = map[string]string{
 var (
 	checkPortInUse = portInUseBy
 	getInstalled   = loadInstalled
+	dockerCmd      = util.DockerCmd
 )
 
 // PreCheck verifies the system is ready for installation.
@@ -506,7 +540,7 @@ func PreCheck(app App, port string) []string {
 	}
 
 	// Check docker daemon is running
-	if _, err := util.DockerCmd("info"); err != nil {
+	if _, err := dockerCmd("info"); err != nil {
 		issues = append(issues, "docker daemon is not running.\n"+
 			"    Try: sudo systemctl start docker   (Linux)\n"+
 			"         colima start                   (macOS)")
@@ -514,7 +548,7 @@ func PreCheck(app App, port string) []string {
 	}
 
 	// Check docker compose is available
-	if _, err := util.DockerCmd("compose", "version"); err != nil {
+	if _, err := dockerCmd("compose", "version"); err != nil {
 		issues = append(issues, "docker compose is not available.\n"+
 			"    Install: https://docs.docker.com/compose/install/")
 		return issues
@@ -526,7 +560,7 @@ func PreCheck(app App, port string) []string {
 			"    Use --port <number> to pick a different port", port, processInfo))
 	} else {
 		// Also check Docker containers (colima/podman may not show in lsof)
-		dockerOut, _ := util.DockerCmd("ps", "--format", "{{.Names}} {{.Ports}}")
+		dockerOut, _ := dockerCmd("ps", "--format", "{{.Names}} {{.Ports}}")
 		if strings.Contains(dockerOut, ":"+port+"->") {
 			// Extract container name
 			for _, line := range strings.Split(dockerOut, "\n") {
@@ -583,7 +617,7 @@ func PreCheck(app App, port string) []string {
 	composeFile := filepath.Join(GetInstalledPath(app.Name), "docker-compose.yml")
 	if _, err := os.Stat(composeFile); err == nil {
 		// Compose file exists — check if containers are actually running
-		stateOut, _ := util.DockerCmd("compose", "-f", composeFile, "ps", "--format", "{{.State}}")
+		stateOut, _ := dockerCmd("compose", "-f", composeFile, "ps", "--format", "{{.State}}")
 		if strings.TrimSpace(stateOut) == "running" {
 			issues = append(issues, fmt.Sprintf("%s is already running.\n"+
 				"    Run: homebutler install uninstall %s", app.Name, app.Name))
@@ -662,99 +696,176 @@ func ValidatePort(port string) error {
 }
 
 // Install creates the app directory, renders docker-compose.yml, and runs it.
-func Install(app App, opts InstallOptions) error {
+// The Carryover says what it did with an earlier install's state, if anything.
+func Install(app App, opts InstallOptions) (Carryover, error) {
+	var carried Carryover
 	port := app.DefaultPort
 	if opts.Port != "" {
 		port = opts.Port
 	}
 
 	if err := ValidatePort(port); err != nil {
-		return err
+		return carried, err
 	}
 
 	appDir := AppDir(app.Name)
 	dataDir := filepath.Join(appDir, "data")
+	user, chownTo := containerUser(app)
 
 	// Render docker-compose.yml
 	ctx := composeContext{
 		Port:         port,
+		AppDir:       appDir,
 		DataDir:      dataDir,
 		UID:          os.Getuid(),
 		GID:          os.Getgid(),
+		User:         user,
 		MediaDir:     opts.MediaDir,
 		DockerSocket: util.DockerSocket(),
 	}
 
 	tmpl, err := template.New("compose").Parse(app.ComposeFile)
 	if err != nil {
-		return fmt.Errorf("invalid compose template: %w", err)
+		return carried, fmt.Errorf("invalid compose template: %w", err)
 	}
 
 	if opts.DryRun {
 		fmt.Printf("✨ [Dry Run] Rendered docker-compose.yml for %s:\n\n", app.Name)
 		if err := tmpl.Execute(os.Stdout, ctx); err != nil {
-			return fmt.Errorf("failed to render compose file to stdout: %w", err)
+			return carried, fmt.Errorf("failed to render compose file to stdout: %w", err)
 		}
 		fmt.Printf("\n✨ [Dry Run] Would run: docker compose -f %s up -d\n", filepath.Join(appDir, "docker-compose.yml"))
-		return nil
+		return carried, nil
 	}
 
 	// Create directories (only for real installs)
 	if err := os.MkdirAll(dataDir, 0755); err != nil {
 		if util.IsPermissionError(err) {
-			return util.NewHintError("cannot create directory "+dataDir, err, "sudo homebutler install "+app.Name)
+			return carried, util.NewHintError("cannot create directory "+dataDir, err, "sudo homebutler install "+app.Name)
 		}
-		return fmt.Errorf("failed to create directory %s: %w", dataDir, err)
+		return carried, fmt.Errorf("failed to create directory %s: %w", dataDir, err)
+	}
+
+	// Before the old compose file is replaced: it is what says where an
+	// earlier install kept its state.
+	carried, err = carryOverState(app, appDir)
+	if err != nil {
+		return carried, fmt.Errorf("did not replace the earlier %s install: %w", app.Name, err)
+	}
+	for _, d := range app.StateDirs {
+		dir := filepath.Join(appDir, d.Name)
+		if err := os.MkdirAll(dir, 0755); err != nil {
+			if util.IsPermissionError(err) {
+				return carried, util.NewHintError("cannot create directory "+dir, err, "sudo homebutler install "+app.Name)
+			}
+			return carried, fmt.Errorf("failed to create directory %s: %w", dir, err)
+		}
+		if chownTo != nil {
+			if err := chownTree(dir, chownTo[0], chownTo[1]); err != nil {
+				return carried, fmt.Errorf("failed to hand %s to the image's user: %w", dir, err)
+			}
+		}
 	}
 
 	composeFile := filepath.Join(appDir, "docker-compose.yml")
 	f, err := os.Create(composeFile)
 	if err != nil {
 		if util.IsPermissionError(err) {
-			return util.NewHintError("cannot create "+composeFile, err, "sudo homebutler install "+app.Name)
+			return carried, util.NewHintError("cannot create "+composeFile, err, "sudo homebutler install "+app.Name)
 		}
-		return fmt.Errorf("failed to create %s: %w", composeFile, err)
+		return carried, fmt.Errorf("failed to create %s: %w", composeFile, err)
 	}
 	defer f.Close()
 
 	if err := tmpl.Execute(f, ctx); err != nil {
 		f.Close()
 		os.Remove(composeFile)
-		return fmt.Errorf("failed to render compose file: %w", err)
+		return carried, fmt.Errorf("failed to render compose file: %w", err)
 	}
 
 	// Run docker compose up
-	_, err = util.DockerCmd("compose", "-f", composeFile, "up", "-d")
+	_, err = dockerCmd("compose", "-f", composeFile, "up", "-d")
 	if err != nil {
-		return fmt.Errorf("failed to start %s: %w", app.Name, err)
+		return carried, fmt.Errorf("failed to start %s: %w", app.Name, err)
 	}
 
 	// Record install location
-	return saveInstalled(installedApp{
+	return carried, saveInstalled(installedApp{
 		Name: app.Name,
 		Path: appDir,
 		Port: port,
 	})
 }
 
-// Uninstall stops the app and removes its containers.
-func Uninstall(appName string) error {
+// containerUser is the user an app with state dirs runs as, and the owner to
+// give those dirs, if they need one. It is the installing user, so the
+// container owns the directories Install creates, with two exceptions:
+//
+//   - Under rootless Docker or Podman, the container's root is the installing
+//     user on the host, and any other uid is a subordinate one that cannot
+//     write to them. So it runs as 0:0.
+//   - When the installer is root (sudo), running the container as root would
+//     give filebrowser more than its image asks for. It runs as the image's
+//     own user, and the dirs are handed to that user instead.
+//
+// An app without state dirs keeps whatever its image or template says.
+func containerUser(app App) (string, []int) {
+	if len(app.StateDirs) == 0 {
+		return "", nil
+	}
+	if out, err := dockerCmd("info", "--format", "{{.SecurityOptions}}"); err == nil && strings.Contains(out, "rootless") {
+		return "0:0", nil
+	}
+	if os.Geteuid() == 0 {
+		var uid, gid int
+		if _, err := fmt.Sscanf(app.ImageUser, "%d:%d", &uid, &gid); err == nil {
+			return "", []int{uid, gid}
+		}
+		return "", nil
+	}
+	return fmt.Sprintf("%d:%d", os.Getuid(), os.Getgid()), nil
+}
+
+// chownTree gives dir and everything under it to uid:gid.
+func chownTree(dir string, uid, gid int) error {
+	return filepath.WalkDir(dir, func(path string, _ fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		return os.Lchown(path, uid, gid)
+	})
+}
+
+// Uninstall stops the app and removes its containers. The Carryover says what
+// it did with an earlier install's state, if anything.
+func Uninstall(appName string) (Carryover, error) {
+	var carried Carryover
 	if err := ValidateAppName(appName); err != nil {
-		return err
+		return carried, err
 	}
 	appDir := GetInstalledPath(appName)
 	composeFile := filepath.Join(appDir, "docker-compose.yml")
 
 	if _, err := os.Stat(composeFile); os.IsNotExist(err) {
-		return fmt.Errorf("%s is not installed", appName)
+		return carried, fmt.Errorf("%s is not installed", appName)
+	}
+
+	// down removes the container, and with it the only record of which
+	// anonymous volumes held an older install's state, so copy that first.
+	if app, ok := Registry[appName]; ok {
+		var err error
+		carried, err = carryOverState(app, appDir)
+		if err != nil {
+			return carried, fmt.Errorf("did not remove %s's container: %w", appName, err)
+		}
 	}
 
 	// docker compose down
-	if _, err := util.DockerCmd("compose", "-f", composeFile, "down"); err != nil {
-		return fmt.Errorf("failed to stop %s: %w", appName, err)
+	if _, err := dockerCmd("compose", "-f", composeFile, "down"); err != nil {
+		return carried, fmt.Errorf("failed to stop %s: %w", appName, err)
 	}
 
-	return nil
+	return carried, nil
 }
 
 // PurgeResult says which of an app's Docker volumes a purge removed and which
@@ -802,16 +913,38 @@ func Purge(appName string) (PurgeResult, error) {
 	// Read before the containers go, since they are what names the volumes.
 	// Best effort: a purge that cannot list them still removes them.
 	var volumes []string
-	if ids, err := util.DockerCmd("compose", "-f", composeFile, "ps", "-a", "-q"); err == nil && strings.TrimSpace(ids) != "" {
+	if ids, err := dockerCmd("compose", "-f", composeFile, "ps", "-a", "-q"); err == nil && strings.TrimSpace(ids) != "" {
 		args := append([]string{"inspect", "--format", volumeMountsFormat}, strings.Fields(ids)...)
-		if out, err := util.DockerCmd(args...); err == nil {
+		if out, err := dockerCmd(args...); err == nil {
 			volumes = parseVolumeNames(out)
 		}
 	}
 
-	if _, err := util.DockerCmd("compose", "-f", composeFile, "down", "-v"); err != nil {
+	// The anonymous volumes an earlier install's state was copied out of
+	// (#327). No container mounts them any more, so the lookup above does
+	// not find them, and they still hold that state.
+	// Only what reads as an anonymous volume's ID is removed. The record is
+	// a file anyone can edit, and a name in it could be someone's named
+	// volume: that is reported, never removed.
+	var carried, notAnonymous []string
+	for _, v := range carriedVolumes(appDir) {
+		if anonymousVolumeID.MatchString(v) {
+			carried = append(carried, v)
+		} else {
+			notAnonymous = append(notAnonymous, v)
+		}
+	}
+
+	if _, err := dockerCmd("compose", "-f", composeFile, "down", "-v"); err != nil {
 		return PurgeResult{}, fmt.Errorf("failed to stop %s: %w", appName, err)
 	}
+	// Recorded only for volumes that were anonymous state mounts of a
+	// catalogue template that declares no named volume, and rm refuses a
+	// volume still in use, so these need no label check.
+	for _, v := range carried {
+		_, _ = dockerCmd("volume", "rm", v)
+	}
+	volumes = parseVolumeNames(strings.Join(append(volumes, carried...), "\n"))
 	// `down -v` misses the anonymous volumes of a container that was ever
 	// recreated: compose carries them over to the new container, and Docker
 	// then does not count them as that container's own (#335). Remove the
@@ -819,9 +952,9 @@ func Purge(appName string) (PurgeResult, error) {
 	// Docker's own label marks them; a named, external or in-use volume is
 	// never touched here.
 	if len(volumes) > 0 {
-		if out, err := util.DockerCmd("volume", "ls", "-q", "--filter", "dangling=true", "--filter", "label=com.docker.volume.anonymous"); err == nil {
+		if out, err := dockerCmd("volume", "ls", "-q", "--filter", "dangling=true", "--filter", "label=com.docker.volume.anonymous"); err == nil {
 			for _, v := range orphanedAnonymous(volumes, out) {
-				_, _ = util.DockerCmd("volume", "rm", v)
+				_, _ = dockerCmd("volume", "rm", v)
 			}
 		}
 	}
@@ -839,10 +972,26 @@ func Purge(appName string) (PurgeResult, error) {
 		}
 	}
 
-	return classifyVolumes(volumes, func(name string) (string, error) {
-		return util.DockerCmd("volume", "inspect", name)
-	}), nil
+	result := classifyVolumes(volumes, func(name string) (string, error) {
+		return dockerCmd("volume", "inspect", name)
+	})
+	// Purge did not remove these, so none of them counts as removed: still
+	// there is kept, and anything else is unchecked.
+	for _, v := range notAnonymous {
+		if slices.Contains(volumes, v) {
+			continue
+		}
+		if _, err := dockerCmd("volume", "inspect", v); err == nil {
+			result.Kept = append(result.Kept, v)
+		} else {
+			result.Unchecked = append(result.Unchecked, v)
+		}
+	}
+	return result, nil
 }
+
+// anonymousVolumeID is what Docker names an anonymous volume.
+var anonymousVolumeID = regexp.MustCompile(`^[0-9a-f]{64}$`)
 
 // orphanedAnonymous returns the volumes in listed that also appear in the
 // output of `docker volume ls -q --filter dangling=true --filter
@@ -947,7 +1096,7 @@ func Status(appName string) (string, error) {
 		return "", fmt.Errorf("%s is %w", appName, ErrNotInstalled)
 	}
 
-	out, err := util.DockerCmd("compose", "-f", composeFile, "ps",
+	out, err := dockerCmd("compose", "-f", composeFile, "ps",
 		"--format", "{{.State}}")
 	if err != nil {
 		return "", fmt.Errorf("failed to check status: %w", err)

@@ -556,7 +556,7 @@ homebutler install purge uptime-kuma
 
 - **Pre-checks** — Verifies docker is installed/running, port is available, no duplicate containers
 - **Compose-based** — Each app gets its own `docker-compose.yml` you can inspect and customize
-- **Data safety** — `uninstall` stops containers but keeps your data; `purge` removes everything, including the Docker volumes the app used, and names them. One exception for now: filebrowser's accounts and settings do not survive an `uninstall` and reinstall (see the table)
+- **Data safety** — `uninstall` stops containers but keeps your data; `purge` removes everything, including the Docker volumes the app used, and names them
 - **Cross-platform** — Auto-detects docker socket (default, colima, podman)
 
 ### Available apps
@@ -566,7 +566,7 @@ homebutler install purge uptime-kuma
 | `uptime-kuma` | 3001 | Self-hosted monitoring tool | |
 | `plex` | 32400 | Plex Media Server | `--media /path` to mount media dir |
 | `vaultwarden` | 8080 | Bitwarden-compatible password manager | |
-| `filebrowser` | 8081 | Web-based file manager | ⚠️ `uninstall` keeps the files under `/srv` but not its accounts and settings: reinstalling starts a new database ([#327](https://github.com/Higangssh/homebutler/issues/327)) |
+| `filebrowser` | 8081 | Web-based file manager | Its upstream project is archived and gets no further releases or security fixes |
 | `it-tools` | 8082 | Developer utilities (JSON, Base64, Hash, etc.) | |
 | `gitea` | 3002 | Lightweight self-hosted Git service | |
 | `jellyfin` | 8096 | Media system (movies, TV, music) | `--media /path` to mount media dir |

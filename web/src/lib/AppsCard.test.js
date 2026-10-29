@@ -1,7 +1,7 @@
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import AppsCard from './AppsCard.svelte';
-import { getInstallable, getInstallStatus, purgeApp } from './api.js';
+import { getInstallable, getInstallStatus, purgeApp, uninstallApp } from './api.js';
 
 vi.mock('./api.js', () => ({
   getInstallable: vi.fn(),
@@ -77,6 +77,38 @@ describe('the app catalogue', () => {
       expect(screen.queryByText('Removed, with its data.')).toBeNull();
       expect(screen.getByText(/shared-vol/).textContent).toContain('(still exists)');
       expect(screen.getByText(/unknown-vol/).textContent).toContain('(could not check whether it was removed)');
+    });
+  });
+
+  // An earlier filebrowser install could leave its database in an anonymous
+  // volume with no container left to copy it from (#327). The route says so
+  // in `warning`, and the card has to say it beside "still on disk".
+  describe('after an uninstall', () => {
+    async function uninstallWith(answer) {
+      uninstallApp.mockResolvedValue(answer);
+      await show({ canAct: true });
+      await screen.getByRole('button', { expanded: false }).click();
+      await vi.waitFor(() => screen.getByRole('button', { name: 'Uninstall' }));
+      await screen.getByRole('button', { name: 'Uninstall' }).click();
+      await vi.waitFor(() => expect(uninstallApp).toHaveBeenCalledWith('portainer'));
+      await new Promise(r => setTimeout(r, 0));
+    }
+
+    it('says only that the data is on disk when nothing was stranded', async () => {
+      await uninstallWith({ status: 'uninstalled', app: 'portainer', data_preserved: true });
+      await vi.waitFor(() => expect(screen.getByText(/Its data is still on disk/)).toBeTruthy());
+      expect(screen.queryByText(/anonymous Docker volumes/)).toBeNull();
+    });
+
+    it('shows the warning when part of the data is not in the app directory', async () => {
+      await uninstallWith({
+        status: 'uninstalled',
+        app: 'portainer',
+        data_preserved: true,
+        warning: "portainer's /database are not in /home/u/.homebutler/apps/portainer: an earlier install kept them in anonymous Docker volumes",
+      });
+      await vi.waitFor(() => expect(screen.getByText(/Its data is still on disk/)).toBeTruthy());
+      expect(screen.getByText(/anonymous Docker volumes/).className).toContain('partial');
     });
   });
 
