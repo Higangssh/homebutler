@@ -233,6 +233,46 @@ func TestAShortPeriodicJobIsNeverReported(t *testing.T) {
 	}
 }
 
+// An hourly job caught running at every hourly report is a new instance each
+// time, not the one the baseline saw. The run that hangs is still there an
+// hour later, and that is news: 1.3.0 said new, and so does this. Carrying
+// the baseline's unconfirmed forward would count the hung one silently, call
+// the next run a restart, and the one after that `restarting`.
+func TestAnHourlyJobThatHangsIsNew(t *testing.T) {
+	r := newReports(t)
+	job := system.ProcessInfo{PID: 7100, PPID: 500, Name: "poll.sh", Command: "/bin/sh /opt/poll.sh"}
+	r.after(0, with(aged(time.Hour, sshd), aged(20*time.Second, job)))
+	for i := 1; i <= 2; i++ {
+		run := with(aged(time.Duration(i+1)*time.Hour, sshd), aged(25*time.Second, job))
+		if got := changeTargets(r.after(time.Hour, run)); len(got) != 0 {
+			t.Fatalf("report %d: an hourly job running as usual was reported: %v", i, got)
+		}
+	}
+	hung := r.after(time.Hour, with(aged(4*time.Hour, sshd), aged(time.Hour+25*time.Second, job)))
+	if got := changeTargets(hung); len(got) != 1 || got[0] != "new poll.sh" {
+		t.Fatalf("want the hung run reported new, got %v", got)
+	}
+	still := r.after(time.Hour, with(aged(5*time.Hour, sshd), aged(2*time.Hour+25*time.Second, job)))
+	if got := changeTargets(still); len(got) != 0 {
+		t.Fatalf("a hung job already reported is not new again: %v", got)
+	}
+}
+
+// The same young process seen by two reports a few seconds apart can be the
+// one the baseline saw, and stays unconfirmed: when it is later seen old, it
+// had been there since the baseline.
+func TestAnUnconfirmedProcessSeenAgainSoonIsStillTheBaselines(t *testing.T) {
+	r := newReports(t)
+	tmux := system.ProcessInfo{PID: 5000, PPID: 1, Name: "tmux: server", Command: "tmux new -s ops"}
+	r.after(0, with(aged(time.Hour, sshd), aged(20*time.Second, tmux)))
+	r.after(30*time.Second, with(aged(time.Hour+30*time.Second, sshd), aged(50*time.Second, tmux)))
+	next := r.after(24*time.Hour, with(aged(25*time.Hour, sshd), aged(24*time.Hour+50*time.Second, tmux)))
+
+	if got := changeTargets(next); len(got) != 0 {
+		t.Fatalf("tmux had been there since the baseline: %v", got)
+	}
+}
+
 // Keeping young processes in the baseline must not swallow a real arrival.
 // Something that starts shortly before a later report is held back on that
 // run and is still new on the one after.
@@ -376,8 +416,10 @@ func TestASnapshotWithoutYoungComparesAsBefore(t *testing.T) {
 // process list was read.
 func TestASnapshotRecordsWhatAYoungProcessWas(t *testing.T) {
 	r := newReports(t)
+	// Thirty seconds apart: the cron 5s old at the first list is the same
+	// process, 35s old, at the second.
 	r.after(0, with(aged(time.Hour, sshd, agent), aged(5*time.Second, cron)))
-	r.after(time.Hour, with(aged(2*time.Hour, sshd), aged(5*time.Second, agent, cron)))
+	r.after(30*time.Second, with(aged(time.Hour+30*time.Second, sshd), aged(5*time.Second, agent), aged(35*time.Second, cron)))
 
 	snap := r.latest()
 	young := map[string]string{}
@@ -387,7 +429,7 @@ func TestASnapshotRecordsWhatAYoungProcessWas(t *testing.T) {
 	if young["sshd"] != "" || young["agent"] != youngRestarted || young["cron"] != youngUnconfirmed {
 		t.Fatalf("want sshd old, agent restarted, cron unconfirmed, got %v", young)
 	}
-	if snap.ProcessesReadAt != "2026-10-29T04:00:00Z" {
+	if snap.ProcessesReadAt != "2026-10-29T03:00:30Z" {
 		t.Fatalf("want the process list's read time saved, got %q", snap.ProcessesReadAt)
 	}
 }

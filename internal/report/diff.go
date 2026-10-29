@@ -557,13 +557,16 @@ func processIdentities(procs []system.ProcessInfo) []ProcessIdentity {
 // was: it started since the last report, and the next report says so if it is
 // still running a minute later. Keeping it as unconfirmed would hide that,
 // because an unconfirmed process becoming old is what a baseline's young
-// processes do, and that is not news. One the older snapshot had is kept: it
-// stays unconfirmed if that is all it was, and is a restart if it had been
-// seen running for a minute.
+// processes do, and that is not news. One the older snapshot had is a restart
+// if it had been seen running for a minute. If all it was is unconfirmed, it
+// stays unconfirmed only while it can be the same process the older snapshot
+// saw. A later instance of the same command, such as an hourly job caught
+// running at every hourly report, is an arrival like any other: left out, so
+// that the one which hangs and is still there an hour later is new.
 //
 // A baseline does not come through here, and keeps every young process as
 // unconfirmed: nothing before it can say whether they are new.
-func settleProcesses(curr, prev []ProcessIdentity) []ProcessIdentity {
+func settleProcesses(curr, prev []ProcessIdentity, since time.Duration) []ProcessIdentity {
 	before := make(map[ProcessIdentity]ProcessIdentity, len(prev))
 	for _, p := range prev {
 		before[p.key()] = p
@@ -579,6 +582,9 @@ func settleProcesses(curr, prev []ProcessIdentity) []ProcessIdentity {
 			continue
 		}
 		if p.Young == youngUnconfirmed {
+			if startedSince(c, since) {
+				continue
+			}
 			c.Young = youngUnconfirmed
 		} else {
 			c.Young = youngRestarted
@@ -709,6 +715,13 @@ func withoutUnmatched(list, other []ProcessIdentity, only string) []ProcessIdent
 // started after it, and one restart would be counted twice.
 const etimeSlack = 2 * time.Second
 
+// startedSince reports a young process that cannot be the one a process list
+// read since earlier saw: it is younger than the time between the two, with
+// etimeSlack to spare. An unknown interval says it can be.
+func startedSince(c ProcessIdentity, since time.Duration) bool {
+	return since > 0 && c.Young != "" && c.age+etimeSlack < since
+}
+
 // restarting reports the processes that have restarted at least twice: under
 // a minute old at the last report, after having been seen running for
 // longer, and started again since. A process that restarts once with the
@@ -732,7 +745,7 @@ func restarting(prev, curr []ProcessIdentity, since time.Duration) []Change {
 	}
 	var out []Change
 	for _, c := range curr {
-		if c.Young == "" || c.age+etimeSlack >= since || !restarted[c.key()] {
+		if !startedSince(c, since) || !restarted[c.key()] {
 			continue
 		}
 		out = append(out, Change{

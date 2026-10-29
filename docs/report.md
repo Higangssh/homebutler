@@ -80,8 +80,10 @@ A report nobody reads is worse than no report. These are excluded on purpose:
   started half a minute before it — a container just recreated, the tmux
   session the report was run from — is not called new the next day. A process
   counts once a snapshot has seen it running for a minute. Until then it is
-  neither new nor gone, so the report's own ssh session, shell and `| jq`, and
-  a job that runs for a few seconds every so often, never get a line. The
+  neither new nor gone, so the report's own ssh session, shell and `| jq` get
+  no line as long as they are under a minute old at each report, and nor does
+  a job that runs for a few seconds every so often. A shell that has been open
+  longer is the operator's, and is `gone` once it is closed. The
   cost is that something never seen running for a minute that then stops is
   not reported either. A daemon that restarted with the same command line just
   before a report is the same daemon, and is neither gone nor new. One that

@@ -261,7 +261,7 @@ func Run(cfg *config.Config, fns CollectFuncs, opts Options) (*Report, error) {
 	}
 
 	if processesCompared(prev, snap) {
-		snap.Processes = settleProcesses(snap.Processes, prev.Processes)
+		snap.Processes = settleProcesses(snap.Processes, prev.Processes, timeBetween(prev, snap))
 	}
 
 	if !opts.NoSave {
@@ -306,7 +306,9 @@ var now = time.Now
 // timeBetween is how long before snap's process list prev's was read, or zero
 // when either was not recorded, as in a snapshot from an earlier release.
 // Zero says nothing restarted since, which is the direction that adds no
-// line.
+// line. It is a difference of wall-clock readings, so a clock stepped back
+// between the two makes it negative, and for that run `restarting` is silent
+// and every unconfirmed process is taken to be the one seen before.
 func timeBetween(prev, snap *Snapshot) time.Duration {
 	from, err := time.Parse(time.RFC3339Nano, prev.ProcessesReadAt)
 	if err != nil {
