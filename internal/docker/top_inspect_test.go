@@ -39,8 +39,11 @@ func TestParseDockerTopLinuxFixture(t *testing.T) {
 		t.Errorf("pid = %q, want 2623", first.PID)
 	}
 	want := "/usr/local/bin/python3.11 /usr/local/bin/gunicorn -w 4 -b 0.0.0.0:5000 --timeout 30 --access-logfile - --error-logfile - app.wsgi:app"
-	if first.Command != want {
-		t.Errorf("command = %q, want %q", first.Command, want)
+	if first.Invocation != want {
+		t.Errorf("invocation = %q, want %q", first.Invocation, want)
+	}
+	if first.Command != "python3.11" {
+		t.Errorf("command = %q, want python3.11", first.Command)
 	}
 	if processes[1].PID != "3382" {
 		t.Errorf("second row pid = %q, want 3382", processes[1].PID)
@@ -64,8 +67,11 @@ func TestParseDockerTopMacOSFixture(t *testing.T) {
 	if processes[1].User != "_www" {
 		t.Errorf("macOS renders unprivileged users with an underscore; got %q", processes[1].User)
 	}
-	if !strings.HasPrefix(processes[0].Command, "caddy run") {
-		t.Errorf("command = %q, want it to start with caddy run", processes[0].Command)
+	if !strings.HasPrefix(processes[0].Invocation, "caddy run") {
+		t.Errorf("invocation = %q, want it to start with caddy run", processes[0].Invocation)
+	}
+	if processes[0].Command != "caddy" {
+		t.Errorf("command = %q, want caddy", processes[0].Command)
 	}
 }
 

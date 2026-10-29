@@ -68,8 +68,9 @@ homebutler mcp
 - **read** — changes nothing on the machine, so running one needs no
   confirmation. What comes back is another matter: hostnames, internal
   addresses, what is listening, what is running, usernames, host paths, log
-  contents. `docker_top` returns each command line inside a container in full,
-  arguments included, so a token passed as a flag is in the answer.
+  contents. `docker_top` names each process inside a container by the kernel's
+  name for it, with nothing from its command line; ask the operator to run
+  `homebutler docker top` themselves when the arguments matter.
   `config_validate` names the config file, the servers, the Proxmox endpoints
   and the backup directory, and quotes a key or token file path, MAC address or
   the host of a notify URL it finds wrong. `network_scan` lists every device on

@@ -140,7 +140,7 @@ func newDockerTopCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "top <container>",
 		Short: "Show the processes running inside a container",
-		Long:  "Show the processes running inside a container, read from the host via docker top. Nothing runs in the container: no exec, no TTY. Each command line is shown in full, arguments included, so a token passed as a flag is printed with it.",
+		Long:  "Show the processes running inside a container, read from the host via docker top. Nothing runs in the container: no exec, no TTY. The table shows each command line in full, arguments included, so a token passed as a flag is printed with it. With --json, each command is the kernel's name for the process (ps comm) and nothing from its command line.",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if err := loadConfig(); err != nil {

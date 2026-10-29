@@ -111,21 +111,114 @@ type TopResult struct {
 
 // TopProcess is one row of docker top output.
 type TopProcess struct {
-	PID     string `json:"pid"`
-	User    string `json:"user"`
+	PID  string `json:"pid"`
+	User string `json:"user"`
+	// Command is the kernel's name for the process, ps's comm column: the
+	// executable's file name, at most 15 characters, which is also what
+	// system.ProcessInfo.Name holds. It is the only part of the process that
+	// goes over the wire, for the reason system.ProcessInfo keeps its Command
+	// out of JSON: command lines carry secrets in flags and in positional
+	// arguments alike, and docker_top is a read tool that an agent only
+	// allowed to look can still call. comm rather than a name taken from the
+	// command line, because argv[0] is the process's to set: exec -a, a
+	// rewritten title or an empty argv[0] would put an argument in its place.
 	Command string `json:"command"`
+	// Invocation is the full command line, kept for the table printed on the
+	// operator's own terminal. It is never marshalled.
+	Invocation string `json:"-"`
+}
+
+// topColumns asks ps for the kernel name next to the command line. docker
+// top hands these options to ps on the host and needs the PID column back
+// to pick out the container's processes. The daemon splits each row on
+// whitespace and joins only the last column, so a comm holding a space
+// comes back as its first word, with the rest pushed into args.
+const topColumns = "pid,user,comm,args"
+
+// CommandName reduces a ps command line to its first word's base name. It is
+// the fallback for output that has no comm column — a ps that rejected
+// topColumns, or a remote homebutler from before comm was read — and is a
+// best effort: anything a process put in its own argv[0] comes through. It
+// never returns more than that first word, so it is still less than the
+// whole line those answers held before.
+func CommandName(cmdline string) string {
+	cmdline = strings.TrimSpace(cmdline)
+	if strings.HasPrefix(cmdline, "[") {
+		// A kernel thread or a zombie: ps shows the name in brackets, and a
+		// zombie adds " <defunct>" after it. The bracketed part is the name,
+		// and it holds no arguments.
+		if end := strings.Index(cmdline, "]"); end > 0 {
+			return cmdline[:end+1]
+		}
+	}
+	fields := strings.Fields(cmdline)
+	if len(fields) == 0 {
+		return ""
+	}
+	name := fields[0]
+	if i := strings.LastIndex(name, "/"); i >= 0 && i < len(name)-1 {
+		name = name[i+1:]
+	}
+	// A process that rewrote its title (nginx, postgres) shows as
+	// "nginx: worker process", whose first word keeps the colon.
+	if trimmed := strings.TrimSuffix(name, ":"); trimmed != "" {
+		name = trimmed
+	}
+	return name
 }
 
 func Top(name string) (*TopResult, error) {
 	if !ValidName(name) {
 		return nil, fmt.Errorf("invalid container name: %s", name)
 	}
+	if out, err := util.DockerCmd("top", name, "-o", topColumns); err == nil {
+		if processes, skipped, ok := parseDockerTopComm(out); ok {
+			return &TopResult{Container: name, Processes: processes, Skipped: skipped}, nil
+		}
+	}
+	// Whether ps accepts the columns, and the header it prints for them, is
+	// a property of the host's ps; a process in the container changes
+	// neither. Here the name comes from the command line, as CommandName
+	// describes. Any other failure, such as a container that is not
+	// running, fails this call too and is reported from it.
 	out, err := util.DockerCmd("top", name)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list processes for %s: %s", name, out)
 	}
 	processes, skipped := parseDockerTop(out)
 	return &TopResult{Container: name, Processes: processes, Skipped: skipped}, nil
+}
+
+// parseDockerTopComm parses docker top output for topColumns: PID, USER,
+// comm, then the command line. It reports false when the header is not that
+// four-column layout, so the caller can fall back to plain docker top
+// rather than reading the wrong column as the name. A row needs the first
+// three; args can be empty.
+func parseDockerTopComm(out string) ([]TopProcess, int, bool) {
+	var rows [][]string
+	for _, line := range splitLines(out) {
+		if fields := strings.Fields(line); len(fields) > 0 {
+			rows = append(rows, fields)
+		}
+	}
+	if len(rows) == 0 || len(rows[0]) != 4 || rows[0][0] != "PID" {
+		return nil, 0, false
+	}
+	processes := make([]TopProcess, 0, len(rows)-1)
+	skipped := 0
+	for _, fields := range rows[1:] {
+		if len(fields) < 3 {
+			skipped++
+			continue
+		}
+		processes = append(processes, TopProcess{
+			PID:        fields[0],
+			User:       fields[1],
+			Command:    fields[2],
+			Invocation: strings.Join(fields[3:], " "),
+		})
+	}
+	return processes, skipped, true
 }
 
 // parseDockerTop parses raw docker top output: a ps header line followed by
@@ -170,10 +263,12 @@ func parseDockerTop(out string) ([]TopProcess, int) {
 			skipped++
 			continue
 		}
+		invocation := strings.Join(fields[cmdCol:], " ")
 		processes = append(processes, TopProcess{
-			PID:     fields[pidCol],
-			User:    fields[0],
-			Command: strings.Join(fields[cmdCol:], " "),
+			PID:        fields[pidCol],
+			User:       fields[0],
+			Command:    CommandName(invocation),
+			Invocation: invocation,
 		})
 	}
 	return processes, skipped

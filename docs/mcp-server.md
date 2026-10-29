@@ -108,8 +108,9 @@ What read mode does and does not mean:
 - **It stops changes, not reading.** A read tool can still show you, and the
   agent, whatever it reads. `docker_logs`, and `watch_history` with
   `include_logs`, return log lines, which hold whatever the app printed,
-  credentials included. `docker_top` returns each process's command line in
-  full, so a token passed as a flag comes back with it. `docker_inspect` leaves
+  credentials included. `docker_top` names each process by ps's `comm`, the
+  name `processes` reports, and nothing from its command line. Unlike
+  `processes`, it does not leave out kernel threads. `docker_inspect` leaves
   out environment values but returns host mount paths and container addresses.
   `system_status` returns the hostname, OS, uptime and disk mounts;
   `open_ports` what is listening and on which address; `inventory_scan` all of
@@ -207,7 +208,7 @@ the ceiling is refused by this server whatever the client does with its hints.
 | `docker_stop`            | Stop a container                                                                                                       |
 | `docker_logs`            | Container log output                                                                                                   |
 | `docker_stats`           | Running container resource usage                                                                                       |
-| `docker_top`             | Processes inside a container, read from the host — no exec, no TTY. Command lines come back in full, arguments included |
+| `docker_top`             | Processes inside a container, read from the host — no exec, no TTY. Each command is ps's `comm`, nothing from the command line |
 | `docker_inspect`         | Image, state, restart policy, ports, mounts, networks, health. Env values are never included                           |
 | `wake`                   | Wake-on-LAN magic packet                                                                                               |
 | `open_ports`             | Open ports with process info                                                                                           |
