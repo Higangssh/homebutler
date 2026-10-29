@@ -1,6 +1,7 @@
 package config
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -532,6 +533,131 @@ notify:
 	requireFinding(t, r, "notify.slack.webhook_url", SeverityWarning)
 	if !r.Valid {
 		t.Error("an incomplete provider is a warning, not an error")
+	}
+}
+
+// A webhook URL is the credential for Discord, Slack and generic webhooks, and
+// leaving off the scheme while pasting one is exactly when this warning fires.
+// config_validate is an MCP read tool, so whatever it quotes reaches the agent
+// too (#358).
+func TestValidateSchemelessNotifyURLDoesNotEchoTheSecret(t *testing.T) {
+	cases := []struct {
+		name, yaml, field string
+		secrets           []string
+		shown             string
+	}{
+		{
+			name:    "discord",
+			yaml:    "notify:\n  discord:\n    webhook_url: discord.com/api/webhooks/123/SECRETTOKEN\n",
+			field:   "notify.discord.webhook_url",
+			secrets: []string{"SECRETTOKEN"},
+			shown:   `"discord.com/…"`,
+		},
+		{
+			name:    "slack",
+			yaml:    "notify:\n  slack:\n    webhook_url: hooks.slack.com/services/T000/B000/SECRETTOKEN\n",
+			field:   "notify.slack.webhook_url",
+			secrets: []string{"SECRETTOKEN"},
+			shown:   `"hooks.slack.com/…"`,
+		},
+		{
+			name:    "ntfy with credentials and no path",
+			yaml:    "notify:\n  ntfy:\n    url: alice:SECRETTOKEN@ntfy.example.com\n    topic: alerts\n",
+			field:   "notify.ntfy.url",
+			secrets: []string{"SECRETTOKEN"},
+			shown:   `"…@ntfy.example.com"`,
+		},
+		{
+			name:    "gotify with a port and a token in the query",
+			yaml:    "notify:\n  gotify:\n    url: gotify:8080/message?token=SECRETTOKEN\n    token: x\n",
+			field:   "notify.gotify.url",
+			secrets: []string{"SECRETTOKEN"},
+			shown:   `"gotify:8080/…"`,
+		},
+		{
+			name:    "gotify with a token in the query and no path",
+			yaml:    "notify:\n  gotify:\n    url: gotify.example.com?token=SECRETTOKEN\n    token: x\n",
+			field:   "notify.gotify.url",
+			secrets: []string{"SECRETTOKEN"},
+			shown:   `"gotify.example.com…"`,
+		},
+	}
+
+	// The rest go in notify.webhook.url, single-quoted so YAML takes them
+	// exactly as written. Each is a way a malformed URL could make the host
+	// look like it ends somewhere other than where it does.
+	webhook := []struct {
+		name, url string
+		secrets   []string
+		shown     string
+	}{
+		{"misspelt scheme", "htps://discord.com/api/webhooks/123/SECRETTOKEN", []string{"SECRETTOKEN"}, `"htps://discord.com/…"`},
+		{"credentials before the host", "alice:SECRETTOKEN@hooks.example.com/notify", []string{"SECRETTOKEN"}, `"…@hooks.example.com/…"`},
+		{"bracketed IPv6 with a port", "[fd00::1]:8080/hooks/SECRETTOKEN", []string{"SECRETTOKEN"}, `"[fd00::1]:8080/…"`},
+		{"localhost", "localhost/hooks/SECRETTOKEN", []string{"SECRETTOKEN"}, `"localhost/…"`},
+		{"slash inside the password", "alice:SECRETHEAD/SECRETTAIL@ntfy.sh", []string{"SECRETHEAD", "SECRETTAIL", "alice"}, `"…"`},
+		{"question mark inside the password", "alice:SECRETHEAD?SECRETTAIL@ntfy.sh", []string{"SECRETHEAD", "SECRETTAIL", "alice"}, `"…"`},
+		{"hash inside the password", "alice:SECRETHEAD#SECRETTAIL@ntfy.sh", []string{"SECRETHEAD", "SECRETTAIL", "alice"}, `"…"`},
+		{"token where the port goes", "hooks.example.com:SECRETTOKEN", []string{"SECRETTOKEN"}, `"…"`},
+		{"token where the port goes, then a path", "hooks.example.com:SECRETTOKEN/notify", []string{"SECRETTOKEN"}, `"…"`},
+		{"bare token", "SECRETTOKEN", []string{"SECRETTOKEN"}, `"…"`},
+		{"backslashes", `discord.com\api\webhooks\123\SECRETTOKEN`, []string{"SECRETTOKEN"}, `"…"`},
+		{"percent-encoded slashes", "discord.com%2Fapi%2Fwebhooks%2F123%2FSECRETTOKEN", []string{"SECRETTOKEN"}, `"…"`},
+		{"semicolons", "discord.com;api;webhooks;123;SECRETTOKEN", []string{"SECRETTOKEN"}, `"…"`},
+		{"fullwidth slashes", "discord.com\uff0fapi\uff0fwebhooks\uff0f123\uff0fSECRETTOKEN", []string{"SECRETTOKEN"}, `"…"`},
+		{"division slashes", "discord.com\u2215api\u2215webhooks\u2215123\u2215SECRETTOKEN", []string{"SECRETTOKEN"}, `"…"`},
+		{"scheme-like text after the token", "discord.com/api/webhooks/123/SECRETTOKEN://x", []string{"SECRETTOKEN"}, `"discord.com/…"`},
+	}
+	for _, w := range webhook {
+		cases = append(cases, struct {
+			name, yaml, field string
+			secrets           []string
+			shown             string
+		}{
+			name:    w.name,
+			yaml:    "notify:\n  webhook:\n    url: '" + w.url + "'\n",
+			field:   "notify.webhook.url",
+			secrets: w.secrets,
+			shown:   w.shown,
+		})
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			r := Validate(writeConfig(t, tc.yaml))
+
+			out, err := json.Marshal(r)
+			if err != nil {
+				t.Fatalf("marshal: %v", err)
+			}
+			for _, secret := range tc.secrets {
+				if strings.Contains(string(out), secret) {
+					t.Errorf("validation result contains %q: %s", secret, out)
+				}
+			}
+
+			f := requireFinding(t, r, tc.field, SeverityWarning)
+			if f.Field != tc.field {
+				t.Errorf("field = %q, want %q", f.Field, tc.field)
+			}
+			if !strings.Contains(f.Message, "does not start with http:// or https://") {
+				t.Errorf("message no longer says what is wrong: %q", f.Message)
+			}
+			if want := "URL " + tc.shown + " does not"; !strings.Contains(f.Message, want) {
+				t.Errorf("message = %q, want it to quote %s", f.Message, tc.shown)
+			}
+		})
+	}
+}
+
+// A token written as the host cannot be told apart from a hostname, so it is
+// quoted like one. This pins that limit down rather than letting a later
+// change look like it closed it.
+func TestValidateSchemelessNotifyURLStillShowsAHostEmbeddedToken(t *testing.T) {
+	r := Validate(writeConfig(t, "notify:\n  webhook:\n    url: 'SECRETTOKEN.ntfy.sh/topic'\n"))
+	f := requireFinding(t, r, "notify.webhook.url", SeverityWarning)
+	if !strings.Contains(f.Message, `"SECRETTOKEN.ntfy.sh/…"`) {
+		t.Errorf("message = %q", f.Message)
 	}
 }
 
