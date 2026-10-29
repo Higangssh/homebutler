@@ -48,6 +48,52 @@ watch_history risk=read args=[container:string include_logs:boolean limit:intege
 watch_list risk=read args=[server:string]
 watch_remove risk=write args=[container:string server:string] required=[container]
 
+## annotations
+alerts {"readOnlyHint":true,"destructiveHint":false}
+alerts_history {"readOnlyHint":true,"destructiveHint":false}
+backup_create {"readOnlyHint":false,"destructiveHint":true}
+backup_drill {"readOnlyHint":false,"destructiveHint":true}
+backup_list {"readOnlyHint":true,"destructiveHint":false}
+backup_restore {"readOnlyHint":false,"destructiveHint":true}
+config_validate {"readOnlyHint":true,"destructiveHint":false}
+docker_inspect {"readOnlyHint":true,"destructiveHint":false}
+docker_list {"readOnlyHint":true,"destructiveHint":false}
+docker_logs {"readOnlyHint":true,"destructiveHint":false}
+docker_restart {"readOnlyHint":false,"destructiveHint":false}
+docker_stats {"readOnlyHint":true,"destructiveHint":false}
+docker_stop {"readOnlyHint":false,"destructiveHint":true}
+docker_top {"readOnlyHint":true,"destructiveHint":false}
+doctor {"readOnlyHint":true,"destructiveHint":false}
+install_app {"readOnlyHint":false,"destructiveHint":true}
+install_list {"readOnlyHint":true,"destructiveHint":false}
+install_purge {"readOnlyHint":false,"destructiveHint":true}
+install_status {"readOnlyHint":true,"destructiveHint":false}
+install_uninstall {"readOnlyHint":false,"destructiveHint":true}
+inventory_export {"readOnlyHint":true,"destructiveHint":false}
+inventory_scan {"readOnlyHint":true,"destructiveHint":false}
+network_scan {"readOnlyHint":true,"destructiveHint":false}
+notify_test {"readOnlyHint":false,"destructiveHint":false}
+open_ports {"readOnlyHint":true,"destructiveHint":false}
+processes {"readOnlyHint":true,"destructiveHint":false}
+proxmox_guest_reboot {"readOnlyHint":false,"destructiveHint":false}
+proxmox_guest_shutdown {"readOnlyHint":false,"destructiveHint":true}
+proxmox_guest_start {"readOnlyHint":false,"destructiveHint":false}
+proxmox_guests {"readOnlyHint":true,"destructiveHint":false}
+proxmox_node {"readOnlyHint":true,"destructiveHint":false}
+proxmox_script_command {"readOnlyHint":true,"destructiveHint":false}
+proxmox_script_list {"readOnlyHint":true,"destructiveHint":false}
+proxmox_status {"readOnlyHint":true,"destructiveHint":false}
+proxmox_task_status {"readOnlyHint":true,"destructiveHint":false}
+proxmox_tasks {"readOnlyHint":true,"destructiveHint":false}
+report {"readOnlyHint":false,"destructiveHint":true}
+system_status {"readOnlyHint":true,"destructiveHint":false}
+wake {"readOnlyHint":false,"destructiveHint":false}
+watch_add {"readOnlyHint":false,"destructiveHint":false}
+watch_check {"readOnlyHint":false,"destructiveHint":true}
+watch_history {"readOnlyHint":true,"destructiveHint":false}
+watch_list {"readOnlyHint":true,"destructiveHint":false}
+watch_remove {"readOnlyHint":false,"destructiveHint":true}
+
 ## routes
 GET /api/alerts protection=none
 GET /api/backup protection=none
@@ -419,10 +465,12 @@ mcp.ConfigValidateResult.warnings:int
 mcp.InstallResult.app:string
 mcp.InstallResult.data_preserved?:?bool
 mcp.InstallResult.issues?:[]string
+mcp.InstallResult.kept_volumes?:[]string
 mcp.InstallResult.path?:string
 mcp.InstallResult.port?:string
 mcp.InstallResult.state?:string
 mcp.InstallResult.status:string
+mcp.InstallResult.unchecked_volumes?:[]string
 mcp.InstallStatusResult.app:string
 mcp.InstallStatusResult.state:string
 mcp.InventoryExportResult.content:string

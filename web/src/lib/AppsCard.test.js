@@ -1,7 +1,7 @@
-import { cleanup, render, screen } from '@testing-library/svelte';
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import AppsCard from './AppsCard.svelte';
-import { getInstallable, getInstallStatus } from './api.js';
+import { getInstallable, getInstallStatus, purgeApp } from './api.js';
 
 vi.mock('./api.js', () => ({
   getInstallable: vi.fn(),
@@ -39,6 +39,45 @@ describe('the app catalogue', () => {
 
     await screen.getByRole('button', { expanded: false }).click();
     await vi.waitFor(() => expect(getInstallStatus).toHaveBeenCalledWith('portainer'));
+  });
+
+  // The card said "Removed, with its data." after every purge, including one
+  // that left a volume another container was using. `install purge` says
+  // "Removed, except:" and lists it; the card has to say the same thing.
+  describe('after a purge', () => {
+    async function purgeWith(answer) {
+      purgeApp.mockResolvedValue(answer);
+      await show({ canAct: true });
+      await screen.getByRole('button', { expanded: false }).click();
+      await vi.waitFor(() => screen.getByRole('button', { name: /Remove portainer and its data/ }));
+      await screen.getByRole('button', { name: /Remove portainer and its data/ }).click();
+
+      const dialog = within(screen.getByRole('alertdialog'));
+      await fireEvent.input(dialog.getByRole('textbox'), { target: { value: 'portainer' } });
+      await dialog.getByRole('button', { name: 'Remove portainer and its data' }).click();
+      await vi.waitFor(() => expect(purgeApp).toHaveBeenCalledWith('portainer'));
+      await new Promise(r => setTimeout(r, 0));
+    }
+
+    it('says it removed everything when nothing was left', async () => {
+      await purgeWith({ status: 'purged', app: 'portainer', data_preserved: false });
+      await vi.waitFor(() => expect(screen.getByText('Removed, with its data.')).toBeTruthy());
+      expect(screen.queryByText(/Removed, except/)).toBeNull();
+    });
+
+    it('names the volumes it kept or could not check', async () => {
+      await purgeWith({
+        status: 'purged',
+        app: 'portainer',
+        data_preserved: false,
+        kept_volumes: ['shared-vol'],
+        unchecked_volumes: ['unknown-vol'],
+      });
+      await vi.waitFor(() => expect(screen.getByText(/Removed, except/)).toBeTruthy());
+      expect(screen.queryByText('Removed, with its data.')).toBeNull();
+      expect(screen.getByText(/shared-vol/).textContent).toContain('(still exists)');
+      expect(screen.getByText(/unknown-vol/).textContent).toContain('(could not check whether it was removed)');
+    });
   });
 
   it('offers nothing when the dashboard cannot act', async () => {
