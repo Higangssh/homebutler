@@ -58,8 +58,10 @@ Recorded on 2026-10-12, in UTC as the frame shows it:
 
 1. In a home directory of its own on the Pi, `homebutler install filebrowser`
    and `homebutler install uptime-kuma`. The first `report` ran after both had
-   been up for over a minute, from a short ssh session. A process younger than
-   a minute is left out of a snapshot and would turn up later as `new` (#315).
+   been up for over a minute, from a short ssh session. The release it was
+   recorded with left a process younger than a minute out of a snapshot, and
+   that process turned up later as `new` (#315). A baseline now keeps it as
+   unconfirmed, and waiting is no longer needed for that.
 2. An hour later, filebrowser was recreated with `docker compose up -d
    --force-recreate`, and uptime-kuma's image changed from `:1` to `:2`. The
    `:2` image had to be pulled, which is the `disk` line.

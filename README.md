@@ -63,7 +63,7 @@ Every change line, like those in the card at the top, is three columns: **what k
 | `new` | it was not there last time and is now | starting anything |
 | `replaced` | same name, different thing underneath | `docker compose up -d` — the container is recreated, so the name and the count are unchanged |
 | `image` | same container, different image | pulling a new tag |
-| `state` | same container, running where it was stopped, or the reverse | a crash, or bringing something back up |
+| `state` | same container, running where it was stopped, or the reverse; or a process that keeps restarting | a crash, a crash loop, or bringing something back up |
 | `port` | same port, a different process answering on it | one service taking over another's port |
 | `disk` | a mount moved by more than half a gigabyte | anything that writes |
 | `skipped` | the comparison could not be made | Docker was down when either snapshot was taken |

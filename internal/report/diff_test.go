@@ -368,14 +368,25 @@ func TestPreviousSnapshotWithoutProcessesIsNotAnEmptyMachine(t *testing.T) {
 }
 
 // A process the invocation lookup missed has an unknown age, not a young one.
-// Dropping it would make a running daemon disappear and come back.
+// Holding it back would make a running daemon disappear and come back.
 func TestUnknownAgeIsKept(t *testing.T) {
 	ids := processIdentities([]system.ProcessInfo{
 		{PID: 1, Name: "sshd", Command: "", Elapsed: system.ElapsedUnknown},
 		{PID: 2, Name: "sed", Command: "sed -n", Elapsed: 2 * time.Second},
 	})
-	if len(ids) != 1 || ids[0].Name != "sshd" {
-		t.Errorf("expected the unknown-age process kept and the young one dropped, got %+v", ids)
+	if len(ids) != 2 || ids[0].Name != "sed" || ids[0].Young != youngUnconfirmed || ids[1].Name != "sshd" || ids[1].Young != "" {
+		t.Errorf("expected the unknown-age process confirmed and the young one unconfirmed, got %+v", ids)
+	}
+}
+
+// One old worker is enough to say an invocation was already running.
+func TestAnIdentityWithOneOldProcessIsConfirmed(t *testing.T) {
+	ids := processIdentities([]system.ProcessInfo{
+		{PID: 1, Name: "worker", Command: "worker --pool", Elapsed: 5 * time.Second},
+		{PID: 2, Name: "worker", Command: "worker --pool", Elapsed: time.Hour},
+	})
+	if len(ids) != 1 || ids[0].Young != "" {
+		t.Errorf("want one confirmed identity, got %+v", ids)
 	}
 }
 
