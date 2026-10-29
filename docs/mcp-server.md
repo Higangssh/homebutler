@@ -106,10 +106,21 @@ it says so rather than creating one.
 What read mode does and does not mean:
 
 - **It stops changes, not reading.** A read tool can still show you, and the
-  agent, whatever it reads: `docker_logs` returns log lines, `docker_inspect`
-  returns a container's configuration, and either can contain a credential
-  that something printed. Read mode decides what the agent can do, not what it
-  can see.
+  agent, whatever it reads. `docker_logs`, and `watch_history` with
+  `include_logs`, return log lines, which hold whatever the app printed,
+  credentials included. `docker_top` returns each process's command line in
+  full, so a token passed as a flag comes back with it. `docker_inspect` leaves
+  out environment values but returns host mount paths and container addresses.
+  `system_status` returns the hostname, OS, uptime and disk mounts;
+  `open_ports` what is listening and on which address; `inventory_scan` all of
+  that with the server's configured host. `docker_top` and the Proxmox task
+  reads name users (`root@pam`), and `backup_list` and `doctor` name host
+  paths. `config_validate` returns the config path, the server and Proxmox
+  endpoint names and the backup directory, and quotes a key or token file
+  path, a MAC address or a notify URL when it finds one wrong. A notify URL
+  missing its `http://` or `https://` is quoted in full, so a token in that URL
+  is quoted with it. Read mode decides what the agent can do, not what it can
+  see, or what ends up in the conversation it is answering.
 - **"Read" means no state changes on this machine or a remote one. It includes
   asking things outside them.** `network_scan` pings every address on the
   local subnet to fill the ARP table before reading it. The Proxmox reads and
@@ -138,7 +149,7 @@ What read mode does and does not mean:
 | `docker_stop`            | Stop a container                                                                                                       |
 | `docker_logs`            | Container log output                                                                                                   |
 | `docker_stats`           | Running container resource usage                                                                                       |
-| `docker_top`             | Processes inside a container, read from the host — no exec, no TTY                                                     |
+| `docker_top`             | Processes inside a container, read from the host — no exec, no TTY. Command lines come back in full, arguments included |
 | `docker_inspect`         | Image, state, restart policy, ports, mounts, networks, health. Env values are never included                           |
 | `wake`                   | Wake-on-LAN magic packet                                                                                               |
 | `open_ports`             | Open ports with process info                                                                                           |

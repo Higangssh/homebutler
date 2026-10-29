@@ -420,7 +420,7 @@ var Registry = []Capability{
 		HTTP:    HTTP{Absent: AbsentNoViewYet},
 		Tool: Definition{
 			Name:        "docker_top",
-			Description: "List the processes running inside a Docker container, read from the host. Read-only: no exec, no TTY",
+			Description: "List the processes running inside a Docker container, read from the host. Nothing runs in the container: no exec, no TTY. Each command line comes back in full, arguments included, so a token passed as a flag is in the result",
 			InputSchema: Schema{
 				Type: "object",
 				Properties: map[string]Property{

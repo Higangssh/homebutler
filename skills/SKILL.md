@@ -26,8 +26,10 @@ deployed there once and runs only when asked, over SSH.
 
 Start `homebutler mcp` and call tools. Every tool is classed **read**, **write**
 or **destructive**, and that classification is what lets an agent decide what it
-may do unattended. Shell commands are for the handful of things no tool exposes,
-and for anything the operator has to run themselves.
+may do without asking. It says what a call does to the machine, not what the
+answer contains; what a read returns is under the classes, below. Shell
+commands are for the handful of things no tool exposes, and for anything the
+operator has to run themselves.
 
 ```bash
 homebutler mcp
@@ -65,11 +67,17 @@ homebutler mcp
 
 - **read** — changes nothing on the machine, so running one needs no
   confirmation. What comes back is another matter: hostnames, internal
-  addresses, what is listening, what is running, log contents. So read the
-  machine the operator is asking about rather than every machine in the config;
-  `--all` and `inventory_scan` are answers to a question somebody asked, not a
-  way to begin. Summarise what matters instead of returning raw logs, port
-  tables or JSON into a conversation other people can read.
+  addresses, what is listening, what is running, usernames, host paths, log
+  contents. `docker_top` returns each command line inside a container in full,
+  arguments included, so a token passed as a flag is in the answer.
+  `config_validate` names the config file, the servers, the Proxmox endpoints
+  and the backup directory, and quotes a key or token file path, MAC address or
+  notify URL it finds wrong. `network_scan` lists every device on the subnet,
+  not only the configured servers. So read the machine the operator is asking
+  about rather than every machine in the config; `--all` and `inventory_scan`
+  are answers to a question somebody asked, not a way to begin. Summarise what
+  matters instead of returning raw logs, port tables or JSON into a
+  conversation other people can read.
 - **write** — something changes on the machine, or a message leaves it. Do it when
   it follows from what was asked, and say afterwards what changed.
 - **destructive** — **never on your own initiative.** Only when the operator asked
