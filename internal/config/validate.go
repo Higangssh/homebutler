@@ -6,6 +6,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"slices"
 	"sort"
@@ -745,9 +746,75 @@ func (r *ValidationResult) checkNotify(cfg *Config) {
 				fmt.Sprintf("URL is missing, so %s stays disabled.", provider), "")
 		case !strings.HasPrefix(u.url, "http://") && !strings.HasPrefix(u.url, "https://"):
 			r.add(SeverityWarning, u.field,
-				fmt.Sprintf("URL %q does not start with http:// or https://.", u.url), "")
+				fmt.Sprintf("URL %q does not start with http:// or https://.", urlHost(u.url)), "")
 		}
 	}
+}
+
+// urlHost returns the part of a notify URL that is safe to quote back: a
+// scheme the user wrote at the start and the host, with "…" for the rest.
+//
+// For Discord, Slack and generic webhooks the URL is the credential, and the
+// token lives in the path; ntfy and Gotify URLs can carry user:password@ or a
+// ?token=. config validate prints to a terminal somebody may be sharing, and
+// config_validate answers over MCP, so neither may echo those parts. The host
+// stays because it is where a pasting mistake shows: "discord.com/…" says the
+// scheme was dropped, and "htps://discord.com/…" says which letter.
+//
+// The URL is malformed by the time this runs, so nothing in it can be trusted
+// to mark where the secret stops. Only text shaped like a host is quoted, and
+// anything else becomes "…". A token written as the host itself still shows;
+// nothing can tell it apart from a hostname.
+func urlHost(raw string) string {
+	scheme, rest := "", raw
+	if m := urlSchemePrefix.FindString(raw); m != "" {
+		scheme, rest = m, raw[len(m):]
+	}
+
+	authority, tail := rest, ""
+	if i := strings.IndexAny(rest, "/?#"); i >= 0 {
+		authority, tail = rest[:i], rest[i:]
+	}
+	// An @ past the first separator means userinfo that itself held a / ? or
+	// #, and then there is no telling where the host starts.
+	if strings.Contains(tail, "@") {
+		return scheme + "…"
+	}
+
+	userinfo, host := "", authority
+	if i := strings.LastIndex(authority, "@"); i >= 0 {
+		userinfo, host = "…@", authority[i+1:]
+	}
+	if !plausibleHost(host) {
+		return scheme + "…"
+	}
+
+	switch {
+	case tail == "":
+		return scheme + userinfo + host
+	case tail[0] == '/':
+		return scheme + userinfo + host + "/…"
+	default:
+		return scheme + userinfo + host + "…"
+	}
+}
+
+var (
+	urlSchemePrefix = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9+.-]*://`)
+	hostWithPort    = regexp.MustCompile(`^(?:[A-Za-z0-9.-]+|\[[0-9A-Fa-f:.]+\])(:[0-9]{1,5})?$`)
+)
+
+// plausibleHost reports whether s is shaped like a host, and like a host
+// rather than a bare token: it needs a port, brackets, a dot, or to be
+// localhost. A single word such as "gotify" is a valid Docker hostname, but
+// so is a pasted token, and only one of the two is safe to print.
+func plausibleHost(s string) bool {
+	m := hostWithPort.FindStringSubmatch(s)
+	if m == nil {
+		return false
+	}
+	name := strings.TrimSuffix(s, m[1])
+	return m[1] != "" || strings.HasPrefix(name, "[") || strings.Contains(name, ".") || name == "localhost"
 }
 
 func (r *ValidationResult) checkWatch(cfg *Config) {

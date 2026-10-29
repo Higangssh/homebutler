@@ -117,10 +117,15 @@ What read mode does and does not mean:
   reads name users (`root@pam`), and `backup_list` and `doctor` name host
   paths. `config_validate` returns the config path, the server and Proxmox
   endpoint names and the backup directory, and quotes a key or token file
-  path, a MAC address or a notify URL when it finds one wrong. A notify URL
-  missing its `http://` or `https://` is quoted in full, so a token in that URL
-  is quoted with it. Read mode decides what the agent can do, not what it can
-  see, or what ends up in the conversation it is answering.
+  path, a MAC address or a notify URL when it finds one wrong. A notify URL is
+  quoted only as far as its host, with any scheme written at the start kept
+  (`discord.com/…`, `htps://discord.com/…`). A `user:password@` before the
+  host shows as `…@`, the path and query after it, where webhook tokens live,
+  are left out, and a URL whose host cannot be picked out is quoted as `…`. A
+  token written as the host itself, such as `<token>.ntfy.sh`, still shows,
+  because nothing tells it apart from a hostname. Read mode decides what the
+  agent can do, not what it can see, or what ends up in the conversation it is
+  answering.
 - **"Read" means no state changes on this machine or a remote one. It includes
   asking things outside them.** `network_scan` pings every address on the
   local subnet to fill the ARP table before reading it. The Proxmox reads and

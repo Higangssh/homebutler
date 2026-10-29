@@ -72,12 +72,12 @@ homebutler mcp
   arguments included, so a token passed as a flag is in the answer.
   `config_validate` names the config file, the servers, the Proxmox endpoints
   and the backup directory, and quotes a key or token file path, MAC address or
-  notify URL it finds wrong. `network_scan` lists every device on the subnet,
-  not only the configured servers. So read the machine the operator is asking
-  about rather than every machine in the config; `--all` and `inventory_scan`
-  are answers to a question somebody asked, not a way to begin. Summarise what
-  matters instead of returning raw logs, port tables or JSON into a
-  conversation other people can read.
+  the host of a notify URL it finds wrong. `network_scan` lists every device on
+  the subnet, not only the configured servers. So read the machine the operator
+  is asking about rather than every machine in the config; `--all` and
+  `inventory_scan` are answers to a question somebody asked, not a way to begin.
+  Summarise what matters instead of returning raw logs, port tables or JSON into
+  a conversation other people can read.
 - **write** — something changes on the machine, or a message leaves it. Do it when
   it follows from what was asked, and say afterwards what changed.
 - **destructive** — **never on your own initiative.** Only when the operator asked
