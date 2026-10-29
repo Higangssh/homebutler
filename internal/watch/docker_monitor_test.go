@@ -428,6 +428,57 @@ func TestDockerMonitor_Watch_ScanError(t *testing.T) {
 	}
 }
 
+// Stopping while an incident was being gathered returned without cleanup, so
+// the docker events child was killed but never waited for (#360). Every
+// return has to go through it, this one included.
+func TestDockerMonitor_Watch_CancelMidIncidentStillCleansUp(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	cleanedUp := make(chan struct{})
+	dm := &DockerMonitor{
+		// The pre-death logs are the first thing an incident gathers, so
+		// stopping here is stopping in the middle of one.
+		Run: func(name string, args ...string) (string, error) {
+			if len(args) > 0 && args[0] == "logs" {
+				cancel()
+			}
+			return "", nil
+		},
+		PostLogDelay: time.Hour,
+		Events: func(ctx context.Context) (io.ReadCloser, func(), error) {
+			pr, pw := io.Pipe()
+			go func() {
+				_, _ = pw.Write([]byte(`{"status":"die","id":"abc","Actor":{"Attributes":{"name":"nginx"}},"time":1700000000}` + "\n"))
+				<-ctx.Done()
+				_ = pw.Close()
+			}()
+			return pr, func() { close(cleanedUp) }, nil
+		},
+	}
+
+	// Unbuffered and never read, so the incident cannot be delivered.
+	incCh := make(chan Incident)
+	done := make(chan error, 1)
+	go func() {
+		done <- dm.watchOnce(ctx, []Target{{Container: "nginx", Kind: "docker"}}, incCh)
+	}()
+
+	select {
+	case err := <-done:
+		if err != context.Canceled {
+			t.Errorf("expected context.Canceled, got %v", err)
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatal("watchOnce did not return after a cancel mid-incident")
+	}
+	select {
+	case <-cleanedUp:
+	default:
+		t.Error("watchOnce returned after a cancel mid-incident without running cleanup, so docker events is never waited for")
+	}
+}
+
 func TestDockerMonitor_Watch_EffectiveUnit(t *testing.T) {
 	// Target with Unit set should use Unit as the container name to watch
 	runner := func(name string, args ...string) (string, error) {

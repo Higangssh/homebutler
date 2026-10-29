@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### ⚠️ Behavior changes
+
+- **Stopping `watch start` waits for its monitors** (#360, #361). On SIGTERM or SIGINT it used to print `Stopping all monitors.` and exit at once. Now it exits once the monitors have stopped, which is normally immediate. A monitor that has not stopped after 10 seconds is left behind with a warning on stderr, and a second signal exits straight away. Under systemd this is well inside the default `TimeoutStopSec`
+
+### 🐛 Fixes
+
+- stopping `watch start` left its `docker events` child running, reparented to pid 1, and every restart under `nohup`, tmux or a shell `&` added one more (#360). The process exited before the child was killed. On the Raspberry Pi, three restarts left three; now none are left. systemd setups were not affected, because the child died with the service's cgroup. Stopping while an incident was being gathered also killed the child without waiting for it, and that now goes through the same cleanup as an idle stop
+
 ## [1.3.0](https://github.com/Higangssh/homebutler/compare/v1.2.0...v1.3.0) - 2026-10-17
 
 **With `homebutler mcp --max-risk read`, an agent can look at your servers and change nothing through this process.**
