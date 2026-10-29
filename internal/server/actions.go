@@ -98,11 +98,12 @@ func (s *Server) handleInstallApp(w http.ResponseWriter, r *http.Request) {
 	}
 	// The pre-flight is an answer, not an error: a refusal tells the operator
 	// which port is taken so they can change it and ask again.
-	if issues := install.PreCheck(app, port); len(issues) > 0 {
+	if issues := preCheckApp(app, port); len(issues) > 0 {
 		writeJSON(w, installResponse{Status: install.OutcomeFailed, App: app.Name, Port: port, Issues: issues})
 		return
 	}
-	if err := install.Install(app, install.InstallOptions{Port: port}); err != nil {
+	carried, err := installApp(app, install.InstallOptions{Port: port})
+	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
@@ -110,17 +111,23 @@ func (s *Server) handleInstallApp(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, installResponse{
 		Status: install.OutcomeInstalled, App: app.Name, Port: port,
 		Path: install.AppDir(app.Name), State: state,
+		Warning: carried.InstallWarning(app.Name),
 	})
 }
 
 func (s *Server) handleInstallUninstall(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("app")
-	if err := install.Uninstall(name); err != nil {
+	appDir := install.GetInstalledPath(name)
+	carried, err := uninstallApp(name)
+	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 	preserved := true
-	writeJSON(w, installResponse{Status: install.OutcomeUninstalled, App: name, DataPreserved: &preserved})
+	writeJSON(w, installResponse{
+		Status: install.OutcomeUninstalled, App: name, DataPreserved: &preserved,
+		Warning: carried.UninstallWarning(name, appDir),
+	})
 }
 
 func (s *Server) handleInstallPurge(w http.ResponseWriter, r *http.Request) {
@@ -141,6 +148,15 @@ func (s *Server) handleInstallPurge(w http.ResponseWriter, r *http.Request) {
 // Docker with a volume that was kept.
 var purgeApp = install.Purge
 
+// installApp, uninstallApp and preCheckApp are install.Install, Uninstall and
+// PreCheck, for the same reason: a test can answer with state an earlier
+// install stranded, on a machine without Docker.
+var (
+	installApp   = install.Install
+	uninstallApp = install.Uninstall
+	preCheckApp  = install.PreCheck
+)
+
 // installResponse is the same shape the MCP tool answers with, named here so
 // the two surfaces cannot drift into describing the same outcome differently.
 type installResponse struct {
@@ -155,6 +171,8 @@ type installResponse struct {
 	// InstallResult.
 	KeptVolumes      []string `json:"kept_volumes,omitempty"`
 	UncheckedVolumes []string `json:"unchecked_volumes,omitempty"`
+	// See the MCP InstallResult.
+	Warning string `json:"warning,omitempty"`
 }
 
 func (s *Server) handleWatchAdd(w http.ResponseWriter, r *http.Request) {

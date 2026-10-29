@@ -162,8 +162,12 @@
                   </div>
                 {:else if result && result.status === 'installed'}
                   <p class="ok">Installed on port {result.port} · {result.path}</p>
+                  {#if result.warning}<p class="partial">{result.warning}</p>{/if}
                 {:else if result && result.status === 'uninstalled'}
+                  <!-- data_preserved names the operation. warning says when
+                       part of the data is somewhere the app directory is not. -->
                   <p class="ok">Stopped and removed. Its data is still on disk.</p>
+                  {#if result.warning}<p class="partial">{result.warning}</p>{/if}
                 {:else if result && result.status === 'purged'}
                   <!-- data_preserved is false on every purge: it names the
                        operation. What is actually left is in these two. -->

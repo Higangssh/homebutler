@@ -101,12 +101,21 @@ func newInstallUninstallCmd() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			appName := args[0]
 			fmt.Fprintf(os.Stderr, "🛑 Stopping %s...\n", appName)
-			if err := install.Uninstall(appName); err != nil {
+			appDir := install.GetInstalledPath(appName)
+			carried, err := install.Uninstall(appName)
+			for _, line := range carried.Lines(appName, "") {
+				fmt.Fprintln(os.Stderr, line)
+			}
+			if err != nil {
 				return err
 			}
 			fmt.Fprintln(os.Stderr, "✅ Stopped and removed containers")
-			fmt.Fprintf(os.Stderr, "💡 Data preserved at: %s\n", install.GetInstalledPath(appName))
+			fmt.Fprintf(os.Stderr, "💡 Data preserved at: %s\n", appDir)
 			fmt.Fprintf(os.Stderr, "   To delete everything: homebutler install purge %s\n", appName)
+			// Said after the line above, which it qualifies.
+			for _, line := range (install.Carryover{}).Lines(appName, carried.UninstallWarning(appName, appDir)) {
+				fmt.Fprintln(os.Stderr, line)
+			}
 			return nil
 		},
 	}
@@ -189,7 +198,11 @@ func runInstallApp(appName string, cmd *cobra.Command) error {
 	fmt.Fprintln(os.Stderr)
 
 	// Install
-	if err := install.Install(app, opts); err != nil {
+	carried, err := install.Install(app, opts)
+	for _, line := range carried.Lines(app.Name, carried.InstallWarning(app.Name)) {
+		fmt.Fprintln(os.Stderr, line)
+	}
+	if err != nil {
 		return err
 	}
 

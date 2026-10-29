@@ -164,9 +164,9 @@ Three writes are annotated destructive although their class is not, because of
 something a call can take with it:
 
 - `install_uninstall` runs `compose down`, which removes the app's containers.
-  The app directory stays, but filebrowser's accounts and settings do not:
-  reinstalling it starts a new database
-  ([#327](https://github.com/Higangssh/homebutler/issues/327)).
+  The app directory stays, and so does every catalogue app's data in it, but
+  anything an app wrote inside its container rather than to that directory
+  goes with the container.
 - `report` prunes saved snapshots down to `keep`, which the caller sets. `keep:
   1` leaves one, and the history every later comparison is measured against is
   gone.
@@ -219,9 +219,9 @@ the ceiling is refused by this server whatever the client does with its hints.
 | `backup_drill`           | Boot a backup in isolation and verify app health                                                                       |
 | `backup_restore`         | Restore volumes from a backup archive                                                                                  |
 | `install_list`           | List installable self-hosted apps                                                                                      |
-| `install_app`            | Install an app via generated docker-compose.yml                                                                        |
+| `install_app`            | Install an app via generated docker-compose.yml. Says in `warning` when an earlier install's state could not be carried over |
 | `install_status`         | Check installed app status                                                                                             |
-| `install_uninstall`      | Stop an app while preserving data                                                                                      |
+| `install_uninstall`      | Stop an app while preserving data. Says in `warning` when part of that data is in Docker volumes outside the app directory |
 | `install_purge`          | Stop an app and delete all data. Names any volume left behind in `kept_volumes` or `unchecked_volumes`                  |
 | `processes`              | Top processes by CPU or memory, with zombies broken out separately                                                     |
 | `config_validate`        | Check the config file this server is running on                                                                        |

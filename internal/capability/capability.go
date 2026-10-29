@@ -939,7 +939,7 @@ var Registry = []Capability{
 		HTTP:    HTTP{Method: "POST", Path: "/api/install/{app}", Protection: ProtectionToken, Target: "install_list"},
 		Tool: Definition{
 			Name:        "install_app",
-			Description: "Install a self-hosted app via docker compose. Pre-checks docker, ports, and duplicates automatically, and a refusal comes back as a result with the reasons rather than as an error",
+			Description: "Install a self-hosted app via docker compose. Pre-checks docker, ports, and duplicates automatically, and a refusal comes back as a result with the reasons rather than as an error. warning is present when an earlier install of the app left state in Docker volumes this install could not carry over",
 			InputSchema: Schema{
 				Type: "object",
 				Properties: map[string]Property{
@@ -968,12 +968,12 @@ var Registry = []Capability{
 	},
 	{
 		Risk:    RiskWrite,
-		Erases:  ErasesSomething, // compose down removes the containers, and filebrowser's database with them (#327)
+		Erases:  ErasesSomething, // compose down removes the containers, and whatever an app wrote inside them rather than to its directory
 		Targets: []TargetKind{TargetLocal},
 		HTTP:    HTTP{Method: "POST", Path: "/api/install/{app}/uninstall", Protection: ProtectionToken, Target: "install_list"},
 		Tool: Definition{
 			Name:        "install_uninstall",
-			Description: "Stop an installed app and remove its containers. The app directory and its volumes stay on disk; install_purge is the one that deletes them",
+			Description: "Stop an installed app and remove its containers. The app directory and its volumes stay on disk; install_purge is the one that deletes them. warning is present when part of the app's state is in Docker volumes outside the app directory, left there by an earlier install",
 			InputSchema: Schema{
 				Type: "object",
 				Properties: map[string]Property{
