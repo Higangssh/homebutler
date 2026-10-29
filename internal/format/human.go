@@ -59,7 +59,14 @@ func DockerTop(r *docker.TopResult) string {
 	}
 	fmt.Fprintf(&b, "%-8s %-12s %s\n", "PID", "USER", "COMMAND")
 	for _, p := range r.Processes {
-		fmt.Fprintf(&b, "%-8s %-12s %s\n", p.PID, p.User, p.Command)
+		// The full command line is for this table on the operator's own
+		// terminal. A result decoded from JSON, as a remote one is, has only
+		// the name.
+		cmd := p.Invocation
+		if cmd == "" {
+			cmd = p.Command
+		}
+		fmt.Fprintf(&b, "%-8s %-12s %s\n", p.PID, p.User, cmd)
 	}
 	if r.Skipped > 0 {
 		fmt.Fprintf(&b, "⚠️  %d of %d output rows could not be parsed\n",

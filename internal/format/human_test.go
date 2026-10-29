@@ -55,6 +55,15 @@ func TestDockerTopAndInspect(t *testing.T) {
 			t.Fatalf("expected %q in top output: %s", want, top)
 		}
 	}
+	// A remote result is decoded from JSON and has no invocation; the table
+	// then shows the name it does have rather than a blank column.
+	remote := DockerTop(&docker.TopResult{
+		Container: "app-api",
+		Processes: []docker.TopProcess{{PID: "1", User: "root", Command: "probe"}},
+	})
+	if !strings.Contains(remote, "probe") {
+		t.Fatalf("a row without an invocation should show its name:\n%s", remote)
+	}
 	if empty := DockerTop(&docker.TopResult{Container: "app-api"}); !strings.Contains(empty, "No processes found in app-api") {
 		t.Fatalf("unexpected empty top output: %q", empty)
 	}

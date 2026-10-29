@@ -993,6 +993,9 @@ func (s *Server) executeRemote(srv *config.ServerConfig, tool string, args map[s
 	if err != nil {
 		return nil, err
 	}
+	if tool == "docker_top" {
+		return remoteDockerTop(out)
+	}
 
 	// Return raw JSON from remote as-is
 	var result any
@@ -1000,6 +1003,24 @@ func (s *Server) executeRemote(srv *config.ServerConfig, tool string, args map[s
 		return nil, fmt.Errorf("invalid JSON from remote: %w", err)
 	}
 	return result, nil
+}
+
+// remoteDockerTop passes each command in a remote docker top answer through
+// docker.CommandName. A remote homebutler from before #356 returns command
+// lines in full, and this process is the one that promises a read-mode agent
+// it will not be handed them. From an older remote this is the first word
+// of each line, the best a full line allows. A current remote already sends
+// comm, which has no spaces and comes through unchanged, unless it holds a
+// slash, in which case only the part after the slash is kept.
+func remoteDockerTop(out []byte) (any, error) {
+	var result docker.TopResult
+	if err := json.Unmarshal(out, &result); err != nil {
+		return nil, fmt.Errorf("invalid JSON from remote: %w", err)
+	}
+	for i := range result.Processes {
+		result.Processes[i].Command = docker.CommandName(result.Processes[i].Command)
+	}
+	return &result, nil
 }
 
 func (s *Server) writeResult(id json.RawMessage, result any) {

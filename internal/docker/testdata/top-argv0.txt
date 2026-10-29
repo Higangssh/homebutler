@@ -1,0 +1,8 @@
+UID                 PID                 PPID                C                   STIME               TTY                 TIME                CMD
+root                2974149             2974125             0                   22:33               ?                   00:00:00            bash /argv0.sh
+root                2974169             2974149             0                   22:33               ?                   00:00:00            --token=XA1 3600
+root                2974170             2974149             0                   22:33               ?                   00:00:00            [celeryd: celery@HOSTB2:MainProcess] 3600
+root                2974171             2974149             0                   22:33               ?                   00:00:00            /opt/SECRETC3/ 3600
+root                2974172             2974149             0                   22:33               ?                   00:00:00            run​--token=XD4 3600
+root                2974173             2974149             0                   22:33               ?                   00:00:00            run?--token=XE5 3600
+root                2974174             2974149             0                   22:33               ?                   00:00:00            3601

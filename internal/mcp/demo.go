@@ -446,31 +446,32 @@ func demoLogs(container, lines string) docker.LogsResult {
 // demoDockerTop mirrors the demo fleet's containers so top, list and inspect
 // do not describe different machines. Unknown containers get a plausible
 // entrypoint row rather than an error, matching demoLogs' fallback behaviour.
+// Each command is the executable name only, as the real tool returns it.
 func demoDockerTop(container string) map[string]any {
 	fleet := map[string][]map[string]any{
 		"nginx": {
-			{"pid": "1", "user": "root", "command": "nginx: master process nginx -g daemon off;"},
-			{"pid": "29", "user": "nginx", "command": "nginx: worker process"},
-			{"pid": "30", "user": "nginx", "command": "nginx: worker process"},
+			{"pid": "1", "user": "root", "command": "nginx"},
+			{"pid": "29", "user": "nginx", "command": "nginx"},
+			{"pid": "30", "user": "nginx", "command": "nginx"},
 		},
 		"postgres": {
 			{"pid": "1", "user": "postgres", "command": "postgres"},
-			{"pid": "45", "user": "postgres", "command": "postgres: checkpointer"},
-			{"pid": "46", "user": "postgres", "command": "postgres: walwriter"},
+			{"pid": "45", "user": "postgres", "command": "postgres"},
+			{"pid": "46", "user": "postgres", "command": "postgres"},
 		},
 		"redis": {
-			{"pid": "1", "user": "redis", "command": "redis-server *:6379"},
+			{"pid": "1", "user": "redis", "command": "redis-server"},
 		},
 		"grafana": {
-			{"pid": "1", "user": "grafana", "command": "/run.sh"},
+			{"pid": "1", "user": "grafana", "command": "run.sh"},
 		},
 		"prometheus": {
-			{"pid": "1", "user": "nobody", "command": "/bin/prometheus --config.file=/etc/prometheus/prometheus.yml --storage.tsdb.path=/prometheus"},
+			{"pid": "1", "user": "nobody", "command": "prometheus"},
 		},
 	}
 	procs, ok := fleet[container]
 	if !ok {
-		procs = []map[string]any{{"pid": "1", "user": "root", "command": "/entrypoint.sh"}}
+		procs = []map[string]any{{"pid": "1", "user": "root", "command": "entrypoint.sh"}}
 	}
 	return map[string]any{"container": container, "processes": procs}
 }
