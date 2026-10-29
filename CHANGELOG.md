@@ -13,6 +13,7 @@ All notable changes to this project will be documented in this file.
 
 ### 🐛 Fixes
 
+- a `ps` whose elapsed times could not be read made every process look as if it had just started (#315). 1.3.0 then saved no processes at all, and every report said `skipped: processes — not compared — the previous snapshot has none`, which was not the reason. An unreadable time is now unknown, and a process of unknown age is compared as an old one, as a process the invocation lookup missed already was
 
 - stopping `watch start` left its `docker events` child running, reparented to pid 1, and every restart under `nohup`, tmux or a shell `&` added one more (#360). The process exited before the child was killed. On the Raspberry Pi, three restarts left three; now none are left. systemd setups were not affected, because the child died with the service's cgroup. Stopping while an incident was being gathered also killed the child without waiting for it, and that now goes through the same cleanup as an idle stop
 
