@@ -120,7 +120,7 @@ jobs:
           head -1 "$RUNNER_TEMP/release-notes.md"
 
       - name: Run GoReleaser
-        uses: goreleaser/goreleaser-action@v6
+        uses: goreleaser/goreleaser-action@v7
         with:
           # Pinned to the version that built the last release. An upgrade is a
           # pull request, which CI checks the config with before a tag exists.

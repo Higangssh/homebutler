@@ -44,7 +44,7 @@ jobs:
       # said so until somebody ran it by hand — with `version: latest` on the
       # release job, that is a release breaking on a day we changed nothing.
       - name: Check the release config
-        uses: goreleaser/goreleaser-action@v6
+        uses: goreleaser/goreleaser-action@v7
         with:
           version: v2.18.1
           args: check
