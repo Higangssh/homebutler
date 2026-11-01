@@ -1,0 +1,48 @@
+name: Verify setup-qemu-action v4
+
+on:
+  push:
+    branches: [claude/cloud-session-check-qdezve]
+
+permissions:
+  contents: read
+
+jobs:
+  release-path:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version: "1.26"
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+
+      - name: Build web frontend
+        run: make build-web
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v4
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: arm64 runs under emulation
+        run: |
+          arch=$(docker run --rm --platform linux/arm64 alpine:3.21 uname -m)
+          echo "linux/arm64 container reports: $arch"
+          test "$arch" = "aarch64"
+
+      - name: GoReleaser snapshot (builds both images, publishes nothing)
+        uses: goreleaser/goreleaser-action@v7
+        with:
+          version: v2.18.1
+          args: release --snapshot --clean
+
+      - name: Images that were built
+        run: docker images ghcr.io/higangssh/homebutler
