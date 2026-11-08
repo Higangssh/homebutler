@@ -218,8 +218,12 @@ notification channels, Wake-on-LAN devices, servers and Proxmox endpoints.
 Without a token it is read-only and the write routes do not exist at all. The
 token can also live in the config file as `web.token`, which is where `serve
 install` reads it: a unit file is not homebutler's to protect, and `--token`
-is visible in `ps` to every user on the machine. The Report tab shows what
-`report` reports. There is a container image,
+is visible in `ps` to every user on the machine. Since **1.5.0** `serve` also
+takes it from `HOMEBUTLER_TOKEN`, which is how the container image is meant to
+get one. It is the last place `serve` looks, after `--token` and `web.token`,
+and `serve` removes it from its environment once read, so the commands it runs
+do not inherit it. `serve install` still reads only `web.token`. The Report
+tab shows what `report` reports. There is a container image,
 `ghcr.io/higangssh/homebutler`, which reaches the machines in `servers:` over
 SSH — a container cannot see the host it runs on, and says so rather than
 answering with its own numbers.
@@ -293,21 +297,21 @@ agent that installs an unpinned executable cannot say what it ran.
 
 ```bash
 brew install Higangssh/homebutler/homebutler       # pinned formula, our own tap
-go install github.com/Higangssh/homebutler@v1.4.0
+go install github.com/Higangssh/homebutler@v1.5.0
 ```
 
 Taking a release archive instead means checking it against the checksums the
 release publishes:
 
 ```bash
-V=1.4.0
+V=1.5.0
 BASE=https://github.com/Higangssh/homebutler/releases/download/v$V
 curl -fsSLO $BASE/homebutler_${V}_linux_amd64.tar.gz
 curl -fsSLO $BASE/checksums.txt
 sha256sum --check --ignore-missing checksums.txt   # macOS: shasum -a 256 --check …
-# must print: homebutler_1.4.0_linux_amd64.tar.gz: OK
+# must print: homebutler_1.5.0_linux_amd64.tar.gz: OK
 tar xzf homebutler_${V}_linux_amd64.tar.gz
 ```
 
-There is a container image, `ghcr.io/higangssh/homebutler:1.4.0`, pinned the
+There is a container image, `ghcr.io/higangssh/homebutler:1.5.0`, pinned the
 same way.
