@@ -1,8 +1,11 @@
 package server
 
 import (
+	"encoding/json"
+	"errors"
 	"net/http"
 
+	"github.com/Higangssh/homebutler/internal/config"
 	"github.com/Higangssh/homebutler/internal/doctor"
 	"github.com/Higangssh/homebutler/internal/report"
 )
@@ -43,9 +46,14 @@ func withSummary(r *report.Report) reportResponse {
 // snapshots in eight minutes and prune the baseline somebody wanted to compare
 // against — so looking is looking, and saving is a separate request that costs
 // a token.
+//
+// The same holds for a remote one, so the forwarded command carries --no-save.
+// Every remote that has `report` understands it — both arrived in 0.18.0 — and
+// one older than that has no `report` at all, which remote.Run already explains
+// by naming the version on the far side.
 func (s *Server) handleReport(w http.ResponseWriter, r *http.Request) {
 	if srv, ok := s.isRemoteRequest(r); ok {
-		s.forwardRemote(w, srv, "report", "--json")
+		s.forwardRemoteReport(w, srv, "report", "--json", "--no-save")
 		return
 	}
 
@@ -61,7 +69,7 @@ func (s *Server) handleReport(w http.ResponseWriter, r *http.Request) {
 // about the time since now.
 func (s *Server) handleReportSnapshot(w http.ResponseWriter, r *http.Request) {
 	if srv, ok := s.isRemoteRequest(r); ok {
-		s.forwardRemote(w, srv, "report", "--json")
+		s.forwardRemoteReport(w, srv, "report", "--json")
 		return
 	}
 
@@ -73,6 +81,55 @@ func (s *Server) handleReportSnapshot(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, withSummary(result))
+}
+
+// forwardRemoteReport answers with the remote's report and the summary the
+// local path adds, so a widget pointed at summary.* reads the same fields
+// whichever server it names.
+//
+// The remote's answer is extended rather than decoded into report.Report and
+// written again: a remote newer than this binary may send a field this one does
+// not know, and a round trip through the struct would drop it.
+func (s *Server) forwardRemoteReport(w http.ResponseWriter, srv *config.ServerConfig, args ...string) {
+	out, err := s.remoteRunner(srv, args...)
+	if err != nil {
+		writeError(w, http.StatusBadGateway, err.Error())
+		return
+	}
+	body, err := withRemoteSummary(out)
+	if err != nil {
+		writeError(w, http.StatusBadGateway, "invalid response from remote server")
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	_, _ = w.Write(body)
+}
+
+func withRemoteSummary(out []byte) ([]byte, error) {
+	var doc map[string]json.RawMessage
+	if err := json.Unmarshal(out, &doc); err != nil {
+		return nil, err
+	}
+	// null decodes without error and leaves the map nil.
+	if doc == nil {
+		return nil, errors.New("remote report is not a JSON object")
+	}
+	var lists struct {
+		NeedsAttention []json.RawMessage `json:"needs_attention"`
+		NotableChanges []json.RawMessage `json:"notable_changes"`
+	}
+	if err := json.Unmarshal(out, &lists); err != nil {
+		return nil, err
+	}
+	summary, err := json.Marshal(reportSummary{
+		NeedsAttention: len(lists.NeedsAttention),
+		NotableChanges: len(lists.NotableChanges),
+	})
+	if err != nil {
+		return nil, err
+	}
+	doc["summary"] = summary
+	return json.Marshal(doc)
 }
 
 func (s *Server) handleDoctor(w http.ResponseWriter, r *http.Request) {

@@ -4,12 +4,17 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### ⚠️ Behavior changes
+
+- **`GET /api/report?server=<name>` no longer saves a snapshot on that server** (#375). It forwarded `report --json` without `--no-save`, so every poll, from a Homepage widget or anything else, saved one there and moved its baseline, and the next comparison was against a few seconds earlier. It now forwards `report --json --no-save`, as the local route has always compared without saving. A remote that was getting its snapshots only from being polled stops getting them: save one with `POST /api/report/snapshot?server=<name>`, or with `homebutler report` from cron on that machine. A remote older than 0.18.0 has no `report` at all and is answered with a 502 naming its version, as before
+
 ### ✨ Features
 
 - each release carries a Claude Desktop extension per platform (`homebutler_<version>_darwin_arm64.mcpb` and the rest), with the binary inside, so the MCP server installs from Claude Desktop without Node or a separate homebutler. It starts as `homebutler mcp --max-risk read`, and the extension's **Highest tool risk** setting raises that to `write` or `destructive`. In read mode it never saves a report snapshot, so it reports changes only against snapshots saved outside it, by `homebutler report` or cron. The bundles are listed in `checksums.txt`. `docs/mcp-server.md` says how to install one and which `PATH` it runs with
 
 ### 🐛 Fixes
 
+- a Homepage widget reading `summary.*` from `GET /api/report?server=<name>` showed `-`, because a remote report had no `summary` (#375). It now answers with the same `summary` object as a local report, and so does `POST /api/report/snapshot?server=<name>`
 - the dashboard's sign-in screen and its read-only hints named only `web.token` and `--token`, so somebody who started the container with `HOMEBUTLER_TOKEN` was sent looking for a config file they did not have (#379). The sign-in screen now names the variable and how to read it back, `docker exec <name> printenv HOMEBUTLER_TOKEN`, and the five read-only settings cards say the same thing in one sentence. Neither says which of them this server used, and the API still does not tell the browser
 
 ## [1.4.0](https://github.com/Higangssh/homebutler/compare/v1.3.0...v1.4.0) - 2026-10-29
