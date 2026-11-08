@@ -10,6 +10,9 @@ test.describe('a dashboard started with a token', () => {
     // The point of the gate: one message, not eleven failures behind it.
     await expect(page.locator('.card')).toHaveCount(1);
     await expect(page.locator('header')).toHaveCount(0);
+    // A container gets its token from the environment, with no config file to
+    // look in, so the gate has to say where that one is too.
+    await expect(page.getByText('docker exec <name> printenv HOMEBUTLER_TOKEN')).toBeVisible();
   });
 
   test('says so when the token is refused, and does not keep it', async ({ page }) => {

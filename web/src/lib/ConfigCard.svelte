@@ -1,6 +1,7 @@
 <script>
   import { onMount } from 'svelte';
   import { getConfig, saveAlerts, StaleConfigError } from './api.js';
+  import ReadOnlyHint from './ReadOnlyHint.svelte';
   import NotifyCard from './NotifyCard.svelte';
   import WakeDevicesCard from './WakeDevicesCard.svelte';
   import ServersCard from './ServersCard.svelte';
@@ -157,9 +158,7 @@
             <span class="label">Disk</span><code class="value">{data.alerts.disk}%</code>
           </div>
         </div>
-        <p class="hint read-only">
-          Read-only: start <code>homebutler serve</code> with <code>--token</code> to edit settings here.
-        </p>
+        <ReadOnlyHint what="settings" />
       {:else}
         <form class="thresholds editable" onsubmit={submitThresholds}>
           <label class="threshold-item">
