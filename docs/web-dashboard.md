@@ -117,6 +117,7 @@ this to `services.yaml`:
         widget:
           type: customapi
           url: http://your-server:8080/api/report
+          refreshInterval: 60000
           headers:
             Authorization: Bearer YOUR_TOKEN
           mappings:
@@ -135,22 +136,30 @@ this to `services.yaml`:
 | Label | Field | What it counts |
 |---|---|---|
 | Needs attention | `summary.needs_attention` | Findings worth acting on: a stopped container, memory or a disk over 85%, a port newly open to every interface. `0` is the number you want |
-| Changes | `summary.notable_changes` | Everything that moved since the last saved snapshot, attention-worthy or not |
+| Changes | `summary.notable_changes` | Lines in the change list: what moved since the last saved snapshot, plus one line for each comparison that could not be made |
 | Running | `running_count` | Docker containers running now |
 | Stopped | `stopped_count` | Docker containers stopped now |
 
+Run `homebutler report` once, or press **Save a snapshot** on the Report tab
+(that needs a token), before trusting Changes. Until a snapshot exists there is
+nothing to compare against, and Changes shows `1` — the line saying so. Loading
+the widget never saves one, so after that Changes covers everything since the
+last save; `homebutler report` on a schedule keeps the window short. While
+Docker is unreachable, Changes includes a line saying containers were not
+compared.
+
 Running and Stopped show `-` when Docker did not answer. They are left without
-`format: number` on purpose: homebutler sends an empty count rather than a
-`0` it did not see, and `format: number` would turn that into `NaN`.
+`format: number` on purpose: homebutler sends `null` rather than a `0` it did
+not see, and `format: number` would turn that into `NaN`.
 
-The comparison is against the last snapshot, and loading the widget does not
-save one. Changes keeps growing until something does — `homebutler report`
-on a schedule, or **Save a snapshot** on the Report tab. `href` makes the card
-a link to the dashboard, where the Report tab names what the numbers count.
+`refreshInterval` is in milliseconds. Homepage's default is 10 seconds, and
+every request collects the whole report again; once a minute is plenty for
+counts that change when containers and ports do.
 
-Homepage shows at most four fields in a card. `summary` exists because a widget
-maps fields to values; `format: size` on the `needs_attention` list counts it
-too, but a field holding the number is the simpler snippet.
+In the default block display Homepage shows the first four fields of a card;
+`display: list` shows them all. `href` makes the card a link to the dashboard,
+where the Report tab names what the numbers count. `summary` exists so each
+value is one field; `format: size` on the `needs_attention` list counts it too.
 
 Checked against Homepage 2.7.0: pasted as it is, with only the address and the
 token filled in, the card shows all four values from `GET /api/report`,
