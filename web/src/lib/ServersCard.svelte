@@ -1,5 +1,6 @@
 <script>
   import { saveServers, StaleConfigError } from './api.js';
+  import ReadOnlyHint from './ReadOnlyHint.svelte';
 
   let { servers = [], revision = '', editable = false, onsaved, onreload } = $props();
 
@@ -342,9 +343,7 @@
   </div>
 
   {#if !editable}
-    <p class="hint read-only">
-      Read-only: start <code>homebutler serve</code> with <code>--token</code> to edit servers here.
-    </p>
+    <ReadOnlyHint what="servers" />
   {/if}
 </div>
 
@@ -548,11 +547,6 @@
     line-height: 1.5;
     color: var(--text-secondary);
     margin: 0;
-  }
-
-  .hint.read-only {
-    margin-top: 0.75rem;
-    font-size: 0.78rem;
   }
 
   .stale {

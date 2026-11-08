@@ -15,6 +15,7 @@ All notable changes to this project will be documented in this file.
 ### 🐛 Fixes
 
 - a Homepage widget reading `summary.*` from `GET /api/report?server=<name>` showed `-`, because a remote report had no `summary` (#375). It now answers with the same `summary` object as a local report, and so does `POST /api/report/snapshot?server=<name>`
+- the dashboard's sign-in screen and its read-only hints named only `web.token` and `--token`, so somebody who started the container with `HOMEBUTLER_TOKEN` was sent looking for a config file they did not have (#379). The sign-in screen now names the variable and how to read it back, `docker exec <name> printenv HOMEBUTLER_TOKEN`, and the five read-only settings cards say the same thing in one sentence. Neither says which of them this server used, and the API still does not tell the browser
 
 ## [1.4.0](https://github.com/Higangssh/homebutler/compare/v1.3.0...v1.4.0) - 2026-10-29
 

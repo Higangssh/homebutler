@@ -1,5 +1,6 @@
 <script>
   import { saveWake, StaleConfigError } from './api.js';
+  import ReadOnlyHint from './ReadOnlyHint.svelte';
 
   // Same arrangement as the channels above: the revision is shared with every
   // other form on this screen, so a save hands the new one back rather than
@@ -127,9 +128,7 @@
         {/each}
       </div>
     {/if}
-    <p class="hint read-only">
-      Read-only: start <code>homebutler serve</code> with <code>--token</code> to edit devices here.
-    </p>
+    <ReadOnlyHint what="devices" />
   {:else}
     {#if targets.length === 0 && !adding}
       <p class="empty">No WoL targets configured</p>
@@ -430,12 +429,6 @@
     font-size: 0.78rem;
     color: var(--red, #e5534b);
     margin: 0;
-  }
-
-  .hint.read-only {
-    margin-top: 0.75rem;
-    font-size: 0.78rem;
-    color: var(--text-secondary);
   }
 
   @media (max-width: 480px) {

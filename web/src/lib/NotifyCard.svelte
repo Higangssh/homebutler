@@ -1,5 +1,6 @@
 <script>
   import { saveNotify, testNotify, StaleConfigError } from './api.js';
+  import ReadOnlyHint from './ReadOnlyHint.svelte';
 
   // revision is shared with the thresholds form above: both write the same
   // file, so a save through either one hands back the revision the other must
@@ -250,9 +251,7 @@
   </div>
 
   {#if !editable}
-    <p class="hint read-only">
-      Read-only: start <code>homebutler serve</code> with <code>--token</code> to edit channels here.
-    </p>
+    <ReadOnlyHint what="channels" />
   {/if}
 </div>
 
@@ -487,12 +486,6 @@
     font-size: 0.78rem;
     color: var(--red, #e5534b);
     margin: 0.5rem 0 0;
-  }
-
-  .hint.read-only {
-    margin-top: 0.75rem;
-    font-size: 0.78rem;
-    color: var(--text-secondary);
   }
 
   .row {
