@@ -1,0 +1,46 @@
+{
+  "manifest_version": "0.3",
+  "name": "homebutler",
+  "display_name": "HomeButler",
+  "version": "0.0.0",
+  "description": "Lets Claude read your server's status, Docker, backups and Proxmox, and what changed since the last saved report.",
+  "long_description": "HomeButler remembers what your server looked like at the last saved report and tells you, or Claude, what moved. The extension runs the homebutler binary on this computer as a local MCP server. It reads `~/.config/homebutler/config.yaml` when that file exists, and reaches the servers listed there over SSH.\n\nIt starts in read mode: Claude can look, and homebutler changes nothing. That includes saving report snapshots, so on its own the extension never reports a change: each report is a first look with nothing to compare. To get changes reported, save snapshots outside Claude by running `homebutler report` from an installed homebutler, by hand or from cron, or set **Highest tool risk** to `write`, which lets a report Claude runs save one.\n\n`write` and `destructive` also offer the tools that change things, such as restarting a container, taking a backup or installing an app.",
+  "author": {
+    "name": "Higangssh",
+    "url": "https://github.com/Higangssh"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Higangssh/homebutler"
+  },
+  "homepage": "https://homebutler.dev",
+  "documentation": "https://github.com/Higangssh/homebutler/blob/main/docs/mcp-server.md",
+  "support": "https://github.com/Higangssh/homebutler/issues",
+  "icon": "icon.png",
+  "server": {
+    "type": "binary",
+    "entry_point": "server/homebutler",
+    "mcp_config": {
+      "command": "${__dirname}/server/homebutler",
+      "args": ["mcp", "--max-risk", "${user_config.max_risk}"],
+      "env": {
+        "PATH": "/usr/local/bin:/usr/local/sbin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin:/snap/bin"
+      }
+    }
+  },
+  "tools_generated": true,
+  "keywords": ["homelab", "server", "docker", "proxmox", "backup", "monitoring"],
+  "license": "MIT",
+  "compatibility": {
+    "platforms": ["darwin", "linux"]
+  },
+  "user_config": {
+    "max_risk": {
+      "type": "string",
+      "title": "Highest tool risk",
+      "description": "read, write or destructive. read: Claude can look and homebutler changes nothing. write: also tools that change something, such as restarting a container or taking a backup. destructive: also stopping containers, restoring backups and deleting app data.",
+      "default": "read",
+      "required": true
+    }
+  }
+}

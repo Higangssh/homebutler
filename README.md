@@ -657,6 +657,13 @@ homebutler serve install      # Let the host keep it running
 
 </details>
 
+### In Homepage
+
+Already run [Homepage](https://gethomepage.dev)? One `customapi` snippet in
+`services.yaml` puts a homebutler card on it: needs attention, changes since
+the last snapshot, containers running and stopped.
+[The snippet →](docs/web-dashboard.md#in-a-homepage-dashboard)
+
 ### 🖥️ TUI Dashboard
 
 <p align="center">
@@ -779,6 +786,15 @@ Downloads the Go binary automatically. This package publishes one command,
 `homebutler-mcp`, and it starts the MCP server — `npx -y homebutler@latest`
 launches that, not the CLI. For the command line, use one of the other
 installs above.
+
+### Claude Desktop extension (MCP server)
+
+Download `homebutler_<version>_darwin_arm64.mcpb` (Apple silicon) or
+`homebutler_<version>_darwin_amd64.mcpb` (Intel) from the
+[latest release](https://github.com/Higangssh/homebutler/releases/latest) and
+open it, or drag it onto Claude Desktop's Settings → Extensions. The binary is
+inside, so nothing else needs installing. It starts read-only; see
+[the MCP docs](docs/mcp-server.md#claude-desktop-extension) to allow more.
 
 ### Go Install
 

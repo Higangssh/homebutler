@@ -119,6 +119,13 @@ jobs:
           scripts/release-notes.sh "${GITHUB_REF#refs/tags/}" > "$RUNNER_TEMP/release-notes.md"
           head -1 "$RUNNER_TEMP/release-notes.md"
 
+      # scripts/build-mcpb.sh packs each binary as a Claude Desktop extension
+      # from a GoReleaser hook. Installed here, outside the checkout, so the
+      # four builds do not each fetch it through npx at once, and pinned to the
+      # version the script names in its fallback.
+      - name: Install the MCP bundle packer
+        run: npm install -g @anthropic-ai/mcpb@2.1.2
+
       - name: Run GoReleaser
         uses: goreleaser/goreleaser-action@v7
         with:
@@ -146,11 +153,13 @@ jobs:
           CHECKSUMS_URL="https://github.com/${REPO}/releases/download/v${TAG}/checksums.txt"
           curl -sL "$CHECKSUMS_URL" -o checksums.txt
 
-          # Extract sha256 for each platform
-          SHA_DARWIN_ARM64=$(grep "darwin_arm64" checksums.txt | awk '{print $1}')
-          SHA_DARWIN_AMD64=$(grep "darwin_amd64" checksums.txt | awk '{print $1}')
-          SHA_LINUX_ARM64=$(grep "linux_arm64" checksums.txt | awk '{print $1}')
-          SHA_LINUX_AMD64=$(grep "linux_amd64" checksums.txt | awk '{print $1}')
+          # Extract sha256 for each platform. Matched on the archive's full
+          # name: checksums.txt also lists the .mcpb bundle for each platform,
+          # and a match on the platform alone returns both hashes.
+          SHA_DARWIN_ARM64=$(grep "_darwin_arm64.tar.gz$" checksums.txt | awk '{print $1}')
+          SHA_DARWIN_AMD64=$(grep "_darwin_amd64.tar.gz$" checksums.txt | awk '{print $1}')
+          SHA_LINUX_ARM64=$(grep "_linux_arm64.tar.gz$" checksums.txt | awk '{print $1}')
+          SHA_LINUX_AMD64=$(grep "_linux_amd64.tar.gz$" checksums.txt | awk '{print $1}')
 
           # Generate formula
           cat > homebutler.rb << EOF
