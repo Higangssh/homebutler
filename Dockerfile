@@ -31,6 +31,6 @@ EXPOSE 8080
 
 ENTRYPOINT ["homebutler"]
 # 0.0.0.0 because the point of the image is to be reached from another machine.
-# That is also why serve refuses to run without --token when it is bound
+# That is also why serve refuses to run without a token when it is bound
 # beyond localhost.
 CMD ["serve", "--host", "0.0.0.0", "--port", "8080"]

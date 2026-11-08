@@ -44,7 +44,9 @@ running: homebutler serve install`,
 				fmt.Fprintln(os.Stderr, note)
 			}
 			// serve runs docker, systemctl and ssh. None of them needs the
-			// dashboard's token, and each would otherwise inherit it.
+			// dashboard's token, so child processes do not inherit it. This
+			// does not hide it: /proc/1/environ keeps the environment the
+			// process started with, as docker inspect does.
 			_ = os.Unsetenv(webTokenEnv)
 
 			// The image exists to be reached from another machine, which is

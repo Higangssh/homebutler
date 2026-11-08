@@ -136,8 +136,9 @@ curl -fsSL https://raw.githubusercontent.com/Higangssh/homebutler/main/install.s
 brew install Higangssh/homebutler/homebutler
 
 # Or as a container — the hub that reaches your machines over SSH
-docker run -d -p 8080:8080 -v ~/.config/homebutler:/config -v ~/.ssh:/root/.ssh:ro \
+docker run -d --name homebutler -p 8080:8080 -v ~/.config/homebutler:/config -v ~/.ssh:/root/.ssh:ro \
   -e HOMEBUTLER_TOKEN="$(openssl rand -hex 16)" ghcr.io/higangssh/homebutler
+docker exec homebutler printenv HOMEBUTLER_TOKEN   # the token, to sign in to the dashboard
 
 # Interactive setup — add your servers in seconds
 homebutler init
