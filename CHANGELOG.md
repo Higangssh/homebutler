@@ -8,6 +8,10 @@ All notable changes to this project will be documented in this file.
 
 - each release carries a Claude Desktop extension per platform (`homebutler_<version>_darwin_arm64.mcpb` and the rest), with the binary inside, so the MCP server installs from Claude Desktop without Node or a separate homebutler. It starts as `homebutler mcp --max-risk read`, and the extension's **Highest tool risk** setting raises that to `write` or `destructive`. In read mode it never saves a report snapshot, so it reports changes only against snapshots saved outside it, by `homebutler report` or cron. The bundles are listed in `checksums.txt`. `docs/mcp-server.md` says how to install one and which `PATH` it runs with
 
+### 🐛 Fixes
+
+- polling `GET /api/report?server=<name>`, from a Homepage widget or anything else, saved a snapshot on that server every time and moved its baseline, so the next comparison was against a few seconds earlier and real changes never showed (#375). It now forwards `report --json --no-save`, as the local route has always compared without saving, and answers with the same `summary` object as a local report, which a widget reading `summary.*` showed as `-` for a remote. A remote that was getting its snapshots only from being polled stops getting them: save one with `POST /api/report/snapshot?server=<name>`, or with `homebutler report` from cron on that machine. A remote older than 0.18.0 has no `report` at all and is answered with a 502 naming its version, as before
+
 ## [1.4.0](https://github.com/Higangssh/homebutler/compare/v1.3.0...v1.4.0) - 2026-10-29
 
 **`report`, `install` and `watch` stop saying what was not so, and `docker_top` and `config validate` stop handing an agent a token from a container's command line or a webhook URL.**
