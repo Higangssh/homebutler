@@ -40,7 +40,7 @@
       "title": "Highest tool risk",
       "description": "read, write or destructive. read: Claude can look and homebutler changes nothing. write: also tools that change something, such as restarting a container or taking a backup. destructive: also stopping containers, restoring backups and deleting app data.",
       "default": "read",
-      "required": true
+      "required": false
     }
   }
 }

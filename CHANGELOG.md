@@ -10,7 +10,7 @@ All notable changes to this project will be documented in this file.
 
 ### ✨ Features
 
-- each release carries a Claude Desktop extension per platform (`homebutler_<version>_darwin_arm64.mcpb` and the rest), with the binary inside, so the MCP server installs from Claude Desktop without Node or a separate homebutler. It starts as `homebutler mcp --max-risk read`, and the extension's **Highest tool risk** setting raises that to `write` or `destructive`. In read mode it never saves a report snapshot, so it reports changes only against snapshots saved outside it, by `homebutler report` or cron. The bundles are listed in `checksums.txt`. `docs/mcp-server.md` says how to install one and which `PATH` it runs with
+- each release carries a Claude Desktop extension per platform (`homebutler_<version>_darwin_arm64.mcpb` and the rest), with the binary inside, so the MCP server installs from Claude Desktop without Node or a separate homebutler. It installs switched on and starts as `homebutler mcp --max-risk read`, and the extension's **Highest tool risk** setting raises that to `write` or `destructive`. In read mode it never saves a report snapshot, so it reports changes only against snapshots saved outside it, by `homebutler report` or cron. The bundles are listed in `checksums.txt`. `docs/mcp-server.md` says how to install one and which `PATH` it runs with
 
 ### 🐛 Fixes
 
