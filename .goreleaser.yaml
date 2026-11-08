@@ -13,6 +13,13 @@ builds:
       - arm64
     ldflags:
       - -s -w -X main.version={{.Version}} -X main.buildDate={{.Date}}
+    # Each binary is also packed as a Claude Desktop extension. A post hook
+    # rather than a step after GoReleaser, so a bundle that fails to pack or
+    # validate stops the release before anything is published.
+    hooks:
+      post:
+        - cmd: scripts/build-mcpb.sh "{{ .Path }}" "{{ .Os }}" "{{ .Arch }}" "{{ .Version }}"
+          output: true
 
 archives:
   - formats: [tar.gz]
@@ -20,6 +27,12 @@ archives:
 
 checksum:
   name_template: checksums.txt
+  extra_files:
+    - glob: ./dist/homebutler_*.mcpb
+
+release:
+  extra_files:
+    - glob: ./dist/homebutler_*.mcpb
 
 # The image is built from the binary above rather than from source, so the
 # dashboard assets embedded by `make build-web` are in it. A Dockerfile that

@@ -253,3 +253,9 @@ jobs:
           GOOS: ${{ matrix.goos }}
           GOARCH: ${{ matrix.goarch }}
         run: go build -ldflags "-s -w" -o homebutler-${{ matrix.goos }}-${{ matrix.goarch }} .
+
+      # The release packs each binary as a Claude Desktop extension from a
+      # GoReleaser hook, which `goreleaser check` does not run. A manifest the
+      # packer rejects would otherwise first fail on a tag.
+      - name: Pack the Claude Desktop extension
+        run: scripts/build-mcpb.sh homebutler-${{ matrix.goos }}-${{ matrix.goarch }} ${{ matrix.goos }} ${{ matrix.goarch }} 0.0.0-ci
