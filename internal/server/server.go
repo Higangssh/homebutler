@@ -131,7 +131,7 @@ func (s *Server) Run() error {
 		}
 		fmt.Fprintf(os.Stderr, "⚠️  WARNING: binding to %s exposes the dashboard to all network interfaces.\n", bound)
 		if s.token == "" {
-			fmt.Fprintln(os.Stderr, "   Consider using --token to require authentication.")
+			fmt.Fprintln(os.Stderr, "   Set web.token in the config, or HOMEBUTLER_TOKEN in a container, to require authentication.")
 		}
 	}
 

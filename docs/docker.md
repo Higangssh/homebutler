@@ -40,9 +40,11 @@ docker run -d --name homebutler -p 8080:8080 \
   -v ~/.config/homebutler:/config \
   -v homebutler-state:/root/.homebutler \
   -v ~/.ssh:/root/.ssh:ro \
-  ghcr.io/higangssh/homebutler:latest \
-  serve --host 0.0.0.0 --port 8080 --token "$(openssl rand -hex 16)"
+  -e HOMEBUTLER_TOKEN="$(openssl rand -hex 16)" \
+  ghcr.io/higangssh/homebutler:latest
 ```
+
+`docker exec homebutler printenv HOMEBUTLER_TOKEN` prints it when you need it to sign in.
 
 Or as a compose block to paste beside the rest:
 
@@ -51,7 +53,8 @@ services:
   homebutler:
     image: ghcr.io/higangssh/homebutler:latest
     container_name: homebutler
-    command: serve --host 0.0.0.0 --port 8080 --token ${HOMEBUTLER_TOKEN}
+    environment:
+      HOMEBUTLER_TOKEN: ${HOMEBUTLER_TOKEN:?set it in .env}  # the dashboard's API token
     ports:
       - "8080:8080"
     volumes:
@@ -74,10 +77,25 @@ volumes:
 
 ## The token is not optional here
 
-`serve` refuses to bind beyond `127.0.0.1` from a container without `--token`.
+`serve` refuses to bind beyond `127.0.0.1` from a container without a token.
 The image exists to be reached from another machine, which is exactly when an
 unauthenticated dashboard is wrong. The token still crosses the network in the
 clear, so put a reverse proxy with TLS or a tunnel in front of it.
+
+`HOMEBUTLER_TOKEN` is the variable to set, because it is how Unraid templates,
+compose, Portainer and TrueNAS pass a secret, and they mask it in their forms.
+It is the last place `serve` looks:
+
+1. `--token` on the command line
+2. `web.token` in the mounted `config.yaml`
+3. `HOMEBUTLER_TOKEN`
+
+A `web.token` you wrote into the config on purpose is not replaced by a
+variable somebody left in a template; `serve` says on stderr when it ignores
+one. `HOMEBUTLER_TOKEN=` with nothing after it — an unfilled template field —
+counts as unset, so the container refuses to start rather than serving with no
+token. The settings screen never writes a token from the environment into
+`config.yaml`, and no API response carries it.
 
 ## Trusting a server the first time
 

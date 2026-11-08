@@ -43,7 +43,10 @@ web:
 
 `doctor` already requires that file to be `0600` once it holds a secret.
 `homebutler serve` reads the same key, so `--token` is now only needed for a
-one-off run with a different one.
+one-off run with a different one. When neither is set, a foreground `serve`
+falls back to `$HOMEBUTLER_TOKEN`, which is how a container is given its token
+([docker.md](docker.md#the-token-is-not-optional-here)). An installed unit does
+not see your shell's environment, so `serve install` only counts `web.token`.
 
 Installing on an address other machines can reach with no token configured is
 refused. A foreground dashboard is exposed for as long as somebody is watching
@@ -165,7 +168,7 @@ Checked against Homepage 2.7.0: pasted as it is, with only the address and the
 token filled in, the card shows all four values from `GET /api/report`,
 and `-` for Running and Stopped while Docker was unreachable.
 
-**The token.** If `serve` runs with a token (`web.token` or `--token`), every
+**The token.** If `serve` runs with a token (`web.token`, `--token` or `HOMEBUTLER_TOKEN`), every
 `/api/*` route needs it, reads included; put it in `headers` as above. Without
 a token, drop the `headers` block. Homepage makes the request from its own
 server, not from the browser, so the token never reaches the page — nothing
