@@ -24,8 +24,8 @@
       A token is configured, so every request has to carry it. Paste the one in
       <code>web.token</code> in your config file, the one you passed to
       <code>homebutler serve --token</code>, or, in a container,
-      <code>HOMEBUTLER_TOKEN</code>:
-      <code>docker exec &lt;name&gt; printenv HOMEBUTLER_TOKEN</code> prints it.
+      <code>HOMEBUTLER_TOKEN</code>
+      (<code>docker exec &lt;name&gt; printenv HOMEBUTLER_TOKEN</code> prints it).
     </p>
 
     <label for="token">Token</label>

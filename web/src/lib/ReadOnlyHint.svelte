@@ -6,8 +6,8 @@
 </script>
 
 <p class="read-only">
-  Read-only: set <code>web.token</code> in the config, or <code>HOMEBUTLER_TOKEN</code> in a
-  container, and restart <code>homebutler serve</code> to edit {what} here.
+  Read-only: to edit {what} here, set <code>web.token</code> in the config and restart
+  <code>homebutler serve</code>, or recreate the container with <code>HOMEBUTLER_TOKEN</code> set.
 </p>
 
 <style>

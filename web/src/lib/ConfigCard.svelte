@@ -305,10 +305,6 @@
     color: var(--green);
   }
 
-  .read-only {
-    text-align: left;
-  }
-
   .config-view {
     max-width: 900px;
     margin: 0 auto;
