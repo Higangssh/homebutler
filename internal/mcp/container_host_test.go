@@ -6,9 +6,11 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/Higangssh/homebutler/internal/capability"
 	"github.com/Higangssh/homebutler/internal/config"
+	"github.com/Higangssh/homebutler/internal/network"
 	"github.com/Higangssh/homebutler/internal/system"
 )
 
@@ -31,11 +33,20 @@ func containerServer(t *testing.T) (*Server, *bytes.Buffer) {
 // to be refused whether the call left server out or named a local: true one,
 // because the second is the case that also labels the numbers with a real
 // machine's name.
+//
+// If the guard breaks, the tools run for real on the developer's machine, so
+// report is told not to save a snapshot into ~/.homebutler and network_scan
+// fails at once instead of probing the subnet for 30 seconds.
 func TestContainerRefusesLocalHostReadings(t *testing.T) {
 	s, _ := containerServer(t)
+	realScan := scanNetwork
+	t.Cleanup(func() { scanNetwork = realScan })
+	scanNetwork = func(time.Duration) ([]network.Device, error) {
+		return nil, errors.New("network_scan ran in a container instead of being refused")
+	}
 	for name := range hostDescribingTools {
 		for _, server := range []string{"", "mini"} {
-			args := map[string]any{}
+			args := map[string]any{"no_save": true}
 			if server != "" {
 				args["server"] = server
 			}

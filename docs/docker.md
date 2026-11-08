@@ -14,7 +14,9 @@ rather than answered with the container's numbers.
 `inventory_export`, `report` and `doctor`, with the same reason the dashboard
 gives. The same calls pointed at a server reached over SSH work as they do
 anywhere else. The docker tools answer for whichever daemon the `docker` CLI
-reaches, and the image ships without one.
+reaches, and the image ships without one. The image sets
+`HOMEBUTLER_CONTAINER=1`, so this holds on runtimes that write no container
+marker file, such as containerd under Kubernetes.
 
 **homebutler has to be on the machines it reaches.** A remote command runs the
 remote binary: `report --server pi` runs `homebutler report` on the Pi. Nothing

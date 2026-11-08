@@ -664,7 +664,7 @@ func (s *Server) executeTool(name string, args map[string]any) (any, error) {
 	case "open_ports":
 		return ports.List()
 	case "network_scan":
-		return network.ScanWithTimeout(30 * time.Second)
+		return scanNetwork(30 * time.Second)
 	case "alerts":
 		return alerts.Check(&s.cfg.Alerts)
 	case "inventory_scan":
@@ -914,6 +914,10 @@ func (s *Server) executeTool(name string, args map[string]any) (any, error) {
 		return nil, fmt.Errorf("unknown tool: %s", name)
 	}
 }
+
+// scanNetwork is network.ScanWithTimeout, held in a variable so a test whose
+// guard has broken fails at once rather than probing the subnet for 30 seconds.
+var scanNetwork = network.ScanWithTimeout
 
 // purgeApp is install.Purge, held in a variable so a test can answer for
 // Docker with a volume that was kept.
