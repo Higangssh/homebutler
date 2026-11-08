@@ -1,6 +1,9 @@
 package system
 
-import "os"
+import (
+	"errors"
+	"os"
+)
 
 // InContainer reports whether this process is running inside a container.
 //
@@ -29,3 +32,15 @@ func InContainer() bool {
 // wanted their host watched has to end up doing one of them.
 const ContainerCannotSeeHost = "homebutler is running in a container, which cannot see the machine it is on. " +
 	"Watch that machine either by running homebutler on it directly, or by adding it to servers: and reaching it over SSH."
+
+// ErrContainerCannotSeeHost is returned instead of the container's own
+// readings when the machine homebutler runs on is what was asked about: a
+// server marked local, or an MCP call that names no server.
+//
+// Answering with them would be worse than failing: the numbers look right,
+// they update, and they describe a machine nobody asked about.
+// The sentence a person reads is ContainerCannotSeeHost; this is the value the
+// code branches on, in the shape Go errors are written in. It lives here
+// rather than with serve so the dashboard and the MCP server refuse with the
+// same value and the same reason.
+var ErrContainerCannotSeeHost = errors.New("a container cannot see the machine it runs on")

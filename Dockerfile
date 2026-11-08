@@ -25,6 +25,13 @@ COPY ${TARGETPLATFORM}/homebutler /usr/local/bin/homebutler
 # snapshots and incidents — belongs on a volume, or a restart turns "what
 # changed" into "everything is new".
 ENV HOMEBUTLER_CONFIG=/config/config.yaml
+
+# Said outright rather than inferred. homebutler looks for /.dockerenv or
+# /run/.containerenv, and a containerd-only runtime (Kubernetes without
+# dockershim, nerdctl, some k3s) writes neither, so there the image would
+# answer local calls with the container's own numbers and serve an
+# unauthenticated dashboard on 0.0.0.0. This image is always a container.
+ENV HOMEBUTLER_CONTAINER=1
 VOLUME ["/config", "/root/.homebutler"]
 
 EXPOSE 8080

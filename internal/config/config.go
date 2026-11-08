@@ -168,7 +168,16 @@ type ServerConfig struct {
 	Password string `yaml:"password,omitempty" json:"-" secret:"true"`
 	AuthMode string `yaml:"auth,omitempty"` // "key" (default) or "password"
 	BinPath  string `yaml:"bin,omitempty"`  // remote homebutler path (default: homebutler)
+
+	// configPath is the file this entry was read from, so an SSH failure can
+	// point at the file that needs fixing rather than at the default location,
+	// which in the container image is not where the config is.
+	configPath string
 }
+
+// ConfigPath returns the file this server was read from, or "" for an entry
+// that did not come from a file.
+func (s *ServerConfig) ConfigPath() string { return s.configPath }
 
 // ProxmoxConfig describes one Proxmox VE API endpoint. It is separate from
 // ServerConfig because Proxmox uses its HTTP API rather than SSH.
@@ -426,6 +435,9 @@ func load(path string, refuseOpenPermissions bool) (*Config, error) {
 	cfg.Watch.Retention.Normalize()
 
 	cfg.Path = path
+	for i := range cfg.Servers {
+		cfg.Servers[i].configPath = path
+	}
 
 	// Refuse unsafe config permissions when plaintext secrets are present.
 	if perm, tooOpen := PermissionProblem(path, cfg); refuseOpenPermissions && tooOpen {
