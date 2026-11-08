@@ -3,6 +3,7 @@ package cmd
 import (
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/Higangssh/homebutler/internal/config"
 	"github.com/Higangssh/homebutler/internal/server"
@@ -23,13 +24,28 @@ func newServeCmd() *cobra.Command {
 		Short: "Web dashboard (default port 8080)",
 		Long: `Start the homebutler web dashboard. Use --demo for realistic demo data without real system calls.
 
+The API token comes from the first of these that is set:
+  1. --token                visible in ps to every user on the machine
+  2. web.token              in the config file
+  3. $HOMEBUTLER_TOKEN      for containers, where the platform passes secrets
+                            as environment variables. An empty value is unset.
+
+A token from the environment is never written to the config file.
+
 The dashboard runs for as long as this command does. To have the host keep it
 running: homebutler serve install`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if err := loadConfig(); err != nil {
 				return err
 			}
-			token = resolveWebToken(token, cfg)
+			var note string
+			token, note = resolveWebToken(token, cfg, os.LookupEnv)
+			if note != "" {
+				fmt.Fprintln(os.Stderr, note)
+			}
+			// serve runs docker, systemctl and ssh. None of them needs the
+			// dashboard's token, and each would otherwise inherit it.
+			_ = os.Unsetenv(webTokenEnv)
 
 			// The image exists to be reached from another machine, which is
 			// exactly when an unauthenticated dashboard is wrong. Outside a
@@ -37,7 +53,7 @@ running: homebutler serve install`,
 			// running it on a LAN behind their own reverse proxy has made a
 			// choice, and a container published to a network has not.
 			if token == "" && system.InContainer() && !isLoopback(host) {
-				return fmt.Errorf("refusing to serve %s from a container without --token: this dashboard would be reachable from the network with nothing in front of it\n  → pass --token, or bind 127.0.0.1 and put a proxy in front", host)
+				return fmt.Errorf("refusing to serve %s from a container without a token: this dashboard would be reachable from the network with nothing in front of it\n  → set HOMEBUTLER_TOKEN in the container's environment, or bind 127.0.0.1 and put a proxy in front", host)
 			}
 
 			srv := server.New(cfg, host, port, demo)
@@ -52,25 +68,56 @@ running: homebutler serve install`,
 	cmd.Flags().StringVar(&host, "host", "127.0.0.1", "Host to bind to")
 	cmd.Flags().IntVar(&port, "port", 8080, "Port for the web dashboard")
 	cmd.Flags().BoolVar(&demo, "demo", false, "Run with realistic demo data (no real system calls)")
-	cmd.Flags().StringVar(&token, "token", "", "Bearer token for API authentication (prefer web.token in the config file)")
+	cmd.Flags().StringVar(&token, "token", "", "Bearer token for API authentication (prefer web.token in the config file, or $HOMEBUTLER_TOKEN in a container)")
 
 	cmd.AddCommand(newServeInstallCmd(), newServeUninstallCmd(), newServeInstalledCmd())
 	return cmd
 }
 
-// resolveWebToken prefers the flag and falls back to the config file.
+// webTokenEnv is how a container platform hands serve its token. Unraid
+// templates, compose environment: blocks and the Portainer and TrueNAS forms
+// all pass secrets this way and mask them in their UI; asking them for a
+// chmod-600 file on the host instead fails the first start.
+const webTokenEnv = "HOMEBUTLER_TOKEN"
+
+// resolveWebToken picks the dashboard token: the flag, then web.token, then
+// $HOMEBUTLER_TOKEN. The note, when there is one, says why the variable was
+// not used, and goes to stderr.
 //
 // --token is the older spelling and stays, but it puts the token in ps output
 // for every user on the machine, so the config file is where it belongs and
 // where an installed unit can read it without carrying a copy.
-func resolveWebToken(flag string, cfg *config.Config) string {
-	if flag != "" {
-		return flag
+//
+// The variable comes last because it is the weakest place to keep a secret —
+// docker inspect shows it, and so does every process that inherits it — and
+// because a variable left exported in a shell profile should not quietly
+// replace a token somebody wrote into the config on purpose. It is read here
+// and never copied into cfg, which is what keeps the settings screen from
+// writing it to config.yaml.
+func resolveWebToken(flag string, cfg *config.Config, lookupEnv func(string) (string, bool)) (token, note string) {
+	env, envSet := lookupEnv(webTokenEnv)
+	env = strings.TrimSpace(env)
+
+	from := ""
+	switch {
+	case flag != "":
+		token, from = flag, "--token"
+	case cfg != nil && cfg.Web.Token != "":
+		token, from = cfg.Web.Token, "web.token in "+cfg.Path
 	}
-	if cfg != nil {
-		return cfg.Web.Token
+	if token != "" {
+		if env != "" && env != token {
+			note = fmt.Sprintf("%s is set but ignored: %s takes precedence", webTokenEnv, from)
+		}
+		return token, note
 	}
-	return ""
+
+	if envSet && env == "" {
+		// An empty token would mean no authentication. Nobody sets a
+		// variable to ask for that; an unfilled template field does.
+		return "", fmt.Sprintf("%s is set but empty, so it is ignored and the dashboard has no token", webTokenEnv)
+	}
+	return env, ""
 }
 
 // installBindRefusal blocks installing an unauthenticated dashboard on an

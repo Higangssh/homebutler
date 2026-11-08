@@ -137,14 +137,14 @@ brew install Higangssh/homebutler/homebutler
 
 # Or as a container — the hub that reaches your machines over SSH
 docker run -d -p 8080:8080 -v ~/.config/homebutler:/config -v ~/.ssh:/root/.ssh:ro \
-  ghcr.io/higangssh/homebutler serve --host 0.0.0.0 --token "$(openssl rand -hex 16)"
+  -e HOMEBUTLER_TOKEN="$(openssl rand -hex 16)" ghcr.io/higangssh/homebutler
 
 # Interactive setup — add your servers in seconds
 homebutler init
 ```
 
 Or as a container, reaching your machines over SSH — [docs/docker.md](docs/docker.md):
-`docker run -v ~/.config/homebutler:/config -v ~/.ssh:/root/.ssh:ro ghcr.io/higangssh/homebutler`
+`docker run -p 8080:8080 -e HOMEBUTLER_TOKEN=… -v ~/.config/homebutler:/config -v ~/.ssh:/root/.ssh:ro ghcr.io/higangssh/homebutler`
 
 Use it right away:
 
@@ -944,7 +944,8 @@ homebutler serve uninstall      # and take it back
 
 The installed unit records the address and never the token — that comes from
 `web.token` in the config file, because `--token` is visible in `ps` to every
-user on the machine.
+user on the machine. In a container, set `HOMEBUTLER_TOKEN` instead; it is used
+when neither of the others is set, and never written to the config.
 
 📖 **[Web dashboard details →](docs/web-dashboard.md)**
 
