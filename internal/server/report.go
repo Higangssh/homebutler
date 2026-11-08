@@ -2,6 +2,7 @@ package server
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 
 	"github.com/Higangssh/homebutler/internal/config"
@@ -108,6 +109,10 @@ func withRemoteSummary(out []byte) ([]byte, error) {
 	var doc map[string]json.RawMessage
 	if err := json.Unmarshal(out, &doc); err != nil {
 		return nil, err
+	}
+	// null decodes without error and leaves the map nil.
+	if doc == nil {
+		return nil, errors.New("remote report is not a JSON object")
 	}
 	var lists struct {
 		NeedsAttention []json.RawMessage `json:"needs_attention"`

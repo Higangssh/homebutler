@@ -58,13 +58,17 @@ func TestRemoteSnapshotStillSaves(t *testing.T) {
 }
 
 func TestRemoteReportRejectsAnAnswerThatIsNotAReport(t *testing.T) {
-	srv := testServerWithMockRemote(func(_ *config.ServerConfig, _ ...string) ([]byte, error) {
-		return []byte(`[]`), nil
-	})
-	w := httptest.NewRecorder()
-	srv.Handler().ServeHTTP(w, httptest.NewRequest("GET", "/api/report?server=remote1", nil))
-	if w.Code != http.StatusBadGateway {
-		t.Fatalf("expected 502, got %d: %s", w.Code, w.Body.String())
+	// null decodes into a map without error and leaves it nil, which is the
+	// case that panicked rather than answering 502.
+	for _, body := range []string{`[]`, "null\n"} {
+		srv := testServerWithMockRemote(func(_ *config.ServerConfig, _ ...string) ([]byte, error) {
+			return []byte(body), nil
+		})
+		w := httptest.NewRecorder()
+		srv.Handler().ServeHTTP(w, httptest.NewRequest("GET", "/api/report?server=remote1", nil))
+		if w.Code != http.StatusBadGateway {
+			t.Fatalf("remote answered %q: expected 502, got %d: %s", body, w.Code, w.Body.String())
+		}
 	}
 }
 
