@@ -21,6 +21,17 @@ goos=$2
 goarch=$3
 version=$4
 
+# Checked before anything is staged, so a missing tool names itself instead of
+# surfacing as an error from halfway through the script.
+if ! command -v jq > /dev/null 2>&1; then
+  echo "$0: jq is required to stamp the manifest, and it is not on PATH" >&2
+  exit 1
+fi
+if ! command -v mcpb > /dev/null 2>&1 && ! command -v npx > /dev/null 2>&1; then
+  echo "$0: packing needs mcpb (npm install -g @anthropic-ai/mcpb@2.1.2) or Node's npx, and neither is on PATH" >&2
+  exit 1
+fi
+
 root=$(cd "$(dirname "$0")/.." && pwd)
 stage="$root/dist/mcpb/${goos}_${goarch}"
 out="$root/dist/homebutler_${version}_${goos}_${goarch}.mcpb"

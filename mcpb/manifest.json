@@ -3,8 +3,8 @@
   "name": "homebutler",
   "display_name": "HomeButler",
   "version": "0.0.0",
-  "description": "Tells Claude what changed on your server since it last looked - status, Docker, backups, Proxmox.",
-  "long_description": "HomeButler remembers what your server looked like last time and tells you, or Claude, what moved. The extension runs the homebutler binary on this computer as a local MCP server. It reads `~/.config/homebutler/config.yaml` when that file exists, and reaches the servers listed there over SSH.\n\nIt starts in read mode: Claude can look, and homebutler changes nothing. Set **Highest tool risk** to `write` or `destructive` to also offer the tools that change things, such as restarting a container, taking a backup or installing an app.",
+  "description": "Lets Claude read your server's status, Docker, backups and Proxmox, and what changed since the last saved report.",
+  "long_description": "HomeButler remembers what your server looked like at the last saved report and tells you, or Claude, what moved. The extension runs the homebutler binary on this computer as a local MCP server. It reads `~/.config/homebutler/config.yaml` when that file exists, and reaches the servers listed there over SSH.\n\nIt starts in read mode: Claude can look, and homebutler changes nothing. That includes saving report snapshots, so on its own the extension never reports a change: each report is a first look with nothing to compare. To get changes reported, save snapshots outside Claude by running `homebutler report` from an installed homebutler, by hand or from cron, or set **Highest tool risk** to `write`, which lets a report Claude runs save one.\n\n`write` and `destructive` also offer the tools that change things, such as restarting a container, taking a backup or installing an app.",
   "author": {
     "name": "Higangssh",
     "url": "https://github.com/Higangssh"

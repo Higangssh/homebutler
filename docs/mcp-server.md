@@ -65,6 +65,17 @@ other value stops the server from starting, with
 `--max-risk must be read, write or destructive` on its stderr, rather than
 falling back to some other ceiling.
 
+On its own, the extension in read mode never reports a change. `report`
+compares against the last saved snapshot, and read mode never saves one, so
+with nothing saved every report is a first look and says so. To get changes
+reported, do one of these:
+
+- Save snapshots outside Claude, by running `homebutler report` from an
+  installed homebutler by hand or from cron. The extension reads the same
+  `~/.homebutler/reports/snapshots/` and compares against the newest.
+- Set **Highest tool risk** to `write`, so a report Claude runs saves a
+  snapshot for the next one to compare against.
+
 The extension reads the same config as the CLI,
 `~/.config/homebutler/config.yaml`, so servers configured there are reachable
 over SSH. It starts with `PATH` set to
