@@ -40,6 +40,39 @@ Add `"args": ["mcp", "--demo"]` to your MCP config to try it instantly.
 - **Windsurf** — AI code editor
 - **Any MCP-compatible client**
 
+## Claude Desktop extension
+
+Each release carries a Claude Desktop extension for each platform, with the
+homebutler binary inside, so it needs neither Node nor an installed
+homebutler:
+
+| Machine | Asset |
+| --- | --- |
+| Mac, Apple silicon | `homebutler_<version>_darwin_arm64.mcpb` |
+| Mac, Intel | `homebutler_<version>_darwin_amd64.mcpb` |
+| Linux, for other clients that install `.mcpb` bundles | `homebutler_<version>_linux_arm64.mcpb`, `homebutler_<version>_linux_amd64.mcpb` |
+
+Download the one for your machine from the
+[latest release](https://github.com/Higangssh/homebutler/releases/latest) and
+double-click it, or drag it onto Settings → Extensions in Claude Desktop, then
+choose Install.
+
+The extension runs `homebutler mcp --max-risk read`: Claude can look, and
+homebutler changes nothing ([read-only mode](#read-only-mode) below says what
+that does and does not cover). To offer more, open the extension's settings in
+Claude Desktop and set **Highest tool risk** to `write` or `destructive`. Any
+other value stops the server from starting, with
+`--max-risk must be read, write or destructive` on its stderr, rather than
+falling back to some other ceiling.
+
+The extension reads the same config as the CLI,
+`~/.config/homebutler/config.yaml`, so servers configured there are reachable
+over SSH. It starts with `PATH` set to
+`/usr/local/bin:/usr/local/sbin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin:/snap/bin`,
+the list `watch install` and `serve install` give a supervised homebutler, so
+it finds `docker` from Homebrew or Docker Desktop. A `docker` anywhere else is
+not found.
+
 ## Setup
 
 Add to your MCP client config:
