@@ -8,6 +8,14 @@ reaches the machines in `servers:` over SSH — the path multi-server already
 uses. A server marked `local: true` is reported as not visible from a container
 rather than answered with the container's numbers.
 
+`homebutler mcp` in the image holds to the same rule. A call that leaves
+`server` out, or names a `local: true` server, is refused by `system_status`,
+`open_ports`, `processes`, `network_scan`, `alerts`, `inventory_scan`,
+`inventory_export`, `report` and `doctor`, with the same reason the dashboard
+gives. The same calls pointed at a server reached over SSH work as they do
+anywhere else. The docker tools answer for whichever daemon the `docker` CLI
+reaches, and the image ships without one.
+
 **homebutler has to be on the machines it reaches.** A remote command runs the
 remote binary: `report --server pi` runs `homebutler report` on the Pi. Nothing
 runs there between commands — no daemon, no open port — but the binary has to

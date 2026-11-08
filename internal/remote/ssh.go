@@ -52,18 +52,33 @@ func Run(server *config.ServerConfig, args ...string) ([]byte, error) {
 	return out, nil
 }
 
+// configLocation names the file a fix belongs in: the one this server was
+// read from, else the one the resolution rules would pick now, which honours
+// $HOMEBUTLER_CONFIG (/config/config.yaml in the image). Naming
+// ~/.config/homebutler/config.yaml regardless sent people to a file that was
+// not the one being read.
+func configLocation(server *config.ServerConfig) string {
+	if p := server.ConfigPath(); p != "" {
+		return p
+	}
+	if p := config.Resolve(""); p != "" {
+		return p
+	}
+	return "your config file"
+}
+
 func connect(server *config.ServerConfig) (*ssh.Client, error) {
 	var authMethods []ssh.AuthMethod
 
 	if server.UseKeyAuth() {
 		signer, err := loadKey(server.KeyFile)
 		if err != nil {
-			return nil, classified(ClassAuthentication, "[%s] failed to load SSH key (%s): %w\n  → Check the key_file path in your config: ~/.config/homebutler/config.yaml", server.Name, server.KeyFile, err)
+			return nil, classified(ClassAuthentication, "[%s] failed to load SSH key (%s): %w\n  → Check this server's 'key' in %s", server.Name, server.KeyFile, err, configLocation(server))
 		}
 		authMethods = append(authMethods, ssh.PublicKeys(signer))
 	} else {
 		if server.Password == "" {
-			return nil, classified(ClassAuthentication, "[%s] no SSH credentials configured\n  → Add 'key_file' or 'password' to this server in ~/.config/homebutler/config.yaml", server.Name)
+			return nil, classified(ClassAuthentication, "[%s] no SSH credentials configured\n  → Add 'key' or 'password' to this server in %s", server.Name, configLocation(server))
 		}
 		authMethods = append(authMethods, ssh.Password(server.Password))
 	}
@@ -84,7 +99,7 @@ func connect(server *config.ServerConfig) (*ssh.Client, error) {
 	client, err := ssh.Dial("tcp", addr, cfg)
 	if err != nil {
 		if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
-			return nil, classified(ClassUnreachable, "[%s] connection timed out (%s)\n  → Check if the server is online and reachable\n  → Verify host/port in ~/.config/homebutler/config.yaml", server.Name, addr)
+			return nil, classified(ClassUnreachable, "[%s] connection timed out (%s)\n  → Check if the server is online and reachable\n  → Verify host/port in %s", server.Name, addr, configLocation(server))
 		}
 		// Wrap known_hosts errors with actionable messages
 		var keyErr *knownhosts.KeyError
@@ -143,7 +158,7 @@ func connect(server *config.ServerConfig) (*ssh.Client, error) {
 		if strings.Contains(err.Error(), "unable to authenticate") {
 			class = ClassAuthentication
 		}
-		return nil, classified(class, "[%s] SSH connection failed (%s): %w\n  → Check: server online? correct host/port? firewall rules?\n  → Config: ~/.config/homebutler/config.yaml", server.Name, addr, err)
+		return nil, classified(class, "[%s] SSH connection failed (%s): %w\n  → Check: server online? correct host/port? firewall rules?\n  → Config: %s", server.Name, addr, err, configLocation(server))
 	}
 
 	return client, nil

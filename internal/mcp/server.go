@@ -3,6 +3,7 @@ package mcp
 import (
 	"bufio"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -448,9 +449,14 @@ func (s *Server) handleToolCall(req *jsonRPCRequest) {
 
 	result, toolErr := s.executeTool(params.Name, params.Arguments)
 	if toolErr != nil {
+		text := toolErr.Error()
+		if errors.Is(toolErr, system.ErrContainerCannotSeeHost) {
+			// The sentence serve shows, which names both ways out.
+			text = system.ContainerCannotSeeHost
+		}
 		s.writeResult(req.ID, toolsCallResult{
 			ResultType: "complete",
-			Content:    []contentItem{{Type: "text", Text: toolErr.Error()}},
+			Content:    []contentItem{{Type: "text", Text: text}},
 			IsError:    true,
 			Meta:       responseMeta{ServerInfo: serverInfo{Name: "homebutler", Version: s.version}},
 		})
@@ -489,6 +495,29 @@ var containerArgTools = map[string]string{
 	"docker_logs":    "lines",
 	"docker_top":     "",
 	"docker_inspect": "",
+}
+
+// hostDescribingTools answer, locally, with readings of the machine this
+// binary runs on. Inside a container that machine is the container: its own
+// /proc, its own sockets, its own bridge network. executeTool refuses them
+// there with the reason serve gives, rather than answering about a machine
+// nobody asked about under the name of one somebody did.
+//
+// What is left out is left out on purpose. The docker tools talk to whatever
+// daemon the docker CLI reaches, which with the host's socket mounted is the
+// host's, and without a CLI they fail on their own. config_validate reads the
+// mounted file, and the watch, backup and alerts_history tools read state
+// that lives on the volume. None of those describe the container as the host.
+var hostDescribingTools = map[string]bool{
+	"system_status":    true,
+	"open_ports":       true,
+	"processes":        true,
+	"network_scan":     true,
+	"alerts":           true,
+	"inventory_scan":   true,
+	"inventory_export": true,
+	"report":           true,
+	"doctor":           true,
 }
 
 // validateContainerArgs is the one gate for forwarded container arguments,
@@ -561,6 +590,13 @@ func (s *Server) executeTool(name string, args map[string]any) (any, error) {
 			}
 			return s.executeRemote(srv, name, args)
 		}
+	}
+
+	// Past this point the call is answered by this machine. The guard has to
+	// sit after the remote route and before the switch, or it refuses servers
+	// reached over SSH too; TestContainerStillReachesRemoteServers holds it here.
+	if hostDescribingTools[name] && system.InContainer() {
+		return nil, system.ErrContainerCannotSeeHost
 	}
 
 	switch name {

@@ -358,11 +358,11 @@ var Registry = []Capability{
 		HTTP:    HTTP{Method: "GET", Path: "/api/status"},
 		Tool: Definition{
 			Name:        "system_status",
-			Description: "Get system status including CPU, memory, disk usage, and uptime, for the machine this binary runs on. Inside a container that is the container, not the host underneath it",
+			Description: "Get system status including CPU, memory, disk usage, and uptime, for the machine this binary runs on. Inside a container it refuses rather than describe the container as the host; name a server to read a machine over SSH",
 			InputSchema: Schema{
 				Type: "object",
 				Properties: map[string]Property{
-					"server": {Type: "string", Description: "Remote server name from config (optional, runs locally if omitted)"},
+					"server": {Type: "string", Description: "Remote server name from config (optional, runs locally if omitted; inside a container a local call is refused, because a container cannot see the machine it is on)"},
 				},
 			},
 		},
@@ -580,7 +580,7 @@ var Registry = []Capability{
 			InputSchema: Schema{
 				Type: "object",
 				Properties: map[string]Property{
-					"server": {Type: "string", Description: "Remote server name from config (optional, runs locally if omitted)"},
+					"server": {Type: "string", Description: "Remote server name from config (optional, runs locally if omitted; inside a container a local call is refused, because a container cannot see the machine it is on)"},
 				},
 			},
 		},
@@ -591,7 +591,7 @@ var Registry = []Capability{
 		HTTP:    HTTP{Absent: AbsentNoViewYet},
 		Tool: Definition{
 			Name:        "network_scan",
-			Description: "Scan the local network to discover devices (IP, MAC, hostname). It probes every address on the subnet and takes up to 30 seconds, so it is an answer to a question somebody asked rather than a way to begin",
+			Description: "Scan the local network to discover devices (IP, MAC, hostname). It probes every address on the subnet and takes up to 30 seconds, so it is an answer to a question somebody asked rather than a way to begin. Inside a container it refuses, because the subnet it would scan is the container's own",
 			InputSchema: Schema{
 				Type: "object",
 			},
@@ -607,7 +607,7 @@ var Registry = []Capability{
 			InputSchema: Schema{
 				Type: "object",
 				Properties: map[string]Property{
-					"server": {Type: "string", Description: "Remote server name from config (optional, runs locally if omitted)"},
+					"server": {Type: "string", Description: "Remote server name from config (optional, runs locally if omitted; inside a container a local call is refused, because a container cannot see the machine it is on)"},
 				},
 			},
 		},
@@ -622,7 +622,7 @@ var Registry = []Capability{
 			InputSchema: Schema{
 				Type: "object",
 				Properties: map[string]Property{
-					"server": {Type: "string", Description: "Remote server name from config (optional, runs locally if omitted)"},
+					"server": {Type: "string", Description: "Remote server name from config (optional, runs locally if omitted; inside a container a local call is refused, because a container cannot see the machine it is on)"},
 				},
 			},
 		},
@@ -633,12 +633,12 @@ var Registry = []Capability{
 		HTTP:    HTTP{Absent: AbsentNoViewYet},
 		Tool: Definition{
 			Name:        "inventory_export",
-			Description: "Export server inventory/topology as a Mermaid diagram locally, or JSON locally/remotely",
+			Description: "Export server inventory/topology as a Mermaid diagram locally, or JSON locally/remotely. Inside a container a local export is refused, because a container cannot see the machine it is on",
 			InputSchema: Schema{
 				Type: "object",
 				Properties: map[string]Property{
 					"format": {Type: "string", Description: "Export format: mermaid (default, local) or json"},
-					"server": {Type: "string", Description: "Remote server name from config (optional; remote supports format=json)"},
+					"server": {Type: "string", Description: "Remote server name from config (optional; remote supports format=json, and is the only way to export from inside a container)"},
 				},
 			},
 		},
@@ -660,7 +660,7 @@ var Registry = []Capability{
 				Properties: map[string]Property{
 					"keep":    {Type: "integer", Description: "Number of snapshots to retain (default: 30)"},
 					"no_save": {Type: "boolean", Description: "Preview without writing a snapshot"},
-					"server":  {Type: "string", Description: "Remote server name from config (optional, runs locally if omitted)"},
+					"server":  {Type: "string", Description: "Remote server name from config (optional, runs locally if omitted; inside a container a local call is refused, because a container cannot see the machine it is on)"},
 				},
 			},
 		},
@@ -676,7 +676,7 @@ var Registry = []Capability{
 				Type: "object",
 				Properties: map[string]Property{
 					"backup_max_age_hours": {Type: "integer", Description: "Warn when the latest backup is older than this many hours (default: 168)"},
-					"server":               {Type: "string", Description: "Remote server name from config (optional, runs locally if omitted)"},
+					"server":               {Type: "string", Description: "Remote server name from config (optional, runs locally if omitted; inside a container a local call is refused, because a container cannot see the machine it is on)"},
 				},
 			},
 		},
@@ -712,7 +712,7 @@ var Registry = []Capability{
 				Properties: map[string]Property{
 					"limit":   {Type: "integer", Description: "Number of processes to return (default: 10, 0 for all)"},
 					"sort_by": {Type: "string", Description: "Sort by cpu (default) or mem"},
-					"server":  {Type: "string", Description: "Remote server name from config (optional, runs locally if omitted)"},
+					"server":  {Type: "string", Description: "Remote server name from config (optional, runs locally if omitted; inside a container a local call is refused, because a container cannot see the machine it is on)"},
 				},
 			},
 		},
