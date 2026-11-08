@@ -61,7 +61,7 @@ The extension runs `homebutler mcp --max-risk read`: Claude can look, and
 homebutler changes nothing ([read-only mode](#read-only-mode) below says what
 that does and does not cover). To offer more, open the extension's settings in
 Claude Desktop and set **Highest tool risk** to `write` or `destructive`. Any
-other value stops the server from starting, with
+other value, an empty one included, stops the server from starting, with
 `--max-risk must be read, write or destructive` on its stderr, rather than
 falling back to some other ceiling.
 

@@ -241,3 +241,16 @@ func TestAnUnknownClassIsTreatedAsDestructive(t *testing.T) {
 		}
 	}
 }
+
+// The Claude Desktop extension passes its Highest tool risk setting as
+// --max-risk. A setting saved empty leaves the ${user_config.max_risk}
+// placeholder unsubstituted, so neither that nor an empty value may start a
+// server, and in particular not one at the destructive default.
+func TestACeilingThatIsNotAClassIsRefused(t *testing.T) {
+	for _, risk := range []capability.Risk{"", "${user_config.max_risk}", "Read", " read", "reed"} {
+		s, _ := newTestServer()
+		if err := s.SetMaxRisk(risk); err == nil {
+			t.Errorf("SetMaxRisk(%q) accepted a value that is not read, write or destructive", risk)
+		}
+	}
+}
