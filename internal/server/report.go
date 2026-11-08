@@ -11,9 +11,11 @@ import (
 //
 // The counts are added here rather than in internal/report because `report
 // --json` does not need them — a JSON consumer counts the arrays itself. A
-// dashboard widget cannot: Homepage's customapi maps a field to a value and
-// has no way to take the length of a list, so pointing it at needs_attention
-// renders NaN. Checked by running one.
+// dashboard widget maps a field to a value: Homepage's customapi pointed at
+// needs_attention with `format: number` renders NaN. Its `format: size` can
+// count a list, but a field that already holds the number keeps the snippet
+// in docs/web-dashboard.md to one obvious mapping per value. Checked by
+// running Homepage 2.7.0.
 type reportResponse struct {
 	*report.Report
 	Summary reportSummary `json:"summary"`

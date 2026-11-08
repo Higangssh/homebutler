@@ -102,42 +102,74 @@ a button, and a write like any other.
 `GET /api/report` is the comparison as JSON, without saving a snapshot. It is
 what a status page, a script on another machine, or a dashboard widget reads.
 
-A [Homepage](https://gethomepage.dev) `customapi` widget showing what moved,
-rather than a second CPU gauge:
+### In a Homepage dashboard
+
+A [Homepage](https://gethomepage.dev) card that answers "is anything worth my
+attention?" rather than adding a second CPU gauge. It uses Homepage's built-in
+`customapi` widget, so there is nothing to install on the Homepage side. Add
+this to `services.yaml`:
 
 ```yaml
 - Homelab:
     - homebutler:
+        href: http://your-server:8080
         description: what changed since the last snapshot
         widget:
           type: customapi
           url: http://your-server:8080/api/report
-          method: GET
+          refreshInterval: 60000
           headers:
             Authorization: Bearer YOUR_TOKEN
           mappings:
-            - field: server_name
-              label: Server
             - field: summary.needs_attention
               label: Needs attention
               format: number
             - field: summary.notable_changes
               label: Changes
               format: number
+            - field: running_count
+              label: Running
+            - field: stopped_count
+              label: Stopped
 ```
 
-The counts come from `summary`, which the HTTP response adds for exactly this:
-`needs_attention` and `notable_changes` are lists, and a widget that maps a
-field to a value has no way to take the length of one — pointed at the lists
-themselves it renders `NaN`.
+| Label | Field | What it counts |
+|---|---|---|
+| Needs attention | `summary.needs_attention` | Findings worth acting on: a stopped container, memory or a disk over 85%, a port newly open to every interface. `0` is the number you want |
+| Changes | `summary.notable_changes` | Lines in the change list: what moved since the last saved snapshot, plus one line for each comparison that could not be made |
+| Running | `running_count` | Docker containers running now |
+| Stopped | `stopped_count` | Docker containers stopped now |
 
-Checked against Homepage 2.3.0: pasted as it is, with only the address and the
-token filled in, the card shows the server name and both counts, and they match
-`GET /api/report` at the same moment.
+Run `homebutler report` once, or press **Save a snapshot** on the Report tab
+(that needs a token), before trusting Changes. Until a snapshot exists there is
+nothing to compare against, and Changes shows `1` — the line saying so. Loading
+the widget never saves one, so after that Changes covers everything since the
+last save; `homebutler report` on a schedule keeps the window short. While
+Docker is unreachable, Changes includes a line saying containers were not
+compared.
 
-Homepage makes the request from its own server, not from the browser, so the
-token in `headers` never reaches the page. Nothing Homepage served to the
-browser in that check contained it.
+Running and Stopped show `-` when Docker did not answer. They are left without
+`format: number` on purpose: homebutler sends `null` rather than a `0` it did
+not see, and `format: number` would turn that into `NaN`.
+
+`refreshInterval` is in milliseconds. Homepage's default is 10 seconds, and
+every request collects the whole report again; once a minute is plenty for
+counts that change when containers and ports do.
+
+In the default block display Homepage shows the first four fields of a card;
+`display: list` shows them all. `href` makes the card a link to the dashboard,
+where the Report tab names what the numbers count. `summary` exists so each
+value is one field; `format: size` on the `needs_attention` list counts it too.
+
+Checked against Homepage 2.7.0: pasted as it is, with only the address and the
+token filled in, the card shows all four values from `GET /api/report`,
+and `-` for Running and Stopped while Docker was unreachable.
+
+**The token.** If `serve` runs with a token (`web.token` or `--token`), every
+`/api/*` route needs it, reads included; put it in `headers` as above. Without
+a token, drop the `headers` block. Homepage makes the request from its own
+server, not from the browser, so the token never reaches the page — nothing
+Homepage served to the browser in that check contained it.
 
 `your-server` is an address the Homepage container can reach. If Homepage runs
 in Docker on the same machine as `serve`, `localhost` is the container itself;

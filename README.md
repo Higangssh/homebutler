@@ -657,6 +657,13 @@ homebutler serve install      # Let the host keep it running
 
 </details>
 
+### In Homepage
+
+Already run [Homepage](https://gethomepage.dev)? One `customapi` snippet in
+`services.yaml` puts a homebutler card on it: needs attention, changes since
+the last snapshot, containers running and stopped.
+[The snippet →](docs/web-dashboard.md#in-a-homepage-dashboard)
+
 ### 🖥️ TUI Dashboard
 
 <p align="center">
