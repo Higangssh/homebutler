@@ -104,6 +104,8 @@ a button, and a write like any other.
 
 `GET /api/report` is the comparison as JSON, without saving a snapshot. It is
 what a status page, a script on another machine, or a dashboard widget reads.
+`GET /api/report?server=<name>` is the same comparison for a server in
+`servers:`, read over SSH, and saves nothing on that server either.
 
 ### In a Homepage dashboard
 
