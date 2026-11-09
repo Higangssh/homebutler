@@ -60,29 +60,32 @@ cp "$root/assets/icon-512.png" "$stage/icon.png"
 # neither. A client that checks compatibility.platforms can then turn away a
 # Linux bundle on a Mac rather than install a binary that cannot run.
 #
-# The Windows bundle also takes its command from the manifest's win32 override
-# and drops the base env, rather than leaving both to the override. That env
-# is a Unix PATH, and set on Windows it replaces the whole PATH, so homebutler
-# would no longer find ssh.exe or anything in System32. With the override
-# folded in, a client that ignores overrides, or merges env instead of
-# replacing it, still starts homebutler.exe with the user's own PATH.
+# The Windows bundle is rewritten here rather than through platform_overrides
+# in the manifest: Claude Desktop merges an override's env into the base env,
+# so no override can take away the base PATH. That PATH is a Unix one, and on
+# Windows it replaces the whole PATH, so homebutler would no longer find
+# ssh.exe or anything in System32. The Windows bundle therefore has no env.
 jq --arg v "$version" --arg p "$platform" --arg e "$entry" '
   .version = $v
   | .compatibility.platforms = [$p]
-  | .server.entry_point = $e
   | if $p == "win32" then
-      .server.mcp_config.command = .server.mcp_config.platform_overrides.win32.command
+      .server.entry_point = $e
+      | .server.mcp_config.command = "${__dirname}/" + $e
       | del(.server.mcp_config.env)
     else . end
 ' "$root/mcpb/manifest.json" > "$stage/manifest.json"
 
-# A manifest edit that renamed or dropped the override would otherwise pack a
-# Windows bundle whose command is null, and nothing would fail until somebody
-# installed it.
-case "$(jq -r .server.mcp_config.command "$stage/manifest.json")" in
-  '${__dirname}/'"$entry") ;;
+# Checked on the manifest that is packed, so an edit to the checked-in one
+# that moved the binary, or a rewrite above that stopped applying, fails the
+# build instead of shipping a bundle that cannot start or that hands Windows
+# a Unix PATH.
+staged=$(jq -r '[.server.entry_point, .server.mcp_config.command, (.server.mcp_config.env == null)] | @tsv' "$stage/manifest.json")
+want_env=false
+[ "$platform" = win32 ] && want_env=true
+case "$staged" in
+  "$entry	"'${__dirname}/'"$entry	$want_env") ;;
   *)
-    echo "$0: the $platform bundle's command does not start $entry" >&2
+    echo "$0: the $platform bundle's manifest does not start $entry as expected (entry_point, command, env is null: $staged)" >&2
     exit 1
     ;;
 esac

@@ -25,12 +25,6 @@
       "args": ["mcp", "--max-risk", "${user_config.max_risk}"],
       "env": {
         "PATH": "/usr/local/bin:/usr/local/sbin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin:/snap/bin"
-      },
-      "platform_overrides": {
-        "win32": {
-          "command": "${__dirname}/server/homebutler.exe",
-          "env": {}
-        }
       }
     }
   },
@@ -38,7 +32,7 @@
   "keywords": ["homelab", "server", "docker", "proxmox", "backup", "monitoring"],
   "license": "MIT",
   "compatibility": {
-    "platforms": ["darwin", "linux", "win32"]
+    "platforms": ["darwin", "linux"]
   },
   "user_config": {
     "max_risk": {
