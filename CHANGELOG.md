@@ -2,6 +2,22 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### ⚠️ Behavior changes
+
+- **`GET /api/ports` answers a failed read with a 500 and the reason, not a 200 with `[]`** (#384). On Windows, or on a Linux host without `ss`, the dashboard's ports card said "No open ports detected" about a machine nobody had looked at. It now shows the collector's error, as the processes card already did. A successful answer is unchanged
+- **`status` and everything built on it refuse a platform they cannot read** (#384). Outside Linux, macOS and Windows, `status`, `alerts`, `report`, `doctor`, `inventory`, the TUI and the dashboard's status answered with 0% CPU, 0 GB of memory and no disks; they now fail with `unsupported OS: <name>`, the error `ports` gives. No release is built for such a platform
+
+### 🐛 Fixes
+
+- `status` on Windows printed 0.0% CPU, 0.0 / 0.0 GB of memory, no disks and an unknown uptime, and `alerts`, `report`, `doctor`, `inventory_scan` and the dashboard passed those on as a healthy, idle machine (#384). It now reads them from Windows: memory from `GlobalMemoryStatusEx`, CPU from `GetSystemTimes` over the same one-second window Linux uses, uptime from `GetTickCount64`, and each fixed drive from `GetDiskFreeSpaceEx`, reported with its root, such as `C:\`, as the mount. `ports` and `processes` still refuse on Windows, as they did
+- a server's `key: ~\.ssh\id_ed25519` passed `config validate` on Windows and then failed to load when connecting, because only `~/` was expanded (#384)
+
+### 📚 Documentation
+
+- `docs/configuration.md` says where homebutler looks for its config, keys and `known_hosts` on Windows, and how to quote a Windows path in YAML (#384)
+
 ## [1.5.0](https://github.com/Higangssh/homebutler/compare/v1.4.0...v1.5.0) - 2026-11-09
 
 **Getting homebutler into Claude Desktop meant hand-editing its JSON config and having Node or homebutler installed first, and the dashboard container would not start until its token was written into a mounted config file or onto a command line `ps` shows; now the first is one file to open and the second is `-e HOMEBUTLER_TOKEN=…`.**
