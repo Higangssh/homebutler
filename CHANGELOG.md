@@ -2,7 +2,7 @@
 
 All notable changes to this project will be documented in this file.
 
-## [1.5.1](https://github.com/Higangssh/homebutler/compare/v1.5.0...v1.5.1) - 2026-11-09
+## [1.6.0](https://github.com/Higangssh/homebutler/compare/v1.5.0...v1.6.0) - 2026-11-09
 
 **A command given `--server` or `--all` could act on the wrong machine — `install jellyfin --server rpi5` installed jellyfin here and `docker restart nginx --all` restarted it on every Pi — and `deploy`, `alerts --all` and a build for Windows could report a success or a reading nobody had measured; each now refuses, fails, or reads the real number.**
 
