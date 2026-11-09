@@ -33,6 +33,18 @@ type DeployResult struct {
 func Deploy(server *config.ServerConfig, localBin, releaseVersion string) (*DeployResult, error) {
 	result := &DeployResult{Server: server.Name}
 
+	// Read a local binary before connecting: detectInstallDir can create
+	// ~/.local/bin on the remote, and a path that does not exist should not
+	// get that far.
+	var localData []byte
+	if localBin != "" {
+		data, err := os.ReadFile(localBin)
+		if err != nil {
+			return nil, fmt.Errorf("read local binary: %w", err)
+		}
+		localData = data
+	}
+
 	// Connect
 	client, err := connect(server)
 	if err != nil {
@@ -57,11 +69,7 @@ func Deploy(server *config.ServerConfig, localBin, releaseVersion string) (*Depl
 	if localBin != "" {
 		// Air-gapped: copy local file
 		result.Source = "local"
-		data, err := os.ReadFile(localBin)
-		if err != nil {
-			return nil, fmt.Errorf("read local binary: %w", err)
-		}
-		if err := install(client, data, target, viaSudo); err != nil {
+		if err := install(client, localData, target, viaSudo); err != nil {
 			return nil, fmt.Errorf("upload to %s: %w", server.Name, err)
 		}
 	} else {

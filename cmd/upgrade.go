@@ -4,10 +4,17 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/Higangssh/homebutler/internal/remote"
 	"github.com/Higangssh/homebutler/internal/util"
 	"github.com/spf13/cobra"
+)
+
+// The upgrades themselves, swapped out by tests.
+var (
+	selfUpgrade   = remote.SelfUpgrade
+	remoteUpgrade = remote.RemoteUpgrade
 )
 
 func newUpgradeCmd() *cobra.Command {
@@ -25,7 +32,7 @@ func newUpgradeCmd() *cobra.Command {
 
 			// Fetch latest version
 			fmt.Fprintf(os.Stderr, "checking latest version... ")
-			latestVersion, err := remote.FetchLatestVersion()
+			latestVersion, err := fetchLatestVersion()
 			if err != nil {
 				return fmt.Errorf("cannot check latest version: %w", err)
 			}
@@ -36,7 +43,7 @@ func newUpgradeCmd() *cobra.Command {
 
 			// 1. Self-upgrade
 			fmt.Fprintf(os.Stderr, "upgrading local... ")
-			localResult := remote.SelfUpgrade(Version, latestVersion)
+			localResult := selfUpgrade(Version, latestVersion)
 			report.Results = append(report.Results, *localResult)
 			printUpgradeStatus(localResult)
 
@@ -47,7 +54,7 @@ func newUpgradeCmd() *cobra.Command {
 						continue
 					}
 					fmt.Fprintf(os.Stderr, "upgrading %s... ", srv.Name)
-					result := remote.RemoteUpgrade(&srv, latestVersion)
+					result := remoteUpgrade(&srv, latestVersion)
 					report.Results = append(report.Results, *result)
 					printUpgradeStatus(result)
 				}
@@ -87,10 +94,12 @@ func newUpgradeCmd() *cobra.Command {
 			if jsonOutput {
 				enc := json.NewEncoder(os.Stdout)
 				enc.SetIndent("", "  ")
-				return enc.Encode(report)
+				if err := enc.Encode(report); err != nil {
+					return err
+				}
 			}
 
-			return nil
+			return upgradeVerdict(report.Results)
 		},
 	}
 
@@ -112,4 +121,23 @@ func printUpgradeStatus(r *remote.UpgradeResult) {
 		}
 		fmt.Fprintf(os.Stderr, "✗ %s\n", message)
 	}
+}
+
+// upgradeVerdict fails the command when any target, the local one included,
+// could not be upgraded. Already up to date is not a failure.
+func upgradeVerdict(results []remote.UpgradeResult) error {
+	var failed []string
+	for _, r := range results {
+		if r.Status == "error" {
+			failed = append(failed, r.Target)
+		}
+	}
+	if len(failed) == 0 {
+		return nil
+	}
+	noun := "targets"
+	if len(results) == 1 {
+		noun = "target"
+	}
+	return fmt.Errorf("upgrade failed on %d of %d %s: %s", len(failed), len(results), noun, strings.Join(failed, ", "))
 }

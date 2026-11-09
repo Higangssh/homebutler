@@ -3,10 +3,17 @@ package cmd
 import (
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/Higangssh/homebutler/internal/config"
 	"github.com/Higangssh/homebutler/internal/remote"
 	"github.com/spf13/cobra"
+)
+
+// The calls deploy and upgrade make over the network, swapped out by tests.
+var (
+	deployToServer     = remote.Deploy
+	fetchLatestVersion = remote.FetchLatestVersion
 )
 
 func newDeployCmd() *cobra.Command {
@@ -53,7 +60,7 @@ Use --local to specify a local binary for air-gapped deployment.`,
 
 			releaseVersion := ""
 			if localBin == "" {
-				latestVersion, err := remote.FetchLatestVersion()
+				latestVersion, err := fetchLatestVersion()
 				if err != nil {
 					return fmt.Errorf("check latest release: %w", err)
 				}
@@ -64,7 +71,7 @@ Use --local to specify a local binary for air-gapped deployment.`,
 			var results []remote.DeployResult
 			for _, srv := range targets {
 				fmt.Fprintf(os.Stderr, "deploying to %s (%s)...\n", srv.Name, srv.Host)
-				result, err := remote.Deploy(&srv, localBin, releaseVersion)
+				result, err := deployToServer(&srv, localBin, releaseVersion)
 				if err != nil {
 					results = append(results, remote.DeployResult{
 						Server:  srv.Name,
@@ -75,14 +82,41 @@ Use --local to specify a local binary for air-gapped deployment.`,
 					continue
 				}
 				results = append(results, *result)
+				if result.Status == "error" {
+					fmt.Fprintf(os.Stderr, "  ✗ %s: %s\n", srv.Name, result.Message)
+					continue
+				}
 				fmt.Fprintf(os.Stderr, "  ✓ %s: %s\n", srv.Name, result.Message)
 			}
 
-			return output(results, true)
+			if err := output(results, true); err != nil {
+				return err
+			}
+			return deployVerdict(results)
 		},
 	}
 
 	cmd.Flags().StringVar(&localBin, "local", "", "Use local binary for deploy (air-gapped)")
 
 	return cmd
+}
+
+// deployVerdict fails the command when any server did not take the binary.
+// Every server's result has already been printed; this is what a script or
+// cron job reads.
+func deployVerdict(results []remote.DeployResult) error {
+	var failed []string
+	for _, r := range results {
+		if r.Status == "error" {
+			failed = append(failed, r.Server)
+		}
+	}
+	if len(failed) == 0 {
+		return nil
+	}
+	noun := "servers"
+	if len(results) == 1 {
+		noun = "server"
+	}
+	return fmt.Errorf("deploy failed on %d of %d %s: %s", len(failed), len(results), noun, strings.Join(failed, ", "))
 }
