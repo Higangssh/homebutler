@@ -4,19 +4,17 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"strings"
-	"sync"
 
 	"github.com/Higangssh/homebutler/internal/alerts"
 	"github.com/Higangssh/homebutler/internal/backup"
 	"github.com/Higangssh/homebutler/internal/config"
 	"github.com/Higangssh/homebutler/internal/docker"
-	"github.com/Higangssh/homebutler/internal/doctor"
 	"github.com/Higangssh/homebutler/internal/format"
 	"github.com/Higangssh/homebutler/internal/network"
 	"github.com/Higangssh/homebutler/internal/ports"
-	"github.com/Higangssh/homebutler/internal/remote"
 	"github.com/Higangssh/homebutler/internal/system"
 	"github.com/Higangssh/homebutler/internal/util"
 	"github.com/Higangssh/homebutler/internal/wake"
@@ -40,12 +38,17 @@ var (
 // cfg holds the loaded config (set in root PersistentPreRun)
 var cfg *config.Config
 
+// writeJSON is what --json prints, to any writer.
+func writeJSON(w io.Writer, data any) error {
+	enc := json.NewEncoder(w)
+	enc.SetIndent("", "  ")
+	return enc.Encode(util.EmptyLists(data))
+}
+
 // output renders data as JSON or human-readable format.
 func output(data any, jsonOut bool) error {
 	if jsonOut {
-		enc := json.NewEncoder(os.Stdout)
-		enc.SetIndent("", "  ")
-		return enc.Encode(util.EmptyLists(data))
+		return writeJSON(os.Stdout, data)
 	}
 
 	switch v := data.(type) {
@@ -172,6 +175,11 @@ func filterFlags(args []string, flags ...string) []string {
 			}
 			continue
 		}
+		// --all=true and --server=rpi5 are the same flags written another
+		// way; forwarded, the remote fans out again or looks for itself.
+		if name, _, ok := strings.Cut(arg, "="); ok && skip[name] {
+			continue
+		}
 		filtered = append(filtered, arg)
 	}
 	return filtered
@@ -192,165 +200,4 @@ var valueFlags = map[string]bool{
 // isFlag checks if a string looks like a CLI flag.
 func isFlag(s string) bool {
 	return len(s) > 1 && s[0] == '-'
-}
-
-// runLocalCommand runs homebutler locally and captures JSON output (for --all).
-func runLocalCommand(args []string) ([]byte, error) {
-	if len(args) == 0 {
-		return nil, fmt.Errorf("no command specified")
-	}
-
-	switch args[0] {
-	case "status":
-		info, err := system.Status()
-		if err != nil {
-			return nil, err
-		}
-		return json.Marshal(system.Document(info))
-	case "alerts":
-		alertCfg := &config.AlertConfig{CPU: 90, Memory: 85, Disk: 90}
-		result, err := alerts.Check(alertCfg)
-		if err != nil {
-			return nil, err
-		}
-		return json.Marshal(result)
-	case "docker":
-		if len(args) < 2 || (args[1] != "list" && args[1] != "ls") {
-			return nil, fmt.Errorf("only 'docker list' supported with --all")
-		}
-		containers, err := docker.List()
-		if err != nil {
-			return nil, err
-		}
-		return json.Marshal(containers)
-	case "ports":
-		result, err := ports.List()
-		if err != nil {
-			return nil, err
-		}
-		return json.Marshal(result.Ports)
-	case "doctor":
-		result, err := doctor.Run(cfg, doctor.DefaultCollectFuncs(), doctor.Options{})
-		if err != nil {
-			return nil, err
-		}
-		return json.Marshal(result)
-	default:
-		return nil, fmt.Errorf("command %q not supported with --all", args[0])
-	}
-}
-
-// runAllServers executes a command on all configured servers in parallel.
-func runAllServers(c *config.Config, args []string, jsonOut bool) error {
-	if len(c.Servers) == 0 {
-		return fmt.Errorf("no servers configured. Add servers to your config file")
-	}
-
-	remoteArgs := filterFlags(args, "--server", "--all")
-	results := make([]serverResult, len(c.Servers))
-	var wg sync.WaitGroup
-
-	for i, srv := range c.Servers {
-		wg.Add(1)
-		go func(idx int, server config.ServerConfig) {
-			defer wg.Done()
-			result := serverResult{Server: server.Name}
-
-			if server.Local {
-				out, err := runLocalCommand(remoteArgs)
-				if err != nil {
-					result.Error = util.FormatError(err, verboseOutput || jsonOut)
-				} else {
-					result.Data = json.RawMessage(out)
-				}
-			} else {
-				out, err := remote.Run(&server, remoteArgs...)
-				if err != nil {
-					result.Error = util.FormatError(err, verboseOutput || jsonOut)
-				} else {
-					result.Data = json.RawMessage(out)
-				}
-			}
-
-			results[idx] = result
-		}(i, srv)
-	}
-
-	wg.Wait()
-
-	if !jsonOut {
-		for _, r := range results {
-			if r.Error != "" {
-				fmt.Fprintf(os.Stdout, "❌ %-12s %s\n", r.Server, r.Error)
-				continue
-			}
-			var data map[string]interface{}
-			if err := json.Unmarshal(r.Data, &data); err != nil {
-				fmt.Fprintf(os.Stdout, "📡 %-12s (parse error)\n", r.Server)
-				continue
-			}
-			if status, ok := data["status"].(string); ok {
-				warn, fail := getSummaryCounts(data)
-				fmt.Fprintf(os.Stdout, "🩺 %-12s %-4s | warn %d | fail %d\n", r.Server, strings.ToUpper(status), warn, fail)
-				continue
-			}
-			cpu := getNestedFloat(data, "cpu", "usage_percent")
-			mem := getNestedFloat(data, "memory", "usage_percent")
-			uptime, _ := data["uptime"].(string)
-			disk := getFirstDiskPercent(data)
-			fmt.Fprintf(os.Stdout, "📡 %-12s CPU %4.0f%% | Mem %4.0f%% | Disk %4.0f%% | Up %s\n", r.Server, cpu, mem, disk, uptime)
-		}
-		return nil
-	}
-	return output(results, true)
-}
-
-// serverResult holds the result from a single server.
-type serverResult struct {
-	Server string          `json:"server"`
-	Data   json.RawMessage `json:"data,omitempty"`
-	Error  string          `json:"error,omitempty"`
-}
-
-func getNestedFloat(data map[string]interface{}, keys ...string) float64 {
-	current := data
-	for i, key := range keys {
-		if i == len(keys)-1 {
-			if v, ok := current[key].(float64); ok {
-				return v
-			}
-			return 0
-		}
-		if next, ok := current[key].(map[string]interface{}); ok {
-			current = next
-		} else {
-			return 0
-		}
-	}
-	return 0
-}
-
-func getFirstDiskPercent(data map[string]interface{}) float64 {
-	if disks, ok := data["disks"].([]interface{}); ok && len(disks) > 0 {
-		if d, ok := disks[0].(map[string]interface{}); ok {
-			if v, ok := d["usage_percent"].(float64); ok {
-				return v
-			}
-		}
-	}
-	return 0
-}
-
-func getSummaryCounts(data map[string]interface{}) (warn, fail int) {
-	summary, ok := data["summary"].(map[string]interface{})
-	if !ok {
-		return 0, 0
-	}
-	if v, ok := summary["warn"].(float64); ok {
-		warn = int(v)
-	}
-	if v, ok := summary["fail"].(float64); ok {
-		fail = int(v)
-	}
-	return warn, fail
 }
