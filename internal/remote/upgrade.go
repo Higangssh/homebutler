@@ -457,12 +457,13 @@ func vtag(version string) string {
 	return "v" + strings.TrimPrefix(version, "v")
 }
 
-// elevatedUpgradeHint is what to rerun when the binary's folder is not
-// writable. Windows has no sudo; there it is the same command from a
-// terminal opened as administrator.
+// elevatedUpgradeHint is what to rerun when the binary could not be moved or
+// written. Windows has no sudo, and there access is also denied while another
+// homebutler, such as a serve started before the last upgrade, still runs
+// from the file being replaced.
 func elevatedUpgradeHint() string {
 	if runtime.GOOS == "windows" {
-		return "homebutler upgrade, in a terminal opened as administrator"
+		return "homebutler upgrade in a terminal opened as administrator, after stopping any running homebutler"
 	}
 	return "sudo homebutler upgrade"
 }
