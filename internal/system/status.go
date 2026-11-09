@@ -56,25 +56,65 @@ type DiskInfo struct {
 	Percent float64 `json:"usage_percent"`
 }
 
+// goos is the platform Status reads for. It is runtime.GOOS, held in a
+// variable so a test can ask what happens on a platform it is not running on.
+var goos = runtime.GOOS
+
+// Status reads this machine. On a platform it has no way to read, it fails
+// rather than answering: a status of zeros looks like an idle machine, and
+// report, doctor and alerts would all pass it on as one (#384).
 func Status() (*StatusInfo, error) {
 	hostname, _ := os.Hostname()
 
 	info := &StatusInfo{
 		Hostname: hostname,
-		OS:       runtime.GOOS,
+		OS:       goos,
 		Arch:     runtime.GOARCH,
-		Uptime:   getUptime(),
-		CPU:      getCPU(),
-		Memory:   getMemory(),
-		Disks:    getDisks(),
 		Time:     time.Now().Format(time.RFC3339),
+	}
+
+	switch goos {
+	case "linux", "darwin":
+		info.Uptime = getUptime()
+		info.CPU = getCPU()
+		info.Memory = getMemory()
+		info.Disks = getDisks()
+	case "windows":
+		r, err := readWindows()
+		if err != nil {
+			return nil, err
+		}
+		info.Uptime = r.uptime
+		info.CPU = r.cpu
+		info.Memory = r.memory
+		info.Disks = r.disks
+	default:
+		return nil, fmt.Errorf("unsupported OS: %s", goos)
 	}
 
 	return info, nil
 }
 
+// readings is what a platform reader fills in for Status.
+type readings struct {
+	uptime string
+	cpu    CPUInfo
+	memory MemInfo
+	disks  []DiskInfo
+}
+
+// formatUptime renders time since boot the way every platform prints it.
+func formatUptime(dur time.Duration) string {
+	days := int(dur.Hours() / 24)
+	hours := int(dur.Hours()) % 24
+	if days > 0 {
+		return fmt.Sprintf("%dd %dh", days, hours)
+	}
+	return fmt.Sprintf("%dh %dm", hours, int(dur.Minutes())%60)
+}
+
 func getUptime() string {
-	switch runtime.GOOS {
+	switch goos {
 	case "darwin":
 		out, err := util.RunCmd("/usr/sbin/sysctl", "-n", "kern.boottime")
 		if err != nil {
@@ -88,14 +128,7 @@ func getUptime() string {
 		secStr := strings.TrimSpace(strings.Split(parts[1], ",")[0])
 		var sec int64
 		fmt.Sscanf(secStr, "%d", &sec)
-		boot := time.Unix(sec, 0)
-		dur := time.Since(boot)
-		days := int(dur.Hours() / 24)
-		hours := int(dur.Hours()) % 24
-		if days > 0 {
-			return fmt.Sprintf("%dd %dh", days, hours)
-		}
-		return fmt.Sprintf("%dh %dm", hours, int(dur.Minutes())%60)
+		return formatUptime(time.Since(time.Unix(sec, 0)))
 	case "linux":
 		out, err := util.RunCmd("cat", "/proc/uptime")
 		if err != nil {
@@ -103,13 +136,7 @@ func getUptime() string {
 		}
 		var secs float64
 		fmt.Sscanf(out, "%f", &secs)
-		dur := time.Duration(secs) * time.Second
-		days := int(dur.Hours() / 24)
-		hours := int(dur.Hours()) % 24
-		if days > 0 {
-			return fmt.Sprintf("%dd %dh", days, hours)
-		}
-		return fmt.Sprintf("%dh %dm", hours, int(dur.Minutes())%60)
+		return formatUptime(time.Duration(secs) * time.Second)
 	default:
 		return "unknown"
 	}
@@ -119,7 +146,7 @@ func getCPU() CPUInfo {
 	cores := runtime.NumCPU()
 	usage := 0.0
 
-	switch runtime.GOOS {
+	switch goos {
 	case "darwin":
 		// iostat -c 2 gives two samples; we use the second (instant usage).
 		// readDarwinCPUTimes already handles this internally, no double-call needed.
@@ -259,7 +286,7 @@ func readDarwinCPUTimes() *cpuTimes {
 }
 
 func getMemory() MemInfo {
-	switch runtime.GOOS {
+	switch goos {
 	case "darwin":
 		out, err := util.RunCmd("/usr/sbin/sysctl", "-n", "hw.memsize")
 		if err != nil {
@@ -378,4 +405,96 @@ func parseSize(s string) float64 {
 
 func round2(f float64) float64 {
 	return float64(int(f*100)) / 100
+}
+
+// gib is the unit every platform reports memory and disk in: what df -h and
+// /proc/meminfo call G, a binary gigabyte.
+const gib = 1024 * 1024 * 1024
+
+// memFromBytes turns a physical total and the part still available into the
+// figures Status reports. Used is what is not available, as on Linux, where
+// it is MemTotal less MemAvailable.
+func memFromBytes(total, avail uint64) MemInfo {
+	if avail > total {
+		avail = total
+	}
+	used := total - avail
+	return MemInfo{
+		TotalGB: round2(float64(total) / gib),
+		UsedGB:  round2(float64(used) / gib),
+		Percent: round2(float64(used) / float64(total) * 100),
+	}
+}
+
+// diskFromBytes turns a volume's size and free space into a DiskInfo.
+func diskFromBytes(mount string, total, free uint64) DiskInfo {
+	if free > total {
+		free = total
+	}
+	used := total - free
+	return DiskInfo{
+		Mount:   mount,
+		TotalGB: round2(float64(total) / gib),
+		UsedGB:  round2(float64(used) / gib),
+		Percent: round2(float64(used) / float64(total) * 100),
+	}
+}
+
+// cpuTimesFromSystemTimes converts what Windows' GetSystemTimes returns into
+// cpuTimes. Windows counts idle time inside kernel time, so the total is
+// kernel plus user, not all three.
+func cpuTimesFromSystemTimes(idle, kernel, user uint64) *cpuTimes {
+	return &cpuTimes{total: float64(kernel + user), idle: float64(idle)}
+}
+
+// driveIdentity is what Windows says a drive letter is: the target
+// QueryDosDevice resolves it to, and the volume name the mount manager has
+// for it. Either may be missing.
+type driveIdentity struct {
+	dosTarget string
+	dosOK     bool
+	volume    string
+	volumeOK  bool
+}
+
+// volumeKey decides whether a fixed drive is reported and, if it is, what
+// identifies the storage behind it, so two letters for one volume are
+// reported once.
+//
+// A letter QueryDosDevice resolves to \??\ is a path alias, which is what
+// subst makes: subst Z: C:\Windows is \??\C:\Windows, subst Y: C:\ is \??\C:
+// and even has C:'s volume name. It answers with that drive's numbers, so it
+// is skipped. A real device is kept whether or not the mount manager names
+// it: an ImDisk RAM disk, a WinFsp or Dokany mount (rclone, Cryptomator,
+// SSHFS-Win) is attached with DefineDosDevice to \Device\..., is fixed, and
+// has no volume name. Such a drive is identified by its device instead, and a
+// drive that answers neither question is identified by its own root rather
+// than dropped.
+func volumeKey(root string, id driveIdentity) (key string, keep bool) {
+	switch {
+	case id.dosOK && strings.HasPrefix(id.dosTarget, `\??\`):
+		return "", false
+	case id.volumeOK:
+		return id.volume, true
+	case id.dosOK:
+		return id.dosTarget, true
+	default:
+		return root, true
+	}
+}
+
+// firstRootPerVolume keeps the first drive root of each volume volumeKey
+// keeps.
+func firstRootPerVolume(roots []string, identify func(root string) driveIdentity) []string {
+	seen := make(map[string]bool)
+	var kept []string
+	for _, root := range roots {
+		key, keep := volumeKey(root, identify(root))
+		if !keep || seen[key] {
+			continue
+		}
+		seen[key] = true
+		kept = append(kept, root)
+	}
+	return kept
 }

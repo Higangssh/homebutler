@@ -39,6 +39,11 @@ import (
 //go:embed all:web_dist
 var webFS embed.FS
 
+// listPorts reads this machine's listeners. A variable so the route's tests
+// decide what the read answers instead of depending on the machine running
+// them having ss or lsof.
+var listPorts = ports.List
+
 // RemoteRunner executes a homebutler command on a remote server via SSH.
 // Default implementation uses remote.Run.
 type RemoteRunner func(srv *config.ServerConfig, args ...string) ([]byte, error)
@@ -659,9 +664,12 @@ func (s *Server) handlePorts(w http.ResponseWriter, r *http.Request) {
 		s.forwardRemote(w, srv, "ports", "--json")
 		return
 	}
-	openPorts, err := ports.List()
+	openPorts, err := listPorts()
 	if err != nil {
-		writeJSON(w, []any{})
+		// An empty list here read as "nothing is listening", on a machine
+		// where nothing had been looked at: Windows, or a Linux host without
+		// ss. /api/processes already answers a failed read this way.
+		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 	// The same correlation report makes, so the dashboard does not call a port

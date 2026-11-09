@@ -27,6 +27,13 @@ homebutler searches for a config file in the following order:
 
 If no config file is found, sensible defaults are used (CPU 90%, memory 85%, disk 90%).
 
+On Windows `~` is your profile folder, so step 3 is
+`C:\Users\<you>\.config\homebutler\config.yaml`; `%APPDATA%` is not searched.
+SSH keys and `known_hosts` are read from `C:\Users\<you>\.ssh`, where Windows'
+own `ssh-keygen` puts them. A server's `key:` may be written `~/.ssh/id_ed25519`,
+`~\.ssh\id_ed25519` or as a full path; in YAML, quote a Windows path with
+single quotes or none, since double quotes treat `\U` as an escape.
+
 `~/.homebutler/alerts.yaml` is not in that list. It is read as a fallback for
 notify and webhook settings so an older setup keeps working, and homebutler
 says so when it uses one:
