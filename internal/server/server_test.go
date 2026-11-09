@@ -362,6 +362,7 @@ func TestFrontendFallback(t *testing.T) {
 }
 
 func TestPortsEndpointReturnsJSON(t *testing.T) {
+	stubPortsRead(t)
 	srv := testServer()
 	req := httptest.NewRequest("GET", "/api/ports", nil)
 	w := httptest.NewRecorder()
@@ -1121,6 +1122,7 @@ func TestDockerEndpoint_LocalUnavailable(t *testing.T) {
 // --- Ports endpoint ---
 
 func TestPortsEndpoint_LocalReturnsArray(t *testing.T) {
+	stubPortsRead(t)
 	srv := testServer()
 	req := httptest.NewRequest("GET", "/api/ports", nil)
 	w := httptest.NewRecorder()
@@ -1129,9 +1131,14 @@ func TestPortsEndpoint_LocalReturnsArray(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d", w.Code)
 	}
-	// Should be valid JSON array
-	if !json.Valid(w.Body.Bytes()) {
-		t.Fatal("response is not valid JSON")
+	var body struct {
+		Ports []map[string]any `json:"ports"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
+		t.Fatalf("response is not valid JSON: %v", err)
+	}
+	if len(body.Ports) != 1 || body.Ports[0]["port"] != stubbedPort {
+		t.Fatalf("ports = %v, want the one stubbed listener", body.Ports)
 	}
 }
 

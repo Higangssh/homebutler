@@ -10,6 +10,19 @@ import (
 	"github.com/Higangssh/homebutler/internal/ports"
 )
 
+const stubbedPort = "8443"
+
+// stubPortsRead answers the ports read with one listener, so a test of the
+// route does not depend on the machine running it having ss or lsof.
+func stubPortsRead(t *testing.T) {
+	t.Helper()
+	old := listPorts
+	listPorts = func() (*ports.Result, error) {
+		return &ports.Result{Ports: []ports.PortInfo{{Protocol: "tcp", Address: "0.0.0.0", Port: stubbedPort, Process: "caddy"}}}, nil
+	}
+	t.Cleanup(func() { listPorts = old })
+}
+
 // On Windows /api/ports answered 200 with [], which the dashboard showed as
 // "No open ports detected" for a machine it had not looked at (#384).
 func TestPortsEndpointSaysWhenItCouldNotLook(t *testing.T) {
