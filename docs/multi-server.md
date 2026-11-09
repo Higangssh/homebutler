@@ -53,6 +53,17 @@ ssh-copy-id user@remote-host
 
 ## Usage
 
+`--server` and `--all` reach another machine from `status`, `alerts`,
+`ports`, `processes`, `report`, `doctor`, `wake`, `network scan`, the `docker`
+commands, `backup`, `backup list`, `backup drill`, `restore` and `deploy`.
+`upgrade` takes `--all`, which is what it does anyway. Every other command
+runs on this machine only and refuses both flags rather than ignoring them:
+
+```
+$ homebutler install jellyfin --server rpi5
+error: install runs on this machine only; --server is not supported
+```
+
 ```bash
 # Query a specific server
 homebutler status --server rpi
