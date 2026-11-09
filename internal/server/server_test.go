@@ -1121,7 +1121,7 @@ func TestDockerEndpoint_LocalUnavailable(t *testing.T) {
 
 // --- Ports endpoint ---
 
-func TestPortsEndpoint_LocalReturnsArray(t *testing.T) {
+func TestPortsEndpoint_LocalReturnsTheListenersRead(t *testing.T) {
 	stubPortsRead(t)
 	srv := testServer()
 	req := httptest.NewRequest("GET", "/api/ports", nil)

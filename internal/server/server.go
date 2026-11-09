@@ -39,8 +39,9 @@ import (
 //go:embed all:web_dist
 var webFS embed.FS
 
-// listPorts reads this machine's listeners. A variable so a test can make the
-// read fail on a platform where it would succeed.
+// listPorts reads this machine's listeners. A variable so the route's tests
+// decide what the read answers instead of depending on the machine running
+// them having ss or lsof.
 var listPorts = ports.List
 
 // RemoteRunner executes a homebutler command on a remote server via SSH.
