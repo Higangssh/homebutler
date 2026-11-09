@@ -74,6 +74,31 @@ homebutler upgrade
 homebutler upgrade --local
 ```
 
+## What `--all` runs
+
+`--all` asks every server in `servers:` at once and prints one line each:
+
+```
+$ homebutler alerts --all
+📡 mac-mini     OK       | CPU    6% | Mem   36% | Disk    6% /
+📡 rpi5         OK       | CPU    0% | Mem    5% | Disk   18% /
+```
+
+It runs `status`, `alerts`, `doctor`, `report`, `processes`, `ports`,
+`docker list`, `docker stats`, `backup list` and `network scan`. Each server is
+asked for JSON, whether or not you passed `--json`, and the line is read from
+that answer. A reading the answer did not carry is shown as `-`, not `0%`, and
+a server that answered with something this version cannot read says so. With
+`--json`, the output is a list of `{"server", "data"}` or `{"server", "error"}`,
+one per server, with each server's own `--json` answer as `data`.
+
+Everything else is refused with `--all`. `docker restart`, `docker stop`,
+`backup`, `restore` and `wake` change the machine, and `docker logs`, `top` and
+`inspect` read one container on one server; name the server with `--server`.
+`report --all` saves a snapshot on every server, as `report` does on one; add
+`--no-save` to compare without saving. `backup drill --all` is not the
+multi-server flag: it drills every app in one archive.
+
 ## Upgrade
 
 Upgrade checks GitHub Releases for the latest version, compares with each target, and updates only what's outdated:
