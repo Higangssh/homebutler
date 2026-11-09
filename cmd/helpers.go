@@ -35,7 +35,7 @@ var (
 	cfgPath       string
 )
 
-// cfg holds the loaded config (set in root PersistentPreRun)
+// cfg holds the loaded config, set by loadConfig in each command that reads it
 var cfg *config.Config
 
 // writeJSON is what --json prints, to any writer.

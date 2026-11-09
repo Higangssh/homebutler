@@ -101,9 +101,6 @@ func openProxmoxActionClient(endpointName string) (*config.ProxmoxConfig, *proxm
 }
 
 func openProxmoxClientCredential(endpointName string, action bool) (*config.ProxmoxConfig, *proxmox.Client, error) {
-	if serverName != "" || allServers {
-		return nil, nil, fmt.Errorf("proxmox commands do not support --server or --all; use --endpoint")
-	}
 	if err := loadConfig(); err != nil {
 		return nil, nil, err
 	}
