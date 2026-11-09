@@ -85,6 +85,18 @@ async function downloadAndExtract() {
   const assetName = `homebutler_${version}_${os}_${cpu}.${ext}`;
   const url = `https://github.com/${REPO}/releases/download/${tag}/${assetName}`;
 
+  // Windows has no unzip. Its own tar.exe, in System32 since Windows 10
+  // 1803, reads a zip; named by path, because the tar that Git for Windows
+  // puts first on PATH is GNU tar, which does not. Checked before the
+  // download, so an older Windows is told what to do instead of ENOENT.
+  const winTar = path.join(process.env.SystemRoot || "C:\\Windows", "System32", "tar.exe");
+  if (ext === "zip" && !fs.existsSync(winTar)) {
+    throw new Error(
+      `${winTar} was not found; it comes with Windows 10 1803 and later. ` +
+        `Download ${url}, extract homebutler.exe from it, and put it at ${BIN_PATH}`
+    );
+  }
+
   process.stderr.write(`Downloading homebutler ${tag} for ${os}/${cpu}...\n`);
 
   fs.mkdirSync(BIN_DIR, { recursive: true });
@@ -97,11 +109,7 @@ async function downloadAndExtract() {
   if (ext === "tar.gz") {
     execSync(`tar -xzf "${tmpFile}" -C "${BIN_DIR}"`, { stdio: "pipe" });
   } else {
-    // Windows has no unzip. Its own tar.exe, in System32 since Windows 10
-    // 1803, reads a zip; named by path, because the tar that Git for Windows
-    // puts first on PATH is GNU tar, which does not.
-    const tar = path.join(process.env.SystemRoot || "C:\\Windows", "System32", "tar.exe");
-    execSync(`"${tar}" -xf "${tmpFile}" -C "${BIN_DIR}"`, { stdio: "pipe" });
+    execSync(`"${winTar}" -xf "${tmpFile}" -C "${BIN_DIR}"`, { stdio: "pipe" });
   }
 
   // Find the binary (goreleaser puts it inside a directory or at root)

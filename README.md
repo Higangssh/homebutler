@@ -783,7 +783,8 @@ macOS and Linux only; on Windows, use the zip below.
 Download `homebutler_<version>_windows_amd64.zip` (or `_windows_arm64.zip`)
 from the [latest release](https://github.com/Higangssh/homebutler/releases/latest),
 extract `homebutler.exe`, and put it in a folder on your `PATH`.
-`homebutler upgrade` replaces it with the next release's.
+`homebutler upgrade` replaces it with the next release's. The npm package
+needs Windows 10 version 1803 or later, whose `tar.exe` it extracts the zip with.
 
 On Windows, `status` and what is built on it read this machine, and `ports` and
 `processes` say they are not supported. Servers in your config are reached
