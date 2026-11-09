@@ -69,3 +69,24 @@ func TestFormatUptime(t *testing.T) {
 		}
 	}
 }
+
+// subst Z: C:\Windows is a fixed drive answering with C:'s numbers, and a
+// volume can have two letters; either way one disk was listed, and alerted
+// on, once per letter.
+func TestFirstRootPerVolumeListsEachVolumeOnce(t *testing.T) {
+	volumes := map[string]string{
+		`C:\`: `\\?\Volume{c}\`,
+		`D:\`: `\\?\Volume{d}\`,
+		`E:\`: `\\?\Volume{d}\`, // D: mounted a second time
+		// Z: is subst, and has no volume name
+	}
+	volumeOf := func(root string) (string, bool) {
+		v, ok := volumes[root]
+		return v, ok
+	}
+	got := firstRootPerVolume([]string{`C:\`, `D:\`, `E:\`, `Z:\`}, volumeOf)
+	want := []string{`C:\`, `D:\`}
+	if len(got) != len(want) || got[0] != want[0] || got[1] != want[1] {
+		t.Errorf("firstRootPerVolume = %q, want %q", got, want)
+	}
+}

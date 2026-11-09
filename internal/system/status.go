@@ -446,3 +446,22 @@ func diskFromBytes(mount string, total, free uint64) DiskInfo {
 func cpuTimesFromSystemTimes(idle, kernel, user uint64) *cpuTimes {
 	return &cpuTimes{total: float64(kernel + user), idle: float64(idle)}
 }
+
+// firstRootPerVolume keeps the first drive root of each volume, so a volume
+// with two letters is reported once. A root whose volume cannot be named is
+// dropped rather than kept: every volume Windows mounts has a name, and what
+// lacks one, a subst drive, is a folder on a volume already in the list,
+// answering with that volume's numbers.
+func firstRootPerVolume(roots []string, volumeOf func(root string) (string, bool)) []string {
+	seen := make(map[string]bool)
+	var kept []string
+	for _, root := range roots {
+		vol, ok := volumeOf(root)
+		if !ok || seen[vol] {
+			continue
+		}
+		seen[vol] = true
+		kept = append(kept, root)
+	}
+	return kept
+}

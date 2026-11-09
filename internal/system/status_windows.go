@@ -108,9 +108,14 @@ func windowsCPUUsage() (float64, error) {
 	return usage, nil
 }
 
-// windowsDisks reports every fixed drive, the way df's / and /home are
-// reported elsewhere. Removable, network and optical drives are left out:
-// they come and go, and a network share's size is the server's.
+// windowsDisks reports every fixed volume once, the way df's / and /home
+// are reported elsewhere. Removable, network and optical drives are left
+// out: they come and go, and a network share's size is the server's.
+//
+// A drive letter is not a volume. `subst Z: C:\Windows` makes a Z: that
+// GetDriveType calls fixed and GetDiskFreeSpaceEx answers with C:'s numbers,
+// and one volume can be given two letters. Listed as they come, one full
+// disk would be reported, and alerted on, once per letter.
 func windowsDisks() ([]DiskInfo, error) {
 	buf := make([]uint16, 254)
 	n, err := windows.GetLogicalDriveStrings(uint32(len(buf)), &buf[0])
@@ -124,14 +129,22 @@ func windowsDisks() ([]DiskInfo, error) {
 		}
 	}
 
-	var disks []DiskInfo
-	var lastErr error
+	var fixed []string
 	for _, root := range splitDriveStrings(buf[:n]) {
 		p, err := windows.UTF16PtrFromString(root)
 		if err != nil {
 			continue
 		}
-		if windows.GetDriveType(p) != windows.DRIVE_FIXED {
+		if windows.GetDriveType(p) == windows.DRIVE_FIXED {
+			fixed = append(fixed, root)
+		}
+	}
+
+	var disks []DiskInfo
+	var lastErr error
+	for _, root := range firstRootPerVolume(fixed, volumeName) {
+		p, err := windows.UTF16PtrFromString(root)
+		if err != nil {
 			continue
 		}
 		var freeToCaller, total, free uint64
@@ -151,6 +164,21 @@ func windowsDisks() ([]DiskInfo, error) {
 		return nil, fmt.Errorf("reading disks: no fixed drive could be read")
 	}
 	return disks, nil
+}
+
+// volumeName returns the \\?\Volume{GUID}\ name of the volume mounted at
+// root. A subst drive has none: it is not a mount point but a folder on a
+// drive that is.
+func volumeName(root string) (string, bool) {
+	p, err := windows.UTF16PtrFromString(root)
+	if err != nil {
+		return "", false
+	}
+	buf := make([]uint16, windows.MAX_PATH)
+	if err := windows.GetVolumeNameForVolumeMountPoint(p, &buf[0], uint32(len(buf))); err != nil {
+		return "", false
+	}
+	return windows.UTF16ToString(buf), true
 }
 
 // splitDriveStrings splits GetLogicalDriveStrings' buffer, roots separated
