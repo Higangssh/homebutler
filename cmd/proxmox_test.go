@@ -121,12 +121,13 @@ func TestProxmoxStatusJSON(t *testing.T) {
 	}
 }
 
+// The root refuses --server before any proxmox command runs, and points at
+// --endpoint, which is how a proxmox command picks what it talks to.
 func TestProxmoxStatusRejectsServerFlags(t *testing.T) {
-	oldServer, oldAll := serverName, allServers
-	defer func() { serverName, allServers = oldServer, oldAll }()
-	serverName = "ssh-host"
-	if err := newProxmoxStatusCmd().Execute(); err == nil || !strings.Contains(err.Error(), "do not support --server") {
-		t.Fatalf("proxmox status with --server error = %v", err)
+	ran := stubRuns(t)
+	err := executeRoot(t, ran, "proxmox", "status", "--server", "ssh-host")
+	if *ran != "" || err == nil || !strings.Contains(err.Error(), "--endpoint") || !strings.Contains(err.Error(), "--server is not supported") {
+		t.Fatalf("proxmox status with --server: ran=%q err=%v", *ran, err)
 	}
 }
 

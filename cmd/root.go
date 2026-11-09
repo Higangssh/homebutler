@@ -111,9 +111,11 @@ var remoteFlags = map[string][]string{
 // "runs on this machine only" would be wrong. A subcommand inherits its
 // parent's.
 var localOnlyReasons = map[string]string{
-	"upgrade":        "upgrades this machine and every remote server, or only this one with --local",
-	"trust":          "takes the server to trust as its argument",
-	"proxmox":        "reaches Proxmox through its API, chosen with --endpoint",
+	"upgrade": "upgrades this machine and every remote server, or only this one with --local",
+	"trust":   "takes the server to trust as its argument",
+	"proxmox": "reaches Proxmox through its API, chosen with --endpoint",
+	// The scripts are a catalogue built into the binary, not an API call, so
+	// they take the default back from the proxmox reason above.
 	"proxmox script": "runs on this machine only",
 	"watch tui":      "already shows every configured server",
 }
