@@ -97,7 +97,11 @@ async function downloadAndExtract() {
   if (ext === "tar.gz") {
     execSync(`tar -xzf "${tmpFile}" -C "${BIN_DIR}"`, { stdio: "pipe" });
   } else {
-    execSync(`unzip -o "${tmpFile}" -d "${BIN_DIR}"`, { stdio: "pipe" });
+    // Windows has no unzip. Its own tar.exe, in System32 since Windows 10
+    // 1803, reads a zip; named by path, because the tar that Git for Windows
+    // puts first on PATH is GNU tar, which does not.
+    const tar = path.join(process.env.SystemRoot || "C:\\Windows", "System32", "tar.exe");
+    execSync(`"${tar}" -xf "${tmpFile}" -C "${BIN_DIR}"`, { stdio: "pipe" });
   }
 
   // Find the binary (goreleaser puts it inside a directory or at root)

@@ -1075,6 +1075,54 @@ func TestDownloadRelease(t *testing.T) {
 	}
 }
 
+// Windows is published as a zip, so a Windows `upgrade` has to ask for it
+// and verify it by that name in checksums.txt.
+func TestDownloadRelease_Windows(t *testing.T) {
+	binaryContent := []byte("MZ fake homebutler.exe")
+	zipData := createZip(t, map[string][]byte{"homebutler.exe": binaryContent, "README.md": []byte("# hi")})
+	h := sha256.Sum256(zipData)
+	checksum := hex.EncodeToString(h[:])
+	var requested []string
+
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requested = append(requested, r.URL.Path)
+		switch {
+		case strings.HasSuffix(r.URL.Path, "checksums.txt"):
+			fmt.Fprintf(w, "%s  homebutler_9.9.9_windows_arm64.zip\n", checksum)
+		case strings.HasSuffix(r.URL.Path, "_windows_arm64.zip"):
+			w.Write(zipData)
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer ts.Close()
+
+	origTransport := http.DefaultTransport
+	http.DefaultTransport = &testTransport{
+		wrapped: origTransport,
+		override: func(req *http.Request) *http.Request {
+			if strings.Contains(req.URL.Host, "github.com") {
+				newReq, _ := http.NewRequest(req.Method, ts.URL+req.URL.Path, req.Body)
+				return newReq
+			}
+			return req
+		},
+	}
+	defer func() { http.DefaultTransport = origTransport }()
+
+	data, err := downloadRelease("windows", "arm64", "9.9.9")
+	if err != nil {
+		t.Fatalf("downloadRelease() error: %v (requested %v)", err, requested)
+	}
+	if !bytes.Equal(data, binaryContent) {
+		t.Errorf("extracted binary mismatch: got %q, want %q", data, binaryContent)
+	}
+	wantPath := "/Higangssh/homebutler/releases/download/v9.9.9/homebutler_9.9.9_windows_arm64.zip"
+	if len(requested) == 0 || requested[0] != wantPath {
+		t.Errorf("requests = %v, want the first to be %q", requested, wantPath)
+	}
+}
+
 func TestDownloadRelease_NotFound(t *testing.T) {
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNotFound)

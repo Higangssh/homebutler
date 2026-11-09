@@ -121,7 +121,7 @@ jobs:
 
       # scripts/build-mcpb.sh packs each binary as a Claude Desktop extension
       # from a GoReleaser hook. Installed here, outside the checkout, so the
-      # four builds do not each fetch it through npx at once, and pinned to the
+      # six builds do not each fetch it through npx at once, and pinned to the
       # version the script names in its fallback.
       - name: Install the MCP bundle packer
         run: npm install -g @anthropic-ai/mcpb@2.1.2

@@ -256,7 +256,7 @@ func downloadRelease(osName, arch, version string) ([]byte, error) {
 		return nil, fmt.Errorf("version is required")
 	}
 
-	filename := fmt.Sprintf("homebutler_%s_%s_%s.tar.gz", version, osName, arch)
+	filename, binary := releaseArchive(osName, arch, version)
 	url := fmt.Sprintf("https://github.com/Higangssh/homebutler/releases/download/v%s/%s", version, filename)
 
 	resp, err := http.Get(url)
@@ -269,18 +269,17 @@ func downloadRelease(osName, arch, version string) ([]byte, error) {
 		return nil, fmt.Errorf("download failed: HTTP %d for %s", resp.StatusCode, url)
 	}
 
-	// Download tar.gz
-	tarData, err := io.ReadAll(resp.Body)
+	archive, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, fmt.Errorf("read response: %w", err)
 	}
 
 	// Verify checksum
-	if err := verifyChecksum(tarData, filename, version); err != nil {
+	if err := verifyChecksum(archive, filename, version); err != nil {
 		return nil, fmt.Errorf("checksum verification failed: %w", err)
 	}
 
-	return extractBinaryFromTarGz(tarData)
+	return extractBinary(archive, filename, binary)
 }
 
 // verifyChecksum downloads checksums.txt and verifies the SHA256 hash.
