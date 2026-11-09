@@ -424,13 +424,26 @@ func loadKey(keyFile string) (ssh.Signer, error) {
 		return nil, fmt.Errorf("no SSH key found (tried ~/.ssh/id_ed25519, ~/.ssh/id_rsa). Specify key path in config or use auth: password")
 	}
 
-	// Expand ~ prefix
-	if strings.HasPrefix(keyFile, "~/") {
-		home, _ := os.UserHomeDir()
-		keyFile = filepath.Join(home, keyFile[2:])
-	}
+	return readKey(expandKeyHome(keyFile))
+}
 
-	return readKey(keyFile)
+// expandKeyHome resolves a key path that starts at the home directory. On
+// Windows that is written ~\.ssh\id_ed25519 as often as ~/.ssh/id_ed25519,
+// and config validate already accepted both, so a key it passed could not be
+// opened when connecting.
+func expandKeyHome(keyFile string) string {
+	rest, ok := strings.CutPrefix(keyFile, "~/")
+	if !ok && filepath.Separator == '\\' {
+		rest, ok = strings.CutPrefix(keyFile, `~\`)
+	}
+	if !ok {
+		return keyFile
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return keyFile
+	}
+	return filepath.Join(home, rest)
 }
 
 func readKey(path string) (ssh.Signer, error) {
