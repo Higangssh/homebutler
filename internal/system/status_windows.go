@@ -5,6 +5,7 @@ package system
 import (
 	"fmt"
 	"runtime"
+	"strings"
 	"time"
 	"unsafe"
 
@@ -115,7 +116,8 @@ func windowsCPUUsage() (float64, error) {
 // A drive letter is not a volume. `subst Z: C:\Windows` makes a Z: that
 // GetDriveType calls fixed and GetDiskFreeSpaceEx answers with C:'s numbers,
 // and one volume can be given two letters. Listed as they come, one full
-// disk would be reported, and alerted on, once per letter.
+// disk would be reported, and alerted on, once per letter. volumeKey says
+// which letters are kept.
 func windowsDisks() ([]DiskInfo, error) {
 	buf := make([]uint16, 254)
 	n, err := windows.GetLogicalDriveStrings(uint32(len(buf)), &buf[0])
@@ -142,7 +144,7 @@ func windowsDisks() ([]DiskInfo, error) {
 
 	var disks []DiskInfo
 	var lastErr error
-	for _, root := range firstRootPerVolume(fixed, volumeName) {
+	for _, root := range firstRootPerVolume(fixed, identifyDrive) {
 		p, err := windows.UTF16PtrFromString(root)
 		if err != nil {
 			continue
@@ -166,19 +168,25 @@ func windowsDisks() ([]DiskInfo, error) {
 	return disks, nil
 }
 
-// volumeName returns the \\?\Volume{GUID}\ name of the volume mounted at
-// root. A subst drive has none: it is not a mount point but a folder on a
-// drive that is.
-func volumeName(root string) (string, bool) {
-	p, err := windows.UTF16PtrFromString(root)
-	if err != nil {
-		return "", false
+// identifyDrive asks Windows what a drive root is: what its letter is
+// defined as (QueryDosDevice, on "C:" without the backslash) and the
+// \\?\Volume{GUID}\ name the mount manager has for it, if any.
+func identifyDrive(root string) driveIdentity {
+	var id driveIdentity
+	if letter, err := windows.UTF16PtrFromString(strings.TrimSuffix(root, `\`)); err == nil {
+		buf := make([]uint16, windows.MAX_PATH)
+		if n, err := windows.QueryDosDevice(letter, &buf[0], uint32(len(buf))); err == nil && n > 0 {
+			// The answer is a list; the first entry is the current definition.
+			id.dosTarget, id.dosOK = windows.UTF16ToString(buf), true
+		}
 	}
-	buf := make([]uint16, windows.MAX_PATH)
-	if err := windows.GetVolumeNameForVolumeMountPoint(p, &buf[0], uint32(len(buf))); err != nil {
-		return "", false
+	if p, err := windows.UTF16PtrFromString(root); err == nil {
+		buf := make([]uint16, windows.MAX_PATH)
+		if err := windows.GetVolumeNameForVolumeMountPoint(p, &buf[0], uint32(len(buf))); err == nil {
+			id.volume, id.volumeOK = windows.UTF16ToString(buf), true
+		}
 	}
-	return windows.UTF16ToString(buf), true
+	return id
 }
 
 // splitDriveStrings splits GetLogicalDriveStrings' buffer, roots separated

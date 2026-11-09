@@ -447,20 +447,53 @@ func cpuTimesFromSystemTimes(idle, kernel, user uint64) *cpuTimes {
 	return &cpuTimes{total: float64(kernel + user), idle: float64(idle)}
 }
 
-// firstRootPerVolume keeps the first drive root of each volume, so a volume
-// with two letters is reported once. A root whose volume cannot be named is
-// dropped rather than kept: every volume Windows mounts has a name, and what
-// lacks one, a subst drive, is a folder on a volume already in the list,
-// answering with that volume's numbers.
-func firstRootPerVolume(roots []string, volumeOf func(root string) (string, bool)) []string {
+// driveIdentity is what Windows says a drive letter is: the target
+// QueryDosDevice resolves it to, and the volume name the mount manager has
+// for it. Either may be missing.
+type driveIdentity struct {
+	dosTarget string
+	dosOK     bool
+	volume    string
+	volumeOK  bool
+}
+
+// volumeKey decides whether a fixed drive is reported and, if it is, what
+// identifies the storage behind it, so two letters for one volume are
+// reported once.
+//
+// A letter QueryDosDevice resolves to \??\ is a path alias, which is what
+// subst makes: subst Z: C:\Windows is \??\C:\Windows, subst Y: C:\ is \??\C:
+// and even has C:'s volume name. It answers with that drive's numbers, so it
+// is skipped. A real device is kept whether or not the mount manager names
+// it: an ImDisk RAM disk, a WinFsp or Dokany mount (rclone, Cryptomator,
+// SSHFS-Win) is attached with DefineDosDevice to \Device\..., is fixed, and
+// has no volume name. Such a drive is identified by its device instead, and a
+// drive that answers neither question is identified by its own root rather
+// than dropped.
+func volumeKey(root string, id driveIdentity) (key string, keep bool) {
+	switch {
+	case id.dosOK && strings.HasPrefix(id.dosTarget, `\??\`):
+		return "", false
+	case id.volumeOK:
+		return id.volume, true
+	case id.dosOK:
+		return id.dosTarget, true
+	default:
+		return root, true
+	}
+}
+
+// firstRootPerVolume keeps the first drive root of each volume volumeKey
+// keeps.
+func firstRootPerVolume(roots []string, identify func(root string) driveIdentity) []string {
 	seen := make(map[string]bool)
 	var kept []string
 	for _, root := range roots {
-		vol, ok := volumeOf(root)
-		if !ok || seen[vol] {
+		key, keep := volumeKey(root, identify(root))
+		if !keep || seen[key] {
 			continue
 		}
-		seen[vol] = true
+		seen[key] = true
 		kept = append(kept, root)
 	}
 	return kept

@@ -1,6 +1,7 @@
 package system
 
 import (
+	"strings"
 	"testing"
 	"time"
 )
@@ -70,23 +71,35 @@ func TestFormatUptime(t *testing.T) {
 	}
 }
 
-// subst Z: C:\Windows is a fixed drive answering with C:'s numbers, and a
-// volume can have two letters; either way one disk was listed, and alerted
-// on, once per letter.
+// The drives below are what Windows answers for each kind, as measured on a
+// Windows 11 VM, except ImDisk's, which is what its DefineDosDevice call sets.
 func TestFirstRootPerVolumeListsEachVolumeOnce(t *testing.T) {
-	volumes := map[string]string{
-		`C:\`: `\\?\Volume{c}\`,
-		`D:\`: `\\?\Volume{d}\`,
-		`E:\`: `\\?\Volume{d}\`, // D: mounted a second time
-		// Z: is subst, and has no volume name
+	drives := map[string]driveIdentity{
+		// subst B: D:\ resolves to \??\D: and carries D:'s volume name.
+		`B:\`: {dosTarget: `\??\D:`, dosOK: true, volume: `\\?\Volume{d}\`, volumeOK: true},
+		`C:\`: {dosTarget: `\Device\HarddiskVolume3`, dosOK: true, volume: `\\?\Volume{c}\`, volumeOK: true},
+		`D:\`: {dosTarget: `\Device\HarddiskVolume5`, dosOK: true, volume: `\\?\Volume{d}\`, volumeOK: true},
+		// D: given a second letter by the mount manager.
+		`E:\`: {dosTarget: `\Device\HarddiskVolume5`, dosOK: true, volume: `\\?\Volume{d}\`, volumeOK: true},
+		// An ImDisk RAM disk: a real device with no volume name.
+		`R:\`: {dosTarget: `\Device\ImDisk0`, dosOK: true},
+		// subst Z: C:\Windows: a path alias with no volume name.
+		`Z:\`: {dosTarget: `\??\C:\Windows`, dosOK: true},
 	}
-	volumeOf := func(root string) (string, bool) {
-		v, ok := volumes[root]
-		return v, ok
-	}
-	got := firstRootPerVolume([]string{`C:\`, `D:\`, `E:\`, `Z:\`}, volumeOf)
-	want := []string{`C:\`, `D:\`}
-	if len(got) != len(want) || got[0] != want[0] || got[1] != want[1] {
+	identify := func(root string) driveIdentity { return drives[root] }
+
+	got := firstRootPerVolume([]string{`B:\`, `C:\`, `D:\`, `E:\`, `R:\`, `Z:\`}, identify)
+	want := []string{`C:\`, `D:\`, `R:\`}
+	if strings.Join(got, " ") != strings.Join(want, " ") {
 		t.Errorf("firstRootPerVolume = %q, want %q", got, want)
+	}
+}
+
+// A drive Windows says nothing about is still a drive; it is reported
+// rather than dropped.
+func TestVolumeKeyKeepsADriveItCannotIdentify(t *testing.T) {
+	key, keep := volumeKey(`Q:\`, driveIdentity{})
+	if !keep || key != `Q:\` {
+		t.Errorf("volumeKey(unidentified) = %q, %v; want Q:\\, true", key, keep)
 	}
 }
