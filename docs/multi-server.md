@@ -103,6 +103,12 @@ a server that answered with something this version cannot read says so. With
 `--json`, the output is a list of `{"server", "data"}` or `{"server", "error"}`,
 one per server, with each server's own `--json` answer as `data`.
 
+When a server could not be asked, or its command failed there, it gets a `❌`
+line (or an `"error"` entry) and the run exits 1 after printing every server,
+naming the ones that failed on stderr: `status failed on 1 of 2 servers: rpi5`.
+`doctor --strict --all` exits 1 when any server did not pass, unreachable ones
+included.
+
 Everything else is refused with `--all`. `docker restart`, `docker stop`,
 `backup`, `restore` and `wake` change the machine, and `docker logs`, `top` and
 `inspect` read one container on one server; name the server with `--server`.
@@ -124,3 +130,11 @@ upgrading nas...   ─ already v0.8.0
 
 2 upgraded, 1 already up-to-date
 ```
+
+A binary built with `go install` or `go build` reports its version as `dev`.
+When the one running `upgrade` is such a build, upgrade leaves it alone rather
+than replace it with a release: the local line is `─ dev build, left as it is`,
+it counts as skipped, not failed, and the remote servers are still upgraded.
+Update it with `go install github.com/Higangssh/homebutler@latest`. A remote
+server running a `dev` build is not skipped: upgrade replaces it with the
+release, as it always has.

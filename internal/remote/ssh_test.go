@@ -675,13 +675,15 @@ func TestRemoveHostKeys_NonexistentFile(t *testing.T) {
 	}
 }
 
+// A dev build is left alone, which is not a failure: upgrade from a go
+// install binary said "error" and exited 1 every time.
 func TestSelfUpgrade_DevBuild(t *testing.T) {
 	result := SelfUpgrade("dev", "1.0.0")
-	if result.Status != "error" {
-		t.Errorf("expected error status for dev build, got %s", result.Status)
+	if result.Status != "skipped" {
+		t.Errorf("expected skipped status for dev build, got %s", result.Status)
 	}
-	if !strings.Contains(result.Message, "dev build") {
-		t.Errorf("expected dev build message, got %s", result.Message)
+	if !strings.Contains(result.Message, "dev build") || !strings.Contains(result.Message, "go install github.com/Higangssh/homebutler@latest") {
+		t.Errorf("expected the message to say how to update a dev build, got %s", result.Message)
 	}
 }
 

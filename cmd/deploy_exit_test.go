@@ -175,3 +175,27 @@ func TestUpgradeExitsCleanWhenNothingFailed(t *testing.T) {
 		t.Fatalf("up to date is not a failure, got %v", err)
 	}
 }
+
+// upgrade from a go install binary refused to replace it, rightly, and then
+// called that a failure, so it exited 1 on every run even when every remote
+// server was upgraded.
+func TestUpgradeFromADevBuildIsNotAFailure(t *testing.T) {
+	oldVersion, oldRemote := Version, remoteUpgrade
+	t.Cleanup(func() { Version, remoteUpgrade = oldVersion, oldRemote })
+	Version = "dev"
+	remoteUpgrade = func(s *config.ServerConfig, _ string) *remote.UpgradeResult {
+		return &remote.UpgradeResult{Target: s.Name, Status: "upgraded"}
+	}
+
+	out, err := runFleetCmd(t, newUpgradeCmd(), false, "", true)
+	if err != nil {
+		t.Fatalf("a dev build left alone is not a failure, got %v", err)
+	}
+	var report remote.UpgradeReport
+	if err := json.Unmarshal([]byte(out), &report); err != nil {
+		t.Fatalf("--json must still print the report: %v\n%s", err, out)
+	}
+	if len(report.Results) != 3 || report.Results[0].Target != "local" || report.Results[0].Status != "skipped" {
+		t.Errorf("report = %+v", report)
+	}
+}
