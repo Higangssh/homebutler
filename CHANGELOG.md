@@ -10,7 +10,7 @@ All notable changes to this project will be documented in this file.
 
 ### 🐛 Fixes
 
-- `backup drill --all --server <name>` failed on the server with `accepts 1 arg(s), received 0` (#390). The drill's own `--all`, which drills every app in the archive, was taken off the command line along with the global `--all` before it was sent, so the server was asked for `backup drill` with neither an app nor `--all`. A command's own `--all`, in any of its `--all`, `--all=true` and `--all=false` forms, is now sent on; the global one is still taken off
+- `backup drill --all --server <name>` failed on the server with `accepts 1 arg(s), received 0` (#396). The drill's own `--all`, which drills every app in the archive, was taken off the command line along with the global `--all` before it was sent, so the server was asked for `backup drill` with neither an app nor `--all`. A command's own `--all`, in any of its `--all`, `--all=true` and `--all=false` forms, is now sent on; the global one is still taken off
 
 ## [1.6.0](https://github.com/Higangssh/homebutler/compare/v1.5.0...v1.6.0) - 2026-11-09
 
