@@ -211,7 +211,7 @@ func fanOutAll(w io.Writer, c *config.Config, args []string, jsonOut bool) error
 		return err
 	}
 
-	remoteArgs := jsonArgs(filterFlags(args, append([]string{"--server", "--all"}, f.remoteDrop...)...))
+	remoteArgs := jsonArgs(forwardedArgs(cmd, args, f.remoteDrop...))
 	results := make([]serverResult, len(c.Servers))
 	var wg sync.WaitGroup
 

@@ -35,7 +35,7 @@ history nearing its limit, and configured Proxmox endpoint reachability.`,
 				}
 				cfg = permissive
 			}
-			if handled, err := maybeRouteRemote(); handled {
+			if handled, err := maybeRouteRemote(cmd); handled {
 				return err
 			}
 

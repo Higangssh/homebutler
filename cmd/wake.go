@@ -15,7 +15,7 @@ func newWakeCmd() *cobra.Command {
 			if err := loadConfig(); err != nil {
 				return err
 			}
-			if handled, err := maybeRouteRemote(); handled {
+			if handled, err := maybeRouteRemote(cmd); handled {
 				return err
 			}
 

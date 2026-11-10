@@ -35,7 +35,7 @@ func newDockerListCmd() *cobra.Command {
 			if err := loadConfig(); err != nil {
 				return err
 			}
-			if handled, err := maybeRouteRemote(); handled {
+			if handled, err := maybeRouteRemote(cmd); handled {
 				return err
 			}
 			containers, err := docker.List()
@@ -56,7 +56,7 @@ func newDockerRestartCmd() *cobra.Command {
 			if err := loadConfig(); err != nil {
 				return err
 			}
-			if handled, err := maybeRouteRemote(); handled {
+			if handled, err := maybeRouteRemote(cmd); handled {
 				return err
 			}
 			result, err := docker.Restart(args[0])
@@ -77,7 +77,7 @@ func newDockerStopCmd() *cobra.Command {
 			if err := loadConfig(); err != nil {
 				return err
 			}
-			if handled, err := maybeRouteRemote(); handled {
+			if handled, err := maybeRouteRemote(cmd); handled {
 				return err
 			}
 			result, err := docker.Stop(args[0])
@@ -99,7 +99,7 @@ func newDockerLogsCmd() *cobra.Command {
 			if err := loadConfig(); err != nil {
 				return err
 			}
-			if handled, err := maybeRouteRemote(); handled {
+			if handled, err := maybeRouteRemote(cmd); handled {
 				return err
 			}
 			lines := "50"
@@ -124,7 +124,7 @@ func newDockerStatsCmd() *cobra.Command {
 			if err := loadConfig(); err != nil {
 				return err
 			}
-			if handled, err := maybeRouteRemote(); handled {
+			if handled, err := maybeRouteRemote(cmd); handled {
 				return err
 			}
 			stats, err := docker.Stats()
@@ -146,7 +146,7 @@ func newDockerTopCmd() *cobra.Command {
 			if err := loadConfig(); err != nil {
 				return err
 			}
-			if handled, err := maybeRouteRemote(); handled {
+			if handled, err := maybeRouteRemote(cmd); handled {
 				return err
 			}
 			result, err := docker.Top(args[0])
@@ -168,7 +168,7 @@ func newDockerInspectCmd() *cobra.Command {
 			if err := loadConfig(); err != nil {
 				return err
 			}
-			if handled, err := maybeRouteRemote(); handled {
+			if handled, err := maybeRouteRemote(cmd); handled {
 				return err
 			}
 			result, err := docker.Inspect(args[0])
