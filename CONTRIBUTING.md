@@ -237,8 +237,8 @@ tagged commit:
 clawhub publish "$PWD/skills" --slug homebutler --name Homebutler --version <next> --changelog "..." --source-repo Higangssh/homebutler --source-commit <sha> --source-path skills
 ```
 
-Keep `--name`. Without it ClawHub derives a title of its own, and the listing
-was published as "Skill V120.EHnt".
+Keep `--name`. The 2.5.0 publish went out without it, and the listing has been
+titled "Skill V120.EHnt" since.
 
 ## Code style
 
