@@ -228,6 +228,18 @@ afterwards. So the release PR that moves `## [Unreleased]` to a version number
 also updates that pin — a test compares the two and fails the build if they
 drift apart, which is the reminder.
 
+Nothing reminds you about ClawHub. When a release changed `skills/SKILL.md`,
+publish it after the tag is pushed, with `<next>` as the next ClawHub version
+(it has its own numbering, separate from homebutler's) and `<sha>` as the
+tagged commit:
+
+```bash
+clawhub publish "$PWD/skills" --slug homebutler --name Homebutler --version <next> --changelog "..." --source-repo Higangssh/homebutler --source-commit <sha> --source-path skills
+```
+
+Keep `--name`. Without it ClawHub derives a title of its own, and the listing
+was published as "Skill V120.EHnt".
+
 ## Code style
 
 - Follow standard Go conventions

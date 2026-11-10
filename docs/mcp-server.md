@@ -343,16 +343,16 @@ homebutler ships with an [Agent Skill](https://agentskills.io) that works across
 **Claude Code / Cursor / Gemini CLI** — copy the skill to your personal skills directory:
 
 ```bash
-mkdir -p ~/.claude/skills/homeserver
-cp skills/homeserver/SKILL.md ~/.claude/skills/homeserver/
+mkdir -p ~/.claude/skills/homebutler
+cp skills/SKILL.md ~/.claude/skills/homebutler/
 ```
 
-Then ask Claude Code: *"Check my server status"* — or invoke directly with `/homeserver`.
+Then ask Claude Code: *"Check my server status"* — or invoke directly with `/homebutler`.
 
-**OpenClaw** — install from [ClawHub](https://clawhub.ai/Higangssh/homeserver):
+**OpenClaw** — install from [ClawHub](https://clawhub.ai/higangssh/skills/homebutler):
 
 ```bash
-clawhub install homeserver
+openclaw skills install @higangssh/homebutler
 ```
 
 Manage your homelab from Telegram, Discord, or any chat platform — in any language.
