@@ -103,6 +103,12 @@ a server that answered with something this version cannot read says so. With
 `--json`, the output is a list of `{"server", "data"}` or `{"server", "error"}`,
 one per server, with each server's own `--json` answer as `data`.
 
+When a server could not be asked, or its command failed there, it gets a `❌`
+line (or an `"error"` entry) and the run exits 1 after printing every server,
+naming the ones that failed on stderr: `status failed on 1 of 2 servers: rpi5`.
+`doctor --strict --all` exits 1 when any server did not pass, unreachable ones
+included.
+
 Everything else is refused with `--all`. `docker restart`, `docker stop`,
 `backup`, `restore` and `wake` change the machine, and `docker logs`, `top` and
 `inspect` read one container on one server; name the server with `--server`.

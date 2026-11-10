@@ -278,7 +278,11 @@ func TestFanOutJSONEnvelopeIsUnchanged(t *testing.T) {
 	f := &fakeServers{local: `{"total":1,"processes":[]}`, remoteErr: errors.New("[pi] connection refused")}
 	f.install(t)
 
-	got := runFanOut(t, []string{"processes", "--json"}, true)
+	var buf bytes.Buffer
+	if err := fanOutAll(&buf, twoServers(), []string{"processes", "--json"}, true); err == nil {
+		t.Error("pi could not be asked and the run passed")
+	}
+	got := buf.String()
 	want := `[
   {
     "server": "here",
@@ -362,7 +366,47 @@ func TestFanOutDoctorStrictIsOneVerdict(t *testing.T) {
 
 	f = &fakeServers{local: pass, remoteErr: errors.New("[pi] connection refused")}
 	f.install(t)
-	if err := fanOutAll(&bytes.Buffer{}, twoServers(), []string{"doctor", "--strict"}, true); err == nil {
-		t.Error("a server that could not be asked passed --strict")
+	err = fanOutAll(&bytes.Buffer{}, twoServers(), []string{"doctor", "--strict"}, true)
+	// One verdict, the strict one, not a second line for the same server.
+	if err == nil || err.Error() != "doctor did not pass on 1 of 2 servers: pi" {
+		t.Errorf("err = %v, want only the strict verdict naming pi", err)
+	}
+}
+
+// status --all printed ❌ for a server it could not reach and exited 0, so
+// `homebutler status --all && …` went on as if every server had answered.
+func TestFanOutExitsNonZeroWhenAServerFails(t *testing.T) {
+	for _, jsonOut := range []bool{false, true} {
+		f := &fakeServers{local: statusJSON, remoteErr: errors.New("[pi] connection refused")}
+		f.install(t)
+		var buf bytes.Buffer
+		err := fanOutAll(&buf, twoServers(), []string{"status"}, jsonOut)
+		if err == nil {
+			t.Fatalf("json=%v: pi failed and status --all passed", jsonOut)
+		}
+		if got, want := err.Error(), "status failed on 1 of 2 servers: pi"; got != want {
+			t.Errorf("json=%v: error = %q, want %q", jsonOut, got, want)
+		}
+		// Every server's answer is still printed before the verdict.
+		out := buf.String()
+		if jsonOut {
+			if !strings.Contains(out, `"server": "here"`) || !strings.Contains(out, `"error": "[pi] connection refused"`) {
+				t.Errorf("json output is missing a server:\n%s", out)
+			}
+		} else if !strings.Contains(out, "📡 here") || !strings.Contains(out, "❌ pi") {
+			t.Errorf("human output is missing a server:\n%s", out)
+		}
+	}
+}
+
+// doctor without --strict has no verdict of its own, so a server it could not
+// ask still fails the run.
+func TestFanOutDoctorWithoutStrictStillFailsAnUnreachableServer(t *testing.T) {
+	warn := `{"schema_version":1,"status":"warn","summary":{"pass":8,"warn":1,"fail":0},"findings":[]}`
+	f := &fakeServers{local: warn, remoteErr: errors.New("[pi] connection refused")}
+	f.install(t)
+	err := fanOutAll(&bytes.Buffer{}, twoServers(), []string{"doctor"}, false)
+	if err == nil || err.Error() != "doctor failed on 1 of 2 servers: pi" {
+		t.Errorf("err = %v, want the fan-out verdict naming pi", err)
 	}
 }

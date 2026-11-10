@@ -244,7 +244,7 @@ func fanOutAll(w io.Writer, c *config.Config, args []string, jsonOut bool) error
 		if err := writeJSON(w, results); err != nil {
 			return err
 		}
-		return runVerdict(f, cmd, results)
+		return fanOutVerdict(f, cmd, results)
 	}
 	icon := f.icon
 	if icon == "" {
@@ -262,14 +262,33 @@ func fanOutAll(w io.Writer, c *config.Config, args []string, jsonOut bool) error
 		}
 		fmt.Fprintf(w, "%s %-12s %s\n", icon, r.Server, line)
 	}
-	return runVerdict(f, cmd, results)
+	return fanOutVerdict(f, cmd, results)
 }
 
-func runVerdict(f fanOut, cmd *cobra.Command, results []serverResult) error {
-	if f.verdict == nil {
+// fanOutVerdict fails the run when any server could not be asked or its
+// command failed there. Every server's line has already been printed; this
+// is what a script or cron job reads. A command with its own verdict gives
+// that one instead when it fails, so a run is never reported twice.
+func fanOutVerdict(f fanOut, cmd *cobra.Command, results []serverResult) error {
+	if f.verdict != nil {
+		if err := f.verdict(cmd, results); err != nil {
+			return err
+		}
+	}
+	var failed []string
+	for _, r := range results {
+		if r.Error != "" {
+			failed = append(failed, r.Server)
+		}
+	}
+	if len(failed) == 0 {
 		return nil
 	}
-	return f.verdict(cmd, results)
+	noun := "servers"
+	if len(results) == 1 {
+		noun = "server"
+	}
+	return fmt.Errorf("%s failed on %d of %d %s: %s", commandPath(cmd), len(failed), len(results), noun, strings.Join(failed, ", "))
 }
 
 // doctorStrictVerdict is doctor --strict across servers: the run fails when

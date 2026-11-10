@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### ⚠️ Behavior changes
+
+- **`--all` exits 1 when any server could not be asked or its command failed there.** `status --all`, `alerts --all`, `docker list --all` and the rest printed a `❌` line for that server and exited 0, so `homebutler status --all && …` went on as if every server had answered. Every server is still asked and printed, and the `--json` output is unchanged; the command then fails with `status failed on 1 of 2 servers: nas`. A server that answered with something this version cannot summarise, printed with `⚠️`, does not count, because it did answer and its JSON is passed through whole. `doctor --strict --all` still gives its own single verdict, which already counted an unreachable server, and is not reported twice. A cron job or script that ran `--all` against a fleet with a server that is often off now sees that as a failure
+
 ### ✨ Features
 
 - each release carries Windows builds for x64 and Arm: `homebutler_<version>_windows_amd64.zip` and `_windows_arm64.zip` with `homebutler.exe` inside, and a Claude Desktop extension for each, `homebutler_<version>_windows_amd64.mcpb` and `_windows_arm64.mcpb` (#384). The extension starts `server\homebutler.exe mcp --max-risk read` with the `PATH` Windows gives Claude Desktop, rather than the Unix one the macOS and Linux bundles set, so `ssh.exe` and `docker` are found where Windows finds them. `npm install -g homebutler` on Windows now installs, where it failed on a missing archive and would then have failed on `unzip`, which Windows does not have; it extracts with Windows' own `tar.exe`, so it needs Windows 10 1803 or later, and on an older one names the zip to download by hand. `homebutler upgrade` on Windows fetches the `.zip`, and leaves the previous binary beside the new one as `homebutler.exe.bak`, because Windows does not delete a program that is running; the next upgrade replaces it. On Windows, `status` and what is built on it read the machine, and `ports` and `processes` still refuse. Homebrew and the container image are unchanged, macOS and Linux only
