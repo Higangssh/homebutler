@@ -399,6 +399,28 @@ func TestFanOutExitsNonZeroWhenAServerFails(t *testing.T) {
 	}
 }
 
+// A server that answered with JSON this version cannot summarise did answer,
+// and its JSON is passed through whole, so it is not a failure: only the one
+// that could not be asked is named.
+func TestFanOutUnreadableAnswerIsNotAFailure(t *testing.T) {
+	f := &fakeServers{local: `{"from_a_newer_version":true}`, remoteErr: errors.New("[pi] connection refused")}
+	f.install(t)
+	var buf bytes.Buffer
+	err := fanOutAll(&buf, twoServers(), []string{"status"}, false)
+	if !strings.Contains(buf.String(), "⚠️  here") {
+		t.Fatalf("want here's line to say it could not be read:\n%s", buf.String())
+	}
+	if err == nil || err.Error() != "status failed on 1 of 2 servers: pi" {
+		t.Errorf("err = %v, want only pi named", err)
+	}
+
+	f = &fakeServers{local: `{"from_a_newer_version":true}`, remoteJSON: statusJSON}
+	f.install(t)
+	if err := fanOutAll(&bytes.Buffer{}, twoServers(), []string{"status"}, false); err != nil {
+		t.Errorf("an unreadable answer failed the run: %v", err)
+	}
+}
+
 // doctor without --strict has no verdict of its own, so a server it could not
 // ask still fails the run.
 func TestFanOutDoctorWithoutStrictStillFailsAnUnreachableServer(t *testing.T) {
