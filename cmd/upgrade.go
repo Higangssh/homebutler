@@ -61,13 +61,15 @@ func newUpgradeCmd() *cobra.Command {
 			}
 
 			// Summary
-			upgraded, upToDate, failed := 0, 0, 0
+			upgraded, upToDate, skipped, failed := 0, 0, 0, 0
 			for _, r := range report.Results {
 				switch r.Status {
 				case "upgraded":
 					upgraded++
 				case "up-to-date":
 					upToDate++
+				case "skipped":
+					skipped++
 				case "error":
 					failed++
 				}
@@ -79,6 +81,9 @@ func newUpgradeCmd() *cobra.Command {
 			}
 			if upToDate > 0 {
 				parts = append(parts, fmt.Sprintf("%d already up-to-date", upToDate))
+			}
+			if skipped > 0 {
+				parts = append(parts, fmt.Sprintf("%d skipped", skipped))
 			}
 			if failed > 0 {
 				parts = append(parts, fmt.Sprintf("%d failed", failed))
@@ -112,7 +117,7 @@ func printUpgradeStatus(r *remote.UpgradeResult) {
 	switch r.Status {
 	case "upgraded":
 		fmt.Fprintf(os.Stderr, "✓ %s\n", r.Message)
-	case "up-to-date":
+	case "up-to-date", "skipped":
 		fmt.Fprintf(os.Stderr, "─ %s\n", r.Message)
 	case "error":
 		message := r.Message
@@ -124,7 +129,8 @@ func printUpgradeStatus(r *remote.UpgradeResult) {
 }
 
 // upgradeVerdict fails the command when any target, the local one included,
-// could not be upgraded. Already up to date is not a failure.
+// could not be upgraded. Already up to date is not a failure, and nor is a
+// dev build left alone.
 func upgradeVerdict(results []remote.UpgradeResult) error {
 	var failed []string
 	for _, r := range results {

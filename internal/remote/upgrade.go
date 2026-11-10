@@ -21,7 +21,7 @@ type UpgradeResult struct {
 	Target      string `json:"target"`
 	PrevVersion string `json:"prev_version"`
 	NewVersion  string `json:"new_version"`
-	Status      string `json:"status"` // "upgraded", "up-to-date", "error"
+	Status      string `json:"status"` // "upgraded", "up-to-date", "skipped", "error"
 	Message     string `json:"message,omitempty"`
 	Error       error  `json:"-"`
 }
@@ -68,9 +68,13 @@ func SelfUpgrade(currentVersion, latestVersion string) *UpgradeResult {
 		PrevVersion: currentVersion,
 	}
 
+	// A dev build (go install, go build) carries no version to compare, and
+	// replacing it with a release would undo whatever it was built from.
+	// Leaving it alone is the right outcome, not a failure.
 	if currentVersion == "dev" {
-		result.Status = "error"
-		result.Message = "running dev build — upgrade from release builds only"
+		result.Status = "skipped"
+		result.NewVersion = currentVersion
+		result.Message = "dev build, left as it is: upgrade replaces release builds only. Update it with `go install github.com/Higangssh/homebutler@latest`, or rebuild it from your checkout"
 		return result
 	}
 
