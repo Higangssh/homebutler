@@ -45,7 +45,7 @@ Use --config to load YAML rules for self-healing mode.`,
 			if err := loadConfig(); err != nil {
 				return err
 			}
-			if handled, err := maybeRouteRemote(); handled {
+			if handled, err := maybeRouteRemote(cmd); handled {
 				return err
 			}
 			if watchMode {

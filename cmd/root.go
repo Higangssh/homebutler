@@ -191,9 +191,9 @@ func loadConfig() error {
 // maybeRouteRemote checks --server and --all flags and routes to remote servers if needed.
 // Returns true if the command was handled remotely.
 // skipRemote commands (deploy, upgrade) handle their own remote routing.
-func maybeRouteRemote() (bool, error) {
+func maybeRouteRemote(cmd *cobra.Command) (bool, error) {
 	if allServers {
-		remoteArgs := filterFlags(os.Args[1:], "--server", "--all", "--config")
+		remoteArgs := forwardedArgs(cmd, os.Args[1:])
 		return true, runAllServers(cfg, remoteArgs, jsonOutput)
 	}
 	if serverName != "" {
@@ -202,7 +202,7 @@ func maybeRouteRemote() (bool, error) {
 			return true, fmt.Errorf("server %q not found in config. Available servers: %s", serverName, listServerNames(cfg))
 		}
 		if !server.Local {
-			remoteArgs := filterFlags(os.Args[1:], "--server", "--all", "--config")
+			remoteArgs := forwardedArgs(cmd, os.Args[1:])
 			out, err := remote.Run(server, remoteArgs...)
 			if err != nil {
 				return true, err
@@ -212,6 +212,29 @@ func maybeRouteRemote() (bool, error) {
 		}
 	}
 	return false, nil
+}
+
+// forwardedArgs is the command line a server is sent to run cmd: args without
+// the global flags that reach it (--server, --all, --config) or the ones in
+// drop.
+//
+// A command with an --all of its own, such as backup drill's "every app in the
+// archive", keeps it. Cobra resolves --all to that flag wherever it is typed,
+// so every --all on the line is the command's, and stripping it sent the
+// server `backup drill` with neither an app nor --all.
+func forwardedArgs(cmd *cobra.Command, args []string, drop ...string) []string {
+	strip := append([]string{"--server", "--config"}, drop...)
+	if !hasOwnAllFlag(cmd) {
+		strip = append(strip, "--all")
+	}
+	return filterFlags(args, strip...)
+}
+
+// hasOwnAllFlag reports whether cmd defines an --all that shadows the global
+// one.
+func hasOwnAllFlag(cmd *cobra.Command) bool {
+	f := cmd.Flags().Lookup("all")
+	return f != nil && f != cmd.Root().PersistentFlags().Lookup("all")
 }
 
 // Execute is the entry point called from main.go.
