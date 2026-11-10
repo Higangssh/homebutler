@@ -776,6 +776,20 @@ curl -fsSL https://raw.githubusercontent.com/Higangssh/homebutler/main/install.s
 ```
 
 Auto-detects OS/architecture, downloads the latest release, and installs to PATH.
+macOS and Linux only; on Windows, use the zip below.
+
+### Windows
+
+Download `homebutler_<version>_windows_amd64.zip` (or `_windows_arm64.zip`)
+from the [latest release](https://github.com/Higangssh/homebutler/releases/latest),
+extract `homebutler.exe`, and put it in a folder on your `PATH`.
+`homebutler upgrade` replaces it with the next release's. The npm package
+needs Windows 10 version 1803 or later, whose `tar.exe` it extracts the zip with.
+
+On Windows, `status` and what is built on it read this machine, and `ports` and
+`processes` say they are not supported. Servers in your config are reached
+over SSH as from any other machine, with keys read from
+`C:\Users\<you>\.ssh` ([configuration](docs/configuration.md)).
 
 ### npm (MCP server)
 
@@ -790,8 +804,10 @@ installs above.
 
 ### Claude Desktop extension (MCP server)
 
-Download `homebutler_<version>_darwin_arm64.mcpb` (Apple silicon) or
-`homebutler_<version>_darwin_amd64.mcpb` (Intel) from the
+Download `homebutler_<version>_darwin_arm64.mcpb` (Apple silicon),
+`homebutler_<version>_darwin_amd64.mcpb` (Intel Mac),
+`homebutler_<version>_windows_amd64.mcpb` (Windows) or
+`homebutler_<version>_windows_arm64.mcpb` (Windows on Arm) from the
 [latest release](https://github.com/Higangssh/homebutler/releases/latest) and
 open it, or drag it onto Claude Desktop's Settings → Extensions. The binary is
 inside, so nothing else needs installing. It starts read-only; see

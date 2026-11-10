@@ -50,6 +50,8 @@ homebutler:
 | --- | --- |
 | Mac, Apple silicon | `homebutler_<version>_darwin_arm64.mcpb` |
 | Mac, Intel | `homebutler_<version>_darwin_amd64.mcpb` |
+| Windows, x64 | `homebutler_<version>_windows_amd64.mcpb` |
+| Windows on Arm | `homebutler_<version>_windows_arm64.mcpb` |
 | Linux, for other clients that install `.mcpb` bundles | `homebutler_<version>_linux_arm64.mcpb`, `homebutler_<version>_linux_amd64.mcpb` |
 
 Download the one for your machine from the
@@ -82,7 +84,8 @@ over SSH. It starts with `PATH` set to
 `/usr/local/bin:/usr/local/sbin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin:/snap/bin`,
 the list `watch install` and `serve install` give a supervised homebutler, so
 it finds `docker` from Homebrew or Docker Desktop. A `docker` anywhere else is
-not found.
+not found. On Windows it sets no `PATH` and runs with the one Claude Desktop
+has, so `ssh.exe` and `docker` are found where Windows finds them.
 
 ## Setup
 

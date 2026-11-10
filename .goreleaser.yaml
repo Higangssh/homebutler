@@ -8,6 +8,7 @@ builds:
     goos:
       - linux
       - darwin
+      - windows
     goarch:
       - amd64
       - arm64
@@ -24,6 +25,12 @@ builds:
 archives:
   - formats: [tar.gz]
     name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    # Explorer opens a .zip and not a .tar.gz, and npm/install.js and
+    # `homebutler upgrade` both ask for the .zip on Windows. Renaming either
+    # breaks every Windows install that asks for the old name.
+    format_overrides:
+      - goos: windows
+        formats: [zip]
 
 checksum:
   name_template: checksums.txt

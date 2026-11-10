@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### ✨ Features
+
+- each release carries Windows builds for x64 and Arm: `homebutler_<version>_windows_amd64.zip` and `_windows_arm64.zip` with `homebutler.exe` inside, and a Claude Desktop extension for each, `homebutler_<version>_windows_amd64.mcpb` and `_windows_arm64.mcpb` (#384). The extension starts `server\homebutler.exe mcp --max-risk read` with the `PATH` Windows gives Claude Desktop, rather than the Unix one the macOS and Linux bundles set, so `ssh.exe` and `docker` are found where Windows finds them. `npm install -g homebutler` on Windows now installs, where it failed on a missing archive and would then have failed on `unzip`, which Windows does not have; it extracts with Windows' own `tar.exe`, so it needs Windows 10 1803 or later, and on an older one names the zip to download by hand. `homebutler upgrade` on Windows fetches the `.zip`, and leaves the previous binary beside the new one as `homebutler.exe.bak`, because Windows does not delete a program that is running; the next upgrade replaces it. On Windows, `status` and what is built on it read the machine, and `ports` and `processes` still refuse. Homebrew and the container image are unchanged, macOS and Linux only
+
 ## [1.6.0](https://github.com/Higangssh/homebutler/compare/v1.5.0...v1.6.0) - 2026-11-09
 
 **A command given `--server` or `--all` could act on the wrong machine — `install jellyfin --server rpi5` installed jellyfin here and `docker restart nginx --all` restarted it on every Pi — and `deploy`, `alerts --all` and a build for Windows could report a success or a reading nobody had measured; each now refuses, fails, or reads the real number.**

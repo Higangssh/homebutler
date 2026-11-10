@@ -36,19 +36,59 @@ root=$(cd "$(dirname "$0")/.." && pwd)
 stage="$root/dist/mcpb/${goos}_${goarch}"
 out="$root/dist/homebutler_${version}_${goos}_${goarch}.mcpb"
 
+# The manifest names platforms as Node's process.platform does, so Windows is
+# win32 there, and the packer rejects "windows".
+case "$goos" in
+  windows)
+    platform=win32
+    entry=server/homebutler.exe
+    ;;
+  *)
+    platform=$goos
+    entry=server/homebutler
+    ;;
+esac
+
 rm -rf "$stage"
 mkdir -p "$stage/server"
-cp "$binary" "$stage/server/homebutler"
-chmod 755 "$stage/server/homebutler"
+cp "$binary" "$stage/$entry"
+chmod 755 "$stage/$entry"
 cp "$root/assets/icon-512.png" "$stage/icon.png"
 
 # The version comes from the tag, as server.json's and the npm package's do,
 # and the platform from the binary inside; the checked-in manifest holds
 # neither. A client that checks compatibility.platforms can then turn away a
 # Linux bundle on a Mac rather than install a binary that cannot run.
-jq --arg v "$version" --arg p "$goos" \
-  '.version = $v | .compatibility.platforms = [$p]' \
-  "$root/mcpb/manifest.json" > "$stage/manifest.json"
+#
+# The Windows bundle is rewritten here rather than through platform_overrides
+# in the manifest: Claude Desktop merges an override's env into the base env,
+# so no override can take away the base PATH. That PATH is a Unix one, and on
+# Windows it replaces the whole PATH, so homebutler would no longer find
+# ssh.exe or anything in System32. The Windows bundle therefore has no env.
+jq --arg v "$version" --arg p "$platform" --arg e "$entry" '
+  .version = $v
+  | .compatibility.platforms = [$p]
+  | if $p == "win32" then
+      .server.entry_point = $e
+      | .server.mcp_config.command = "${__dirname}/" + $e
+      | del(.server.mcp_config.env)
+    else . end
+' "$root/mcpb/manifest.json" > "$stage/manifest.json"
+
+# Checked on the manifest that is packed, so an edit to the checked-in one
+# that moved the binary, or a rewrite above that stopped applying, fails the
+# build instead of shipping a bundle that cannot start or that hands Windows
+# a Unix PATH.
+staged=$(jq -r '[.server.entry_point, .server.mcp_config.command, (.server.mcp_config.env == null)] | @tsv' "$stage/manifest.json")
+want_env=false
+[ "$platform" = win32 ] && want_env=true
+case "$staged" in
+  "$entry	"'${__dirname}/'"$entry	$want_env") ;;
+  *)
+    echo "$0: the $platform bundle's manifest does not start $entry as expected (entry_point, command, env is null: $staged)" >&2
+    exit 1
+    ;;
+esac
 
 # The release job installs this version globally; the fallback is for a local
 # run. Pinned, so a new mcpb release cannot change what a tag produces.

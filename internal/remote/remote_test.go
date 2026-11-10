@@ -2,6 +2,7 @@ package remote
 
 import (
 	"archive/tar"
+	"archive/zip"
 	"bytes"
 	"compress/gzip"
 	"runtime"
@@ -99,6 +100,66 @@ func TestExtractBinaryFromTarGz_InvalidData(t *testing.T) {
 	_, err := extractBinaryFromTarGz([]byte("not a tar.gz"))
 	if err == nil {
 		t.Error("expected error for invalid tar.gz data")
+	}
+}
+
+// --- release archive tests ---
+
+// The names npm/install.js downloads and .goreleaser.yaml publishes. A
+// Windows upgrade that asked for a .tar.gz would 404 on every release.
+func TestReleaseArchive(t *testing.T) {
+	tests := []struct {
+		os, arch        string
+		archive, binary string
+	}{
+		{"linux", "amd64", "homebutler_1.7.0_linux_amd64.tar.gz", "homebutler"},
+		{"darwin", "arm64", "homebutler_1.7.0_darwin_arm64.tar.gz", "homebutler"},
+		{"windows", "amd64", "homebutler_1.7.0_windows_amd64.zip", "homebutler.exe"},
+		{"windows", "arm64", "homebutler_1.7.0_windows_arm64.zip", "homebutler.exe"},
+	}
+	for _, tt := range tests {
+		archive, binary := releaseArchive(tt.os, tt.arch, "1.7.0")
+		if archive != tt.archive || binary != tt.binary {
+			t.Errorf("releaseArchive(%s, %s) = %q, %q, want %q, %q", tt.os, tt.arch, archive, binary, tt.archive, tt.binary)
+		}
+	}
+}
+
+func TestExtractBinaryFromZip(t *testing.T) {
+	content := []byte("MZ fake homebutler.exe")
+	tests := []struct {
+		name  string
+		files map[string][]byte
+	}{
+		// GoReleaser puts the binary at the root, beside README and LICENSE.
+		{"at root", map[string][]byte{"README.md": []byte("# hi"), "homebutler.exe": content, "LICENSE": []byte("MIT")}},
+		{"in a directory", map[string][]byte{"homebutler_windows_arm64/homebutler.exe": content}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := extractBinaryFromZip(createZip(t, tt.files), "homebutler.exe")
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if !bytes.Equal(got, content) {
+				t.Errorf("extracted %q, want %q", got, content)
+			}
+		})
+	}
+}
+
+func TestExtractBinaryFromZip_NotFound(t *testing.T) {
+	// A Unix binary in a zip is not the Windows one.
+	data := createZip(t, map[string][]byte{"homebutler": []byte("ELF")})
+	_, err := extractBinaryFromZip(data, "homebutler.exe")
+	if err == nil || !contains(err.Error(), "homebutler.exe not found") {
+		t.Errorf("err = %v, want homebutler.exe not found", err)
+	}
+}
+
+func TestExtractBinaryFromZip_InvalidData(t *testing.T) {
+	if _, err := extractBinaryFromZip([]byte("not a zip"), "homebutler.exe"); err == nil {
+		t.Error("expected error for invalid zip data")
 	}
 }
 
@@ -267,6 +328,25 @@ func createTarGz(t *testing.T, name string, content []byte) []byte {
 
 	tw.Close()
 	gw.Close()
+	return buf.Bytes()
+}
+
+func createZip(t *testing.T, files map[string][]byte) []byte {
+	t.Helper()
+	var buf bytes.Buffer
+	zw := zip.NewWriter(&buf)
+	for name, content := range files {
+		w, err := zw.Create(name)
+		if err != nil {
+			t.Fatalf("zip create: %v", err)
+		}
+		if _, err := w.Write(content); err != nil {
+			t.Fatalf("zip write: %v", err)
+		}
+	}
+	if err := zw.Close(); err != nil {
+		t.Fatalf("zip close: %v", err)
+	}
 	return buf.Bytes()
 }
 

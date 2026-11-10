@@ -107,7 +107,7 @@ func SelfUpgrade(currentVersion, latestVersion string) *UpgradeResult {
 	if err := os.Rename(execPath, backupPath); err != nil {
 		result.Status = "error"
 		if util.IsPermissionError(err) {
-			result.Error = util.NewHintError("cannot backup current binary "+backupPath, err, "sudo homebutler upgrade")
+			result.Error = util.NewHintError("cannot backup current binary "+backupPath, err, elevatedUpgradeHint())
 			result.Message = util.FormatError(result.Error, true)
 		} else {
 			result.Message = fmt.Sprintf("cannot backup current binary: %v", err)
@@ -120,7 +120,7 @@ func SelfUpgrade(currentVersion, latestVersion string) *UpgradeResult {
 		os.Rename(backupPath, execPath)
 		result.Status = "error"
 		if util.IsPermissionError(err) {
-			result.Error = util.NewHintError("cannot write new binary "+execPath, err, "sudo homebutler upgrade")
+			result.Error = util.NewHintError("cannot write new binary "+execPath, err, elevatedUpgradeHint())
 			result.Message = util.FormatError(result.Error, true)
 		} else {
 			result.Message = fmt.Sprintf("cannot write new binary: %v", err)
@@ -455,4 +455,15 @@ func cmpInt(a, b int) int {
 // "already vv0.41.2".
 func vtag(version string) string {
 	return "v" + strings.TrimPrefix(version, "v")
+}
+
+// elevatedUpgradeHint is what to rerun when the binary could not be moved or
+// written. Windows has no sudo, and there access is also denied while another
+// homebutler, such as a serve started before the last upgrade, still runs
+// from the file being replaced.
+func elevatedUpgradeHint() string {
+	if runtime.GOOS == "windows" {
+		return "homebutler upgrade in a terminal opened as administrator, after stopping any running homebutler"
+	}
+	return "sudo homebutler upgrade"
 }
