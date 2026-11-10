@@ -131,8 +131,10 @@ upgrading nas...   ─ already v0.8.0
 2 upgraded, 1 already up-to-date
 ```
 
-A binary built with `go install` or `go build` reports its version as `dev`,
-and upgrade leaves it alone rather than replace it with a release: its line is
-`─ dev build, left as it is`, it counts as skipped, not failed, and the remote
-servers are still upgraded. Update it with
-`go install github.com/Higangssh/homebutler@latest`.
+A binary built with `go install` or `go build` reports its version as `dev`.
+When the one running `upgrade` is such a build, upgrade leaves it alone rather
+than replace it with a release: the local line is `─ dev build, left as it is`,
+it counts as skipped, not failed, and the remote servers are still upgraded.
+Update it with `go install github.com/Higangssh/homebutler@latest`. A remote
+server running a `dev` build is not skipped: upgrade replaces it with the
+release, as it always has.

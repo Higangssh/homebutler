@@ -74,7 +74,7 @@ func SelfUpgrade(currentVersion, latestVersion string) *UpgradeResult {
 	if currentVersion == "dev" {
 		result.Status = "skipped"
 		result.NewVersion = currentVersion
-		result.Message = "dev build, left as it is: upgrade replaces release builds only. Update it with `go install github.com/Higangssh/homebutler@latest`, or rebuild it from your checkout"
+		result.Message = "dev build, left as it is: upgrade does not replace the binary it runs from when that is a dev build. Update it with `go install github.com/Higangssh/homebutler@latest`, or rebuild it from your checkout"
 		return result
 	}
 
