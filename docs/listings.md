@@ -42,7 +42,7 @@ wrong.
 | `awesome-selfhosted/awesome-selfhosted` | the description is `software/homebutler.yml` in `awesome-selfhosted-data`, and only a PR there changes it. A bot refreshes the stars, latest release and commit history in that file every few days, so the file looks maintained while the sentence in it is not |
 | Glama | rebuilds itself from the README — the one entry here a commit still fixes |
 | GitHub repository description and topics | repository settings, not a file |
-| ClawHub | `skills/SKILL.md` published as `@higangssh/homebutler`; a new version has to be pushed |
+| ClawHub | `skills/SKILL.md` published as `@higangssh/homebutler`; a new version has to be pushed, as the last step of cutting a release in `CONTRIBUTING.md` |
 | homebutler.dev | the `homebutler-site` repository, which builds on its own push |
 
 The list is incomplete by nature. Add a row when you find one rather than
