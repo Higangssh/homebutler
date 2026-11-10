@@ -97,3 +97,73 @@ func TestIsFlag(t *testing.T) {
 		}
 	}
 }
+
+// backup drill has an --all of its own, which shadows the global one, so
+// `--server rpi5 backup drill --all` arrived at the Pi as `backup drill`, with
+// neither an app nor --all, and failed on its arguments.
+func TestForwardedArgsKeepACommandsOwnAll(t *testing.T) {
+	tests := []struct {
+		args []string
+		want []string
+	}{
+		{
+			args: []string{"--server", "rpi5", "backup", "drill", "--all"},
+			want: []string{"backup", "drill", "--all"},
+		},
+		{
+			args: []string{"--server=rpi5", "backup", "drill", "--all=true", "--json"},
+			want: []string{"backup", "drill", "--all=true", "--json"},
+		},
+		{
+			args: []string{"backup", "drill", "--all=false", "vaultwarden", "--server", "rpi5", "--config", "/tmp/x.yaml"},
+			want: []string{"backup", "drill", "--all=false", "vaultwarden"},
+		},
+		// Without an --all of its own, any --all is the global one, and
+		// forwarded it would make the server fan out again.
+		{
+			args: []string{"--server", "rpi5", "status", "--all", "--json"},
+			want: []string{"status", "--json"},
+		},
+		{
+			args: []string{"backup", "list", "--all=true", "--server=rpi5"},
+			want: []string{"backup", "list"},
+		},
+	}
+	for _, tc := range tests {
+		cmd, _, err := rootCmd.Find(tc.args)
+		if err != nil {
+			t.Fatalf("Find(%v): %v", tc.args, err)
+		}
+		if got := forwardedArgs(cmd, tc.args); !reflect.DeepEqual(got, tc.want) {
+			t.Errorf("forwardedArgs(%s, %v) = %v, want %v", commandPath(cmd), tc.args, got, tc.want)
+		}
+	}
+}
+
+// Without --server, backup drill --all is still the drill's: every app in the
+// archive here, not this command on every server.
+func TestBackupDrillAllIsTheDrillsFlagLocally(t *testing.T) {
+	ran := stubRuns(t)
+	drill, _, err := rootCmd.Find([]string{"backup", "drill"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	own := drill.Flags().Lookup("all")
+	t.Cleanup(func() {
+		_ = own.Value.Set("false")
+		own.Changed = false
+	})
+
+	if err := executeRoot(t, ran, "backup", "drill", "--all"); err != nil {
+		t.Fatal(err)
+	}
+	if *ran != "backup drill" {
+		t.Fatalf("ran %q, want backup drill", *ran)
+	}
+	if allServers {
+		t.Error("the global --all was set; want the drill's own")
+	}
+	if own.Value.String() != "true" {
+		t.Errorf("backup drill's --all = %s, want true", own.Value.String())
+	}
+}

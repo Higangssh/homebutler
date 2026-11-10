@@ -23,7 +23,7 @@ Use --to to specify a custom backup destination.`,
 			if err := loadConfig(); err != nil {
 				return err
 			}
-			if handled, err := maybeRouteRemote(); handled {
+			if handled, err := maybeRouteRemote(cmd); handled {
 				return err
 			}
 
@@ -59,7 +59,7 @@ func newBackupListCmd() *cobra.Command {
 			if err := loadConfig(); err != nil {
 				return err
 			}
-			if handled, err := maybeRouteRemote(); handled {
+			if handled, err := maybeRouteRemote(cmd); handled {
 				return err
 			}
 
@@ -118,7 +118,7 @@ Use --archive to drill a specific archive, or --all to verify every supported ap
 			if err := loadConfig(); err != nil {
 				return err
 			}
-			if handled, err := maybeRouteRemote(); handled {
+			if handled, err := maybeRouteRemote(cmd); handled {
 				return err
 			}
 
@@ -173,7 +173,7 @@ func newRestoreCmd() *cobra.Command {
 			if err := loadConfig(); err != nil {
 				return err
 			}
-			if handled, err := maybeRouteRemote(); handled {
+			if handled, err := maybeRouteRemote(cmd); handled {
 				return err
 			}
 
