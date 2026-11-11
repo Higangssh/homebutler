@@ -137,7 +137,7 @@ func TestForwardedContainerNamesHaveAGate(t *testing.T) {
 		t.Fatalf("reading server.go: %v", err)
 	}
 
-	fn := regexp.MustCompile(`(?s)func \(s \*Server\) executeRemote\(.*?\n\tout, err := remote\.Run`)
+	fn := regexp.MustCompile(`(?s)func \(s \*Server\) executeRemote\(.*?\n\tout, err := runRemote`)
 	body := fn.Find(src)
 	if body == nil {
 		t.Fatal("could not locate the executeRemote argv switch; update this test if it moved")

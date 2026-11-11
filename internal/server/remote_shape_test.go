@@ -154,9 +154,13 @@ func TestRemotePortsEmptyIsAList(t *testing.T) {
 	}
 }
 
+// A ports value that is not a list was passed through as a 200, so the card
+// had an object where it reads a list.
 func TestRemotePortsRejectAnUnrelatedObject(t *testing.T) {
-	w := getRoute(t, remoteAnswering(t, "ports", []byte(`{"hostname":"pi"}`)), "/api/ports?server=remote1")
-	if w.Code != http.StatusBadGateway {
-		t.Fatalf("status = %d, want 502; body %s", w.Code, w.Body.String())
+	for _, out := range []string{`{"hostname":"pi"}`, `{"ports":{"a":1}}`, `{"ports":"22"}`} {
+		w := getRoute(t, remoteAnswering(t, "ports", []byte(out)), "/api/ports?server=remote1")
+		if w.Code != http.StatusBadGateway {
+			t.Errorf("%s: status = %d, want 502; body %s", out, w.Code, w.Body.String())
+		}
 	}
 }
