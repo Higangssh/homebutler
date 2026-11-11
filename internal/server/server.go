@@ -531,15 +531,29 @@ func (s *Server) handleOptions(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
+// refuseInContainer answers a request about the machine this binary runs on
+// when that machine is a container, and reports whether it did. Every route
+// that reads this machine — with no server named, or naming one marked
+// local: true — asks it first, so the refusal is the same 501 and the same
+// sentence whichever route a caller took. The container's own /proc and
+// sockets are a convincing answer about the wrong machine.
+//
+// The docker routes do not ask: with the host's socket mounted they reach the
+// host's daemon, which is the machine somebody meant.
+func refuseInContainer(w http.ResponseWriter) bool {
+	if !system.InContainer() {
+		return false
+	}
+	writeError(w, http.StatusNotImplemented, system.ContainerCannotSeeHost)
+	return true
+}
+
 func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request) {
 	if srv, ok := s.isRemoteRequest(r); ok {
 		s.forwardRemote(w, srv, "status", "--json")
 		return
 	}
-	// Inside a container this would be the container's own /proc, which is a
-	// convincing answer about the wrong machine.
-	if system.InContainer() {
-		writeError(w, http.StatusNotImplemented, system.ContainerCannotSeeHost)
+	if refuseInContainer(w) {
 		return
 	}
 	info, err := system.Status()
@@ -638,6 +652,9 @@ func (s *Server) handleProcesses(w http.ResponseWriter, r *http.Request) {
 		s.forwardRemote(w, srv, "processes", "--json")
 		return
 	}
+	if refuseInContainer(w) {
+		return
+	}
 	procs, err := system.TopProcesses(10)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
@@ -651,6 +668,9 @@ func (s *Server) handleAlerts(w http.ResponseWriter, r *http.Request) {
 		s.forwardRemote(w, srv, "alerts", "--json")
 		return
 	}
+	if refuseInContainer(w) {
+		return
+	}
 	result, err := alerts.Check(&s.config().Alerts)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
@@ -662,6 +682,9 @@ func (s *Server) handleAlerts(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handlePorts(w http.ResponseWriter, r *http.Request) {
 	if srv, ok := s.isRemoteRequest(r); ok {
 		s.forwardRemote(w, srv, "ports", "--json")
+		return
+	}
+	if refuseInContainer(w) {
 		return
 	}
 	openPorts, err := listPorts()
@@ -1026,7 +1049,9 @@ func (s *Server) handleServerStatus(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if srv.Local {
-		// Run locally
+		if refuseInContainer(w) {
+			return
+		}
 		info, err := system.Status()
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, err.Error())

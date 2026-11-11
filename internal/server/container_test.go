@@ -92,3 +92,73 @@ func TestALocalServerIsAnsweredNormallyOutsideAContainer(t *testing.T) {
 		t.Fatalf("the local machine was not read: %+v", body.Servers[0])
 	}
 }
+
+// Every route that reads this machine refuses inside a container the way
+// /api/status does, whether it names no server or one marked local: true.
+// /api/servers/{name}/status answered a local server with the container's own
+// CPU, memory and disks under the server's name.
+func TestEveryLocalReadingRefusesLikeStatusInsideAContainer(t *testing.T) {
+	t.Setenv("HOMEBUTLER_CONTAINER", "1")
+
+	ran := false
+	srv := testServerWithMockRemote(func(*config.ServerConfig, ...string) ([]byte, error) {
+		ran = true
+		return []byte(`{}`), nil
+	})
+	srv.SetToken("secret")
+
+	serve := func(method, path string) *httptest.ResponseRecorder {
+		req := httptest.NewRequest(method, path, nil)
+		req.Header.Set("Authorization", "Bearer secret")
+		w := httptest.NewRecorder()
+		srv.Handler().ServeHTTP(w, req)
+		return w
+	}
+
+	want := serve("GET", "/api/status")
+	if want.Code != http.StatusNotImplemented {
+		t.Fatalf("/api/status: expected 501, got %d: %s", want.Code, want.Body)
+	}
+
+	for _, route := range []struct{ method, path string }{
+		{"GET", "/api/servers/local/status"},
+		{"GET", "/api/status?server=local"},
+		{"GET", "/api/processes"},
+		{"GET", "/api/processes?server=local"},
+		{"GET", "/api/alerts"},
+		{"GET", "/api/alerts?server=local"},
+		{"GET", "/api/ports"},
+		{"GET", "/api/ports?server=local"},
+		{"GET", "/api/report"},
+		{"GET", "/api/report?server=local"},
+		{"POST", "/api/report/snapshot"},
+		{"POST", "/api/report/snapshot?server=local"},
+		{"GET", "/api/doctor"},
+		{"GET", "/api/doctor?server=local"},
+	} {
+		got := serve(route.method, route.path)
+		if got.Code != want.Code || got.Body.String() != want.Body.String() {
+			t.Errorf("%s %s: got %d %s, want what /api/status gives: %d %s",
+				route.method, route.path, got.Code, got.Body, want.Code, want.Body)
+		}
+	}
+	if ran {
+		t.Error("a local server was sent over SSH")
+	}
+}
+
+// The refusal is about this machine only: a server reached over SSH is a
+// real machine, and a container can reach it as well as anything can.
+func TestAContainerStillAnswersForARemoteServer(t *testing.T) {
+	t.Setenv("HOMEBUTLER_CONTAINER", "1")
+
+	srv := testServerWithMockRemote(func(*config.ServerConfig, ...string) ([]byte, error) {
+		return []byte(`{"hostname":"remote-host"}`), nil
+	})
+	w := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(w, httptest.NewRequest("GET", "/api/servers/remote1/status", nil))
+
+	if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), "remote-host") {
+		t.Fatalf("expected the remote's answer, got %d: %s", w.Code, w.Body)
+	}
+}

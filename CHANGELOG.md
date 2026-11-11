@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### ⚠️ Behavior changes
+
+- **Inside a container, every dashboard route that reads this machine refuses as `GET /api/status` does** (#PRNUM). `GET /api/servers/<name>/status` for a server marked `local: true` answered 200 with the container's own CPU, memory and disks as that server's, while `/api/status` refused the same reading. `/api/processes`, `/api/alerts`, `/api/ports`, `GET /api/report`, `POST /api/report/snapshot` and `/api/doctor`, with no `server` or with one marked `local: true`, did the same, and `report` and `doctor` put the server's name on them. Each now answers `501` with `{"error":"homebutler is running in a container, which cannot see the machine it is on. …"}`, the body `/api/status` gives. A Homepage widget or script pointed at `/api/report` on the container image gets that error instead of a report about the container; point it at `?server=<name>` for a server reached over SSH, which works as before. The docker routes, which reach whatever daemon the mounted socket leads to, are unchanged. Nothing changes outside a container
+- **Inside a container, `--all` and `--server` refuse a `local: true` server for `status`, `alerts`, `ports`, `processes`, `report`, `doctor` and `network scan`** (#PRNUM). `status --all` printed the container's readings on that server's line and `status --server <name>` printed them as its own. The `--all` line is now `❌` with the same sentence, and so the run exits 1 as any failed server does; `--server` exits 1 with it. The SSH servers in the same run are still asked. `docker list`, `docker stats` and `backup list` are unchanged, and so is a command run with neither flag
+
 ## [1.7.0](https://github.com/Higangssh/homebutler/compare/v1.6.0...v1.7.0) - 2026-11-10
 
 **Windows had nothing to install — `npm install -g homebutler` asked for a zip no release had ever carried — and a script was told the opposite of what happened: `status --all` exited 0 after a server could not be reached, and `upgrade` from a `go install` build exited 1 on every run; each release now carries a Windows zip and Claude Desktop extension, and `--all` and `upgrade` exit with what they printed.**

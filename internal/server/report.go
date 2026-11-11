@@ -56,6 +56,9 @@ func (s *Server) handleReport(w http.ResponseWriter, r *http.Request) {
 		s.forwardRemoteReport(w, srv, "report", "--json", "--no-save")
 		return
 	}
+	if refuseInContainer(w) {
+		return
+	}
 
 	result, err := report.Run(s.config(), report.DefaultCollectFuncs(), report.Options{NoSave: true})
 	if err != nil {
@@ -70,6 +73,9 @@ func (s *Server) handleReport(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleReportSnapshot(w http.ResponseWriter, r *http.Request) {
 	if srv, ok := s.isRemoteRequest(r); ok {
 		s.forwardRemoteReport(w, srv, "report", "--json")
+		return
+	}
+	if refuseInContainer(w) {
 		return
 	}
 
@@ -135,6 +141,9 @@ func withRemoteSummary(out []byte) ([]byte, error) {
 func (s *Server) handleDoctor(w http.ResponseWriter, r *http.Request) {
 	if srv, ok := s.isRemoteRequest(r); ok {
 		s.forwardRemote(w, srv, "doctor", "--json")
+		return
+	}
+	if refuseInContainer(w) {
 		return
 	}
 
