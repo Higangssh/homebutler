@@ -98,7 +98,9 @@ The Report tab leads with what needs attention, then the changes with the kind
 word each one carries, then the snapshot the comparison is against and how old
 it is. Loading it does not save a snapshot — a page that saved one every time
 it was opened would prune the baseline you wanted to compare against. Saving is
-a button, and a write like any other.
+a button, and a write like any other. The report and the doctor findings are
+for the server picked in the header, as the Dashboard tab's cards are, and the
+button saves the snapshot on that server.
 
 ## Reading the report from somewhere else
 

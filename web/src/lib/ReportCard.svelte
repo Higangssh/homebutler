@@ -1,6 +1,9 @@
 <script>
-  import { onMount } from 'svelte';
   import { getReport, saveSnapshot, getDoctor } from './api.js';
+
+  // The server picked in the header, as the dashboard's cards take it. Empty
+  // means this machine.
+  let { server = '' } = $props();
 
   let report = $state(null);
   let doctor = $state(null);
@@ -12,37 +15,63 @@
   // Loading this tab does not save a snapshot. Looking is looking: a save
   // moves the window every later comparison is measured from, so it is a
   // button somebody presses.
-  async function load() {
+  //
+  // Each answer is kept only if it is for the server still selected: a slow
+  // SSH server answering after the picker moved on would otherwise show its
+  // report under the next one's name.
+  let generation = 0;
+
+  async function load(gen, target) {
     try {
-      report = await getReport();
+      const r = await getReport(target);
+      if (gen !== generation) return;
+      report = r;
       error = '';
     } catch (err) {
+      if (gen !== generation) return;
+      report = null;
       error = err.message;
     }
   }
 
-  async function loadDoctor() {
+  async function loadDoctor(gen, target) {
     try {
-      doctor = await getDoctor();
+      const d = await getDoctor(target);
+      if (gen !== generation) return;
+      doctor = d;
       doctorError = '';
     } catch (err) {
+      if (gen !== generation) return;
+      doctor = null;
       doctorError = err.message;
     }
   }
 
-  onMount(() => {
-    load();
-    loadDoctor();
+  $effect(() => {
+    const target = server;
+    const gen = ++generation;
+    report = null;
+    doctor = null;
+    error = '';
+    doctorError = '';
+    saved = '';
+    load(gen, target);
+    loadDoctor(gen, target);
   });
 
   async function snapshot() {
     if (saving) return;
     saving = true;
     saved = '';
+    const gen = generation;
     try {
-      report = await saveSnapshot();
+      const r = await saveSnapshot(server);
+      if (gen !== generation) return;
+      report = r;
+      error = '';
       saved = 'Saved. The next comparison starts from now.';
     } catch (err) {
+      if (gen !== generation) return;
       error = err.message;
     } finally {
       saving = false;
@@ -69,19 +98,17 @@
 </script>
 
 <div class="report-view">
-  {#if error}
-    <div class="section"><p class="error">{error}</p></div>
-  {:else if !report}
-    <div class="section"><p class="loading">Reading the machine…</p></div>
-  {:else}
+  <!-- The two sections fail on their own. A server whose report cannot be
+       read still gets its doctor findings, and the other way round, rather
+       than one error standing in for the whole tab. -->
     <div class="section">
       <div class="section-header">
         <h2>What changed</h2>
         <!-- The window the comparison covers, stated rather than implied:
              "no changes" means nothing without it. -->
-        {#if report.is_baseline}
+        {#if report?.is_baseline}
           <span class="window">first look — nothing to compare against yet</span>
-        {:else if report.compared_to}
+        {:else if report?.compared_to}
           <span class="window">compared with the snapshot from {age(report.compared_to)}</span>
         {/if}
         <button type="button" class="snapshot" onclick={snapshot} disabled={saving}>
@@ -92,6 +119,12 @@
       {#if saved}
         <p class="saved">{saved}</p>
       {/if}
+
+      {#if error}
+        <p class="error">{error}</p>
+      {:else if !report}
+        <p class="loading">Reading the machine…</p>
+      {:else}
 
       {#if report.needs_attention?.length}
         <h3 class="subhead attention">Needs attention</h3>
@@ -137,6 +170,7 @@
             </li>
           {/each}
         </ul>
+      {/if}
       {/if}
     </div>
 
@@ -184,7 +218,6 @@
         </ul>
       {/if}
     </div>
-  {/if}
 </div>
 
 <style>

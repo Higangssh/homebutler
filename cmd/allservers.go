@@ -44,7 +44,14 @@ type fanOut struct {
 	remoteDrop []string
 	// verdict, when set, is the run's error once every line is printed.
 	verdict func(cmd *cobra.Command, results []serverResult) error
-	icon    string
+	// describesHost marks a command whose local answer is a reading of the
+	// machine this binary runs on. Inside a container that machine is the
+	// container, so a local: true server is refused rather than given its
+	// numbers under the server's name. The docker commands reach whatever
+	// daemon the socket leads to and backup list reads the volume, so neither
+	// is marked; the set is the one the MCP server refuses.
+	describesHost bool
+	icon          string
 }
 
 // fanOuts is every command --all runs, keyed by its path below the root.
@@ -55,6 +62,7 @@ type fanOut struct {
 // server, and a container name means nothing on the others.
 var fanOuts = map[string]fanOut{
 	"status": {
+		describesHost: true,
 		local: func(*config.Config, *cobra.Command) (any, error) {
 			info, err := system.Status()
 			if err != nil {
@@ -65,6 +73,7 @@ var fanOuts = map[string]fanOut{
 		summary: summarizeStatus,
 	},
 	"alerts": {
+		describesHost: true,
 		local: func(c *config.Config, _ *cobra.Command) (any, error) {
 			return alerts.Check(&config.AlertConfig{CPU: c.Alerts.CPU, Memory: c.Alerts.Memory, Disk: c.Alerts.Disk})
 		},
@@ -85,6 +94,7 @@ var fanOuts = map[string]fanOut{
 		summary: summarizeDockerStats,
 	},
 	"ports": {
+		describesHost: true,
 		local: func(*config.Config, *cobra.Command) (any, error) {
 			result, err := ports.List()
 			if err != nil {
@@ -100,6 +110,7 @@ var fanOuts = map[string]fanOut{
 		summary: summarizePorts,
 	},
 	"doctor": {
+		describesHost: true,
 		local: func(c *config.Config, cmd *cobra.Command) (any, error) {
 			maxAge, _ := cmd.Flags().GetDuration("backup-max-age")
 			strict, _ := cmd.Flags().GetBool("strict")
@@ -114,6 +125,7 @@ var fanOuts = map[string]fanOut{
 		icon:       "🩺",
 	},
 	"processes": {
+		describesHost: true,
 		local: func(_ *config.Config, cmd *cobra.Command) (any, error) {
 			limit, _ := cmd.Flags().GetInt("limit")
 			sortBy, _ := cmd.Flags().GetString("sort")
@@ -122,6 +134,7 @@ var fanOuts = map[string]fanOut{
 		summary: summarizeProcesses,
 	},
 	"report": {
+		describesHost: true,
 		local: func(c *config.Config, cmd *cobra.Command) (any, error) {
 			keep, _ := cmd.Flags().GetInt("keep")
 			noSave, _ := cmd.Flags().GetBool("no-save")
@@ -136,12 +149,23 @@ var fanOuts = map[string]fanOut{
 		summary: summarizeBackupList,
 	},
 	"network scan": {
+		describesHost: true,
 		local: func(*config.Config, *cobra.Command) (any, error) {
 			return network.ScanWithTimeout(30 * time.Second)
 		},
 		summary: summarizeNetworkScan,
 	},
 }
+
+// errContainerCannotSeeHost is system.ErrContainerCannotSeeHost as a reader
+// sees it: the sentence the dashboard and the MCP server give, which names
+// both ways out.
+var errContainerCannotSeeHost error = containerCannotSeeHost{}
+
+type containerCannotSeeHost struct{}
+
+func (containerCannotSeeHost) Error() string { return system.ContainerCannotSeeHost }
+func (containerCannotSeeHost) Unwrap() error { return system.ErrContainerCannotSeeHost }
 
 // Seams for tests: the far side of each kind of server.
 var (
@@ -223,9 +247,12 @@ func fanOutAll(w io.Writer, c *config.Config, args []string, jsonOut bool) error
 
 			var out []byte
 			var err error
-			if server.Local {
+			switch {
+			case server.Local && f.describesHost && system.InContainer():
+				err = errContainerCannotSeeHost
+			case server.Local:
 				out, err = localRun(f, c, cmd)
-			} else {
+			default:
 				out, err = remoteRun(&server, remoteArgs...)
 			}
 			if err != nil {
