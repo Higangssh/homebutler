@@ -498,12 +498,14 @@ func TestDemoPortsEndpoint(t *testing.T) {
 		t.Fatalf("expected 200, got %d", w.Code)
 	}
 
-	var result []map[string]any
-	if err := json.Unmarshal(w.Body.Bytes(), &result); err != nil {
+	var body struct {
+		Ports []map[string]any `json:"ports"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
 		t.Fatalf("invalid JSON: %v", err)
 	}
-	if len(result) != 7 {
-		t.Fatalf("expected 7 demo ports, got %d", len(result))
+	if len(body.Ports) != 7 {
+		t.Fatalf("expected 7 demo ports, got %d", len(body.Ports))
 	}
 }
 
@@ -760,12 +762,14 @@ func TestDemoPortsWithServerParam(t *testing.T) {
 		t.Fatalf("expected 200, got %d", w.Code)
 	}
 
-	var result []map[string]any
-	if err := json.Unmarshal(w.Body.Bytes(), &result); err != nil {
+	var body struct {
+		Ports []map[string]any `json:"ports"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
 		t.Fatalf("invalid JSON: %v", err)
 	}
-	if len(result) != 3 {
-		t.Fatalf("expected 3 ports for nas-box, got %d", len(result))
+	if len(body.Ports) != 3 {
+		t.Fatalf("expected 3 ports for nas-box, got %d", len(body.Ports))
 	}
 }
 
@@ -1305,10 +1309,12 @@ func TestDemoPortsRaspberryPi(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d", w.Code)
 	}
-	var result []map[string]any
-	json.Unmarshal(w.Body.Bytes(), &result)
-	if len(result) != 3 {
-		t.Fatalf("expected 3 ports for raspberry-pi, got %d", len(result))
+	var body struct {
+		Ports []map[string]any `json:"ports"`
+	}
+	json.Unmarshal(w.Body.Bytes(), &body)
+	if len(body.Ports) != 3 {
+		t.Fatalf("expected 3 ports for raspberry-pi, got %d", len(body.Ports))
 	}
 }
 

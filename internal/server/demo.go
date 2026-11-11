@@ -255,13 +255,14 @@ func (s *Server) demoAlerts(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// demoPorts returns realistic demo ports data.
+// demoPorts returns realistic demo ports data, in the shape /api/ports
+// answers with for real.
 func (s *Server) demoPorts(w http.ResponseWriter, r *http.Request) {
 	name := demoServerName(r)
 
 	switch name {
 	case "":
-		writeJSON(w, []map[string]any{
+		writeJSON(w, map[string]any{"ports": []map[string]any{
 			{"protocol": "tcp", "address": "0.0.0.0", "port": "80", "pid": "1234", "process": "nginx"},
 			{"protocol": "tcp", "address": "0.0.0.0", "port": "443", "pid": "1234", "process": "nginx"},
 			{"protocol": "tcp", "address": "127.0.0.1", "port": "5432", "pid": "2345", "process": "postgres"},
@@ -269,19 +270,19 @@ func (s *Server) demoPorts(w http.ResponseWriter, r *http.Request) {
 			{"protocol": "tcp", "address": "0.0.0.0", "port": "3000", "pid": "6789", "process": "grafana"},
 			{"protocol": "tcp", "address": "0.0.0.0", "port": "8080", "pid": "4567", "process": "homebutler"},
 			{"protocol": "tcp", "address": "0.0.0.0", "port": "9090", "pid": "7890", "process": "prometheus"},
-		})
+		}})
 	case "nas-box":
-		writeJSON(w, []map[string]any{
+		writeJSON(w, map[string]any{"ports": []map[string]any{
 			{"protocol": "tcp", "address": "0.0.0.0", "port": "445", "pid": "1100", "process": "smbd"},
 			{"protocol": "tcp", "address": "0.0.0.0", "port": "32400", "pid": "1200", "process": "plex"},
 			{"protocol": "tcp", "address": "0.0.0.0", "port": "22", "pid": "200", "process": "sshd"},
-		})
+		}})
 	case "raspberry-pi":
-		writeJSON(w, []map[string]any{
+		writeJSON(w, map[string]any{"ports": []map[string]any{
 			{"protocol": "tcp", "address": "0.0.0.0", "port": "53", "pid": "800", "process": "pihole-FTL"},
 			{"protocol": "tcp", "address": "0.0.0.0", "port": "80", "pid": "900", "process": "lighttpd"},
 			{"protocol": "tcp", "address": "0.0.0.0", "port": "22", "pid": "300", "process": "sshd"},
-		})
+		}})
 	default:
 		demoOfflineError(w, name)
 	}

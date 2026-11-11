@@ -649,7 +649,7 @@ func (s *Server) handleDockerStats(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleProcesses(w http.ResponseWriter, r *http.Request) {
 	if srv, ok := s.isRemoteRequest(r); ok {
-		s.forwardRemote(w, srv, "processes", "--json")
+		s.forwardRemoteAs(w, srv, remoteProcessList, "processes", "--json")
 		return
 	}
 	if refuseInContainer(w) {
@@ -681,7 +681,7 @@ func (s *Server) handleAlerts(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handlePorts(w http.ResponseWriter, r *http.Request) {
 	if srv, ok := s.isRemoteRequest(r); ok {
-		s.forwardRemote(w, srv, "ports", "--json")
+		s.forwardRemoteAs(w, srv, remotePortsResult, "ports", "--json")
 		return
 	}
 	if refuseInContainer(w) {
