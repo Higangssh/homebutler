@@ -1,7 +1,10 @@
 package cmd
 
 import (
+	"bytes"
+	"errors"
 	"fmt"
+	"io"
 	"os"
 	"slices"
 	"strings"
@@ -210,15 +213,43 @@ func maybeRouteRemote(cmd *cobra.Command) (bool, error) {
 		}
 		if !server.Local {
 			remoteArgs := forwardedArgs(cmd, os.Args[1:])
-			out, err := remote.Run(server, remoteArgs...)
-			if err != nil {
-				return true, err
-			}
-			fmt.Print(string(out))
-			return true, nil
+			return true, passThrough(server, remoteArgs)
 		}
 	}
 	return false, nil
+}
+
+// remoteRunSplit is remote.RunSplit, held in a variable so a test can answer
+// for the server.
+var remoteRunSplit = remote.RunSplit
+
+// passThrough runs args on server and prints what it printed, each stream to
+// its own, so `--server` gives what running the command there gives.
+func passThrough(server *config.ServerConfig, args []string) error {
+	return passThroughTo(os.Stdout, os.Stderr, server, args)
+}
+
+func passThroughTo(stdout, stderr io.Writer, server *config.ServerConfig, args []string) error {
+	out, errOut, err := remoteRunSplit(server, args...)
+	if err == nil {
+		_, _ = stdout.Write(out)
+		_, _ = stderr.Write(errOut)
+		return nil
+	}
+	// A command that printed something and then exited non-zero, such as a
+	// drill that failed or doctor --strict with a warning, printed its
+	// answer and then its verdict. Both are passed on, as they are when the
+	// command runs here, and the exit stays a failure. The error is the
+	// server's own sentence, since the command ran; "check if homebutler is
+	// installed" would send someone to look at an install that worked.
+	var exit *remote.ExitError
+	if errors.As(err, &exit) && len(bytes.TrimSpace(exit.Stdout)) > 0 {
+		_, _ = stdout.Write(exit.Stdout)
+		if reason := remote.Reason(err); reason != "" {
+			return fmt.Errorf("[%s] %s", server.Name, reason)
+		}
+	}
+	return err
 }
 
 // forwardedArgs is the command line a server is sent to run cmd: args without
