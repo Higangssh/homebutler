@@ -147,6 +147,36 @@ func TestEveryLocalReadingRefusesLikeStatusInsideAContainer(t *testing.T) {
 	}
 }
 
+// The dashboard picks the server it opens on from /api/servers, so the list
+// says which one a container cannot see, and only inside one.
+func TestServerListSaysALocalServerIsNotVisibleFromAContainer(t *testing.T) {
+	visible := func() map[string]bool {
+		srv := testServerWithMockRemote(nil)
+		w := httptest.NewRecorder()
+		srv.Handler().ServeHTTP(w, httptest.NewRequest("GET", "/api/servers", nil))
+		var list []struct {
+			Name    string `json:"name"`
+			Visible bool   `json:"visible"`
+		}
+		if err := json.Unmarshal(w.Body.Bytes(), &list); err != nil {
+			t.Fatal(err)
+		}
+		out := map[string]bool{}
+		for _, s := range list {
+			out[s.Name] = s.Visible
+		}
+		return out
+	}
+
+	if got := visible(); !got["local"] || !got["remote1"] {
+		t.Errorf("outside a container: %v", got)
+	}
+	t.Setenv("HOMEBUTLER_CONTAINER", "1")
+	if got := visible(); got["local"] || !got["remote1"] {
+		t.Errorf("inside a container: %v", got)
+	}
+}
+
 // The refusal is about this machine only: a server reached over SSH is a
 // real machine, and a container can reach it as well as anything can.
 func TestAContainerStillAnswersForARemoteServer(t *testing.T) {

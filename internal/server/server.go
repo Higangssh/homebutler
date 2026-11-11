@@ -1025,16 +1025,23 @@ type serverInfo struct {
 	Name  string `json:"name"`
 	Host  string `json:"host"`
 	Local bool   `json:"local"`
+	// Visible is false for a local server when homebutler runs in a
+	// container, which cannot see the machine it is on. The dashboard reads
+	// it to pick a server it can show, rather than opening on one whose every
+	// card is the same refusal.
+	Visible bool `json:"visible"`
 }
 
 func (s *Server) handleServers(w http.ResponseWriter, r *http.Request) {
 	cfg := s.config()
+	inContainer := system.InContainer()
 	servers := make([]serverInfo, len(cfg.Servers))
 	for i, srv := range cfg.Servers {
 		servers[i] = serverInfo{
-			Name:  srv.Name,
-			Host:  srv.Host,
-			Local: srv.Local,
+			Name:    srv.Name,
+			Host:    srv.Host,
+			Local:   srv.Local,
+			Visible: !srv.Local || !inContainer,
 		}
 	}
 	writeJSON(w, servers)

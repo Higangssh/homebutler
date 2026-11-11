@@ -46,7 +46,7 @@ test('what needs attention comes before what merely moved', async ({ page }) => 
 // measured from, so it is a button and a separate request.
 test('loading the tab does not save a snapshot', async ({ page }) => {
   let saved = false;
-  await page.route('**/api/report/snapshot', route => {
+  await page.route('**/api/report/snapshot**', route => {
     saved = true;
     route.fulfill({ status: 200, contentType: 'application/json', body: '{}' });
   });

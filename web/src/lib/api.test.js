@@ -1,9 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   clearToken,
+  defaultServer,
+  getDoctor,
+  getReport,
   getStatus,
   getToken,
   onUnauthorized,
+  saveSnapshot,
   setToken,
   UnauthorizedError,
 } from './api.js';
@@ -95,5 +99,53 @@ describe('a refused token', () => {
 
     expect(getToken()).toBe('');
     expect(localStorage.getItem('homebutler.token')).toBeNull();
+  });
+});
+
+// Inside a container the local server is listed but cannot be read, and a
+// dashboard that opened on it showed the same refusal in every card.
+describe('defaultServer', () => {
+  it('opens on the local server when it can be read', () => {
+    expect(defaultServer([
+      { name: 'pi', local: false, visible: true },
+      { name: 'mini', local: true, visible: true },
+    ])).toBe('mini');
+  });
+
+  it('opens on the first server it can read when the local one is not visible', () => {
+    expect(defaultServer([
+      { name: 'mini', local: true, visible: false },
+      { name: 'pi', local: false, visible: true },
+    ])).toBe('pi');
+  });
+
+  it('opens on the first server when none is local', () => {
+    expect(defaultServer([
+      { name: 'pi', local: false, visible: true },
+      { name: 'nas', local: false, visible: true },
+    ])).toBe('pi');
+  });
+
+  it('reads a server list without visible as all visible', () => {
+    expect(defaultServer([{ name: 'pi' }, { name: 'mini', local: true }])).toBe('mini');
+  });
+
+  it('still names a server when none can be read', () => {
+    expect(defaultServer([{ name: 'mini', local: true, visible: false }])).toBe('mini');
+    expect(defaultServer([])).toBe('');
+  });
+});
+
+describe('report requests', () => {
+  it('name the selected server', async () => {
+    fetch.mockResolvedValue(jsonResponse({}));
+    await getReport('pi');
+    await getDoctor('pi');
+    await saveSnapshot('pi');
+    expect(fetch.mock.calls.map(c => c[0])).toEqual([
+      '/api/report?server=pi',
+      '/api/doctor?server=pi',
+      '/api/report/snapshot?server=pi',
+    ]);
   });
 });

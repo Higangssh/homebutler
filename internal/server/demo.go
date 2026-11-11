@@ -458,16 +458,16 @@ func (s *Server) demoSaveNotify(w http.ResponseWriter, r *http.Request) {
 // demoServers returns realistic demo server list.
 func (s *Server) demoServers(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, []map[string]any{
-		{"name": "homelab-server", "host": "192.168.1.10", "local": true, "status": "ok"},
-		{"name": "nas-box", "host": "192.168.1.20", "local": false, "status": "ok"},
-		{"name": "raspberry-pi", "host": "192.168.1.30", "local": false, "status": "ok"},
-		{"name": "media-server", "host": "192.168.1.40", "local": false, "status": "ok"},
-		{"name": "dev-vm", "host": "192.168.1.50", "local": false, "status": "ok"},
-		{"name": "backup-nas", "host": "192.168.1.60", "local": false, "status": "error"},
-		{"name": "docker-host", "host": "192.168.1.70", "local": false, "status": "ok"},
-		{"name": "k3s-node-1", "host": "192.168.1.80", "local": false, "status": "ok"},
-		{"name": "k3s-node-2", "host": "192.168.1.81", "local": false, "status": "ok"},
-		{"name": "vpn-gateway", "host": "192.168.1.90", "local": false, "status": "error"},
+		{"name": "homelab-server", "host": "192.168.1.10", "local": true, "visible": true, "status": "ok"},
+		{"name": "nas-box", "host": "192.168.1.20", "local": false, "visible": true, "status": "ok"},
+		{"name": "raspberry-pi", "host": "192.168.1.30", "local": false, "visible": true, "status": "ok"},
+		{"name": "media-server", "host": "192.168.1.40", "local": false, "visible": true, "status": "ok"},
+		{"name": "dev-vm", "host": "192.168.1.50", "local": false, "visible": true, "status": "ok"},
+		{"name": "backup-nas", "host": "192.168.1.60", "local": false, "visible": true, "status": "error"},
+		{"name": "docker-host", "host": "192.168.1.70", "local": false, "visible": true, "status": "ok"},
+		{"name": "k3s-node-1", "host": "192.168.1.80", "local": false, "visible": true, "status": "ok"},
+		{"name": "k3s-node-2", "host": "192.168.1.81", "local": false, "visible": true, "status": "ok"},
+		{"name": "vpn-gateway", "host": "192.168.1.90", "local": false, "visible": true, "status": "error"},
 	})
 }
 
