@@ -7,6 +7,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -189,5 +190,65 @@ func TestReplaceRefusesASymlinkIntoAMissingDirectory(t *testing.T) {
 	got, err := os.Readlink(link)
 	if err != nil || got != target {
 		t.Fatalf("the symlink was changed: %q, %v", got, err)
+	}
+}
+
+// A chain of links longer than knownHostsTarget follows is refused, rather
+// than the link it stopped on being renamed over and turned into a file.
+func TestReplaceRefusesASymlinkChainTooLongToFollow(t *testing.T) {
+	dir := t.TempDir()
+	const links = 41
+	for i := 0; i < links; i++ {
+		// link-i points at link-(i+1); the last one points at nothing.
+		next := filepath.Join(dir, "link-"+strconv.Itoa(i+1))
+		if err := os.Symlink(next, filepath.Join(dir, "link-"+strconv.Itoa(i))); err != nil {
+			t.Fatal(err)
+		}
+	}
+	head := filepath.Join(dir, "link-0")
+
+	fresh := newHostKey(t)
+	if err := replaceHostKeys(head, "pi", piAddr, fresh, knownhosts.Line([]string{piAddr}, fresh)); err == nil {
+		t.Fatal("replacing through a symlink chain too long to follow succeeded")
+	}
+	for i := 0; i < links; i++ {
+		info, err := os.Lstat(filepath.Join(dir, "link-"+strconv.Itoa(i)))
+		if err != nil || info.Mode()&os.ModeSymlink == 0 {
+			t.Fatalf("link-%d is no longer a symlink: %v", i, err)
+		}
+	}
+}
+
+// A line nothing can parse stops the replace, and the error points at the
+// file and line someone can open: not the temporary copy, which is already
+// gone, and not a line number counted after the host's entries were dropped.
+func TestReplaceNamesTheRealFileAndLineItCannotParse(t *testing.T) {
+	old, fresh := newHostKey(t), newHostKey(t)
+	content := entry("192.168.0.4", old) + "\n" +
+		"# a comment\n" +
+		"192.0.2.9 ssh-ed25519 this-is-not-a-key\n"
+	dir := t.TempDir()
+	path := filepath.Join(dir, "known_hosts")
+	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	err := replaceHostKeys(path, "pi", piAddr, fresh, knownhosts.Line([]string{piAddr}, fresh))
+	if err == nil {
+		t.Fatal("a known_hosts with a line nothing can parse was replaced")
+	}
+	if !strings.Contains(err.Error(), path+":3:") {
+		t.Fatalf("the error does not name %s line 3: %v", path, err)
+	}
+	if strings.Contains(err.Error(), ".known_hosts.homebutler-") {
+		t.Fatalf("the error names the temporary copy: %v", err)
+	}
+	data, _ := os.ReadFile(path)
+	if string(data) != content {
+		t.Fatalf("known_hosts changed:\n%s", data)
+	}
+	names, _ := os.ReadDir(dir)
+	if len(names) != 1 {
+		t.Fatalf("files were left beside known_hosts: %v", names)
 	}
 }

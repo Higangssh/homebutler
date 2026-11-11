@@ -409,6 +409,16 @@ func replaceHostKeys(khPath, name, addr string, newKey ssh.PublicKey, line strin
 		mode = info.Mode().Perm()
 	}
 
+	// A line nothing can parse is reported here, against the file and line
+	// number someone can open and fix. Found later, in the rewritten copy, it
+	// named a temporary file that was already gone and counted only the lines
+	// that had been kept.
+	if len(data) > 0 {
+		if _, err := knownhosts.New(target); err != nil {
+			return fmt.Errorf("cannot read known_hosts: %w", err)
+		}
+	}
+
 	kept := withoutHostKeys(string(data), knownhosts.Normalize(addr))
 	if kept != "" && !strings.HasSuffix(kept, "\n") {
 		kept += "\n"
@@ -437,7 +447,9 @@ func replaceHostKeys(khPath, name, addr string, newKey ssh.PublicKey, line strin
 	// actually be applied to it rather than by a second reading of them.
 	stale, err := linesStillTrusting(tmpName, kept, addr, newKey)
 	if err != nil {
-		return err
+		// Only the temporary copy is involved, and it is removed on return,
+		// so its name is no use to anyone; the real file is what to name.
+		return fmt.Errorf("could not read the rewritten copy of %s back, so it was not replaced", target)
 	}
 	if err := os.Rename(tmpName, target); err != nil {
 		return fmt.Errorf("failed to write known_hosts entry: %w", err)
@@ -465,9 +477,11 @@ func knownHostsTarget(khPath string) (string, error) {
 	// Something on the way does not exist. Follow the links by hand to the
 	// first name that is not one, which is where the file belongs.
 	target = khPath
+	end := false
 	for range 40 {
 		info, lerr := os.Lstat(target)
 		if os.IsNotExist(lerr) {
+			end = true
 			break
 		}
 		if lerr != nil {
@@ -484,6 +498,11 @@ func knownHostsTarget(khPath string) (string, error) {
 			link = filepath.Join(filepath.Dir(target), link)
 		}
 		target = link
+	}
+	// Out of hops, target is still a link, and renaming over it would turn
+	// one link in the chain into a regular file.
+	if !end {
+		return "", fmt.Errorf("%s is a chain of more than 40 symlinks; it was left as it was", khPath)
 	}
 	if target == khPath {
 		return khPath, nil
