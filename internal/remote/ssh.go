@@ -126,15 +126,39 @@ func Answered(err error) ([]byte, bool) {
 	return exit.Stdout, true
 }
 
-// Reason is the remote's own account of why it exited non-zero: what it
-// printed on stderr, without the `error: ` homebutler puts before it. It is
-// empty for an error that is not a remote exit, or one that printed nothing.
+// Reason is the remote's own account of why it exited non-zero: the last
+// line it printed on stderr that starts `error: `, without that prefix,
+// which is the line homebutler's main prints on the way out. It is empty for
+// an error that is not a remote exit, or one that printed no such line.
 func Reason(err error) string {
 	var exit *ExitError
 	if !errors.As(err, &exit) {
 		return ""
 	}
-	return strings.TrimPrefix(strings.TrimSpace(string(exit.Stderr)), "error: ")
+	_, reason := SplitReason(exit.Stderr)
+	return reason
+}
+
+// SplitReason separates the remote's closing error from what it printed on
+// stderr before it. The error starts at the last line beginning `error: `
+// and runs to the end, since an error can carry a hint on the lines after it.
+// A warning printed earlier, such as the alerts.yaml deprecation, is in
+// before, in order, so it can be shown on its own line as it is when the
+// command runs here. With no `error: ` line, before is all of stderr and
+// reason is empty.
+func SplitReason(stderr []byte) (before []byte, reason string) {
+	text := string(stderr)
+	start := -1
+	if strings.HasPrefix(text, "error: ") {
+		start = 0
+	}
+	if i := strings.LastIndex(text, "\nerror: "); i >= 0 {
+		start = i + 1
+	}
+	if start < 0 {
+		return stderr, ""
+	}
+	return []byte(text[:start]), strings.TrimSpace(strings.TrimPrefix(text[start:], "error: "))
 }
 
 // configLocation names the file a fix belongs in: the one this server was

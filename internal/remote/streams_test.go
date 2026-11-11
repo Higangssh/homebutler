@@ -122,3 +122,23 @@ func TestOnlyAJSONDocumentIsAnAnswer(t *testing.T) {
 		t.Fatal("a connection failure has a remote reason")
 	}
 }
+
+// The error is the last `error: ` line and whatever hint follows it; what
+// came before is a warning printed on the way, and stays apart from it.
+func TestSplitReasonTakesTheClosingError(t *testing.T) {
+	cases := []struct{ stderr, before, reason string }{
+		{"warning: ~/.homebutler/alerts.yaml is deprecated\nerror: 1 provider(s) failed\n",
+			"warning: ~/.homebutler/alerts.yaml is deprecated\n", "1 provider(s) failed"},
+		{"error: web did not come back from the backup\n", "", "web did not come back from the backup"},
+		{"error: backup directory does not exist: /b\n\n  💡 Run: homebutler backup\n",
+			"", "backup directory does not exist: /b\n\n  💡 Run: homebutler backup"},
+		{"warning: record drill: disk full\n", "warning: record drill: disk full\n", ""},
+		{"", "", ""},
+	}
+	for _, tc := range cases {
+		before, reason := SplitReason([]byte(tc.stderr))
+		if string(before) != tc.before || reason != tc.reason {
+			t.Errorf("SplitReason(%q) = %q, %q; want %q, %q", tc.stderr, before, reason, tc.before, tc.reason)
+		}
+	}
+}

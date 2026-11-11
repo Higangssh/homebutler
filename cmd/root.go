@@ -242,12 +242,21 @@ func passThroughTo(stdout, stderr io.Writer, server *config.ServerConfig, args [
 	// command runs here, and the exit stays a failure. The error is the
 	// server's own sentence, since the command ran; "check if homebutler is
 	// installed" would send someone to look at an install that worked.
+	//
+	// What the server printed on stderr before its error, a deprecation
+	// warning say, goes to stderr on its own lines, and the error is the
+	// server's closing sentence alone. With no such sentence the exit status
+	// is all there is to say: stdout is already printed, so repeating it as
+	// the error's Output would print it twice.
 	var exit *remote.ExitError
 	if errors.As(err, &exit) && len(bytes.TrimSpace(exit.Stdout)) > 0 {
 		_, _ = stdout.Write(exit.Stdout)
-		if reason := remote.Reason(err); reason != "" {
+		before, reason := remote.SplitReason(exit.Stderr)
+		_, _ = stderr.Write(before)
+		if reason != "" {
 			return fmt.Errorf("[%s] %s", server.Name, reason)
 		}
+		return fmt.Errorf("[%s] exited with status %d", server.Name, exit.Status)
 	}
 	return err
 }

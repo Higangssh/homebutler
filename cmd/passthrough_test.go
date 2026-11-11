@@ -82,3 +82,52 @@ func TestServerFailuresWithoutAnAnswerAreUnchanged(t *testing.T) {
 		}
 	}
 }
+
+// A warning before the error went into the error: the user read
+// `error: [pi] warning: …deprecated…` with the real sentence on the line
+// after. Here the warning prints on its own line and the error is the
+// sentence, so --server reads as the command does on the server.
+func TestServerKeepsAWarningOutOfTheError(t *testing.T) {
+	const doc = `[{"channel":"webhook","sent":false}]` + "\n"
+	const warning = "warning: ~/.homebutler/alerts.yaml is deprecated, move rules/notify into config.yaml\n"
+	stderrText := warning + "error: 1 provider(s) failed\n"
+	answeringServer(t, "", "", &remote.ExitError{
+		Status: 1,
+		Stdout: []byte(doc),
+		Stderr: []byte(stderrText),
+		Err:    errors.New("[pi] remote command failed: Process exited with status 1\n  → Output: " + stderrText),
+	})
+
+	var out, errOut bytes.Buffer
+	err := passThroughTo(&out, &errOut, &config.ServerConfig{Name: "pi"}, []string{"notify", "test", "--json"})
+	if out.String() != doc {
+		t.Fatalf("stdout = %q", out.String())
+	}
+	if errOut.String() != warning {
+		t.Fatalf("stderr = %q, want the warning alone", errOut.String())
+	}
+	if err == nil || err.Error() != "[pi] 1 provider(s) failed" {
+		t.Fatalf("error = %v, want [pi] 1 provider(s) failed", err)
+	}
+}
+
+// A server that printed its answer and exited non-zero with nothing on
+// stderr used to have that answer printed twice, the second time as the
+// error's Output beside a deploy hint for an install that had just run.
+func TestServerWithNoReasonSaysOnlyTheStatus(t *testing.T) {
+	const doc = `{"app":"web","passed":false}` + "\n"
+	answeringServer(t, "", "", &remote.ExitError{
+		Status: 3,
+		Stdout: []byte(doc),
+		Err:    errors.New("[pi] remote command failed: Process exited with status 3\n  → Output: " + doc + "  → Check if homebutler is installed on the remote server: homebutler deploy pi"),
+	})
+
+	var out, errOut bytes.Buffer
+	err := passThroughTo(&out, &errOut, &config.ServerConfig{Name: "pi"}, []string{"backup", "drill", "web", "--json"})
+	if out.String() != doc || errOut.Len() != 0 {
+		t.Fatalf("stdout %q, stderr %q", out.String(), errOut.String())
+	}
+	if err == nil || err.Error() != "[pi] exited with status 3" {
+		t.Fatalf("error = %v, want [pi] exited with status 3", err)
+	}
+}
