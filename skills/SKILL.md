@@ -297,19 +297,19 @@ agent that installs an unpinned executable cannot say what it ran.
 
 ```bash
 brew install Higangssh/homebutler/homebutler       # pinned formula, our own tap
-go install github.com/Higangssh/homebutler@v1.7.0
+go install github.com/Higangssh/homebutler@v1.8.0
 ```
 
 Taking a release archive instead means checking it against the checksums the
 release publishes:
 
 ```bash
-V=1.7.0
+V=1.8.0
 BASE=https://github.com/Higangssh/homebutler/releases/download/v$V
 curl -fsSLO $BASE/homebutler_${V}_linux_amd64.tar.gz
 curl -fsSLO $BASE/checksums.txt
 sha256sum --check --ignore-missing checksums.txt   # macOS: shasum -a 256 --check …
-# must print: homebutler_1.7.0_linux_amd64.tar.gz: OK
+# must print: homebutler_1.8.0_linux_amd64.tar.gz: OK
 tar xzf homebutler_${V}_linux_amd64.tar.gz
 ```
 
@@ -317,5 +317,5 @@ On Windows the archive is `homebutler_${V}_windows_amd64.zip` (or
 `_windows_arm64.zip`), with `homebutler.exe` inside, checked against the same
 `checksums.txt`.
 
-There is a container image, `ghcr.io/higangssh/homebutler:1.7.0`, pinned the
+There is a container image, `ghcr.io/higangssh/homebutler:1.8.0`, pinned the
 same way.
