@@ -1,6 +1,10 @@
 package remote
 
 import (
+	"bytes"
+	"crypto/hmac"
+	"crypto/sha1"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"net"
@@ -296,7 +300,14 @@ func tofuConnect(addr string, cfg *ssh.ClientConfig) error {
 
 // TrustServer connects to a server, displays its host key fingerprint,
 // and adds it to known_hosts if the user confirms.
-func TrustServer(server *config.ServerConfig, confirm func(fingerprint string) bool) error {
+//
+// With replace, the entries already recorded for the server's address are
+// dropped in the same write that adds the new one, and not before. --reset is
+// run when a host key has changed, and someone who reads the new fingerprint
+// and answers no must still have the old key standing between them and
+// whatever is answering: an address with no entry is trusted on first use by
+// the next key-authenticated connection.
+func TrustServer(server *config.ServerConfig, replace bool, confirm func(fingerprint string) bool) error {
 	// Said early rather than after a round trip: a server with no usable
 	// credential cannot be connected to once it is trusted, so there is no
 	// point recording its key.
@@ -337,7 +348,6 @@ func TrustServer(server *config.ServerConfig, confirm func(fingerprint string) b
 		return fmt.Errorf("trust cancelled by user")
 	}
 
-	// Add to known_hosts
 	khPath, err := knownHostsPath()
 	if err != nil {
 		return err
@@ -346,7 +356,12 @@ func TrustServer(server *config.ServerConfig, confirm func(fingerprint string) b
 		return fmt.Errorf("cannot create ~/.ssh directory: %w", err)
 	}
 
-	line := knownhosts.Line([]string{knownhosts.Normalize(addr)}, serverKey)
+	normalized := knownhosts.Normalize(addr)
+	line := knownhosts.Line([]string{normalized}, serverKey)
+	if replace {
+		return replaceHostKeys(khPath, server.Name, addr, serverKey, line)
+	}
+
 	f, err := os.OpenFile(khPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0600)
 	if err != nil {
 		return fmt.Errorf("cannot write to known_hosts: %w", err)
@@ -360,26 +375,214 @@ func TrustServer(server *config.ServerConfig, confirm func(fingerprint string) b
 	return nil
 }
 
-// RemoveHostKeys removes all known_hosts entries for a server's address.
-func RemoveHostKeys(server *config.ServerConfig) error {
-	khPath, err := knownHostsPath()
+// StillTrustedError is returned by a replacing TrustServer that wrote the new
+// key but left lines in known_hosts that still accept a different key for the
+// server. They are wildcard or negated patterns, which name more than this one
+// host, so they are not rewritten on anyone's behalf; saying "replaced" while
+// one of them still accepts the old key would be the reassurance --reset is
+// run for, given falsely.
+type StillTrustedError struct {
+	Server string
+	Lines  []string
+}
+
+func (e *StillTrustedError) Error() string {
+	return fmt.Sprintf("the new host key for %s was recorded, but known_hosts still accepts another key for it through %d line(s) that --reset does not rewrite:\n  %s\n  → Remove or narrow those lines by hand",
+		e.Server, len(e.Lines), strings.Join(e.Lines, "\n  "))
+}
+
+// replaceHostKeys rewrites known_hosts with every entry for addr dropped and
+// line added, and swaps it in with one rename, so the file on disk never holds
+// neither the old key nor the new one.
+func replaceHostKeys(khPath, name, addr string, newKey ssh.PublicKey, line string) error {
+	target, err := knownHostsTarget(khPath)
 	if err != nil {
 		return err
 	}
-	data, err := os.ReadFile(khPath)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return nil
-		}
+
+	data, err := os.ReadFile(target)
+	if err != nil && !os.IsNotExist(err) {
 		return fmt.Errorf("cannot read known_hosts: %w", err)
 	}
+	mode := os.FileMode(0600)
+	if info, statErr := os.Stat(target); statErr == nil {
+		mode = info.Mode().Perm()
+	}
 
-	addr := knownhosts.Normalize(fmt.Sprintf("%s:%d", server.Host, server.SSHPort()))
-	lines := strings.Split(string(data), "\n")
-	var kept []string
-	for _, line := range lines {
+	// A line nothing can parse is reported here, against the file and line
+	// number someone can open and fix. Found later, in the rewritten copy, it
+	// named a temporary file that was already gone and counted only the lines
+	// that had been kept.
+	if len(data) > 0 {
+		if _, err := knownhosts.New(target); err != nil {
+			return fmt.Errorf("cannot read known_hosts: %w", err)
+		}
+	}
+
+	kept := withoutHostKeys(string(data), knownhosts.Normalize(addr))
+	if kept != "" && !strings.HasSuffix(kept, "\n") {
+		kept += "\n"
+	}
+
+	tmp, err := os.CreateTemp(filepath.Dir(target), ".known_hosts.homebutler-*")
+	if err != nil {
+		return fmt.Errorf("cannot write to known_hosts: %w", err)
+	}
+	tmpName := tmp.Name()
+	defer os.Remove(tmpName) // nothing left to remove once the rename is done
+
+	_, writeErr := tmp.WriteString(kept + line + "\n")
+	if writeErr == nil {
+		writeErr = tmp.Chmod(mode)
+	}
+	if closeErr := tmp.Close(); writeErr == nil {
+		writeErr = closeErr
+	}
+	if writeErr != nil {
+		return fmt.Errorf("failed to write known_hosts entry: %w", writeErr)
+	}
+
+	// Asked of the file about to be swapped in, with the same matcher a
+	// connection uses, so a pattern line is judged by the rules that will
+	// actually be applied to it rather than by a second reading of them.
+	stale, err := linesStillTrusting(tmpName, kept, addr, newKey)
+	if err != nil {
+		// Only the temporary copy is involved, and it is removed on return,
+		// so its name is no use to anyone; the real file is what to name.
+		return fmt.Errorf("could not read the rewritten copy of %s back, so it was not replaced", target)
+	}
+	if err := os.Rename(tmpName, target); err != nil {
+		return fmt.Errorf("failed to write known_hosts entry: %w", err)
+	}
+	if len(stale) > 0 {
+		return &StillTrustedError{Server: name, Lines: stale}
+	}
+	return nil
+}
+
+// knownHostsTarget is the file a rewrite of khPath should replace. A
+// known_hosts that is a symlink, into a dotfiles checkout say, stays one: the
+// file it points at is the one rewritten, including when that file does not
+// exist yet. Renaming over the link itself would quietly turn it into a
+// regular file.
+func knownHostsTarget(khPath string) (string, error) {
+	target, err := filepath.EvalSymlinks(khPath)
+	if err == nil {
+		return target, nil
+	}
+	if !os.IsNotExist(err) {
+		return "", fmt.Errorf("cannot read known_hosts: %w", err)
+	}
+
+	// Something on the way does not exist. Follow the links by hand to the
+	// first name that is not one, which is where the file belongs.
+	target = khPath
+	end := false
+	for range 40 {
+		info, lerr := os.Lstat(target)
+		if os.IsNotExist(lerr) {
+			end = true
+			break
+		}
+		if lerr != nil {
+			return "", fmt.Errorf("cannot read known_hosts: %w", lerr)
+		}
+		if info.Mode()&os.ModeSymlink == 0 {
+			return target, nil
+		}
+		link, rerr := os.Readlink(target)
+		if rerr != nil {
+			return "", fmt.Errorf("cannot read known_hosts: %w", rerr)
+		}
+		if !filepath.IsAbs(link) {
+			link = filepath.Join(filepath.Dir(target), link)
+		}
+		target = link
+	}
+	// Out of hops, target is still a link, and renaming over it would turn
+	// one link in the chain into a regular file.
+	if !end {
+		return "", fmt.Errorf("%s is a chain of more than 40 symlinks; it was left as it was", khPath)
+	}
+	if target == khPath {
+		return khPath, nil
+	}
+	if _, err := os.Stat(filepath.Dir(target)); err != nil {
+		return "", fmt.Errorf("%s is a symlink to %s, and that directory cannot be written to: %w", khPath, target, err)
+	}
+	return target, nil
+}
+
+// linesStillTrusting returns the lines of kept, the content written to path,
+// that make known_hosts accept a key other than newKey for addr.
+func linesStillTrusting(path, kept, addr string, newKey ssh.PublicKey) ([]string, error) {
+	cb, err := knownhosts.New(path)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read known_hosts back: %w", err)
+	}
+	// Only the hostname is consulted when one is given; the remote address
+	// just has to be well formed.
+	remoteAddr := &net.TCPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 22}
+
+	var stale []string
+	for _, line := range strings.Split(kept, "\n") {
 		trimmed := strings.TrimSpace(line)
 		if trimmed == "" || strings.HasPrefix(trimmed, "#") {
+			continue
+		}
+		marker, _, key, _, _, err := ssh.ParseKnownHosts([]byte(trimmed))
+		if err != nil || marker != "" || bytes.Equal(key.Marshal(), newKey.Marshal()) {
+			continue
+		}
+		// The whole file accepting the key does not say this line is why:
+		// another line may hold the same key. Asking the line alone does,
+		// and asking the whole file first keeps an @revoked line in charge.
+		if cb(addr, remoteAddr, key) != nil {
+			continue
+		}
+		alone, err := lineAccepts(filepath.Dir(path), trimmed, addr, remoteAddr, key)
+		if err != nil {
+			return nil, err
+		}
+		if alone {
+			stale = append(stale, trimmed)
+		}
+	}
+	return stale, nil
+}
+
+// lineAccepts says whether a known_hosts holding only line accepts key for
+// addr. knownhosts reads files only, so the line gets one of its own.
+func lineAccepts(dir, line, addr string, remoteAddr net.Addr, key ssh.PublicKey) (bool, error) {
+	f, err := os.CreateTemp(dir, ".known_hosts.homebutler-line-*")
+	if err != nil {
+		return false, fmt.Errorf("failed to read known_hosts back: %w", err)
+	}
+	defer os.Remove(f.Name())
+	_, werr := f.WriteString(line + "\n")
+	if cerr := f.Close(); werr == nil {
+		werr = cerr
+	}
+	if werr != nil {
+		return false, fmt.Errorf("failed to read known_hosts back: %w", werr)
+	}
+	cb, err := knownhosts.New(f.Name())
+	if err != nil {
+		return false, fmt.Errorf("failed to read known_hosts back: %w", err)
+	}
+	return cb(addr, remoteAddr, key) == nil, nil
+}
+
+// withoutHostKeys returns known_hosts content with every entry for addr
+// (already normalized) removed: written plainly, bracketed with the default
+// port, or hashed. Comments, blank lines, @revoked and @cert-authority lines,
+// and lines it cannot read as an entry are kept as they were, and so are
+// wildcard patterns, which name more than this host.
+func withoutHostKeys(data, addr string) string {
+	var kept []string
+	for _, line := range strings.Split(data, "\n") {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" || strings.HasPrefix(trimmed, "#") || strings.HasPrefix(trimmed, "@") {
 			kept = append(kept, line)
 			continue
 		}
@@ -389,20 +592,50 @@ func RemoveHostKeys(server *config.ServerConfig) error {
 			kept = append(kept, line)
 			continue
 		}
-		hosts := strings.Split(fields[0], ",")
-		match := false
-		for _, h := range hosts {
-			if h == addr {
+		match, negated := false, false
+		for _, h := range strings.Split(fields[0], ",") {
+			if strings.HasPrefix(h, "!") {
+				if hostEntryMatches(h[1:], addr) {
+					negated = true
+				}
+				continue
+			}
+			if hostEntryMatches(h, addr) {
 				match = true
-				break
 			}
 		}
-		if !match {
+		// A line that excludes this host does not apply to it, whatever else
+		// it names.
+		if !match || negated {
 			kept = append(kept, line)
 		}
 	}
+	return strings.Join(kept, "\n")
+}
 
-	return os.WriteFile(khPath, []byte(strings.Join(kept, "\n")), 0600)
+// hostEntryMatches says whether one host entry from a known_hosts line names
+// addr exactly. [host]:22 is the same host as host, and a hashed entry is
+// matched the way OpenSSH and x/crypto match it: HMAC-SHA1 of the normalized
+// address under the entry's salt.
+func hostEntryMatches(entry, addr string) bool {
+	if strings.HasPrefix(entry, "|1|") {
+		parts := strings.Split(entry, "|")
+		if len(parts) != 4 {
+			return false
+		}
+		salt, err := base64.StdEncoding.DecodeString(parts[2])
+		if err != nil {
+			return false
+		}
+		want, err := base64.StdEncoding.DecodeString(parts[3])
+		if err != nil {
+			return false
+		}
+		mac := hmac.New(sha1.New, salt)
+		mac.Write([]byte(addr))
+		return hmac.Equal(mac.Sum(nil), want)
+	}
+	return knownhosts.Normalize(entry) == addr
 }
 
 func loadKey(keyFile string) (ssh.Signer, error) {
