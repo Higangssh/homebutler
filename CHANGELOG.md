@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### 🐛 Fixes
+
+- `trust <server> --reset` deleted the server's `known_hosts` entry before it showed the new fingerprint, so answering `n` left no key at all (#400). `--reset` is what the host-key-changed error tells you to run, and answering no is how you say the new fingerprint is not the one you expected; the next key-authenticated connection then found nothing recorded and trusted whatever answered, which is exactly what the old key was there to stop. A host that could not be reached lost its entry the same way. The old entries are now replaced only after a `y`, in one write that swaps the file whole; answering `n`, giving no answer, pressing Ctrl-C at the prompt, or failing to connect leaves `known_hosts` byte for byte as it was. The prompt under `--reset` now says it will replace the keys, and the command reports `host key for <server> replaced in known_hosts`. There is no non-interactive way to reset trust: `trust` has no `--yes`, and neither MCP nor the dashboard exposes it
+
 ## [1.7.0](https://github.com/Higangssh/homebutler/compare/v1.6.0...v1.7.0) - 2026-11-10
 
 **Windows had nothing to install — `npm install -g homebutler` asked for a zip no release had ever carried — and a script was told the opposite of what happened: `status --all` exited 0 after a server could not be reached, and `upgrade` from a `go install` build exited 1 on every run; each release now carries a Windows zip and Claude Desktop extension, and `--all` and `upgrade` exit with what they printed.**

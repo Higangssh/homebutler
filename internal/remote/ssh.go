@@ -296,7 +296,14 @@ func tofuConnect(addr string, cfg *ssh.ClientConfig) error {
 
 // TrustServer connects to a server, displays its host key fingerprint,
 // and adds it to known_hosts if the user confirms.
-func TrustServer(server *config.ServerConfig, confirm func(fingerprint string) bool) error {
+//
+// With replace, the entries already recorded for the server's address are
+// dropped in the same write that adds the new one, and not before. --reset is
+// run when a host key has changed, and someone who reads the new fingerprint
+// and answers no must still have the old key standing between them and
+// whatever is answering: an address with no entry is trusted on first use by
+// the next key-authenticated connection.
+func TrustServer(server *config.ServerConfig, replace bool, confirm func(fingerprint string) bool) error {
 	// Said early rather than after a round trip: a server with no usable
 	// credential cannot be connected to once it is trusted, so there is no
 	// point recording its key.
@@ -337,7 +344,6 @@ func TrustServer(server *config.ServerConfig, confirm func(fingerprint string) b
 		return fmt.Errorf("trust cancelled by user")
 	}
 
-	// Add to known_hosts
 	khPath, err := knownHostsPath()
 	if err != nil {
 		return err
@@ -346,7 +352,12 @@ func TrustServer(server *config.ServerConfig, confirm func(fingerprint string) b
 		return fmt.Errorf("cannot create ~/.ssh directory: %w", err)
 	}
 
-	line := knownhosts.Line([]string{knownhosts.Normalize(addr)}, serverKey)
+	normalized := knownhosts.Normalize(addr)
+	line := knownhosts.Line([]string{normalized}, serverKey)
+	if replace {
+		return replaceHostKeys(khPath, normalized, line)
+	}
+
 	f, err := os.OpenFile(khPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0600)
 	if err != nil {
 		return fmt.Errorf("cannot write to known_hosts: %w", err)
@@ -360,24 +371,63 @@ func TrustServer(server *config.ServerConfig, confirm func(fingerprint string) b
 	return nil
 }
 
-// RemoveHostKeys removes all known_hosts entries for a server's address.
-func RemoveHostKeys(server *config.ServerConfig) error {
-	khPath, err := knownHostsPath()
+// replaceHostKeys rewrites known_hosts with every entry for addr (already
+// normalized) dropped and line added, and swaps it in with one rename, so the
+// file on disk never holds neither the old key nor the new one.
+func replaceHostKeys(khPath, addr, line string) error {
+	// A known_hosts that is a symlink, into a dotfiles checkout say, stays
+	// one: the file it points at is the one rewritten.
+	target, err := filepath.EvalSymlinks(khPath)
 	if err != nil {
-		return err
-	}
-	data, err := os.ReadFile(khPath)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return nil
+		if !os.IsNotExist(err) {
+			return fmt.Errorf("cannot read known_hosts: %w", err)
 		}
-		return fmt.Errorf("cannot read known_hosts: %w", err)
+		target = khPath
 	}
 
-	addr := knownhosts.Normalize(fmt.Sprintf("%s:%d", server.Host, server.SSHPort()))
-	lines := strings.Split(string(data), "\n")
+	data, err := os.ReadFile(target)
+	if err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("cannot read known_hosts: %w", err)
+	}
+	mode := os.FileMode(0600)
+	if info, statErr := os.Stat(target); statErr == nil {
+		mode = info.Mode().Perm()
+	}
+
+	kept := withoutHostKeys(string(data), addr)
+	if kept != "" && !strings.HasSuffix(kept, "\n") {
+		kept += "\n"
+	}
+
+	tmp, err := os.CreateTemp(filepath.Dir(target), ".known_hosts.homebutler-*")
+	if err != nil {
+		return fmt.Errorf("cannot write to known_hosts: %w", err)
+	}
+	tmpName := tmp.Name()
+	defer os.Remove(tmpName) // nothing left to remove once the rename is done
+
+	_, writeErr := tmp.WriteString(kept + line + "\n")
+	if writeErr == nil {
+		writeErr = tmp.Chmod(mode)
+	}
+	if closeErr := tmp.Close(); writeErr == nil {
+		writeErr = closeErr
+	}
+	if writeErr == nil {
+		writeErr = os.Rename(tmpName, target)
+	}
+	if writeErr != nil {
+		return fmt.Errorf("failed to write known_hosts entry: %w", writeErr)
+	}
+	return nil
+}
+
+// withoutHostKeys returns known_hosts content with every entry naming addr
+// removed. Comments, blank lines, and lines it cannot read as an entry are
+// kept as they were.
+func withoutHostKeys(data, addr string) string {
 	var kept []string
-	for _, line := range lines {
+	for _, line := range strings.Split(data, "\n") {
 		trimmed := strings.TrimSpace(line)
 		if trimmed == "" || strings.HasPrefix(trimmed, "#") {
 			kept = append(kept, line)
@@ -389,9 +439,8 @@ func RemoveHostKeys(server *config.ServerConfig) error {
 			kept = append(kept, line)
 			continue
 		}
-		hosts := strings.Split(fields[0], ",")
 		match := false
-		for _, h := range hosts {
+		for _, h := range strings.Split(fields[0], ",") {
 			if h == addr {
 				match = true
 				break
@@ -401,8 +450,7 @@ func RemoveHostKeys(server *config.ServerConfig) error {
 			kept = append(kept, line)
 		}
 	}
-
-	return os.WriteFile(khPath, []byte(strings.Join(kept, "\n")), 0600)
+	return strings.Join(kept, "\n")
 }
 
 func loadKey(keyFile string) (ssh.Signer, error) {

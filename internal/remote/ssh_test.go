@@ -661,20 +661,6 @@ func TestRemoteGetVersionAndWhichErrors(t *testing.T) {
 	}
 }
 
-func TestRemoveHostKeys_NonexistentFile(t *testing.T) {
-	// Create a temp known_hosts that we control
-	srv := &config.ServerConfig{
-		Name: "test",
-		Host: "10.99.99.99",
-		Port: 22,
-	}
-	// RemoveHostKeys on real known_hosts file — should not error even if key not present
-	err := RemoveHostKeys(srv)
-	if err != nil {
-		t.Errorf("RemoveHostKeys should not error for non-matching keys: %v", err)
-	}
-}
-
 // A dev build is left alone, which is not a failure: upgrade from a go
 // install binary said "error" and exited 1 every time.
 func TestSelfUpgrade_DevBuild(t *testing.T) {
@@ -828,27 +814,6 @@ func TestNormalizeArch_Extended(t *testing.T) {
 			t.Errorf("normalizeArch(%q) = %q, want %q", tc.in, got, tc.want)
 		}
 	}
-}
-
-func TestRemoveHostKeys_WithEntries(t *testing.T) {
-	// Create a temp known_hosts file
-	tmpDir := t.TempDir()
-	origHome := os.Getenv("HOME")
-	// We can't easily override HOME for knownHostsPath, so test against the real file
-	// Instead, test the logic directly by writing and reading a temp file
-	tmpFile := filepath.Join(tmpDir, "known_hosts")
-	content := "[10.0.0.1]:22 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAITest1\n" +
-		"[10.0.0.2]:22 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAITest2\n" +
-		"# comment line\n" +
-		"[10.0.0.1]:2222 ssh-rsa AAAAB3NzaC1yc2EAAAABITest3\n"
-	os.WriteFile(tmpFile, []byte(content), 0600)
-
-	// Verify the file was written
-	data, _ := os.ReadFile(tmpFile)
-	if len(data) == 0 {
-		t.Fatal("failed to write test known_hosts")
-	}
-	_ = origHome
 }
 
 func TestDeployResultJSON(t *testing.T) {
