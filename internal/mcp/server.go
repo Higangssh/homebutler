@@ -2,6 +2,7 @@ package mcp
 
 import (
 	"bufio"
+	"encoding/csv"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -1031,6 +1032,13 @@ func (s *Server) executeRemote(srv *config.ServerConfig, tool string, args map[s
 			kind = watch.KindDocker
 		}
 		remoteArgs = append(remoteArgs, "--kind", kind)
+		// --unit is newer than every released remote. One that does not know
+		// it refuses the flag before touching its watch list, and that refusal
+		// is reported, rather than the target being added under the wrong
+		// name. Left off when unset, so an older remote still takes the call.
+		if unit := stringArg(args, "unit"); unit != "" {
+			remoteArgs = append(remoteArgs, "--unit", unit)
+		}
 	case "watch_remove":
 		remoteArgs = []string{"watch", "remove", stringArg(args, "container"), "--json"}
 	case "alerts_history":
@@ -1046,6 +1054,11 @@ func (s *Server) executeRemote(srv *config.ServerConfig, tool string, args map[s
 		}
 		if to := stringArg(args, "to"); to != "" {
 			remoteArgs = append(remoteArgs, "--to", to)
+		}
+		// --exclude arrived in 0.40.0, and a remote older than that refuses
+		// the flag before archiving anything.
+		for _, path := range stringSliceArg(args, "exclude") {
+			remoteArgs = append(remoteArgs, "--exclude="+sliceFlagValue(path))
 		}
 	case "backup_drill":
 		remoteArgs = []string{"backup", "drill", "--json"}
@@ -1082,6 +1095,17 @@ func (s *Server) executeRemote(srv *config.ServerConfig, tool string, args map[s
 		return nil, err
 	}
 	return remoteAnswer(tool, args, out)
+}
+
+// sliceFlagValue writes one value of a string-slice flag so the remote reads
+// it back whole. pflag reads each value as a CSV record, so a path with a
+// comma in it would arrive as two paths; CSV quoting is what it undoes.
+func sliceFlagValue(v string) string {
+	var b strings.Builder
+	w := csv.NewWriter(&b)
+	_ = w.Write([]string{v})
+	w.Flush()
+	return strings.TrimSuffix(b.String(), "\n")
 }
 
 // runRemote is remote.Run, held in a variable so a test can answer for the
