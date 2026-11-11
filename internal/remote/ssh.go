@@ -185,6 +185,12 @@ func remoteVersionVia(client *ssh.Client) string {
 	return version
 }
 
+// unknownFlag is homebutler refusing a flag its release does not define:
+// cobra's error as main prints it, at the start of a line. Unanchored, a
+// cobra error from docker quoted inside `failed to restart web: …` read as an
+// old homebutler.
+var unknownFlag = regexp.MustCompile(`(?m)^error: unknown flag: (--\S+)`)
+
 // remoteCommandError explains a command the far side refused.
 //
 // "unknown command" almost always means the homebutler over there is older
@@ -193,9 +199,6 @@ func remoteVersionVia(client *ssh.Client) string {
 // it is four releases behind — goes unmentioned. This is easy to walk into:
 // the commands that existed back then still work, so the setup looks correct
 // until the first one that did not.
-// unknownFlag is how cobra refuses a flag the command does not define.
-var unknownFlag = regexp.MustCompile(`unknown flag: (--[A-Za-z0-9-]+)`)
-
 func remoteCommandError(server *config.ServerConfig, remoteVersion string, args []string, out []byte, err error) error {
 	text := strings.TrimSpace(string(out))
 
