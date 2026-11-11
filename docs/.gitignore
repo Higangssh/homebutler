@@ -7,7 +7,6 @@ docs/reference/api/
 src/generated/
 static/openapi.yaml
 static/openapi.json
-.wrangler/
 
 # The API spec shares its name with the config file the repository ignores
 !openapi/homebutler.yaml

@@ -70,7 +70,7 @@ const config: Config = {
     announcementBar: isPreview
       ? {
           id: 'preview-banner',
-          content: `Unofficial documentation preview for ${site.productName}${site.builtBy ? `, built by ${site.builtByUrl ? `<a href="${site.builtByUrl}">${site.builtBy}</a>` : site.builtBy}` : ""}. The project is on <a href="https://github.com/${site.githubOrg}/${site.githubRepo}">GitHub</a>.`,
+          content: `Unofficial documentation preview for ${site.productName}. The project is on <a href="https://github.com/${site.githubOrg}/${site.githubRepo}">GitHub</a>.`,
           isCloseable: false,
         }
       : undefined,

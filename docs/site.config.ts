@@ -17,10 +17,6 @@ export type SiteConfig = {
   openapiSpec: string;
   /** Owner shown in the preview banner, e.g. "Acme" */
   ownerName: string;
-  /** Who built it (shown only in preview mode); omit to leave the banner without a credit */
-  builtBy?: string;
-  /** Link for builtBy; omit to show the name as plain text */
-  builtByUrl?: string;
   /** Wordmark next to the icon. Parts with accent: true use the brand colour. */
   brand?: {
     wordmark: { text: string; accent?: boolean }[];
