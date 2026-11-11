@@ -1,0 +1,64 @@
+---
+title: Introduction
+description: homebutler is a single Go binary that remembers what your server looked like last time and reports only the changes worth mentioning, to you or to an agent.
+slug: /
+---
+
+# homebutler
+
+homebutler is a single Go binary that remembers what your server looked like last time and tells you what moved: a container recreated under the same name, a port answered by a different process, a backup that no longer restores. It reports to a person through the CLI, a terminal dashboard, or a web dashboard, and to an agent through MCP or JSON.
+
+<img className="hb-intro-character" src={require('@site/static/img/mascot.png').default} alt="The homebutler mascot, a butler holding a small server on a tray" />
+
+```text
+── Notable Changes ───────────────────────────────────────────
+   replaced  hb-demo  recreated, 00702cacc7d4 → 11dada014233
+```
+
+A report that only compares counts sees the same number of containers before and after and calls it "no change." homebutler names the container that was swapped out.
+
+<CardGroup cols={2}>
+  <Card title="Quickstart" icon="rocket" href="/quickstart">
+    Install homebutler, take a baseline, and read your first report.
+  </Card>
+  <Card title="Connect your agent" icon="plug" href="/agents/mcp-server">
+    Give Claude, Cursor, or any MCP client typed answers instead of an SSH shell.
+  </Card>
+  <Card title="Report" icon="search" href="/changes/report">
+    What earns a line in a report, and what is left out on purpose.
+  </Card>
+  <Card title="Backup drill" icon="shield" href="/backups/drill">
+    Boot a backup in its own container and check that the app answers.
+  </Card>
+</CardGroup>
+
+## What it does
+
+- **Reports what changed.** [`report`](/changes/report) compares the server with the last snapshot and labels each change with one of eight kinds, such as `replaced`, `port` or `gone`.
+- **Diagnoses common problems.** [`doctor`](/changes/doctor) checks disk and memory pressure, stopped containers, ports open on every interface, and backups that are missing or never tested. Each finding names the command to run next.
+- **Catches crashes.** [`watch`](/monitoring/watch) saves the logs from before and after a restart, classifies the cause (OOM, panic, segfault), and detects restart loops.
+- **Proves backups restore.** [`backup drill`](/backups/drill) boots an archive as a second copy of the app and requires an HTTP health check to pass.
+- **Installs apps.** [`install`](/apps/install-apps) deploys 15 self-hosted apps, such as Uptime Kuma, Jellyfin, and Pi-hole, with a generated `docker-compose.yml`.
+- **Reaches more than one machine.** [Multi-server](/running/multi-server) runs the commands that take `--server` on remote servers over SSH, and [Proxmox VE](/apps/proxmox) endpoints are read through the Proxmox API.
+
+## The ways in
+
+| Interface | Start it with | Use it for |
+| --- | --- | --- |
+| CLI | `homebutler <command>` | Terminal, scripts and cron. Add `--json` for machine-readable output. |
+| MCP server | `homebutler mcp` | Claude Desktop, Claude Code, Cursor and other MCP clients. |
+| Web dashboard | `homebutler serve` | A browser view of servers, containers, ports and the report, on port 8080. |
+| TUI dashboard | `homebutler watch tui` | A live terminal view of every configured server. |
+
+All four call the same code, so a person and an agent get the same answer. homebutler runs no daemon and keeps no database: it runs when you call it, and stores snapshots, incidents and backups as files under `~/.homebutler/`.
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Installation" icon="terminal" href="/installation">
+    Homebrew, the install script, Go, npm, a container, or a source build.
+  </Card>
+  <Card title="How it works" icon="lightbulb" href="/how-it-works">
+    Snapshots, the four interfaces, and how homebutler reaches other machines.
+  </Card>
+</CardGroup>

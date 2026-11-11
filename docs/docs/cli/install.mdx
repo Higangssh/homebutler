@@ -1,0 +1,194 @@
+---
+title: install
+description: "Installs a self-hosted app with Docker Compose, and stops or removes it later."
+---
+
+# homebutler install
+
+Installs a self-hosted app with Docker Compose, and stops or removes it later.
+
+`install <app>` runs prerequisite checks, writes a Compose file under `~/.homebutler/apps/<app>/`, and runs `docker compose up -d`. App data lives in the same folder. An app counts as installed when `~/.homebutler/apps/<app>/docker-compose.yml` exists.
+
+The human-readable output of `install list`, `status`, `uninstall`, and `purge` goes to standard error. Redirect with `2>&1` to capture it.
+
+For the app list and what each install creates, see [Install apps](/apps/install-apps).
+
+| Command | What it does |
+| --- | --- |
+| [`list`](#install-list) | Lists the apps you can install. |
+| [`purge`](#install-purge) | Stops an app and deletes its data. |
+| [`status`](#install-status) | Reports whether an installed app is running. |
+| [`uninstall`](#install-uninstall) | Stops an app and removes its containers, and keeps its data. |
+
+## `install`
+
+Installs the app named on the command line. The apps are `gitea`, `portainer`, `jellyfin`, `stirling-pdf`, `speedtest-tracker`, `mealie`, `plex`, `vaultwarden`, `filebrowser`, `adguard-home`, `nginx-proxy-manager`, `uptime-kuma`, `it-tools`, `homepage`, and `pi-hole`.
+
+```bash
+homebutler install <app> [options]
+homebutler install [command]
+```
+
+| Argument | Description |
+| --- | --- |
+| `app` | App name, from `homebutler install list`. |
+
+| Flag | Type | Default | Description |
+| --- | --- | --- | --- |
+| `--dry-run` | boolean | `false` | Print the Compose file and the command that would run, and change nothing. |
+| `--media` | string | - | Host folder to mount as the media library. Used by `jellyfin`; the mount is read-only. |
+| `--port` | string | - | Host port for the app. Each app has its own default container port, shown in the dry run. |
+
+Preview an install on a custom port. Nothing is installed.
+
+```bash
+homebutler install uptime-kuma --dry-run --port 8504
+```
+
+```text
+🔍 Checking prerequisites for uptime-kuma...
+✅ All checks passed
+
+📦 Installing uptime-kuma
+  Port:    8504 (default: 3001)
+  Path:    /home/you/.homebutler/apps/uptime-kuma
+
+✨ [Dry Run] Rendered docker-compose.yml for uptime-kuma:
+
+services:
+  uptime-kuma:
+    image: louislam/uptime-kuma:1
+    container_name: uptime-kuma
+    restart: unless-stopped
+    ports:
+      - "8504:3001"
+    volumes:
+      - "/home/you/.homebutler/apps/uptime-kuma/data:/app/data"
+    environment:
+      - PUID=501
+      - PGID=1000
+
+✨ [Dry Run] Would run: docker compose -f /home/you/.homebutler/apps/uptime-kuma/docker-compose.yml up -d
+```
+
+An unknown app name lists the available apps.
+
+```bash
+homebutler install nothing
+```
+
+```text
+error: unknown app "nothing". Available: it-tools, uptime-kuma, stirling-pdf, speedtest-tracker, mealie, portainer, plex, filebrowser, jellyfin, gitea, homepage, pi-hole, adguard-home, vaultwarden, nginx-proxy-manager
+```
+
+## `install list`
+
+Lists the apps you can install.
+
+```bash
+homebutler install list [flags]
+```
+
+Alias: `ls`.
+
+```bash
+homebutler install list 2>&1
+```
+
+```text
+📦 Available apps (15):
+
+  it-tools             Collection of developer utilities (JSON, Base64, Hash, etc.)
+  speedtest-tracker    Internet speed test tracker with historical data and graphs
+  stirling-pdf         All-in-one PDF manipulation tool (merge, split, convert, OCR)
+  mealie               Self-hosted recipe manager and meal planner
+  filebrowser          Web-based file manager. Its upstream project is archived and gets no further releases or security fixes
+  uptime-kuma          A self-hosted monitoring tool
+  plex                 Plex Media Server - organize and stream your media
+  vaultwarden          Lightweight Bitwarden-compatible password manager
+  homepage             Modern dashboard for your homelab with service integration
+  pi-hole              Network-wide ad blocking via DNS filtering
+  portainer            Docker management GUI with container, image, and volume control
+  nginx-proxy-manager  Reverse proxy with SSL termination and web UI for managing hosts
+  jellyfin             Free software media system for streaming movies, TV, and music
+  gitea                Lightweight self-hosted Git service
+  adguard-home         DNS-based ad blocker and privacy protection
+
+Usage: homebutler install <app>
+```
+
+## `install purge`
+
+Stops an app and deletes its data.
+
+```bash
+homebutler install purge <app> [flags]
+```
+
+| Argument | Description |
+| --- | --- |
+| `app` | App name. |
+
+<Warning title="Purge deletes data">
+
+`purge` runs `docker compose down -v`, removes the app's unused anonymous volumes, and deletes the folder `~/.homebutler/apps/<app>/` with the data in it.
+
+</Warning>
+
+For an app that is not installed, the command is an error.
+
+```bash
+homebutler install purge uptime-kuma
+```
+
+```text
+⚠️  Purging uptime-kuma (containers + data)...
+error: uptime-kuma is not installed
+```
+
+## `install status`
+
+Reports whether an installed app is running.
+
+```bash
+homebutler install status <app> [flags]
+```
+
+| Argument | Description |
+| --- | --- |
+| `app` | App name. |
+
+For an app that is not installed, the command is an error.
+
+```bash
+homebutler install status uptime-kuma
+```
+
+```text
+error: uptime-kuma is not installed
+```
+
+## `install uninstall`
+
+Stops an app and removes its containers, and keeps its data.
+
+```bash
+homebutler install uninstall <app> [flags]
+```
+
+Alias: `rm`.
+
+| Argument | Description |
+| --- | --- |
+| `app` | App name. |
+
+For an app that is not installed, the command is an error.
+
+```bash
+homebutler install uninstall uptime-kuma
+```
+
+```text
+🛑 Stopping uptime-kuma...
+error: uptime-kuma is not installed
+```

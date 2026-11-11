@@ -1,0 +1,203 @@
+---
+title: docker
+description: "Lists, restarts, and stops containers, and shows their logs, stats, processes, and configuration."
+---
+
+# homebutler docker
+
+Lists, restarts, and stops containers, and shows their logs, stats, processes, and configuration.
+
+Container names must contain only letters, digits, `-`, `_`, and `.`, and cannot start with `-`. All subcommands run on a remote server with `--server`. `docker list` and `docker stats` also run on every configured server with `--all`.
+
+For the day-to-day use of these commands, see [Docker](/apps/docker).
+
+| Command | What it does |
+| --- | --- |
+| [`inspect`](#docker-inspect) | Prints a readable summary of one container: image, state, restart policy, ports, mounts, networks, and health. |
+| [`list`](#docker-list) | Lists the containers on the host with their image, state, and uptime. |
+| [`logs`](#docker-logs) | Prints the last lines of a container's logs. |
+| [`restart`](#docker-restart) | Restarts a container. |
+| [`stats`](#docker-stats) | Shows CPU, memory, network, block I/O, and process counts for the running containers. |
+| [`stop`](#docker-stop) | Stops a container. |
+| [`top`](#docker-top) | Lists the processes inside a container, read from the host with `docker top`. |
+
+## `docker inspect`
+
+Prints a readable summary of one container: image, state, restart policy, ports, mounts, networks, and health.
+
+```bash
+homebutler docker inspect <container> [flags]
+```
+
+Environment variable values are never included.
+
+| Argument | Description |
+| --- | --- |
+| `container` | Container name. |
+
+```bash
+homebutler docker inspect uptime-kuma
+```
+
+```text
+📦 uptime-kuma
+   Image     uptime-kuma:1
+   State     running (up 15m)
+   Restart   no · 0 restarts
+   Ports     0.0.0.0:8502 → 3001/tcp, [::]:8502 → 3001/tcp
+   Mounts    /var/lib/docker/volumes/uptime-kuma-data/_data → /app/data (rw)
+   Networks  homelab_default (172.23.0.2)
+```
+
+## `docker list`
+
+Lists the containers on the host with their image, state, and uptime.
+
+```bash
+homebutler docker list [flags]
+```
+
+Alias: `ls`.
+
+The output is shortened to the containers created for this page.
+
+```bash
+homebutler docker list
+```
+
+```text
+CONTAINER            IMAGE                          STATE      STATUS
+media        uptime-kuma:1                 running    Running · 14m
+uptime-kuma         uptime-kuma:1                 running    Running · 14m
+db           node:lts-alpine                running    Running · Lessthanas
+web          node:lts-alpine                running    Running · 10m
+webhook-sink         node:lts-alpine                running    Running · 21m
+```
+
+## `docker logs`
+
+Prints the last lines of a container's logs.
+
+```bash
+homebutler docker logs <container> [lines] [flags]
+```
+
+| Argument | Description |
+| --- | --- |
+| `container` | Container name. |
+| `lines` | Number of lines. Optional, a positive integer. The default is `50`. |
+
+```bash
+homebutler docker logs webhook-sink 1
+```
+
+```text
+=== webhook-sink (last 1 lines) ===
+POST /hook {"source":"alerts","name":"test-notification","status":"triggered","details":"This is a test notification from homebutler","action_taken":"notify","action_result":"success","timestamp":"2026-10-25 11:30:06"}
+```
+
+A line count that is not a number is an error.
+
+```bash
+homebutler docker logs web abc
+```
+
+```text
+error: invalid line count: abc (must be a positive integer)
+```
+
+## `docker restart`
+
+Restarts a container.
+
+```bash
+homebutler docker restart <container> [flags]
+```
+
+| Argument | Description |
+| --- | --- |
+| `container` | Container name. |
+
+```bash
+homebutler docker restart db
+```
+
+```text
+✅ restart: db
+```
+
+A container that does not exist is an error.
+
+```bash
+homebutler docker restart missing
+```
+
+```text
+error: failed to restart missing: Error response from daemon: No such container: missing
+```
+
+## `docker stats`
+
+Shows CPU, memory, network, block I/O, and process counts for the running containers.
+
+```bash
+homebutler docker stats [flags]
+```
+
+The output is shortened to the containers created for this page.
+
+```bash
+homebutler docker stats
+```
+
+```text
+CONTAINER            CPU %      MEM USAGE                MEM %      NET I/O              BLOCK I/O            PIDS
+media        0.02%      10.4MiB / 7.755GiB       0.13%      1.01kB / 126B        0B / 0B              7
+uptime-kuma         0.00%      11MiB / 7.755GiB         0.14%      1.66kB / 126B        0B / 8.19kB          7
+db           0.05%      9.875MiB / 7.755GiB      0.12%      516B / 126B          0B / 0B              7
+web          0.00%      10.96MiB / 7.755GiB      0.14%      5.95kB / 126B        0B / 0B              7
+webhook-sink         0.00%      12.84MiB / 7.755GiB      0.16%      26.3kB / 7.54kB      0B / 0B              7
+```
+
+## `docker stop`
+
+Stops a container.
+
+```bash
+homebutler docker stop <container> [flags]
+```
+
+| Argument | Description |
+| --- | --- |
+| `container` | Container name. |
+
+```bash
+homebutler docker stop db
+```
+
+```text
+✅ stop: db
+```
+
+## `docker top`
+
+Lists the processes inside a container, read from the host with `docker top`. The table shows each process's full command line. With `--json`, `command` holds the kernel's process name for the process (the `comm` value of `ps`), which is not always the executable's name. A Node.js process shows `MainThread`.
+
+```bash
+homebutler docker top <container> [flags]
+```
+
+The command opens no shell in the container.
+
+| Argument | Description |
+| --- | --- |
+| `container` | Container name. |
+
+```bash
+homebutler docker top uptime-kuma
+```
+
+```text
+PID      USER         COMMAND
+376878   root         node -e require('http').createServer((q,r)=>r.end('ok')).listen(3001)
+```

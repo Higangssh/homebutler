@@ -1,0 +1,98 @@
+---
+title: Quickstart
+description: Install homebutler, take a baseline snapshot, and read a report of what changed since then.
+---
+
+# Quickstart
+
+This page takes you from installing homebutler to a report that names what changed on your server. You need a Linux or macOS machine. Container features need the `docker` CLI on that machine.
+
+<Steps>
+  <Step title="Install homebutler">
+    ```bash
+    brew install Higangssh/homebutler/homebutler
+    ```
+
+    For the install script, Go, a container, or a source build, see [Installation](/installation).
+  </Step>
+  <Step title="Check the machine">
+    ```bash
+    homebutler status
+    ```
+
+    ```text
+    🖥  homelab (linux/amd64)
+       Uptime:  11h 31m
+       CPU:     55.8% (4 cores)
+       Memory:  7.5 / 7.8 GB (96.2%)
+       Disk /: 1 / 19 GB (7%)
+    ```
+
+    homebutler works without a config file. It uses built-in defaults until you run `homebutler init`.
+  </Step>
+  <Step title="Take a baseline">
+    ```bash
+    homebutler report
+    ```
+
+    The first run has nothing to compare against, so it saves a snapshot under `~/.homebutler/reports/snapshots/` and says so:
+
+    ```text
+    📋 This is the butler's first look around — baseline created.
+    ```
+  </Step>
+  <Step title="Read what changed">
+    Run `report` again after something changes on the server, such as a container started, recreated, or removed:
+
+    ```bash
+    homebutler report
+    ```
+
+    ```text
+    🏠 Homebutler Report — homelab
+       2026-10-24T19:43:05Z  ·  compared with 2026-10-24T19:42:56Z
+
+    ── Needs Attention ───────────────────────────────────────────
+       ⚠️  Port :8099/tcp is now reachable from every interface, answered by hb-demo (node:lts-alpine) — it was not before
+
+    ── Notable Changes ───────────────────────────────────────────
+       new  :8099/tcp  now hb-demo (node:lts-alpine)
+       new  hb-demo    now running
+    ```
+
+    Each change line has three columns: the kind of change, what it happened to, and what happened. [Report](/changes/report) lists the eight kinds.
+
+    <Check>The header names the snapshot the report compared against.</Check>
+  </Step>
+  <Step title="Run a health check">
+    ```bash
+    homebutler doctor
+    ```
+
+    `doctor` checks disk and memory pressure, stopped containers, ports open on every interface, backups and notifications. Each finding ends with the command to run next:
+
+    ```text
+    ⚠️ [backup] No backups found
+       No .tar.gz backups found in /home/you/.homebutler/backups.
+       → Create your first backup, then verify at least one important app with a drill.
+       $ homebutler backup
+    ```
+  </Step>
+</Steps>
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Connect your agent" icon="plug" href="/agents/mcp-server">
+    Add homebutler to Claude, Cursor, or another MCP client.
+  </Card>
+  <Card title="Add your servers" icon="terminal" href="/running/multi-server">
+    Run `homebutler init` and reach other machines over SSH.
+  </Card>
+  <Card title="Back up and drill" icon="shield" href="/backups/backup-and-restore">
+    Back up Docker volumes and prove the archive restores.
+  </Card>
+  <Card title="Watch for crashes" icon="bolt" href="/monitoring/watch">
+    Capture the logs around a restart and detect restart loops.
+  </Card>
+</CardGroup>

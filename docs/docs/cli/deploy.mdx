@@ -1,0 +1,70 @@
+---
+title: deploy
+description: "Installs the homebutler binary on remote servers over SSH."
+---
+
+# homebutler deploy
+
+Installs the homebutler binary on remote servers over SSH.
+
+```bash
+homebutler deploy [flags]
+```
+
+Name the targets with the global `--server` or `--all` flag. The command downloads the latest release from GitHub, or copies a binary you give it with `--local`, and puts it in `/usr/local/bin` on the remote host, using `sudo` when that folder is not writable, or in `~/.local/bin` when `/usr/local/bin` is not usable.
+
+The result is a JSON array with one entry per server. Servers marked `local` are skipped. Every server is tried, and the command exits `1` if any failed.
+
+For adding servers and running commands on them, see [Multi-server](/running/multi-server).
+
+## Flags
+
+| Flag | Type | Default | Description |
+| --- | --- | --- | --- |
+| `--local` | string | - | Path to a homebutler binary to copy instead of downloading a release. Use it for hosts that cannot reach GitHub. |
+
+## Examples
+
+Without a target, the command prints its usage.
+
+```bash
+homebutler deploy
+```
+
+```text
+error: usage: homebutler deploy --server <name> [--local <binary>]
+       homebutler deploy --all [--local <binary>]
+```
+
+A local server needs no deploy.
+
+```bash
+homebutler deploy --server main
+```
+
+```text
+error: server "main" is local, no deploy needed
+```
+
+A server that refuses the SSH key. The first lines go to standard error; the JSON goes to standard output.
+
+```bash
+homebutler deploy --server remote1 --local /bin/true
+```
+
+The output, shortened:
+
+```text
+deploying to remote1 (127.0.0.1)...
+  ✗ remote1: ssh connect to remote1: [remote1] SSH connection failed (127.0.0.1:22): ssh: handshake failed: ssh: unable to authenticate, attempted methods [none publickey], no supported methods remain
+  → Check: server online? correct host/port? firewall rules?
+  → Config: /home/you/.config/homebutler/config.yaml
+[
+  {
+    "server": "remote1",
+    "arch": "",
+    "source": "",
+    "status": "error",
+    "message": "ssh connect to remote1: [remote1] SSH connection failed (127.0.0.1:22): ssh: handshake failed: ssh: unable to authenticate, attempted methods [none publickey], no supported methods remain\n  → Check: server online? correct host/port? firewall rules?\n  → Config: /home/you/.config/homebutler/config.yaml"
+  }
+```

@@ -1,0 +1,217 @@
+---
+title: Notifications
+description: Send homebutler alerts and watch incidents to Telegram, Slack, Discord, ntfy, Gotify or a webhook, test each channel with notify test, and control what watch sends with notify_on and cooldown.
+---
+
+# Notifications
+
+homebutler sends alerts and watch incidents to the channels in the `notify` section of your config. This page lists the keys each channel takes, shows the exact request each one receives, and explains the `watch.notify` settings that decide which incidents are sent. Channels are optional, and every one you configure receives every message.
+
+## Configure channels
+
+Add a block under `notify:` for each channel. A channel with a missing required key stays disabled, and `homebutler config validate` names the key. The config file holds secrets, so homebutler refuses to load it unless only your account can read it (`chmod 600`).
+
+```yaml
+notify:
+  telegram:
+    bot_token: "<bot-token>"
+    chat_id: "<chat-id>"
+  slack:
+    webhook_url: https://hooks.slack.example.com/services/<path>
+  discord:
+    webhook_url: https://discord.example.com/api/webhooks/<path>
+  webhook:
+    url: https://hooks.example.com/homebutler
+  ntfy:
+    url: https://ntfy.example.com
+    topic: <topic>
+    token: <access-token>
+  gotify:
+    url: https://gotify.example.com
+    token: <application-token>
+```
+
+Replace each placeholder with the value from the service. The config passes `config validate` as written.
+
+| Channel | Required keys | Optional keys | What homebutler sends |
+| --- | --- | --- | --- |
+| `telegram` | `bot_token`, `chat_id` | | A `sendMessage` call to the Telegram Bot API with an HTML-formatted text. |
+| `slack` | `webhook_url` | | A JSON attachment with a Markdown section. |
+| `discord` | `webhook_url` | | A JSON embed with Action and Result fields. |
+| `webhook` | `url` | | A JSON object with seven fields. |
+| `ntfy` | `url`, `topic` | `token` | The message as the request body to `<url>/<topic>`, with `Title` and `Priority` headers. A `token` is sent as `Authorization: Bearer <token>`. |
+| `gotify` | `url`, `token` | | A JSON message to `<url>/message` with the application token in `X-Gotify-Key`. |
+
+`topic` and every URL are treated as secrets: anyone who knows an ntfy topic on a public server can read what you send to it. Error messages keep the scheme and host of a failing URL and drop the path, the query and the credentials.
+
+## Test a channel
+
+```bash
+homebutler notify test
+```
+
+`notify test` sends one test message through every configured channel and reports each result. It exits `0` when all channels accept the message and `1` when any fails. This run used a config with all five URL-based channels pointed at a small listener:
+
+```text
+Sending test notification...
+  ✅ slack: sent
+  ✅ discord: sent
+  ✅ webhook: sent
+  ✅ ntfy: sent
+  ✅ gotify: sent
+```
+
+A failing channel prints its error and doesn't stop the others. Here the webhook URL points at a closed port, and the query string with its token doesn't appear in the error:
+
+```text
+Sending test notification...
+  ❌ webhook: request to http://127.0.0.1:8299 failed: dial tcp 127.0.0.1:8299: connect: connection refused
+  ✅ ntfy: sent
+error: 1 provider(s) failed
+```
+
+With `--json`, the command returns an array with `channel`, `sent` and, on failure, `error`. A config with no channels fails with `error: no notification config found; configure notify in config.yaml or use --alerts-config for legacy alerts.yaml`. `homebutler alerts test-notify` does the same and is kept for older setups.
+
+### What each channel receives
+
+The test message is the same event in every channel. The requests below are what a local listener received, with `User-Agent: Go-http-client/1.1` on each. The `webhook` channel posts this JSON with `Content-Type: application/json`:
+
+```json
+{
+  "source": "alerts",
+  "name": "test-notification",
+  "status": "triggered",
+  "details": "This is a test notification from homebutler",
+  "action_taken": "notify",
+  "action_result": "success",
+  "timestamp": "2026-10-25 11:24:47"
+}
+```
+
+`source` is `alerts` for thresholds, container changes and rules, and `watch` for watch incidents. This payload is a watch incident, sent when `loop` crossed the flapping threshold:
+
+```json
+{
+  "source": "watch",
+  "name": "loop",
+  "status": "flapping",
+  "details": "category=fatal_error reason=Fatal error detected in logs",
+  "action_taken": "",
+  "action_result": "",
+  "timestamp": "2026-10-25 11:30:19"
+}
+```
+
+A watch incident has `status` `restart` or `flapping`, and `recovered` for a Proxmox endpoint that came back. `details` holds the crash category and reason. An alert has `status` `critical`, `warning`, `ok` or `triggered`, and `name` holds the resource, such as `disk:/mnt/data` or `container:<name>`.
+
+`ntfy` received the message as the body, with the title and priority as headers. Priority is `4` for a `triggered` event and `3` for others:
+
+```text
+POST /topic
+Title: homebutler: test-notification triggered
+Priority: 4
+
+This is a test notification from homebutler
+Action: notify (success)
+2026-10-25 11:24:47
+```
+
+`gotify` received a JSON body at `/gotify/message` with `X-Gotify-Key` set to the application token. Priority is `8` for `triggered` and `4` for others:
+
+```json
+{
+  "message": "This is a test notification from homebutler\nAction: notify (success)\n2026-10-25 11:24:47",
+  "priority": 8,
+  "title": "homebutler: test-notification triggered"
+}
+```
+
+`slack` and `discord` received these bodies, shown shortened to their text fields:
+
+```json
+{
+  "attachments": [
+    {
+      "blocks": [
+        {
+          "text": {
+            "text": "*test-notification* triggered\nThis is a test notification from homebutler\n> Action: notify | Result: success\n_2026-10-25 11:24:47_",
+            "type": "mrkdwn"
+          },
+          "type": "section"
+        }
+      ],
+      "color": "#36a64f"
+    }
+  ]
+}
+```
+
+```json
+{
+  "embeds": [
+    {
+      "color": 3581519,
+      "description": "This is a test notification from homebutler",
+      "fields": [
+        { "inline": true, "name": "Action", "value": "notify" },
+        { "inline": true, "name": "Result", "value": "success" }
+      ],
+      "footer": { "text": "2026-10-25 11:24:47" },
+      "title": "test-notification triggered"
+    }
+  ]
+}
+```
+
+The color is green when `Result` is `success` and red otherwise. `telegram` posts `chat_id`, `parse_mode` set to `HTML`, and a `text` of the form `<icon> <b>name</b> status`, the details, the action, the result, and the time. It isn't covered by a live test because the endpoint is fixed to the Telegram servers.
+
+## Choose which incidents watch sends
+
+Three settings under `watch.notify` control incidents from [Watch](/monitoring/watch). They don't affect threshold alerts or alert rules, which go to your channels whenever a channel exists.
+
+| Key | Default | What it does |
+| --- | --- | --- |
+| `enabled` | `false` | Turns incident notifications on. While `false`, incidents are written to disk and printed, and nothing is sent. |
+| `notify_on` | `flapping` | Which incidents to send: `all`, `incident`, `flapping` or `off`. |
+| `cooldown` | `5m` | The shortest time between two messages for the same target and kind. Takes a Go duration. |
+
+| `notify_on` | Sends |
+| --- | --- |
+| `flapping` | Incidents of a target that is flapping. A single restart is recorded and not sent. |
+| `incident` | Every incident that isn't flapping. |
+| `all` | Both. |
+| `off` | Nothing, even with `enabled: true`. |
+
+Because `enabled` is `false` by default, a channel you have tested still receives no incidents until you switch it on. [Doctor](/changes/doctor) reports this state as `Notifications are configured and switched off for watch`. The block form:
+
+```yaml
+notify:
+  webhook:
+    url: https://hooks.example.com/homebutler
+watch:
+  notify:
+    enabled: true
+    notify_on: all
+    cooldown: 30s
+```
+
+The cooldown key is the target and kind, such as `watch.incident:loop`. In the test run, one target produced seven incidents in 32 seconds. With `notify_on: all` and a `30s` cooldown, the webhook received one `restart` message and one `flapping` message.
+
+`homebutler config validate` rejects an unknown `notify_on` and an invalid `cooldown`. It warns when watch notifications are enabled and no channel exists.
+
+### The flat form
+
+The same keys are also accepted directly under `watch`, which is how older configs wrote them:
+
+```yaml
+notify:
+  webhook:
+    url: https://hooks.example.com/homebutler
+watch:
+  enabled: true
+  notify_on: all
+  cooldown: 5m
+```
+
+When a `watch.notify` block exists, the flat keys are ignored, and `config validate` warns that both are set. `on_incident` and `on_flapping` are older booleans for the same choice; `notify_on` takes precedence when set.

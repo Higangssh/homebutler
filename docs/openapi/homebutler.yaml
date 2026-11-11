@@ -1,0 +1,4679 @@
+openapi: 3.1.0
+info:
+  title: homebutler web dashboard API
+  version: 1.7.0
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+  description: |
+    The HTTP API behind the homebutler web dashboard. `homebutler serve` starts it, and every route on this page is the same one the dashboard calls, so anything the dashboard shows or does you can read or run from a script.
+
+    Reads answer without a token when the server starts without one. Routes that change something exist only when the server starts with a token. Without a token those routes are not registered at all and answer `404`, not `401`.
+
+    Every error is a JSON object with one field: `{"error": "<message>"}`.
+servers:
+  - url: http://localhost:8080
+    description: The default address of `homebutler serve`. Change it with `--host` and `--port`.
+security:
+  - bearerAuth: []
+  - {}
+tags:
+  - name: Overview and servers
+    description: Read the machine homebutler runs on, and the servers in your configuration.
+  - name: Report and doctor
+    description: Compare the machine with its last saved snapshot, and check it for problems.
+  - name: Docker
+    description: List containers and their usage, and restart or stop a container.
+  - name: Watch and alerts
+    description: Check alert thresholds, manage the watch list, and read recorded incidents.
+  - name: Backups
+    description: Create, list, drill and restore Docker compose backups.
+  - name: Install
+    description: Install, inspect, uninstall and purge the apps in the catalogue.
+  - name: Proxmox
+    description: Read Proxmox VE endpoints and guests, and start, reboot or shut down a guest.
+  - name: Wake and notify
+    description: Send a Wake-on-LAN packet and test your notification channels.
+  - name: Config
+    description: Read the settings the dashboard shows, and save changes to the config file.
+  - name: Meta
+    description: Ask the server what it can do, which version it is, and what its CORS preflight allows.
+paths:
+  /api/overview:
+    get:
+      tags:
+        - Overview and servers
+      operationId: getOverview
+      summary: Get overview
+      description: Reads every server in your configuration at once and returns one entry per server. A server that does not answer within four seconds is reported from its last successful reading with `status` set to `stale`, or as `unavailable` when it has never answered.
+      x-protection: none
+      responses:
+        '200':
+          description: One reading per configured server. The example is shortened.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Overview'
+              example:
+                collected_at: '2026-10-25T18:57:47.088855825Z'
+                servers:
+                  - name: nas
+                    host: 192.0.2.10
+                    local: false
+                    status: unavailable
+                    failure_class: authentication
+                    message: The server refused the configured credentials.
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /api/servers:
+    get:
+      tags:
+        - Overview and servers
+      operationId: listServers
+      summary: List servers
+      description: Lists the servers in your configuration. Use a `name` from this list as the `server` query parameter on the read routes, and as the path parameter of [Get server status](/reference/api/overview-and-servers/get-server-status).
+      x-protection: none
+      responses:
+        '200':
+          description: The configured servers, in configuration order.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ServerInfo'
+              example:
+                - name: homelab
+                  host: 192.168.1.10
+                  local: true
+                - name: nas
+                  host: 192.0.2.10
+                  local: false
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /api/servers/{name}/status:
+    get:
+      tags:
+        - Overview and servers
+      operationId: getServerStatus
+      summary: Get server status
+      description: Returns the system status of one configured server. A server marked `local` is read directly; any other is read over SSH by running `homebutler status --json` on it.
+      x-protection: none
+      parameters:
+        - name: name
+          in: path
+          required: true
+          description: The `name` of a server, from [List servers](/reference/api/overview-and-servers/list-servers).
+          schema:
+            type: string
+            example: homelab
+      responses:
+        '200':
+          description: The server's status. The example is shortened.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StatusDoc'
+              example:
+                schema_version: 1
+                hostname: homelab
+                os: linux
+                arch: amd64
+                uptime: 15h 39m
+                cpu:
+                  usage_percent: 4.65
+                  cores: 4
+                memory:
+                  total_gb: 7.75
+                  used_gb: 2.83
+                  usage_percent: 36.53
+                disks:
+                  - mount: /
+                    total_gb: 19
+                    used_gb: 1.2
+                    usage_percent: 7
+                time: '2026-10-25T11:57:48-07:00'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          description: No server has this name.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: server "nope" not found
+        '502':
+          description: A remote server did not answer. The message names the class of failure and never the address or the SSH output.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: The server refused the configured credentials.
+  /api/status:
+    get:
+      tags:
+        - Overview and servers
+      operationId: getStatus
+      summary: Get system status
+      description: Returns CPU, memory and disk readings for the machine homebutler runs on, or for the server named in `server`.
+      x-protection: none
+      parameters:
+        - $ref: '#/components/parameters/Server'
+      responses:
+        '200':
+          description: The system status. The example is shortened.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StatusDoc'
+              example:
+                schema_version: 1
+                hostname: homelab
+                os: linux
+                arch: amd64
+                uptime: 15h 39m
+                cpu:
+                  usage_percent: 0
+                  cores: 4
+                memory:
+                  total_gb: 7.75
+                  used_gb: 2.83
+                  usage_percent: 36.53
+                disks:
+                  - mount: /
+                    total_gb: 19
+                    used_gb: 1.2
+                    usage_percent: 7
+                time: '2026-10-25T11:57:49-07:00'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          description: The readings could not be taken.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: <message>
+        '501':
+          description: homebutler runs in a container, which cannot read the machine it runs on. Run it on the host, or name a remote server.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: <message>
+        '502':
+          description: The server named in `server` did not answer. The message is the SSH error.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: |-
+                  [nas] failed to load SSH key (): no SSH key found (tried ~/.ssh/id_ed25519, ~/.ssh/id_rsa). Specify key path in config or use auth: password
+                    → Check this server's 'key' in /home/you/.config/homebutler/config.yaml
+  /api/processes:
+    get:
+      tags:
+        - Overview and servers
+      operationId: listProcesses
+      summary: List top processes
+      description: Returns the ten processes using the most CPU, busiest first. Without `server`, the route returns the list itself, without the `total` and `zombies` fields the MCP tool adds. With `server`, it returns the document that `homebutler processes --json` prints on that server, an object with a `processes` array and `total`.
+      x-protection: none
+      parameters:
+        - $ref: '#/components/parameters/Server'
+      responses:
+        '200':
+          description: The ten busiest processes. The example is shortened.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ProcessInfo'
+              example:
+                - pid: 1731
+                  name: containerd
+                  cpu: 9.7
+                  mem: 0.7
+                  rss: 62144
+                  state: S
+                - pid: 1888
+                  name: dockerd
+                  cpu: 4.7
+                  mem: 1.2
+                  rss: 99540
+                  state: S
+                - pid: 460000
+                  name: sh
+                  cpu: 4.5
+                  mem: 0
+                  rss: 1144
+                  state: S
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '502':
+          description: The server named in `server` did not answer. The message is the SSH error.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: <message>
+        '500':
+          description: The process table could not be read.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: <message>
+  /api/ports:
+    get:
+      tags:
+        - Overview and servers
+      operationId: listPorts
+      summary: List open ports
+      description: Lists the TCP ports listening on the machine, with the process or Docker container that owns each one. With `server`, the route returns the array that `homebutler ports --json` prints on that server, without the `ports` wrapper. When the ports cannot be listed, the route returns `500` with the reason.
+      x-protection: none
+      parameters:
+        - $ref: '#/components/parameters/Server'
+      responses:
+        '200':
+          description: The listening ports. The example is shortened.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PortsResult'
+              example:
+                ports:
+                  - protocol: tcp
+                    address: 127.0.0.1
+                    port: '53'
+                  - protocol: tcp
+                    address: 0.0.0.0
+                    port: '18611'
+                    container: gitea (imgproxy:1)
+                  - protocol: tcp
+                    address: 0.0.0.0
+                    port: '18610'
+                    container: web (node:lts-alpine)
+                  - protocol: tcp
+                    address: 192.168.5.1
+                    port: '53'
+                  - protocol: tcp
+                    address: 127.0.0.1
+                    port: '18600'
+                    pid: '459588'
+                    process: homebutler
+                  - protocol: tcp
+                    address: 127.0.0.1
+                    port: '18602'
+                    pid: '459604'
+                    process: homebutler
+                  - protocol: tcp
+                    address: 0.0.0.0
+                    port: '22'
+                  - protocol: tcp
+                    address: '[::1]'
+                    port: '53'
+                  - protocol: tcp
+                    address: '*'
+                    port: '18601'
+                  - protocol: tcp
+                    address: '[::]'
+                    port: '18611'
+                    container: gitea (imgproxy:1)
+                  - protocol: tcp
+                    address: '[::]'
+                    port: '18610'
+                    container: web (node:lts-alpine)
+                  - protocol: tcp
+                    address: '[fe80::5055:55ff:fe23:93b6]%eth0'
+                    port: '53'
+                  - protocol: tcp
+                    address: '[::]'
+                    port: '22'
+                missing_process: true
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '502':
+          description: The server named in `server` did not answer. The message is the SSH error.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: <message>
+        '500':
+          description: The ports could not be read. The error gives the reason.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/report:
+    get:
+      tags:
+        - Report and doctor
+      operationId: getReport
+      summary: Get report
+      description: With `server`, compares that server over SSH and saves nothing on it, with the same `summary` as a local report. Compares the machine with the last saved snapshot and lists what needs attention and what changed. Reading a report never saves a snapshot, so a dashboard can poll this route without moving its own baseline. To save one, call [Save report snapshot](/reference/api/report-and-doctor/save-report-snapshot).
+      x-protection: none
+      parameters:
+        - $ref: '#/components/parameters/Server'
+      responses:
+        '200':
+          description: The report. `is_baseline` is `true` when there is no snapshot to compare against. The example is shortened.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReportResponse'
+              example:
+                schema_version: 1
+                timestamp: '2026-10-25T18:58:24Z'
+                server_name: homelab
+                is_baseline: false
+                snapshot_saved: false
+                system:
+                  hostname: homelab
+                  os: linux
+                  arch: amd64
+                  uptime: 15h 40m
+                  cpu:
+                    usage_percent: 0.75
+                    cores: 4
+                  memory:
+                    total_gb: 7.75
+                    used_gb: 2.82
+                    usage_percent: 36.45
+                  disks:
+                    - mount: /
+                      total_gb: 19
+                      used_gb: 1.2
+                      usage_percent: 7
+                  time: '2026-10-25T11:58:24-07:00'
+                running_count: 8
+                stopped_count: 11
+                public_port_count: 11
+                status:
+                  - 'Host: homelab (linux/amd64), uptime 15h 40m'
+                  - 'CPU: 0.8% (4 cores), Memory: 2.8/7.8 GB (36%)'
+                  - 'Disk /: 1.2/19.0 GB (7%)'
+                  - 'Containers: 8 running, 11 stopped'
+                  - 'Public ports: 11'
+                needs_attention:
+                  - kind: container
+                    text: 11 container(s) stopped
+                  - kind: container
+                    target: whoami
+                    text: whoami stopped since the last report
+                notable_changes:
+                  - kind: state
+                    target: whoami
+                    detail: running → exited
+                    text: 'state: whoami — running → exited'
+                compared_to: '2026-10-25T18:58:09Z'
+                suggested_actions:
+                  - text: 'Check why whoami is not running: homebutler docker logs whoami'
+                    command: homebutler docker logs whoami
+                    runner: mcp
+                    tool: docker_logs
+                summary:
+                  needs_attention: 3
+                  notable_changes: 1
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          description: The report could not be built.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: <message>
+        '502':
+          description: The server named in `server` did not answer.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: |-
+                  [nas] failed to load SSH key (): no SSH key found (tried ~/.ssh/id_ed25519, ~/.ssh/id_rsa). Specify key path in config or use auth: password
+                    → Check this server's 'key' in /home/you/.config/homebutler/config.yaml
+  /api/report/snapshot:
+    post:
+      tags:
+        - Report and doctor
+      operationId: saveReportSnapshot
+      summary: Save report snapshot
+      description: 'Builds a report and saves it as the snapshot the next report compares against. Protection: token.'
+      x-protection: token
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/Server'
+      responses:
+        '200':
+          description: The report that was just built, with `snapshot_saved` set to `true`. The example is shortened.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReportResponse'
+              example:
+                schema_version: 1
+                timestamp: '2026-10-25T18:58:26Z'
+                server_name: homelab
+                is_baseline: false
+                snapshot_saved: true
+                system:
+                  hostname: homelab
+                  os: linux
+                  arch: amd64
+                  uptime: 15h 40m
+                  cpu:
+                    usage_percent: 3.84
+                    cores: 4
+                  memory:
+                    total_gb: 7.75
+                    used_gb: 2.83
+                    usage_percent: 36.53
+                  disks:
+                    - mount: /
+                      total_gb: 19
+                      used_gb: 1.2
+                      usage_percent: 7
+                  time: '2026-10-25T11:58:25-07:00'
+                running_count: 8
+                stopped_count: 11
+                public_port_count: 11
+                status:
+                  - 'Host: homelab (linux/amd64), uptime 15h 40m'
+                  - 'CPU: 3.8% (4 cores), Memory: 2.8/7.8 GB (37%)'
+                  - 'Disk /: 1.2/19.0 GB (7%)'
+                  - 'Containers: 8 running, 11 stopped'
+                  - 'Public ports: 11'
+                needs_attention:
+                  - kind: container
+                    text: 11 container(s) stopped
+                  - kind: container
+                    target: whoami
+                    text: whoami stopped since the last report
+                notable_changes:
+                  - kind: state
+                    target: whoami
+                    detail: running → exited
+                    text: 'state: whoami — running → exited'
+                compared_to: '2026-10-25T18:58:09Z'
+                suggested_actions:
+                  - text: 'Check why whoami is not running: homebutler docker logs whoami'
+                    command: homebutler docker logs whoami
+                    runner: mcp
+                    tool: docker_logs
+                summary:
+                  needs_attention: 3
+                  notable_changes: 1
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotRegistered'
+        '500':
+          description: The report could not be built or saved.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: <message>
+  /api/doctor:
+    get:
+      tags:
+        - Report and doctor
+      operationId: runDoctor
+      summary: Run doctor
+      description: Checks the machine for problems across system, Docker, exposure, backups, watch, notifications, Proxmox and configuration, and returns one finding per check. Every `warn` and `fail` finding carries the command that fixes or investigates it.
+      x-protection: none
+      parameters:
+        - $ref: '#/components/parameters/Server'
+      responses:
+        '200':
+          description: The findings and a count per severity. The example is shortened.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DoctorResult'
+              example:
+                schema_version: 1
+                timestamp: '2026-10-25T18:57:55Z'
+                server_name: homelab
+                status: fail
+                summary:
+                  pass: 0
+                  warn: 5
+                  fail: 2
+                findings:
+                  - severity: warn
+                    category: exposure
+                    title: 6 port(s) are listening on all interfaces
+                    detail: 18601/tcp, 18610/tcp, 18611/tcp, 22/tcp, 3399/tcp, 8080/tcp
+                    action: Make sure each one is intentional and protected by firewall, reverse proxy, or login where needed.
+                    command: homebutler inventory scan
+                    runner: mcp
+                    tool: inventory_scan
+                  - severity: warn
+                    category: backup
+                    title: No backups found
+                    detail: No .tar.gz backups found in /home/you/backups.
+                    action: Create your first backup, then verify at least one important app with a drill.
+                    command: homebutler backup
+                    runner: mcp
+                    tool: backup_create
+                  - severity: warn
+                    category: proxmox
+                    title: Proxmox endpoint "pve" accepts any certificate
+                    detail: 'insecure: true disables certificate verification entirely, so anything on the network path can read the API token and answer for the endpoint.'
+                    action: Pin the certificate with fingerprint, or trust its issuer with ca_file, and remove insecure.
+                    command: homebutler proxmox status --endpoint pve
+                    runner: mcp
+                    tool: proxmox_status
+                  - severity: warn
+                    category: report
+                    title: No report baseline yet
+                    detail: Doctor did not find previous report snapshots.
+                    action: Run report once so homebutler can notice what changes later.
+                    command: homebutler report
+                    runner: mcp
+                    tool: report
+                  - severity: fail
+                    category: proxmox
+                    title: Proxmox endpoint "pve" has no readable collectors
+                    detail: 'version: proxmox request /api2/json/version: Get "https://127.0.0.1:8699/api2/json/version": dial tcp 127.0.0.1:8699: connect: connection refused'
+                    action: Check network reachability to the configured host and port, and any firewall rules in between.
+                    command: homebutler proxmox status --endpoint "pve"
+                    runner: mcp
+                    tool: proxmox_status
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          description: The checks could not run.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: <message>
+  /api/docker:
+    get:
+      tags:
+        - Docker
+      operationId: listContainers
+      summary: List containers
+      description: Lists every Docker container on the machine, running or stopped. When Docker does not answer, the route still returns `200` with `available` set to `false` and an empty list.
+      x-protection: none
+      parameters:
+        - $ref: '#/components/parameters/Server'
+      responses:
+        '200':
+          description: 'The containers, or `available: false` when Docker is not reachable. The example is shortened.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ContainerList'
+              example:
+                available: true
+                containers:
+                  - id: 986579b4a954
+                    name: romantic_zhukovsky
+                    image: alpine
+                    status: Running · 4m
+                    state: running
+                    ports: ''
+                  - id: 0063e741c1f9
+                    name: whoami
+                    image: node:lts-alpine
+                    status: Stopped · 38s ago
+                    state: exited
+                    ports: ''
+                  - id: 3bf9c444b8db
+                    name: web
+                    image: node:lts-alpine
+                    status: Running · 51s
+                    state: running
+                    ports: 0.0.0.0:8610->18610/tcp, [::]:8610->18610/tcp
+                  - id: a022d81b0f81
+                    name: hook
+                    image: node:lts-alpine
+                    status: Running · 47m
+                    state: running
+                    ports: ''
+                  - id: f32260339376
+                    name: gitea
+                    image: imgproxy:1
+                    status: Running · 45m
+                    state: running
+                    ports: 18610/tcp, 0.0.0.0:8611->3000/tcp, [::]:8611->3000/tcp
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /api/docker/stats:
+    get:
+      tags:
+        - Docker
+      operationId: getContainerStats
+      summary: Get container stats
+      description: Returns a one-shot CPU, memory, network and disk reading for each running container. Values are the strings Docker prints, such as `0.00%` and `10.96MiB / 7.755GiB`.
+      x-protection: none
+      parameters:
+        - $ref: '#/components/parameters/Server'
+      responses:
+        '200':
+          description: 'The readings, or `available: false` when Docker is not reachable. The example is shortened.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ContainerStatsList'
+              example:
+                available: true
+                stats:
+                  - id: 986579b4a954
+                    name: romantic_zhukovsky
+                    cpu_percent: 0.00%
+                    mem_usage: 116KiB / 7.755GiB
+                    mem_percent: 0.00%
+                    net_io: 2.95kB / 126B
+                    block_io: 0B / 4.1kB
+                    pids: '0'
+                  - id: 3bf9c444b8db
+                    name: web
+                    cpu_percent: 0.00%
+                    mem_usage: 10.93MiB / 7.755GiB
+                    mem_percent: 0.14%
+                    net_io: 1.36kB / 126B
+                    block_io: 0B / 0B
+                    pids: '7'
+                  - id: a022d81b0f81
+                    name: hook
+                    cpu_percent: 0.00%
+                    mem_usage: 11.75MiB / 7.755GiB
+                    mem_percent: 0.15%
+                    net_io: 0B / 0B
+                    block_io: 81.9kB / 0B
+                    pids: '7'
+                  - id: f32260339376
+                    name: gitea
+                    cpu_percent: 0.00%
+                    mem_usage: 11.61MiB / 7.755GiB
+                    mem_percent: 0.15%
+                    net_io: 2.24kB / 606B
+                    block_io: 0B / 0B
+                    pids: '7'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /api/docker/{name}/restart:
+    post:
+      tags:
+        - Docker
+      operationId: restartContainer
+      summary: Restart container
+      description: 'Restarts one container. Protection: token. Starting the container again undoes it, so no confirmation is asked.'
+      x-protection: token
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: name
+          in: path
+          required: true
+          description: The container `name`, from [List containers](/reference/api/docker/list-containers).
+          schema:
+            type: string
+            example: web
+      responses:
+        '200':
+          description: The container restarted.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DockerActionResult'
+              example:
+                action: restart
+                container: web
+                status: ok
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotRegistered'
+        '500':
+          description: Docker refused, for example because no container has this name.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: 'failed to restart missing: Error response from daemon: No such container: missing'
+  /api/docker/{name}/stop:
+    post:
+      tags:
+        - Docker
+      operationId: stopContainer
+      summary: Stop container
+      description: 'Stops one container. Protection: token and `confirm: true` in the body. A missing or non-boolean `confirm` returns `400`, and the string `"true"` does not count.'
+      x-protection: token+confirm
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: name
+          in: path
+          required: true
+          description: The container `name`, from [List containers](/reference/api/docker/list-containers).
+          schema:
+            type: string
+            example: whoami
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ConfirmRequest'
+            example:
+              confirm: true
+      responses:
+        '200':
+          description: The container stopped.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DockerActionResult'
+              example:
+                action: stop
+                container: whoami
+                status: ok
+        '400':
+          description: '`confirm` was missing or was not the boolean `true`.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              examples:
+                no-body:
+                  summary: no body
+                  value:
+                    error: 'docker_stop stops a running service: send confirm=true to say that is what you meant'
+                string-true:
+                  summary: string true
+                  value:
+                    error: 'docker_stop stops a running service: send confirm=true to say that is what you meant'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotRegistered'
+        '500':
+          description: Docker refused, for example because no container has this name.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: 'failed to stop missing: Error response from daemon: No such container: missing'
+  /api/alerts:
+    get:
+      tags:
+        - Watch and alerts
+      operationId: checkAlerts
+      summary: Check alerts
+      description: 'Compares CPU, memory and each disk with the thresholds in `alerts:` of your config. It reads and compares only: nothing is sent and nothing is recorded.'
+      x-protection: none
+      parameters:
+        - $ref: '#/components/parameters/Server'
+      responses:
+        '200':
+          description: Each reading with its threshold and a status of `ok`, `warning` or `critical`. The example is shortened.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AlertResult'
+              example:
+                cpu:
+                  status: ok
+                  current: 15.8
+                  threshold: 90
+                memory:
+                  status: ok
+                  current: 36.43
+                  threshold: 85
+                disks:
+                  - mount: /
+                    status: ok
+                    current: 7
+                    threshold: 90
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          description: The readings could not be taken.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: <message>
+  /api/watch:
+    get:
+      tags:
+        - Watch and alerts
+      operationId: getWatch
+      summary: Get watch list
+      description: Returns the watch list, whether a service is installed to poll it, and how many incidents are kept. The three come in one response because a list with no service polling it records nothing.
+      x-protection: none
+      responses:
+        '200':
+          description: The targets, the service and the retention.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WatchOverview'
+              example:
+                targets:
+                  - container: flaky
+                    kind: docker
+                    unit: flaky
+                    added_at: '2026-10-25T11:58:28.036439838-07:00'
+                service:
+                  installed: false
+                  unit: /home/you/.config/systemd/user/dev.homebutler.watch.service
+                retention:
+                  kept: 0
+                  max: 200
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          description: The watch directory could not be read.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: <message>
+  /api/watch/incidents:
+    get:
+      tags:
+        - Watch and alerts
+      operationId: listIncidents
+      summary: List incidents
+      description: 'Lists recorded incidents, newest first. The list leaves out the captured logs: `pre_logs` and `post_logs` are empty strings. Fetch one incident with [Get incident](/reference/api/watch-and-alerts/get-incident) to read them.'
+      x-protection: none
+      parameters:
+        - name: limit
+          in: query
+          description: The most incidents to return. A value below 1 or one that is not a number is ignored, and the default applies.
+          schema:
+            type: integer
+            minimum: 1
+            default: 25
+        - name: container
+          in: query
+          description: Return only incidents for this watch target.
+          schema:
+            type: string
+            example: flaky
+      responses:
+        '200':
+          description: The incidents, or an empty array when nothing was recorded.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Incident'
+              example:
+                - id: flaky-20261025-115840.172-50551e
+                  container: flaky
+                  detected_at: '2026-10-25T11:58:40.172139897-07:00'
+                  restart_count: 6
+                  prev_started_at: '2026-10-25T18:58:24.350797511Z'
+                  curr_started_at: '2026-10-25T18:58:35.810745971Z'
+                  pre_logs: ''
+                  post_logs: ''
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          description: The watch directory could not be read.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: <message>
+  /api/watch/incidents/{id}:
+    get:
+      tags:
+        - Watch and alerts
+      operationId: getIncident
+      summary: Get incident
+      description: Returns one incident with the logs captured when the restart was detected.
+      x-protection: none
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: The incident `id`, from [List incidents](/reference/api/watch-and-alerts/list-incidents).
+          schema:
+            type: string
+            example: flaky-20261025-113501.277-3c009f
+      responses:
+        '200':
+          description: The incident with its logs.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Incident'
+              example:
+                id: flaky-20261025-115840.172-50551e
+                container: flaky
+                detected_at: '2026-10-25T11:58:40.172139897-07:00'
+                restart_count: 6
+                prev_started_at: '2026-10-25T18:58:24.350797511Z'
+                curr_started_at: '2026-10-25T18:58:35.810745971Z'
+                pre_logs: (captured at detection — see post_logs for current state)
+                post_logs: |-
+                  booting
+                  fatal: out of cheese
+                  booting
+                  fatal: out of cheese
+                  booting
+                  fatal: out of cheese
+                  booting
+                  fatal: out of cheese
+                  booting
+                  fatal: out of cheese
+                  booting
+                  fatal: out of cheese
+                  booting
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          description: No recorded incident has this `id`.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: incident "nope" not found
+  /api/watch/targets:
+    post:
+      tags:
+        - Watch and alerts
+      operationId: addWatchTarget
+      summary: Add watch target
+      description: 'Adds a container, systemd unit or pm2 app to the watch list. Protection: token. Adding a name that is already listed returns `added: false` and changes nothing. The route does not check `kind` against the three values. An unknown value is accepted and echoed back, and every later read of the list treats it as `docker`.'
+      x-protection: token
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WatchAddRequest'
+            example:
+              container: flaky
+      responses:
+        '200':
+          description: The target was added, or was already on the list.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WatchAddResult'
+              examples:
+                added:
+                  summary: added
+                  value:
+                    added: true
+                    container: flaky
+                    kind: docker
+                already-listed:
+                  summary: already listed
+                  value:
+                    added: false
+                    container: flaky
+                    kind: docker
+        '400':
+          description: '`container` is missing.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: container is required
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotRegistered'
+        '500':
+          description: The watch directory could not be written.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: <message>
+  /api/watch/targets/{name}/remove:
+    post:
+      tags:
+        - Watch and alerts
+      operationId: removeWatchTarget
+      summary: Remove watch target
+      description: 'Removes a target from the watch list. Protection: token. Recorded incidents stay.'
+      x-protection: token
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: name
+          in: path
+          required: true
+          description: The `container` of a target, from [Get watch list](/reference/api/watch-and-alerts/get-watch-list).
+          schema:
+            type: string
+            example: flaky
+      responses:
+        '200':
+          description: The target was removed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WatchRemoveResult'
+              example:
+                container: flaky
+                removed: true
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          description: 'The target is not on the watch list. When the server has no token, the route is not registered and answers `{"error": "no such endpoint"}`.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              examples:
+                not-listed:
+                  summary: not listed
+                  value:
+                    error: flaky is not on the watch list
+                no-token-configured:
+                  summary: no token configured
+                  value:
+                    error: no such endpoint
+        '500':
+          description: The watch directory could not be written.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: <message>
+  /api/watch/check:
+    post:
+      tags:
+        - Watch and alerts
+      operationId: runWatchCheck
+      summary: Run watch check
+      description: 'Inspects every Docker target on the watch list once and records an incident for each one that restarted since the last check. Protection: token. Adding a container that already exists records its state, so its first check compares against that state. The first check of a container that did not exist when it was added sets its baseline and records nothing. Targets of another kind appear in `skipped`, because a one-shot check inspects Docker only.'
+      x-protection: token
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: How many targets were checked, and the incidents this check recorded.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WatchRunResult'
+              example:
+                checked: 1
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotRegistered'
+        '500':
+          description: The watch state could not be read or saved.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: <message>
+  /api/backup:
+    get:
+      tags:
+        - Backups
+      operationId: listBackups
+      summary: List backups
+      description: Lists the archives in your backup directory. Use an archive `path` as the `archive` field of [Restore backup](/reference/api/backups/restore-backup) and [Run backup drill](/reference/api/backups/run-backup-drill).
+      x-protection: none
+      responses:
+        '200':
+          description: The archives, or an empty array when there are none.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/BackupListEntry'
+              example:
+                - name: backup_2026-10-25_115840.971.tar.gz
+                  path: /home/you/backups/backup_2026-10-25_115840.971.tar.gz
+                  size: 1.7 KB
+                  created_at: '2026-10-25T11:58:42-07:00'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          description: The backup directory could not be read.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: <message>
+    post:
+      tags:
+        - Backups
+      operationId: createBackup
+      summary: Create backup
+      description: 'Archives the volumes of the Docker compose services that are running, into your backup directory. Protection: token. Volumes are read while the containers run, so an archive is not proof it restores: [Run backup drill](/reference/api/backups/run-backup-drill) is.'
+      x-protection: token
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BackupRequest'
+            example:
+              service: gitea
+              exclude:
+                - /nonexistent
+      responses:
+        '200':
+          description: The archive that was written.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BackupResult'
+              example:
+                archive: /home/you/backups/backup_2026-10-25_115840.971.tar.gz
+                services:
+                  - gitea
+                volumes: 1
+                size: 1.7 KB
+                unmatched_excludes:
+                  - /nonexistent
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotRegistered'
+        '500':
+          description: The backup failed, for example because no compose project has the service.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: service "missing" not found in any compose project
+  /api/backup/drill:
+    post:
+      tags:
+        - Backups
+      operationId: runBackupDrill
+      summary: Run backup drill
+      description: 'Proves an archive restores. The drill checks the archive, boots the app from its data on an isolated network and a free port, and asks the app''s health endpoint for an answer. Protection: token. Without `app`, the drill runs for every app in the archive that has a health check. Without `archive`, it uses the newest archive.'
+      x-protection: token
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DrillRequest'
+            example:
+              app: gitea
+              archive: /home/you/backups/backup_2026-10-25_115840.971.tar.gz
+      responses:
+        '200':
+          description: 'One result when you name an app, or a report with a `results` array when you do not. A drill that ran and failed is still `200`: read `passed` and `error`.'
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: '#/components/schemas/DrillResult'
+                  - $ref: '#/components/schemas/DrillReport'
+              examples:
+                one-app:
+                  summary: one app
+                  value:
+                    app: gitea
+                    archive: /home/you/backups/backup_2026-10-25_115840.971.tar.gz
+                    size: 1.7 KB
+                    file_count: 9
+                    integrity: true
+                    booted: true
+                    boot_seconds: 0
+                    health_status: 200
+                    health_port: '41397'
+                    passed: true
+                    total_seconds: 3
+                    drilled_at: '2026-10-25T18:58:42Z'
+                all-apps:
+                  summary: all apps
+                  value:
+                    results:
+                      - app: gitea
+                        archive: /home/you/backups/backup_2026-10-25_115840.971.tar.gz
+                        size: 1.7 KB
+                        file_count: 9
+                        integrity: true
+                        booted: true
+                        boot_seconds: 0
+                        health_status: 200
+                        health_port: '32851'
+                        passed: true
+                        total_seconds: 3
+                        drilled_at: '2026-10-25T18:58:46Z'
+                    total: 1
+                    passed: 1
+                    failed: 0
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotRegistered'
+        '500':
+          description: The drill could not start, for example because the app has no health check.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: no health check defined for "missing"
+  /api/backup/restore:
+    post:
+      tags:
+        - Backups
+      operationId: restoreBackup
+      summary: Restore backup
+      description: 'Writes the volumes in an archive back to the machine, replacing the data in them. Protection: token and `confirm_name` equal to `archive`. The restore refuses bind mounts that the archive declares: they come back in `refused` and nothing is written to them.'
+      x-protection: token+confirm_name
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RestoreRequest'
+            example:
+              archive: /home/you/backups/backup_2026-10-25_115840.971.tar.gz
+              service: gitea
+              confirm_name: /home/you/backups/backup_2026-10-25_115840.971.tar.gz
+      responses:
+        '200':
+          description: The services and volumes that were restored.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RestoreResult'
+              example:
+                archive: /home/you/backups/backup_2026-10-25_115840.971.tar.gz
+                services:
+                  - gitea
+                volumes: 1
+        '400':
+          description: '`confirm_name` is missing or does not equal `archive`. The message repeats the value to send.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              examples:
+                no-confirm:
+                  summary: no confirm
+                  value:
+                    error: 'backup_restore cannot be undone: send confirm_name="/home/you/backups/backup_2026-10-25_115840.971.tar.gz" to say that is the one you meant'
+                wrong-name:
+                  summary: wrong name
+                  value:
+                    error: 'backup_restore cannot be undone: send confirm_name="/home/you/backups/backup_2026-10-25_115840.971.tar.gz" to say that is the one you meant'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotRegistered'
+        '500':
+          description: The restore failed, for example because the archive does not exist.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: 'archive not found: /home/you/backups/none.tar.gz'
+  /api/install:
+    get:
+      tags:
+        - Install
+      operationId: listApps
+      summary: List apps
+      description: Lists the apps homebutler can install. Use a `name` from this list as the `app` path parameter of the other install routes.
+      x-protection: none
+      responses:
+        '200':
+          description: The catalogue. The example is shortened.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/InstallApp'
+              example:
+                - name: pi-hole
+                  description: Network-wide ad blocking via DNS filtering
+                  default_port: '8088'
+                  container_port: '80'
+                  data_path: /etc/pihole
+                - name: vaultwarden
+                  description: Lightweight Bitwarden-compatible password manager
+                  default_port: '8080'
+                  container_port: '80'
+                  data_path: /data
+                - name: jellyfin
+                  description: Free software media system for streaming movies, TV, and music
+                  default_port: '8096'
+                  container_port: '8096'
+                  data_path: /config
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /api/install/{app}:
+    get:
+      tags:
+        - Install
+      operationId: getAppStatus
+      summary: Get app status
+      description: 'Returns whether one catalogue app is installed and, when it is, whether its containers are running. An app that was never installed answers `installed: false` with status `200`.'
+      x-protection: none
+      parameters:
+        - $ref: '#/components/parameters/App'
+      responses:
+        '200':
+          description: The install state.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InstallStatus'
+              examples:
+                installed:
+                  summary: installed
+                  value:
+                    app: it-tools
+                    installed: true
+                    state: running
+                not-installed:
+                  summary: not installed
+                  value:
+                    app: it-tools
+                    installed: false
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          description: The catalogue has no app with this name.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: unknown app nope
+        '500':
+          description: The state of the app could not be read.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: <message>
+    post:
+      tags:
+        - Install
+      operationId: installApp
+      summary: Install app
+      description: 'Writes the app''s compose file under `~/.homebutler/apps/<app>` and starts it. Protection: token. A failed pre-flight check, such as a port that is taken, returns `200` with `status` set to `failed` and the reasons in `issues`, so you can change the port and ask again.'
+      x-protection: token
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/App'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InstallRequest'
+            example:
+              port: '18620'
+      responses:
+        '200':
+          description: '`status` is `installed`, or `failed` with `issues`.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InstallResult'
+              examples:
+                installed:
+                  summary: installed
+                  value:
+                    status: installed
+                    app: it-tools
+                    port: '18620'
+                    path: /home/you/.homebutler/apps/it-tools
+                    state: running
+                port-in-use:
+                  summary: port in use
+                  value:
+                    status: failed
+                    app: it-tools
+                    issues:
+                      - |-
+                        port 8620 is already in use by in use.
+                            Use --port <number> to pick a different port
+                      - |-
+                        it-tools is already running.
+                            Run: homebutler install uninstall it-tools
+                    port: '18620'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          description: 'The catalogue has no app with this name. When the server has no token, the route is not registered and answers `{"error": "no such endpoint"}`.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              examples:
+                unknown-app:
+                  summary: unknown app
+                  value:
+                    error: unknown app "nope"
+                no-token-configured:
+                  summary: no token configured
+                  value:
+                    error: no such endpoint
+        '500':
+          description: Docker compose failed to start the app.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: <message>
+  /api/install/{app}/uninstall:
+    post:
+      tags:
+        - Install
+      operationId: uninstallApp
+      summary: Uninstall app
+      description: 'Stops the app and removes its containers. The app''s data stays on disk, and installing again picks it up. Protection: token.'
+      x-protection: token
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/App'
+      responses:
+        '200':
+          description: The app was uninstalled and its data kept.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InstallResult'
+              example:
+                status: uninstalled
+                app: it-tools
+                data_preserved: true
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotRegistered'
+        '500':
+          description: The app is not installed, or Docker compose failed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: it-tools is not installed
+  /api/install/{app}/purge:
+    post:
+      tags:
+        - Install
+      operationId: purgeApp
+      summary: Purge app
+      description: 'Removes the app''s containers and deletes its data volumes. The data does not come back. Protection: token and `confirm_name` equal to the `app` in the path.'
+      x-protection: token+confirm_name
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/App'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PurgeRequest'
+            example:
+              confirm_name: it-tools
+      responses:
+        '200':
+          description: The app and its data are gone.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InstallResult'
+              example:
+                status: purged
+                app: it-tools
+                data_preserved: false
+        '400':
+          description: '`confirm_name` is missing or does not equal the app name. The message repeats the value to send.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              examples:
+                no-confirm:
+                  summary: no confirm
+                  value:
+                    error: 'install_purge cannot be undone: send confirm_name="it-tools" to say that is the one you meant'
+                wrong-name:
+                  summary: wrong name
+                  value:
+                    error: 'install_purge cannot be undone: send confirm_name="it-tools" to say that is the one you meant'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotRegistered'
+        '500':
+          description: The app is not installed, or Docker compose failed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: <message>
+  /api/proxmox/endpoints:
+    get:
+      tags:
+        - Proxmox
+      operationId: listProxmoxEndpoints
+      summary: List Proxmox endpoints
+      description: Lists the Proxmox VE endpoints in your configuration. Use a `name` as the `endpoint` query parameter on the other Proxmox routes. With one endpoint configured, the other routes need no `endpoint`.
+      x-protection: none
+      responses:
+        '200':
+          description: The endpoint names.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ProxmoxEndpoint'
+              example:
+                - name: pve
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /api/proxmox/status:
+    get:
+      tags:
+        - Proxmox
+      operationId: getProxmoxStatus
+      summary: Get Proxmox status
+      description: Reads the version, cluster, nodes, guests and storage of one Proxmox VE endpoint with its read-only token. When the endpoint cannot be read, the route answers `200` with `status` set to `stale` and the last reading, or `unavailable` and empty lists when there has been none.
+      x-protection: none
+      parameters:
+        - $ref: '#/components/parameters/Endpoint'
+      responses:
+        '200':
+          description: The reading and how current it is.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProxmoxStatus'
+              example:
+                version:
+                  version: ''
+                  release: ''
+                cluster: []
+                resources:
+                  nodes: []
+                  guests: []
+                  storage: []
+                failed_collectors:
+                  - version
+                  - cluster
+                  - resources
+                failure_classes:
+                  cluster: transport
+                  resources: transport
+                  version: transport
+                status: unavailable
+                failure_class: transport
+        '400':
+          description: '`endpoint` names no configured endpoint, or several are configured and none was named.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: 'proxmox endpoint "nope" not found in config. Available endpoints: [pve]'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /api/proxmox/guests:
+    get:
+      tags:
+        - Proxmox
+      operationId: listProxmoxGuests
+      summary: List Proxmox guests
+      description: Lists the virtual machines and containers on an endpoint. Use `vmid`, `node` and `type` from an entry in the guest action routes. The filters combine.
+      x-protection: none
+      parameters:
+        - $ref: '#/components/parameters/Endpoint'
+        - name: node
+          in: query
+          description: Return only guests on this node.
+          schema:
+            type: string
+            example: pve
+        - name: status
+          in: query
+          description: Return only guests with this status, such as `running` or `stopped`.
+          schema:
+            type: string
+            example: running
+        - name: type
+          in: query
+          description: Return only guests of this type.
+          schema:
+            type: string
+            enum:
+              - qemu
+              - lxc
+      responses:
+        '200':
+          description: The matching guests.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ProxmoxGuest'
+              example: No example captured. This response needs a condition the test server could not produce.
+        '400':
+          description: '`endpoint` names no configured endpoint, or its credentials are missing.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: 'proxmox endpoint "nope" not found in config. Available endpoints: [pve]'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          description: The endpoint did not answer. The message is the request error.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: 'proxmox request /api2/json/cluster/resources: Get "https://127.0.0.1:8699/api2/json/cluster/resources": dial tcp 127.0.0.1:8699: connect: connection refused'
+  /api/proxmox/guests/{vmid}/start:
+    post:
+      tags:
+        - Proxmox
+      operationId: startProxmoxGuest
+      summary: Start Proxmox guest
+      description: 'Starts a guest with the endpoint''s action token. Protection: token. Proxmox runs the start as a task, and the route returns once Proxmox accepts it, with the task id in `upid`. Without an action token on the endpoint the route answers `400`: it never falls back to the read-only token.'
+      x-protection: token
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/Vmid'
+        - $ref: '#/components/parameters/Endpoint'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GuestActionRequest'
+            example:
+              node: pve
+              type: qemu
+      responses:
+        '200':
+          description: Proxmox accepted the task.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GuestActionResult'
+              example: No example captured. This response needs a condition the test server could not produce.
+        '400':
+          description: '`node` or `type` is missing, `vmid` is not a number, or the endpoint or its action token is not configured.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              examples:
+                no-node:
+                  summary: no node
+                  value:
+                    error: 'node and type are required: a guest is addressed explicitly, never guessed'
+                bad-vmid:
+                  summary: bad vmid
+                  value:
+                    error: vmid must be a number
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotRegistered'
+        '500':
+          description: Proxmox did not answer or refused. The message is the request error.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: 'proxmox request /api2/json/nodes/pve/qemu/100/status/start: Post "https://127.0.0.1:8699/api2/json/nodes/pve/qemu/100/status/start": dial tcp 127.0.0.1:8699: connect: connection refused'
+  /api/proxmox/guests/{vmid}/reboot:
+    post:
+      tags:
+        - Proxmox
+      operationId: rebootProxmoxGuest
+      summary: Reboot Proxmox guest
+      description: 'Reboots a guest with the endpoint''s action token. Protection: token. The guest comes back by itself, so no confirmation is asked. The route returns once Proxmox accepts the task.'
+      x-protection: token
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/Vmid'
+        - $ref: '#/components/parameters/Endpoint'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GuestActionRequest'
+            example:
+              node: pve
+              type: qemu
+      responses:
+        '200':
+          description: Proxmox accepted the task.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GuestActionResult'
+              example: No example captured. This response needs a condition the test server could not produce.
+        '400':
+          description: '`node` or `type` is missing, `vmid` is not a number, or the endpoint or its action token is not configured.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: 'node and type are required: a guest is addressed explicitly, never guessed'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotRegistered'
+        '500':
+          description: Proxmox did not answer or refused. The message is the request error.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: 'proxmox request /api2/json/nodes/pve/qemu/100/status/reboot: Post "https://127.0.0.1:8699/api2/json/nodes/pve/qemu/100/status/reboot": dial tcp 127.0.0.1:8699: connect: connection refused'
+  /api/proxmox/guests/{vmid}/shutdown:
+    post:
+      tags:
+        - Proxmox
+      operationId: shutdownProxmoxGuest
+      summary: Shut down Proxmox guest
+      description: 'Asks a guest to shut down with the endpoint''s action token. Protection: token and `confirm: true` in the body. The route returns once Proxmox accepts the task.'
+      x-protection: token+confirm
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/Vmid'
+        - $ref: '#/components/parameters/Endpoint'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GuestShutdownRequest'
+            example:
+              node: pve
+              type: qemu
+              confirm: true
+      responses:
+        '200':
+          description: Proxmox accepted the task.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GuestActionResult'
+              example: No example captured. This response needs a condition the test server could not produce.
+        '400':
+          description: '`confirm` is not `true`, `node` or `type` is missing, `vmid` is not a number, or the endpoint or its action token is not configured.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              examples:
+                no-confirm:
+                  summary: no confirm
+                  value:
+                    error: 'proxmox_guest_shutdown stops a running service: send confirm=true to say that is what you meant'
+                no-node:
+                  summary: no node
+                  value:
+                    error: 'node and type are required: a guest is addressed explicitly, never guessed'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotRegistered'
+        '500':
+          description: Proxmox did not answer or refused. The message is the request error.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: 'proxmox request /api2/json/nodes/pve/qemu/100/status/shutdown: Post "https://127.0.0.1:8699/api2/json/nodes/pve/qemu/100/status/shutdown": dial tcp 127.0.0.1:8699: connect: connection refused'
+  /api/wake:
+    get:
+      tags:
+        - Wake and notify
+      operationId: listWakeTargets
+      summary: List wake targets
+      description: Lists the machines in `wake:` of your config. Use a `name` as the path parameter of [Send wake packet](/reference/api/wake-and-notify/send-wake-packet).
+      x-protection: none
+      responses:
+        '200':
+          description: The wake targets.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/WakeTarget'
+              example:
+                - mac: AA:BB:CC:DD:EE:FF
+                  name: desktop
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /api/wake/{name}:
+    post:
+      tags:
+        - Wake and notify
+      operationId: sendWakePacket
+      summary: Send wake packet
+      description: 'Sends a Wake-on-LAN magic packet to one target. Protection: token. A target without a broadcast address in the config uses `255.255.255.255`.'
+      x-protection: token
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: name
+          in: path
+          required: true
+          description: The wake target `name`, from [List wake targets](/reference/api/wake-and-notify/list-wake-targets).
+          schema:
+            type: string
+            example: desktop
+      responses:
+        '200':
+          description: The packet was sent.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WakeResult'
+              example:
+                action: wake
+                mac: AA:BB:CC:DD:EE:FF
+                broadcast: 127.0.0.255
+                status: sent
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          description: 'No wake target has this name. When the server has no token, the route is not registered and answers `{"error": "no such endpoint"}`.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              examples:
+                unknown-target:
+                  summary: unknown target
+                  value:
+                    error: wake target "nope" not found
+                no-token-configured:
+                  summary: no token configured
+                  value:
+                    error: no such endpoint
+        '500':
+          description: The packet could not be sent.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: <message>
+  /api/notify/test:
+    post:
+      tags:
+        - Wake and notify
+      operationId: sendTestNotification
+      summary: Send test notification
+      description: 'Sends one real test message through every configured notification channel. Protection: token. A channel that fails is a result with `sent` set to `false` and an `error`, not an error response, so one broken channel does not hide the others.'
+      x-protection: token
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: One result per configured channel.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotifyTestResponse'
+              example:
+                results:
+                  - channel: webhook
+                    sent: true
+                  - channel: ntfy
+                    sent: true
+        '400':
+          description: No notification channel is configured.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: no notification channel is configured yet
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotRegistered'
+  /api/config:
+    get:
+      tags:
+        - Config
+      operationId: getConfig
+      summary: Get config
+      description: 'Returns the settings the dashboard shows: servers, Proxmox endpoints, alert thresholds, wake targets and notification channels. Secrets are never returned. A credential appears as a `set` flag, and a notification field that is not a secret appears with its `value`. When the server has a token, the response carries a `revision` to send back with a save.'
+      x-protection: none
+      responses:
+        '200':
+          description: The current settings.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConfigResponse'
+              example:
+                alerts:
+                  cpu: 90
+                  disk: 90
+                  memory: 85
+                editable: true
+                notify:
+                  - channel: telegram
+                    configured: false
+                    fields:
+                      - name: bot_token
+                        secret: true
+                        set: false
+                      - name: chat_id
+                  - channel: slack
+                    configured: false
+                    fields:
+                      - name: webhook_url
+                        secret: true
+                        set: false
+                  - channel: discord
+                    configured: false
+                    fields:
+                      - name: webhook_url
+                        secret: true
+                        set: false
+                  - channel: webhook
+                    configured: true
+                    fields:
+                      - name: url
+                        secret: true
+                        set: true
+                  - channel: ntfy
+                    configured: false
+                    fields:
+                      - name: url
+                      - name: topic
+                        secret: true
+                        set: false
+                      - name: token
+                        secret: true
+                        optional: true
+                        set: false
+                  - channel: gotify
+                    configured: false
+                    fields:
+                      - name: url
+                      - name: token
+                        secret: true
+                        set: false
+                path: /home/you/.config/homebutler/config.yaml
+                proxmox:
+                  - action_token_id: power@pve!action
+                    action_token_in_file: false
+                    action_token_set: true
+                    host: 127.0.0.1
+                    name: pve
+                    port: 8699
+                    token_id: monitoring@pve!readonly
+                    token_in_file: false
+                    token_set: true
+                revision: 5dc27a5248d989362c784ef6616e8bcd949b22c5d7ff8ae1a1d3ff022a5ad009
+                servers:
+                  - auth: key
+                    host: 192.168.1.10
+                    key: ''
+                    local: true
+                    name: homelab
+                    password_set: false
+                    port: 0
+                    user: ''
+                  - auth: key
+                    host: 192.0.2.10
+                    key: ''
+                    local: false
+                    name: nas
+                    password_set: false
+                    port: 0
+                    user: admin
+                transport_warning: ''
+                wake:
+                  - broadcast: 127.0.0.255
+                    mac: AA:BB:CC:DD:EE:FF
+                    name: desktop
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /api/config/alerts:
+    put:
+      tags:
+        - Config
+      operationId: saveAlerts
+      summary: Save alert thresholds
+      description: 'Changes the CPU, memory or disk threshold in the config file. Protection: token. Send the `revision` from [Get config](/reference/api/config/get-config). A save changes only the fields you send. A running `watch` or `alerts` process reads thresholds when it starts, so `restart_needed` names the ones to restart.'
+      x-protection: token
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AlertsRequest'
+            example:
+              revision: de00b31a091f1c29664eba416271abe6acc33d96ed0dcf954cec6f9c0fd7cc9a
+              cpu: 91
+      responses:
+        '200':
+          description: The thresholds were saved.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SaveResponse'
+              example:
+                saved: true
+                revision: e1f870168b857bb64a55869ef60c659e39e636a94198af3b51e47f63cbacadf2
+                restart_needed:
+                  - watch
+                  - alerts
+        '400':
+          description: The body could not be read, the `revision` is missing, or no threshold was sent.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              examples:
+                no-revision:
+                  summary: no revision
+                  value:
+                    error: the request did not carry the revision it was made against
+                nothing-to-change:
+                  summary: nothing to change
+                  value:
+                    error: nothing to change
+                unreadable:
+                  summary: unreadable
+                  value:
+                    error: could not read the request
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotRegistered'
+        '409':
+          $ref: '#/components/responses/StaleRevision'
+        '413':
+          $ref: '#/components/responses/TooLarge'
+  /api/config/notify:
+    put:
+      tags:
+        - Config
+      operationId: saveNotify
+      summary: Save notification channels
+      description: 'Sets or removes notification channels in the config file. Protection: token. Each key of `channels` is a channel name from `notify` in [Get config](/reference/api/config/get-config). Send a secret as `{"value": "..."}` to set it or `{"clear": true}` to remove it. A secret you leave out stays as it is. An empty value clears it.'
+      x-protection: token
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NotifyRequest'
+            example:
+              revision: de00b31a091f1c29664eba416271abe6acc33d96ed0dcf954cec6f9c0fd7cc9a
+              channels:
+                ntfy:
+                  values:
+                    url: http://127.0.0.1:8601
+                  secrets:
+                    topic:
+                      value: topic
+      responses:
+        '200':
+          description: The channels were saved.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SaveResponse'
+              example:
+                saved: true
+                revision: 3ff29896be315a3e897a2556189dcd430fa332cf0452051e7d0947e5cd9fae9e
+                restart_needed:
+                  - watch
+                  - alerts
+        '400':
+          description: The body could not be read, the `revision` is missing, or no channel was sent.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: <message>
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotRegistered'
+        '409':
+          $ref: '#/components/responses/StaleRevision'
+        '413':
+          $ref: '#/components/responses/TooLarge'
+  /api/config/wake:
+    put:
+      tags:
+        - Config
+      operationId: saveWake
+      summary: Save wake targets
+      description: 'Adds, changes or removes Wake-on-LAN targets in the config file. Protection: token. A wake target is usable as soon as it is saved, so `restart_needed` is absent.'
+      x-protection: token
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WakeRequest'
+            example:
+              revision: de00b31a091f1c29664eba416271abe6acc33d96ed0dcf954cec6f9c0fd7cc9a
+              targets:
+                - name: nas
+                  mac: '11:22:33:44:55:66'
+                  broadcast: 127.0.0.255
+      responses:
+        '200':
+          description: The targets were saved.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SaveResponse'
+              example:
+                saved: true
+                revision: a98893f99695e4cde28d74934671b5ca88a938dd7c0e28cdb2f80ea598f44409
+        '400':
+          description: The body could not be read, the `revision` is missing, or `targets` is empty.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: nothing to change
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotRegistered'
+        '409':
+          $ref: '#/components/responses/StaleRevision'
+        '413':
+          $ref: '#/components/responses/TooLarge'
+  /api/config/servers:
+    put:
+      tags:
+        - Config
+      operationId: saveServers
+      summary: Save servers
+      description: 'Adds, changes, renames or removes servers in the config file. Protection: token. A field you leave out stays as it is. The key file of a server is not settable here. Moving a server to a new address returns a notice, because the new address is trusted the first time homebutler connects to it.'
+      x-protection: token
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ServersRequest'
+            example:
+              revision: de00b31a091f1c29664eba416271abe6acc33d96ed0dcf954cec6f9c0fd7cc9a
+              servers:
+                - name: pi
+                  host: 192.0.2.30
+                  user: pi
+                  port: 22
+                  auth: key
+      responses:
+        '200':
+          description: The servers were saved.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SaveResponse'
+              examples:
+                added:
+                  summary: added
+                  value:
+                    saved: true
+                    revision: d47bdc36d4fb839661c6783037afd91ad882b08a61474467b0d3ca6abf3d1d60
+                    restart_needed:
+                      - watch
+                address-moved:
+                  summary: address moved
+                  value:
+                    saved: true
+                    revision: 7271eceb719fa059ea0ac78c1e90adb8b8673d80a18ba66af305572bdeb54fa6
+                    restart_needed:
+                      - watch
+                    notices:
+                      - pi now points at 192.0.2.31, and that address is trusted the first time homebutler connects to it. Check it is the machine you mean.
+        '400':
+          description: The body could not be read, the `revision` is missing, or `servers` is empty.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: could not read the request
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotRegistered'
+        '409':
+          $ref: '#/components/responses/StaleRevision'
+        '413':
+          $ref: '#/components/responses/TooLarge'
+  /api/config/proxmox:
+    put:
+      tags:
+        - Config
+      operationId: saveProxmox
+      summary: Save Proxmox endpoints
+      description: 'Adds, changes, renames or removes Proxmox endpoints in the config file. Protection: token. A token you leave out stays as it is. Send a token as `{"value": "..."}` to set it or `{"clear": true}` to remove it.'
+      x-protection: token
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProxmoxRequest'
+            example:
+              revision: de00b31a091f1c29664eba416271abe6acc33d96ed0dcf954cec6f9c0fd7cc9a
+              endpoints:
+                - name: pve
+                  host: 192.0.2.40
+                  port: 8006
+                  token_id: monitoring@pve!ro
+                  token:
+                    value: 11111111-1111-1111-1111-111111111111
+      responses:
+        '200':
+          description: The endpoints were saved.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SaveResponse'
+              example:
+                saved: true
+                revision: 1867f7424ec647c39d6b1b76ce83a208aed331f72dadc51205788c509a93e50f
+                restart_needed:
+                  - watch
+        '400':
+          description: The body could not be read, the `revision` is missing, or `endpoints` is empty.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: <message>
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotRegistered'
+        '409':
+          $ref: '#/components/responses/StaleRevision'
+        '413':
+          $ref: '#/components/responses/TooLarge'
+  /api/capabilities:
+    get:
+      tags:
+        - Meta
+      operationId: listCapabilities
+      summary: List capabilities
+      description: 'Lists everything homebutler can do, with its risk class (`read`, `write` or `destructive`), what it can be pointed at, and the route that reaches it. A capability with no `method` and `path` has no route: `absent` says why.'
+      x-protection: none
+      responses:
+        '200':
+          description: The capabilities, sorted by name. The example is shortened.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Capability'
+              example:
+                - name: alerts
+                  description: Check resource alerts for CPU, memory, and disk usage against configured thresholds. It reads and compares; nothing is sent anywhere and nothing is recorded, which is what a running watcher does instead
+                  risk: read
+                  targets:
+                    - local
+                    - server
+                  method: GET
+                  path: /api/alerts
+                - name: alerts_history
+                  description: Show recorded alert and remediation history. Entries are only written while a watcher is running, so an empty list means nothing was recording rather than nothing went wrong
+                  risk: read
+                  targets:
+                    - local
+                    - server
+                  absent: no view built for it yet
+                - name: backup_create
+                  description: Create a Docker compose backup archive for all services or one service. Volumes are read while the containers run, so a database mid-write can land inconsistent; an archive is not evidence it restores, which is what backup_drill answers
+                  risk: write
+                  targets:
+                    - local
+                    - server
+                  method: POST
+                  path: /api/backup
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /api/version:
+    get:
+      tags:
+        - Meta
+      operationId: getVersion
+      summary: Get version
+      description: Returns the version of the running homebutler.
+      x-protection: none
+      responses:
+        '200':
+          description: The version.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Version'
+              example:
+                version: 1.7.0
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /api/:
+    options:
+      tags:
+        - Meta
+      operationId: preflight
+      summary: Answer a CORS preflight
+      description: Answers a browser's CORS preflight for any `/api/` path. The route needs no token. For an `Origin` of `http://localhost:<port>`, `http://127.0.0.1:<port>` or `http://<host>:<port>` (the address the server is bound to), the response carries the `Access-Control-Allow-*` headers, and every other origin gets none. The same headers are added to a normal response from a route when the request has one of those origins. `Access-Control-Allow-Methods` lists `GET, POST, OPTIONS`, which leaves out `PUT`, the method of the config save routes.
+      x-protection: none
+      security: []
+      parameters:
+        - name: Origin
+          in: header
+          description: The origin of the page making the cross-origin request.
+          schema:
+            type: string
+            example: http://localhost:8080
+      responses:
+        '204':
+          description: No body. The allow headers are present only for a matching origin.
+          headers:
+            Access-Control-Allow-Origin:
+              description: The request's `Origin`, echoed back.
+              schema:
+                type: string
+            Access-Control-Allow-Methods:
+              description: '`GET, POST, OPTIONS`. `PUT` is not in the list.'
+              schema:
+                type: string
+            Access-Control-Allow-Headers:
+              description: '`Content-Type, Authorization`.'
+              schema:
+                type: string
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      description: 'The token you start the server with: `homebutler serve --token <token>`, or `web.token` in the config file. Send it as `Authorization: Bearer <token>`. When the server has a token, every `/api/` route except the CORS preflight requires it, reads included.'
+  parameters:
+    Server:
+      name: server
+      in: query
+      description: The `name` of a remote server from [List servers](/reference/api/overview-and-servers/list-servers). homebutler runs the command on it over SSH and returns its answer. Leave it out, name the local server, or name a server that is not in the config, to read this machine.
+      schema:
+        type: string
+        example: nas
+    Endpoint:
+      name: endpoint
+      in: query
+      description: The `name` of a Proxmox endpoint from [List Proxmox endpoints](/reference/api/proxmox/list-proxmox-endpoints). Needed when more than one is configured.
+      schema:
+        type: string
+        example: pve
+    App:
+      name: app
+      in: path
+      required: true
+      description: The app `name` from [List apps](/reference/api/install/list-apps).
+      schema:
+        type: string
+        example: it-tools
+    Vmid:
+      name: vmid
+      in: path
+      required: true
+      description: The numeric guest id, from [List Proxmox guests](/reference/api/proxmox/list-proxmox-guests).
+      schema:
+        type: integer
+        example: 100
+  responses:
+    Unauthorized:
+      description: The server runs with a token, and the `Authorization` header is missing or does not match it.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error: unauthorized
+    NotRegistered:
+      description: The server runs without a token, so this route does not exist.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error: no such endpoint
+    StaleRevision:
+      description: The config file changed since the `revision` was issued, or the revision came from an earlier run of the server. Get the config again and resend.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error: the config file changed on disk since this page loaded it; reload before saving
+    TooLarge:
+      description: The request body is larger than 1 MiB.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error: that is larger than a settings change should ever be
+  schemas:
+    Error:
+      type: object
+      required:
+        - error
+      properties:
+        error:
+          type: string
+          description: A sentence that says what went wrong.
+    CPUInfo:
+      type: object
+      required:
+        - usage_percent
+        - cores
+      properties:
+        usage_percent:
+          type: number
+          description: CPU use in percent.
+        cores:
+          type: integer
+          description: Number of CPU cores.
+    MemInfo:
+      type: object
+      required:
+        - total_gb
+        - used_gb
+        - usage_percent
+      properties:
+        total_gb:
+          type: number
+          description: Total memory in GB.
+        used_gb:
+          type: number
+          description: Used memory in GB.
+        usage_percent:
+          type: number
+          description: Memory use in percent.
+    DiskInfo:
+      type: object
+      required:
+        - mount
+        - total_gb
+        - used_gb
+        - usage_percent
+      properties:
+        mount:
+          type: string
+          description: Mount point.
+        total_gb:
+          type: number
+          description: Size in GB.
+        used_gb:
+          type: number
+          description: Used space in GB.
+        usage_percent:
+          type: number
+          description: Used space in percent.
+    StatusInfo:
+      type: object
+      required:
+        - hostname
+        - os
+        - arch
+        - uptime
+        - cpu
+        - memory
+        - disks
+        - time
+      properties:
+        hostname:
+          type: string
+          description: Host name.
+        os:
+          type: string
+          description: Operating system, such as `linux`.
+        arch:
+          type: string
+          description: CPU architecture, such as `amd64`.
+        uptime:
+          type: string
+          description: Time since boot, as text such as `15h 15m`.
+        cpu:
+          $ref: '#/components/schemas/CPUInfo'
+        memory:
+          $ref: '#/components/schemas/MemInfo'
+        disks:
+          type: array
+          description: One entry per mounted disk.
+          items:
+            $ref: '#/components/schemas/DiskInfo'
+        time:
+          type: string
+          description: The time of the reading, RFC 3339 with the machine's offset.
+    StatusDoc:
+      description: The system status document. It is frozen at schema version 1.
+      allOf:
+        - $ref: '#/components/schemas/StatusInfo'
+        - type: object
+          required:
+            - schema_version
+          properties:
+            schema_version:
+              type: integer
+              description: The version of this document's shape. It is `1`.
+    ServerInfo:
+      type: object
+      required:
+        - name
+        - host
+        - local
+      properties:
+        name:
+          type: string
+          description: The server's name in your config.
+        host:
+          type: string
+          description: The server's address.
+        local:
+          type: boolean
+          description: '`true` for the machine homebutler runs on.'
+    ServerReading:
+      type: object
+      required:
+        - name
+        - host
+        - local
+        - status
+      properties:
+        name:
+          type: string
+          description: The server's name in your config.
+        host:
+          type: string
+          description: The server's address.
+        local:
+          type: boolean
+          description: '`true` for the machine homebutler runs on.'
+        status:
+          type: string
+          enum:
+            - current
+            - stale
+            - unavailable
+          description: '`current` is a reading taken now. `stale` is the last reading that worked, shown because a new one failed. `unavailable` means no reading has ever worked.'
+        updated_at:
+          type: string
+          format: date-time
+          description: When `system` was read. Absent when `status` is `unavailable`.
+        system:
+          $ref: '#/components/schemas/StatusInfo'
+        failure_class:
+          type: string
+          enum:
+            - unreachable
+            - host_key
+            - authentication
+            - remote
+          description: Why a new reading failed. Absent when `status` is `current`.
+        message:
+          type: string
+          description: A sentence that describes the failure. Absent when `status` is `current`.
+    Overview:
+      type: object
+      required:
+        - collected_at
+        - servers
+      properties:
+        collected_at:
+          type: string
+          format: date-time
+          description: When this response was assembled.
+        servers:
+          type: array
+          description: One entry per configured server, in configuration order.
+          items:
+            $ref: '#/components/schemas/ServerReading'
+    ProcessInfo:
+      type: object
+      required:
+        - pid
+        - name
+        - cpu
+        - mem
+        - rss
+      properties:
+        pid:
+          type: integer
+          description: Process id.
+        name:
+          type: string
+          description: Process name.
+        cpu:
+          type: number
+          description: CPU use in percent.
+        mem:
+          type: number
+          description: Memory use in percent.
+        rss:
+          type: integer
+          description: Resident memory in KB.
+        state:
+          type: string
+          description: Process state letter, such as `R` or `S`.
+        zombie:
+          type: boolean
+          description: '`true` for a zombie process.'
+    PortInfo:
+      type: object
+      required:
+        - protocol
+        - address
+        - port
+      properties:
+        protocol:
+          type: string
+          description: '`tcp`.'
+        address:
+          type: string
+          description: The address the port listens on.
+        port:
+          type: string
+          description: The port number.
+        container:
+          type: string
+          description: The Docker container that publishes the port, as `name (image)`.
+        pid:
+          type: string
+          description: The owning process id, when readable.
+        process:
+          type: string
+          description: The owning process name, when readable.
+    PortsResult:
+      type: object
+      required:
+        - ports
+      properties:
+        ports:
+          type: array
+          items:
+            $ref: '#/components/schemas/PortInfo'
+          description: The listening ports.
+        missing_process:
+          type: boolean
+          description: '`true` when the process behind some ports could not be read.'
+    Finding:
+      type: object
+      required:
+        - kind
+        - text
+      properties:
+        kind:
+          type: string
+          description: What the finding is about, such as `disk` or `container`.
+        target:
+          type: string
+          description: The disk, container or port it names.
+        text:
+          type: string
+          description: A sentence for a person.
+    ChangeLine:
+      type: object
+      required:
+        - kind
+        - target
+        - text
+      properties:
+        kind:
+          type: string
+          enum:
+            - gone
+            - new
+            - replaced
+            - image
+            - state
+            - port
+            - disk
+            - skipped
+          description: What changed.
+        target:
+          type: string
+          description: What changed.
+        detail:
+          type: string
+          description: The change, such as `running → exited`.
+        text:
+          type: string
+          description: A sentence for a person.
+    ReportAction:
+      type: object
+      required:
+        - text
+      properties:
+        text:
+          type: string
+          description: What to do.
+        command:
+          type: string
+          description: The command that does it.
+        runner:
+          type: string
+          enum:
+            - mcp
+            - cli
+            - shell
+          description: Where the command runs.
+        tool:
+          type: string
+          description: The MCP tool that does it, when `runner` is `mcp`.
+    Report:
+      type: object
+      required:
+        - schema_version
+        - timestamp
+        - server_name
+        - is_baseline
+        - snapshot_saved
+        - status
+        - needs_attention
+        - notable_changes
+        - suggested_actions
+        - running_count
+        - stopped_count
+        - public_port_count
+      properties:
+        schema_version:
+          type: integer
+          description: The version of this document's shape. It is `1`.
+        timestamp:
+          type: string
+          description: When the report was built, RFC 3339 in UTC.
+        server_name:
+          type: string
+          description: The name of the server the report is about.
+        is_baseline:
+          type: boolean
+          description: '`true` when there was no snapshot to compare against.'
+        snapshot_saved:
+          type: boolean
+          description: '`true` when this report was saved as the new snapshot.'
+        compared_to:
+          type: string
+          description: The timestamp of the snapshot this report was compared with. Absent for a baseline.
+        system:
+          $ref: '#/components/schemas/StatusInfo'
+        running_count:
+          type:
+            - integer
+            - 'null'
+          description: Running containers. `null` when Docker did not answer.
+        stopped_count:
+          type:
+            - integer
+            - 'null'
+          description: Stopped containers. `null` when Docker did not answer.
+        public_port_count:
+          type:
+            - integer
+            - 'null'
+          description: Ports open to the network. `null` when ports could not be listed.
+        status:
+          type: array
+          items:
+            type: string
+          description: One sentence per measured area.
+        needs_attention:
+          type: array
+          items:
+            $ref: '#/components/schemas/Finding'
+          description: Problems found now.
+        notable_changes:
+          type: array
+          items:
+            $ref: '#/components/schemas/ChangeLine'
+          description: Differences from the snapshot.
+        suggested_actions:
+          type: array
+          items:
+            $ref: '#/components/schemas/ReportAction'
+          description: Next steps, each with the command that runs it.
+        failed_collectors:
+          type: array
+          items:
+            type: string
+            enum:
+              - docker
+              - ports
+              - processes
+          description: The collectors that failed. A count is trustworthy only when its collector is absent here.
+        warnings:
+          type: array
+          items:
+            type: string
+          description: Problems that did not stop the report, such as an unreadable snapshot.
+    ReportResponse:
+      description: The report plus a count of each list, for widgets that cannot take the length of an array.
+      allOf:
+        - $ref: '#/components/schemas/Report'
+        - type: object
+          required:
+            - summary
+          properties:
+            summary:
+              type: object
+              required:
+                - needs_attention
+                - notable_changes
+              description: The length of each list.
+              properties:
+                needs_attention:
+                  type: integer
+                  description: Length of `needs_attention`.
+                notable_changes:
+                  type: integer
+                  description: Length of `notable_changes`.
+    DoctorFinding:
+      type: object
+      required:
+        - severity
+        - category
+        - title
+      properties:
+        severity:
+          type: string
+          enum:
+            - pass
+            - warn
+            - fail
+          description: How serious the finding is.
+        category:
+          type: string
+          enum:
+            - backup
+            - config
+            - docker
+            - exposure
+            - incomplete
+            - notifications
+            - overall
+            - proxmox
+            - report
+            - system
+            - watch
+          description: The area the check belongs to.
+        title:
+          type: string
+          description: What was found.
+        detail:
+          type: string
+          description: The evidence.
+        action:
+          type: string
+          description: What to do about it.
+        command:
+          type: string
+          description: The command that does it.
+        runner:
+          type: string
+          enum:
+            - mcp
+            - cli
+            - shell
+          description: Where the command runs.
+        tool:
+          type: string
+          description: The MCP tool that does it, when `runner` is `mcp`.
+    DoctorResult:
+      type: object
+      required:
+        - schema_version
+        - timestamp
+        - server_name
+        - status
+        - summary
+        - findings
+      properties:
+        schema_version:
+          type: integer
+          description: The version of this document's shape. It is `1`.
+        timestamp:
+          type: string
+          description: When the checks ran, RFC 3339 in UTC.
+        server_name:
+          type: string
+          description: The name of the server checked.
+        status:
+          type: string
+          enum:
+            - pass
+            - warn
+            - fail
+          description: The worst severity among the findings.
+        summary:
+          type: object
+          required:
+            - pass
+            - warn
+            - fail
+          description: The number of findings at each severity.
+          properties:
+            pass:
+              type: integer
+              description: Findings with severity `pass`.
+            warn:
+              type: integer
+              description: Findings with severity `warn`.
+            fail:
+              type: integer
+              description: Findings with severity `fail`.
+        findings:
+          type: array
+          items:
+            $ref: '#/components/schemas/DoctorFinding'
+          description: One entry per check.
+    Container:
+      type: object
+      required:
+        - id
+        - name
+        - image
+        - status
+        - state
+        - ports
+      properties:
+        id:
+          type: string
+          description: The short container id.
+        name:
+          type: string
+          description: The container name.
+        image:
+          type: string
+          description: The image the container runs.
+        status:
+          type: string
+          description: A sentence with the state and its age, such as `Running · 5s`.
+        state:
+          type: string
+          description: Docker's state word, such as `running` or `exited`.
+        ports:
+          type: string
+          description: The published ports as text. Empty when none.
+    ContainerList:
+      type: object
+      required:
+        - available
+        - containers
+      properties:
+        available:
+          type: boolean
+          description: '`false` when Docker did not answer.'
+        message:
+          type: string
+          description: Why Docker is unavailable. Present only when `available` is `false`.
+        containers:
+          type: array
+          items:
+            $ref: '#/components/schemas/Container'
+          description: The containers. Empty when Docker is unavailable.
+    ContainerStats:
+      type: object
+      required:
+        - id
+        - name
+        - cpu_percent
+        - mem_usage
+        - mem_percent
+        - net_io
+        - block_io
+        - pids
+      properties:
+        id:
+          type: string
+          description: The short container id.
+        name:
+          type: string
+          description: The container name.
+        cpu_percent:
+          type: string
+          description: CPU use as Docker prints it, such as `0.00%`.
+        mem_usage:
+          type: string
+          description: Memory used and the limit, such as `10.96MiB / 7.755GiB`.
+        mem_percent:
+          type: string
+          description: Memory use as a percentage string.
+        net_io:
+          type: string
+          description: Network bytes in and out.
+        block_io:
+          type: string
+          description: Disk bytes read and written.
+        pids:
+          type: string
+          description: The number of processes.
+    ContainerStatsList:
+      type: object
+      required:
+        - available
+        - stats
+      properties:
+        available:
+          type: boolean
+          description: '`false` when Docker did not answer.'
+        message:
+          type: string
+          description: Why Docker is unavailable. Present only when `available` is `false`.
+        stats:
+          type: array
+          items:
+            $ref: '#/components/schemas/ContainerStats'
+          description: One reading per running container. Empty when Docker is unavailable.
+    DockerActionResult:
+      type: object
+      required:
+        - action
+        - container
+        - status
+      properties:
+        action:
+          type: string
+          enum:
+            - restart
+            - stop
+          description: What was done.
+        container:
+          type: string
+          description: The container name.
+        status:
+          type: string
+          enum:
+            - ok
+          description: '`ok`.'
+    ConfirmRequest:
+      type: object
+      required:
+        - confirm
+      properties:
+        confirm:
+          type: boolean
+          enum:
+            - true
+          description: Must be the boolean `true`.
+    AlertItem:
+      type: object
+      required:
+        - status
+        - current
+        - threshold
+      properties:
+        status:
+          type: string
+          enum:
+            - ok
+            - warning
+            - critical
+          description: How the reading compares with the threshold.
+        current:
+          type: number
+          description: The reading in percent.
+        threshold:
+          type: number
+          description: The threshold from your config in percent.
+    DiskAlert:
+      allOf:
+        - $ref: '#/components/schemas/AlertItem'
+        - type: object
+          required:
+            - mount
+          properties:
+            mount:
+              type: string
+              description: The mount point checked.
+    AlertResult:
+      type: object
+      required:
+        - cpu
+        - memory
+        - disks
+      properties:
+        cpu:
+          $ref: '#/components/schemas/AlertItem'
+        memory:
+          $ref: '#/components/schemas/AlertItem'
+        disks:
+          type: array
+          items:
+            $ref: '#/components/schemas/DiskAlert'
+          description: One entry per mounted disk.
+    WatchTarget:
+      type: object
+      required:
+        - container
+        - added_at
+      properties:
+        container:
+          type: string
+          description: The name of the container, unit or app.
+        kind:
+          type: string
+          description: '`docker`, `systemd` or `pm2`.'
+        unit:
+          type: string
+          description: The container, service or app name. It defaults to `container`.
+        added_at:
+          type: string
+          format: date-time
+          description: When the target was added.
+    WatchOverview:
+      type: object
+      required:
+        - targets
+        - service
+        - retention
+      properties:
+        targets:
+          type: array
+          items:
+            $ref: '#/components/schemas/WatchTarget'
+          description: The watch list.
+        service:
+          type: object
+          required:
+            - installed
+          description: The service that polls the watch list.
+          properties:
+            installed:
+              type: boolean
+              description: '`true` when a unit file exists. It does not say the supervisor is running it.'
+            unit:
+              type: string
+              description: The path of the unit file.
+        retention:
+          type: object
+          required:
+            - kept
+            - max
+          description: How full the incident directory is.
+          properties:
+            kept:
+              type: integer
+              description: Incidents on disk.
+            max:
+              type: integer
+              description: The most incidents kept. `0` means unlimited.
+    CrashSummary:
+      type: object
+      required:
+        - category
+        - confidence
+        - exit_code
+        - reason
+      properties:
+        category:
+          type: string
+          enum:
+            - oom
+            - segfault
+            - sigterm
+            - panic
+            - dependency
+            - fatal_error
+            - timeout
+            - error
+            - clean_restart
+            - unknown
+          description: The kind of crash the logs point to.
+        confidence:
+          type: string
+          enum:
+            - high
+            - medium
+            - low
+          description: How sure the analysis is.
+        exit_code:
+          type: integer
+          description: The exit code of the previous run.
+        reason:
+          type: string
+          description: A sentence that explains the category.
+        signal:
+          type: string
+          description: The signal that ended the process, when there was one.
+        patterns:
+          type: array
+          items:
+            type: string
+          description: The log patterns that matched.
+    Flapping:
+      type: object
+      required:
+        - count
+        - is_flapping
+        - level
+        - since
+        - window
+      properties:
+        count:
+          type: integer
+          description: Restarts inside the window.
+        is_flapping:
+          type: boolean
+          description: '`true` when the restart count crossed the flapping threshold.'
+        level:
+          type: string
+          description: How severe the flapping is.
+        since:
+          type: string
+          format: date-time
+          description: The start of the window.
+        window:
+          type: string
+          description: The length of the window.
+    Incident:
+      type: object
+      required:
+        - id
+        - container
+        - detected_at
+        - restart_count
+        - prev_started_at
+        - curr_started_at
+        - pre_logs
+        - post_logs
+      properties:
+        id:
+          type: string
+          description: The incident id.
+        container:
+          type: string
+          description: The watch target that restarted.
+        detected_at:
+          type: string
+          format: date-time
+          description: When the restart was detected.
+        restart_count:
+          type: integer
+          description: Docker's restart count at detection.
+        prev_started_at:
+          type: string
+          description: When the previous run started, RFC 3339 in UTC, or an empty string when unknown.
+        curr_started_at:
+          type: string
+          description: When the current run started, RFC 3339 in UTC, or an empty string when unknown.
+        pre_logs:
+          type: string
+          description: Logs captured before the restart. Empty in a list.
+        post_logs:
+          type: string
+          description: Logs captured at detection. Empty in a list.
+        exit_code:
+          type:
+            - integer
+            - 'null'
+          description: The exit code of the previous run.
+        oom_killed:
+          type: boolean
+          description: '`true` when the kernel killed the process for memory.'
+        recovered:
+          type: boolean
+          description: '`true` when the target is running again.'
+        source:
+          type: string
+          description: Where the incident was detected.
+        proxmox_class:
+          type: string
+          description: The failure class, for a Proxmox guest.
+        proxmox_state:
+          type: string
+          description: The guest state, for a Proxmox guest.
+        crash_analysis:
+          $ref: '#/components/schemas/CrashSummary'
+        flapping:
+          $ref: '#/components/schemas/Flapping'
+    WatchAddRequest:
+      type: object
+      required:
+        - container
+      properties:
+        container:
+          type: string
+          description: The name of the container, systemd unit or pm2 app to watch.
+          example: flaky
+        kind:
+          type: string
+          enum:
+            - docker
+            - systemd
+            - pm2
+          default: docker
+          description: What kind of target it is.
+        unit:
+          type: string
+          description: The actual service or app name, when it differs from `container`.
+    WatchAddResult:
+      type: object
+      required:
+        - container
+        - kind
+        - added
+      properties:
+        container:
+          type: string
+          description: The target name.
+        kind:
+          type: string
+          description: The kind from the request, or `docker`.
+        added:
+          type: boolean
+          description: '`false` when the target was already on the list.'
+    WatchRemoveResult:
+      type: object
+      required:
+        - container
+        - removed
+      properties:
+        container:
+          type: string
+          description: The target name.
+        removed:
+          type: boolean
+          description: '`true`.'
+    WatchRunResult:
+      type: object
+      required:
+        - checked
+      properties:
+        checked:
+          type: integer
+          description: The number of targets inspected.
+        incidents:
+          type: array
+          items:
+            $ref: '#/components/schemas/Incident'
+          description: The incidents this check recorded. Absent when there were none.
+        skipped:
+          type: array
+          description: Targets a one-shot check cannot inspect.
+          items:
+            type: object
+            required:
+              - kind
+              - name
+            properties:
+              kind:
+                type: string
+                description: The target kind.
+              name:
+                type: string
+                description: The target name.
+    BackupRequest:
+      type: object
+      properties:
+        service:
+          type: string
+          description: Back up only this compose service. Without it, every running compose service is backed up.
+          example: gitea
+        exclude:
+          type: array
+          items:
+            type: string
+          description: Mount sources to leave out of the archive.
+    PruneResult:
+      type: object
+      required:
+        - kept
+        - kept_bytes
+      properties:
+        removed:
+          type: array
+          items:
+            type: string
+          description: The archives retention deleted.
+        freed_bytes:
+          type: integer
+          description: Bytes freed.
+        kept:
+          type: integer
+          description: Archives kept.
+        kept_bytes:
+          type: integer
+          description: Bytes kept.
+    BackupResult:
+      type: object
+      required:
+        - archive
+        - services
+        - volumes
+        - size
+      properties:
+        archive:
+          type: string
+          description: The path of the archive.
+        services:
+          type: array
+          items:
+            type: string
+          description: The compose services in the archive.
+        volumes:
+          type: integer
+          description: The number of mounts written.
+        size:
+          type: string
+          description: The archive size as text, such as `1.7 KB`.
+        skipped:
+          type: array
+          items:
+            type: string
+          description: Mounts left out by `exclude`, as `service:source`.
+        unmatched_excludes:
+          type: array
+          items:
+            type: string
+          description: Entries of `exclude` that matched no mount.
+        pruned:
+          $ref: '#/components/schemas/PruneResult'
+    BackupListEntry:
+      type: object
+      required:
+        - name
+        - path
+        - size
+        - created_at
+      properties:
+        name:
+          type: string
+          description: The file name.
+        path:
+          type: string
+          description: The full path. Use it as `archive`.
+        size:
+          type: string
+          description: The size as text.
+        created_at:
+          type: string
+          description: When the archive was written, RFC 3339.
+    DrillRequest:
+      type: object
+      properties:
+        app:
+          type: string
+          description: The app to drill, such as `gitea`. Without it, every app in the archive that has a health check is drilled.
+          example: gitea
+        archive:
+          type: string
+          description: The path of the archive. Without it, the newest archive in the backup directory.
+    DrillResult:
+      type: object
+      required:
+        - app
+        - archive
+        - size
+        - file_count
+        - integrity
+        - booted
+        - boot_seconds
+        - health_port
+        - health_status
+        - passed
+        - total_seconds
+        - drilled_at
+      properties:
+        app:
+          type: string
+          description: The app drilled.
+        archive:
+          type: string
+          description: The archive used.
+        size:
+          type: string
+          description: The archive size as text.
+        file_count:
+          type: integer
+          description: Files in the archive.
+        integrity:
+          type: boolean
+          description: '`true` when the archive read back without errors.'
+        booted:
+          type: boolean
+          description: '`true` when the container started.'
+        boot_seconds:
+          type: integer
+          description: Seconds the boot took.
+        health_port:
+          type: string
+          description: The host port the health check used.
+        health_status:
+          type: integer
+          description: The HTTP status the health endpoint answered with.
+        passed:
+          type: boolean
+          description: '`true` when every stage passed.'
+        total_seconds:
+          type: integer
+          description: Seconds the whole drill took.
+        drilled_at:
+          type: string
+          description: When the drill started, RFC 3339 in UTC.
+        error:
+          type: string
+          description: Why the drill failed.
+        logs:
+          type: string
+          description: The booted container's logs, when the drill failed.
+    DrillReport:
+      type: object
+      required:
+        - results
+        - total
+        - passed
+        - failed
+      properties:
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/DrillResult'
+          description: One result per app.
+        total:
+          type: integer
+          description: Apps drilled.
+        passed:
+          type: integer
+          description: Drills that passed.
+        failed:
+          type: integer
+          description: Drills that failed.
+    RestoreRequest:
+      type: object
+      required:
+        - archive
+        - confirm_name
+      properties:
+        archive:
+          type: string
+          description: The path of the archive, from [List backups](/reference/api/backups/list-backups).
+        service:
+          type: string
+          description: Restore only this service.
+        confirm_name:
+          type: string
+          description: The same value as `archive`.
+    RestoreResult:
+      type: object
+      required:
+        - archive
+        - services
+        - volumes
+      properties:
+        archive:
+          type: string
+          description: The archive restored.
+        services:
+          type: array
+          items:
+            type: string
+          description: The services restored.
+        volumes:
+          type: integer
+          description: The number of mounts written.
+        refused:
+          type: array
+          description: Mounts the restore would not write.
+          items:
+            type: object
+            required:
+              - service
+              - type
+              - target
+              - reason
+            properties:
+              service:
+                type: string
+                description: The service that declares the mount.
+              type:
+                type: string
+                description: The mount type, such as `bind`.
+              target:
+                type: string
+                description: The path on the machine.
+              reason:
+                type: string
+                description: Why it was refused.
+    InstallApp:
+      type: object
+      required:
+        - name
+        - description
+        - default_port
+        - container_port
+        - data_path
+      properties:
+        name:
+          type: string
+          description: The app name.
+        description:
+          type: string
+          description: What the app does.
+        default_port:
+          type: string
+          description: The host port used when you send none.
+        container_port:
+          type: string
+          description: The port inside the container.
+        data_path:
+          type: string
+          description: The data path inside the container.
+    InstallStatus:
+      type: object
+      required:
+        - app
+        - installed
+      properties:
+        app:
+          type: string
+          description: The app name.
+        installed:
+          type: boolean
+          description: '`true` when homebutler installed the app.'
+        state:
+          type: string
+          description: The containers' state, such as `running` or `stopped`. Present only when `installed` is `true`.
+    InstallRequest:
+      type: object
+      properties:
+        port:
+          type: string
+          description: The host port, as a string. It defaults to the app's `default_port`. A JSON number in its place is ignored, and the app installs on the default port.
+          example: '18620'
+    PurgeRequest:
+      type: object
+      required:
+        - confirm_name
+      properties:
+        confirm_name:
+          type: string
+          description: The same value as the `app` in the path.
+    InstallResult:
+      type: object
+      required:
+        - status
+        - app
+      properties:
+        status:
+          type: string
+          enum:
+            - installed
+            - failed
+            - uninstalled
+            - purged
+          description: What happened.
+        app:
+          type: string
+          description: The app name.
+        issues:
+          type: array
+          items:
+            type: string
+          description: Why a pre-flight check failed. Present when `status` is `failed`.
+        port:
+          type: string
+          description: The host port.
+        path:
+          type: string
+          description: The folder with the app's compose file and data.
+        state:
+          type: string
+          description: The containers' state after the install.
+        data_preserved:
+          type: boolean
+          description: '`true` after an uninstall, `false` after a purge.'
+        warning:
+          type: string
+          description: Present when an earlier install's state couldn't be carried over, or when part of the data is in Docker volumes outside the app directory.
+        kept_volumes:
+          type: array
+          items:
+            type: string
+          description: Volumes that still exist after a purge. Present only when not empty.
+        unchecked_volumes:
+          type: array
+          items:
+            type: string
+          description: Volumes Docker couldn't be asked about during a purge. Present only when not empty.
+    ProxmoxEndpoint:
+      type: object
+      required:
+        - name
+      properties:
+        name:
+          type: string
+          description: The endpoint name in your config.
+    ProxmoxCluster:
+      type: object
+      required:
+        - type
+      properties:
+        type:
+          type: string
+          description: '`cluster` or `node`.'
+        id:
+          type: string
+          description: The entry id.
+        name:
+          type: string
+          description: The cluster or node name.
+        ip:
+          type: string
+          description: The node address.
+        level:
+          type: string
+          description: The support level.
+        local:
+          type: boolean
+          description: '`true` for the node that answered.'
+        nodeid:
+          type: integer
+          description: The node id in the cluster.
+        nodes:
+          type: integer
+          description: The number of nodes.
+        online:
+          type: boolean
+          description: '`true` when the node is online.'
+        quorate:
+          type:
+            - boolean
+            - 'null'
+          description: '`true` when the cluster has quorum.'
+        version:
+          type: integer
+          description: The cluster config version.
+    ProxmoxGuest:
+      type: object
+      required:
+        - vmid
+        - node
+        - type
+        - status
+        - template
+      properties:
+        vmid:
+          type: integer
+          description: The guest id.
+        node:
+          type: string
+          description: The node the guest runs on.
+        type:
+          type: string
+          enum:
+            - qemu
+            - lxc
+          description: The guest type.
+        status:
+          type: string
+          description: The guest status, such as `running` or `stopped`.
+        template:
+          type: boolean
+          description: '`true` for a template.'
+        name:
+          type: string
+          description: The guest name.
+        cpu:
+          type: number
+          description: CPU use as a fraction of the allocation.
+        max_cpu:
+          type: number
+          description: The CPUs allocated.
+        mem:
+          type: integer
+          description: Memory used in bytes.
+        max_mem:
+          type: integer
+          description: Memory allocated in bytes.
+        disk:
+          type: integer
+          description: Disk used in bytes.
+        max_disk:
+          type: integer
+          description: Disk allocated in bytes.
+        net_in:
+          type: integer
+          description: Network bytes received.
+        net_out:
+          type: integer
+          description: Network bytes sent.
+        uptime:
+          type: integer
+          description: Seconds since the guest started.
+        lock:
+          type: string
+          description: The lock held on the guest, such as `backup`.
+        pool:
+          type: string
+          description: The resource pool.
+        tags:
+          type: array
+          items:
+            type: string
+          description: The guest's tags.
+    ProxmoxNode:
+      type: object
+      required:
+        - name
+        - status
+      properties:
+        name:
+          type: string
+          description: The node name.
+        status:
+          type: string
+          description: The node status, such as `online`.
+        level:
+          type: string
+          description: The support level.
+        local:
+          type: boolean
+          description: '`true` for the node that answered.'
+        cpu:
+          type: number
+          description: CPU use as a fraction.
+        max_cpu:
+          type: number
+          description: The CPUs available.
+        mem:
+          type: integer
+          description: Memory used in bytes.
+        max_mem:
+          type: integer
+          description: Memory available in bytes.
+        uptime:
+          type: integer
+          description: Seconds since boot.
+        ssl_fingerprint:
+          type: string
+          description: The node's TLS fingerprint.
+    ProxmoxStorage:
+      type: object
+      required:
+        - name
+      properties:
+        name:
+          type: string
+          description: The storage name.
+        node:
+          type: string
+          description: The node it is on.
+        type:
+          type: string
+          description: The storage type, such as `dir`.
+        status:
+          type: string
+          description: The storage status.
+        content:
+          type: string
+          description: What the storage holds.
+        shared:
+          type: boolean
+          description: '`true` when every node sees it.'
+        total:
+          type: integer
+          description: Size in bytes.
+        used:
+          type: integer
+          description: Used bytes.
+    ProxmoxStatus:
+      type: object
+      required:
+        - version
+        - cluster
+        - resources
+        - status
+      properties:
+        version:
+          type: object
+          required:
+            - version
+            - release
+          description: The Proxmox VE version.
+          properties:
+            version:
+              type: string
+              description: The version number.
+            release:
+              type: string
+              description: The release.
+            repo_id:
+              type: string
+              description: The repository id.
+        cluster:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProxmoxCluster'
+          description: The cluster and its nodes.
+        resources:
+          type: object
+          required:
+            - nodes
+            - guests
+            - storage
+          description: Everything Proxmox lists as a resource.
+          properties:
+            nodes:
+              type: array
+              items:
+                $ref: '#/components/schemas/ProxmoxNode'
+              description: The nodes.
+            guests:
+              type: array
+              items:
+                $ref: '#/components/schemas/ProxmoxGuest'
+              description: The virtual machines and containers.
+            storage:
+              type: array
+              items:
+                $ref: '#/components/schemas/ProxmoxStorage'
+              description: The storage.
+        failed_collectors:
+          type: array
+          items:
+            type: string
+            enum:
+              - version
+              - cluster
+              - resources
+          description: The reads that failed in this reading.
+        failure_classes:
+          type: object
+          additionalProperties:
+            type: string
+          description: The failure class of each failed read.
+        warnings:
+          type: array
+          items:
+            type: string
+          description: Problems that did not stop the reading.
+        status:
+          type: string
+          enum:
+            - current
+            - partially_readable
+            - stale
+            - unavailable
+          description: '`current` is a full reading taken now. `partially_readable` means some reads failed. `stale` is the last good reading, shown because a new one failed. `unavailable` means no reading has worked.'
+        updated_at:
+          type: string
+          format: date-time
+          description: When the readings were taken. Absent when `status` is `unavailable`.
+        failure_class:
+          type: string
+          enum:
+            - configuration
+            - response
+            - tls
+            - authentication
+            - authorization
+            - transport
+          description: Why a read failed.
+        message:
+          type: string
+          description: A sentence about the failure, when there is no class.
+        refresh_failed_collectors:
+          type: array
+          items:
+            type: string
+          description: The reads that failed when a stale reading was refreshed.
+        refresh_failure_classes:
+          type: object
+          additionalProperties:
+            type: string
+          description: The failure class of each read in `refresh_failed_collectors`.
+    GuestActionRequest:
+      type: object
+      required:
+        - node
+        - type
+      properties:
+        node:
+          type: string
+          description: The `node` of the guest.
+          example: pve
+        type:
+          type: string
+          enum:
+            - qemu
+            - lxc
+          description: The `type` of the guest.
+    GuestShutdownRequest:
+      allOf:
+        - $ref: '#/components/schemas/GuestActionRequest'
+        - type: object
+          required:
+            - confirm
+          properties:
+            confirm:
+              type: boolean
+              enum:
+                - true
+              description: Must be the boolean `true`.
+    GuestActionResult:
+      type: object
+      required:
+        - action
+        - endpoint
+        - node
+        - status
+        - type
+        - upid
+        - vmid
+      properties:
+        action:
+          type: string
+          enum:
+            - start
+            - shutdown
+            - reboot
+          description: What was asked.
+        endpoint:
+          type: string
+          description: The endpoint name.
+        node:
+          type: string
+          description: The node.
+        type:
+          type: string
+          description: '`qemu` or `lxc`.'
+        vmid:
+          type: integer
+          description: The guest id.
+        status:
+          type: string
+          enum:
+            - accepted
+          description: '`accepted`: Proxmox queued the task.'
+        upid:
+          type: string
+          description: The Proxmox task id.
+    WakeTarget:
+      type: object
+      required:
+        - name
+        - mac
+      properties:
+        name:
+          type: string
+          description: The target name.
+        mac:
+          type: string
+          description: The MAC address.
+    WakeResult:
+      type: object
+      required:
+        - action
+        - mac
+        - broadcast
+        - status
+      properties:
+        action:
+          type: string
+          description: '`wake`.'
+        mac:
+          type: string
+          description: The MAC address.
+        broadcast:
+          type: string
+          description: The address the packet went to.
+        status:
+          type: string
+          enum:
+            - sent
+          description: '`sent`.'
+    NotifyTestResponse:
+      type: object
+      required:
+        - results
+      properties:
+        results:
+          type: array
+          description: One result per configured channel.
+          items:
+            type: object
+            required:
+              - channel
+              - sent
+            properties:
+              channel:
+                type: string
+                description: The channel name.
+              sent:
+                type: boolean
+                description: '`true` when the channel accepted the message.'
+              error:
+                type: string
+                description: Why sending failed.
+    ConfigServer:
+      type: object
+      required:
+        - name
+        - host
+        - local
+        - user
+        - port
+        - auth
+        - key
+        - password_set
+      properties:
+        name:
+          type: string
+          description: The server name.
+        host:
+          type: string
+          description: The address.
+        local:
+          type: boolean
+          description: '`true` for the machine homebutler runs on.'
+        user:
+          type: string
+          description: The SSH user.
+        port:
+          type: integer
+          description: The SSH port. `0` means the default.
+        auth:
+          type: string
+          enum:
+            - key
+            - password
+          description: How homebutler signs in.
+        key:
+          type: string
+          description: The file name of the key, without its folder.
+        password_set:
+          type: boolean
+          description: '`true` when a password is saved. The password is never returned.'
+    ConfigProxmox:
+      type: object
+      required:
+        - name
+        - host
+        - port
+        - token_id
+        - token_set
+        - token_in_file
+        - action_token_id
+        - action_token_set
+        - action_token_in_file
+      properties:
+        name:
+          type: string
+          description: The endpoint name.
+        host:
+          type: string
+          description: The address.
+        port:
+          type: integer
+          description: The API port. `0` means the default.
+        token_id:
+          type: string
+          description: The read-only token id. It names a user and is not a secret.
+        token_set:
+          type: boolean
+          description: '`true` when the read-only token is saved.'
+        token_in_file:
+          type: boolean
+          description: '`true` when the token is kept in a file. The address of such an endpoint cannot be changed here.'
+        action_token_id:
+          type: string
+          description: The action token id.
+        action_token_set:
+          type: boolean
+          description: '`true` when the action token is saved.'
+        action_token_in_file:
+          type: boolean
+          description: '`true` when the action token is kept in a file.'
+    ConfigWake:
+      type: object
+      required:
+        - name
+        - mac
+        - broadcast
+      properties:
+        name:
+          type: string
+          description: The target name.
+        mac:
+          type: string
+          description: The MAC address.
+        broadcast:
+          type: string
+          description: The broadcast address. Empty means `255.255.255.255`.
+    ChannelField:
+      type: object
+      required:
+        - name
+      properties:
+        name:
+          type: string
+          description: The key name.
+        secret:
+          type: boolean
+          description: '`true` for a credential.'
+        optional:
+          type: boolean
+          description: '`true` when the channel works without it.'
+        value:
+          type: string
+          description: The value. Present only for a field that is not a secret.
+        set:
+          type: boolean
+          description: '`true` when a secret has a value. Present only for a secret.'
+    ChannelSettings:
+      type: object
+      required:
+        - channel
+        - configured
+        - fields
+      properties:
+        channel:
+          type: string
+          description: 'The channel name: `telegram`, `slack`, `discord`, `webhook`, `ntfy` or `gotify`.'
+        configured:
+          type: boolean
+          description: '`true` when the channel has every key it needs.'
+        fields:
+          type: array
+          items:
+            $ref: '#/components/schemas/ChannelField'
+          description: The channel's keys, in the order a form asks for them.
+    ConfigResponse:
+      type: object
+      required:
+        - path
+        - servers
+        - proxmox
+        - alerts
+        - wake
+        - notify
+        - editable
+        - transport_warning
+      properties:
+        path:
+          type: string
+          description: The config file in use, or `(defaults)` when there is none.
+        servers:
+          type: array
+          items:
+            $ref: '#/components/schemas/ConfigServer'
+          description: The servers.
+        proxmox:
+          type: array
+          items:
+            $ref: '#/components/schemas/ConfigProxmox'
+          description: The Proxmox endpoints.
+        alerts:
+          type: object
+          required:
+            - cpu
+            - memory
+            - disk
+          description: The alert thresholds in percent.
+          properties:
+            cpu:
+              type: number
+              description: The CPU threshold.
+            memory:
+              type: number
+              description: The memory threshold.
+            disk:
+              type: number
+              description: The disk threshold.
+        wake:
+          type: array
+          items:
+            $ref: '#/components/schemas/ConfigWake'
+          description: The wake targets.
+        notify:
+          type: array
+          items:
+            $ref: '#/components/schemas/ChannelSettings'
+          description: Every channel homebutler has, configured or not.
+        editable:
+          type: boolean
+          description: '`true` when the server has a token, which is what enables the save routes.'
+        transport_warning:
+          type: string
+          description: A warning when the token travels over plain HTTP on a public address. Empty otherwise.
+        revision:
+          type: string
+          description: Send this back with a save. Present only when `editable` is `true` and the config file exists. It is valid until the file changes or the server restarts.
+    SecretInput:
+      type: object
+      properties:
+        value:
+          type: string
+          description: The new secret.
+        clear:
+          type: boolean
+          description: '`true` removes the secret.'
+    AlertsRequest:
+      type: object
+      required:
+        - revision
+      properties:
+        revision:
+          type: string
+          description: The `revision` from [Get config](/reference/api/config/get-config).
+        cpu:
+          type: number
+          description: The new CPU threshold in percent.
+        memory:
+          type: number
+          description: The new memory threshold in percent.
+        disk:
+          type: number
+          description: The new disk threshold in percent.
+    NotifyChannelInput:
+      type: object
+      properties:
+        values:
+          type: object
+          additionalProperties:
+            type: string
+          description: Values for keys that are not secrets.
+        secrets:
+          type: object
+          additionalProperties:
+            $ref: '#/components/schemas/SecretInput'
+          description: Secrets to set or clear, by key.
+        remove:
+          type: boolean
+          description: '`true` removes the channel.'
+    NotifyRequest:
+      type: object
+      required:
+        - revision
+        - channels
+      properties:
+        revision:
+          type: string
+          description: The `revision` from [Get config](/reference/api/config/get-config).
+        channels:
+          type: object
+          additionalProperties:
+            $ref: '#/components/schemas/NotifyChannelInput'
+          description: The channels to change, by name.
+    WakeTargetInput:
+      type: object
+      required:
+        - name
+      properties:
+        name:
+          type: string
+          description: The target name.
+        mac:
+          type: string
+          description: The MAC address. Send it with every add or change, including a change that only edits `broadcast`.
+        broadcast:
+          type: string
+          description: The broadcast address.
+        remove:
+          type: boolean
+          description: '`true` removes the target.'
+    WakeRequest:
+      type: object
+      required:
+        - revision
+        - targets
+      properties:
+        revision:
+          type: string
+          description: The `revision` from [Get config](/reference/api/config/get-config).
+        targets:
+          type: array
+          items:
+            $ref: '#/components/schemas/WakeTargetInput'
+          description: The targets to add, change or remove.
+    ServerInput:
+      type: object
+      required:
+        - name
+      properties:
+        name:
+          type: string
+          description: The server to add or change.
+        rename:
+          type: string
+          description: A new name for the server.
+        host:
+          type: string
+          description: The address.
+        port:
+          type: integer
+          description: The SSH port.
+        user:
+          type: string
+          description: The SSH user.
+        auth:
+          type: string
+          enum:
+            - key
+            - password
+          description: How homebutler signs in.
+        password:
+          $ref: '#/components/schemas/SecretInput'
+        remove:
+          type: boolean
+          description: '`true` removes the server.'
+    ServersRequest:
+      type: object
+      required:
+        - revision
+        - servers
+      properties:
+        revision:
+          type: string
+          description: The `revision` from [Get config](/reference/api/config/get-config).
+        servers:
+          type: array
+          items:
+            $ref: '#/components/schemas/ServerInput'
+          description: The servers to add, change or remove.
+    ProxmoxEndpointInput:
+      type: object
+      required:
+        - name
+      properties:
+        name:
+          type: string
+          description: The endpoint to add or change.
+        rename:
+          type: string
+          description: A new name for the endpoint.
+        host:
+          type: string
+          description: The address.
+        port:
+          type: integer
+          description: The API port.
+        token_id:
+          type: string
+          description: The read-only token id.
+        token:
+          $ref: '#/components/schemas/SecretInput'
+        action_token_id:
+          type: string
+          description: The action token id.
+        action_token:
+          $ref: '#/components/schemas/SecretInput'
+        remove:
+          type: boolean
+          description: '`true` removes the endpoint.'
+    ProxmoxRequest:
+      type: object
+      required:
+        - revision
+        - endpoints
+      properties:
+        revision:
+          type: string
+          description: The `revision` from [Get config](/reference/api/config/get-config).
+        endpoints:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProxmoxEndpointInput'
+          description: The endpoints to add, change or remove.
+    SaveResponse:
+      type: object
+      required:
+        - saved
+        - revision
+      properties:
+        saved:
+          type: boolean
+          description: '`true`.'
+        revision:
+          type: string
+          description: The revision of the file as saved. Use it for the next save.
+        restart_needed:
+          type: array
+          items:
+            type: string
+          description: The processes that read this setting at start and need a restart to use it.
+        notices:
+          type: array
+          items:
+            type: string
+          description: Things that are true about the save and worth knowing.
+    Capability:
+      type: object
+      required:
+        - name
+        - description
+        - risk
+        - targets
+      properties:
+        name:
+          type: string
+          description: The capability name, the same as the MCP tool name.
+        description:
+          type: string
+          description: What it does.
+        risk:
+          type: string
+          enum:
+            - read
+            - write
+            - destructive
+          description: What a call can cost.
+        targets:
+          type: array
+          items:
+            type: string
+            enum:
+              - local
+              - server
+              - proxmox
+          description: What it can be pointed at.
+        method:
+          type: string
+          description: The HTTP method of its route.
+        path:
+          type: string
+          description: The path of its route.
+        absent:
+          type: string
+          description: Why it has no route. Present only when `method` and `path` are absent.
+    Version:
+      type: object
+      required:
+        - version
+      properties:
+        version:
+          type: string
+          description: The homebutler version.

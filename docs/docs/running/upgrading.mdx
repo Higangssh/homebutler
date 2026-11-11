@@ -1,0 +1,120 @@
+---
+title: Upgrading
+description: Upgrade homebutler on this machine and on every remote server, update installs made with Homebrew, npm, Go or a container, and know what stays stable across upgrades.
+---
+
+# Upgrading
+
+This page shows how to move homebutler to the latest release on the local machine and on every server in your config, and how to upgrade installs that a package manager or a container owns. It ends with what the 1.0 compatibility promise means for an upgrade.
+
+## Upgrade with homebutler
+
+```bash
+homebutler upgrade
+```
+
+`upgrade` asks GitHub for the latest release, then handles the local binary and each remote server in turn. It updates only what is out of date. Progress goes to standard error:
+
+```text
+checking latest version... v1.7.0
+
+upgrading local... ─ already v1.7.0
+
+1 already up-to-date
+```
+
+Pass `--local` to skip the remote servers and upgrade only the binary you are running. Add `--json` to print a report on standard output, as well as the progress on standard error:
+
+```json
+{
+  "latest_version": "1.7.0",
+  "results": [
+    {
+      "target": "local",
+      "prev_version": "1.7.0",
+      "new_version": "1.7.0",
+      "status": "up-to-date",
+      "message": "already v1.7.0"
+    }
+  ]
+}
+```
+
+Each result has a `status` of `upgraded`, `up-to-date`, `skipped` or `error`. Every target is tried. If any fails, the command then exits `1`, such as `upgrade failed on 1 of 3 targets: edge`. A local `dev` build is `skipped`, not failed, so it doesn't change the exit code.
+
+### How remote servers are upgraded
+
+For each server without `local: true`, `upgrade` connects over SSH and:
+
+1. Reads the version of the `homebutler` found on the server's `PATH`.
+2. Skips the server if it already runs the latest release or a newer one.
+3. Downloads the release build for the server's operating system and architecture, checks it against the release's `checksums.txt`, and uploads it over the existing binary.
+4. Runs `version` on the server to check the new binary.
+
+A server that has no homebutler yet reports `not installed — run 'homebutler deploy --server <name>' first`. Use [`deploy`](/running/multi-server#put-homebutler-on-each-server) for the first install. A server whose binary is owned by another user reports the `Permission denied` and suggests `deploy`, which replaces it through `sudo` when the account has it.
+
+The output for a server that was upgraded and a server that was unreachable, shortened to those lines:
+
+```text
+upgrading edge... ✓ v1.6.0 → v1.7.0 (linux/amd64)
+upgrading dead... ✗ ssh connect: [dead] SSH connection failed (192.168.1.30:22): dial tcp 192.168.1.30:22: connect: connection refused
+  → Check: server online? correct host/port? firewall rules?
+  → Config: /home/you/.config/homebutler/config.yaml
+```
+
+### How the local binary is upgraded
+
+`upgrade` follows symlinks to the real executable, renames it to `homebutler.bak`, writes the new binary in its place, and deletes the backup. If the write fails, it restores the backup. When the directory isn't writable by your user, it fails with a hint to run `sudo homebutler upgrade`.
+
+On Windows, `upgrade` downloads the release `.zip` and leaves the previous binary next to the new one as `homebutler.exe.bak`, because Windows doesn't delete a program while it runs. The next upgrade replaces it. When access is denied, the hint is to run `homebutler upgrade` in a terminal opened as administrator, after stopping any running homebutler.
+
+It leaves two kinds of binary alone:
+
+- A build that reports `dev` as its version, such as one from `go install` or `go build`. The line is `─ dev build, left as it is`, the summary counts it as skipped, and the remote servers are still upgraded. Update it with `go install github.com/Higangssh/homebutler@latest`, or rebuild it from your checkout. A remote server that runs a `dev` build isn't skipped: `upgrade` replaces it with the release.
+- A build newer than the latest release, such as one made from a later commit. The result has the status `up-to-date` and a message that names both versions.
+
+## Upgrade an install that something else manages
+
+`upgrade` replaces the file in place, so an install owned by a package manager is better updated by that manager. Use the command that matches how you installed homebutler:
+
+| Installed with | Upgrade with |
+| --- | --- |
+| Homebrew | `brew upgrade homebutler` |
+| Install script | Run the script again, or `homebutler upgrade` |
+| Go | `go install github.com/Higangssh/homebutler@latest` |
+| npm | `npm install -g homebutler@latest` |
+| Container | Pull the new image, then recreate the container: `docker pull ghcr.io/higangssh/homebutler:latest`, then `docker rm -f homebutler`, then the same `docker run` command (or `docker compose pull && docker compose up -d`). |
+
+A container keeps your config and snapshots in the mounted folder and volume, so recreating it keeps them. See [Run in a container](/running/container).
+
+The binary on each remote server is separate from the one on the hub. After you upgrade the hub, run `homebutler upgrade` from a machine with SSH access to bring the servers level, or the [commands the hub runs on them](/running/multi-server#keep-versions-level) fail with `does not have` errors.
+
+## Check these when upgrading to 1.4, 1.5, 1.6 or 1.7
+
+- **`--all` exit codes:** from 1.7.0, a command run with `--all` exits `1` when any server couldn't be asked or its command failed there. A cron job or script over servers that are often off, or over a server without Docker for `docker list --all`, now sees a failure. See [Multi-server](/running/multi-server#run-a-command-on-every-server).
+- **`upgrade` from a `dev` build:** from 1.7.0 it exits `0` again, and in `--json` the local result's `status` is `skipped`, where 1.6.0 reported `error`. A script that matched on `error` should accept `skipped`.
+- **`--server` and `--all` on commands that can't use them:** from 1.6.0, `install`, `inventory scan`, `config validate`, `watch`, `serve` and the other local commands exit `1` where they used to run on this machine. Drop the flag. `upgrade --server` is refused too. See [Multi-server](/running/multi-server).
+- **`--all` on commands that change a machine:** from 1.6.0, `docker restart`, `docker stop`, `backup`, `restore` and `wake` are refused with `--all`. Name one server with `--server`.
+- **`deploy` and `upgrade`:** from 1.6.0 they exit `1` when any server failed. A script that treated exit `0` as the only outcome now sees the failure.
+- **`report --all`:** from 1.6.0 it also saves a snapshot on a `local: true` server. Add `--no-save` to compare without saving.
+- **`GET /api/ports`:** from 1.6.0 a failed read returns `500` with the reason, where it returned `200` with an empty list.
+- **`docker_top` and `docker top --json`:** from 1.4.0, `command` holds the kernel's process name (the `comm` value of `ps`), without arguments. A Node.js process shows `MainThread`. A script that read arguments from it gets only that name.
+- **filebrowser:** see the [filebrowser note](/apps/install-apps#app-specific-notes).
+- **`GET /api/report?server=<name>`:** from 1.5.0 it saves no snapshot on that server. A server that got its snapshots only from being polled needs `POST /api/report/snapshot?server=<name>` or `homebutler report` from cron.
+- **Containers on runtimes that write no marker file:** from 1.5.0 the image sets `HOMEBUTLER_CONTAINER=1`, so under containerd, such as Kubernetes without dockershim, `serve` needs a token and local MCP calls are refused.
+- **`serve` with `HOMEBUTLER_TOKEN` in its environment:** from 1.5.0 a `serve` with no other token uses it, so a browser that had the dashboard open is asked for that token.
+
+## What stays the same across upgrades
+
+From 1.0, the parts that scripts, agents and widgets build on don't change in a minor or patch release. You can upgrade without editing:
+
+- MCP tool names, input schemas and risk classes.
+- JSON field names and types in every command's `--json` output, and the words fields such as `kind`, `category` and `status` can hold.
+- The documented config keys, with their names and meanings.
+- The web dashboard's HTTP routes, and what each one asks the caller to send.
+- The exit codes of `doctor`.
+- Snapshots that earlier releases saved: `report` reads a snapshot written by any release from 0.18.0 on and compares against it.
+
+New tools, optional fields, config keys, routes and `kind` words can appear in any release, each with a changelog entry, so a script should ignore fields it doesn't know. Terminal output, log lines, tool descriptions, the order of items in a list, and the dashboard's page markup can change at any time.
+
+A frozen item is replaced in four steps: add the replacement, mark the old one deprecated in the changelog, keep both for at least one minor release, and remove the old one only in the next major release. [JSON output and stability](/reference/json-output) lists exactly what is frozen. Release notes are in the [changelog](/changelog).

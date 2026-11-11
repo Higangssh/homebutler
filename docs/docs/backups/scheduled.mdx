@@ -1,0 +1,90 @@
+---
+title: Scheduled backups
+description: Run homebutler backup, retention and a backup drill from one cron entry, and use the exit codes to find out when one of them fails.
+---
+
+# Scheduled backups
+
+This page sets up a nightly cron entry that backs up your Docker Compose services, trims old archives, and drills the new archive, and it reports a failure of any step. You need homebutler on the machine that runs Docker, and a user that can run `docker`.
+
+homebutler has no scheduler of its own and no systemd timer. Cron, or any other scheduler that runs a shell command, starts it.
+
+## Set up the schedule
+
+<Steps>
+  <Step title="Set retention">
+    Retention runs after every successful backup and is configured in the config file, not on the command line. To keep the 7 newest archives, add this to `~/.config/homebutler/config.yaml`:
+
+    ```yaml
+    backup:
+      retention:
+        max_archives: 7
+    ```
+
+    See [Retention](/backups/backup-and-restore#retention) for `max_bytes` and the rules pruning follows.
+  </Step>
+  <Step title="Add the cron entry">
+    Open your crontab with `crontab -e` and add one line:
+
+    ```cron
+    0 3 * * * /usr/local/bin/homebutler backup && /usr/local/bin/homebutler backup drill --all || echo "homebutler: backup or drill failed"
+    ```
+
+    The entry runs at 03:00 every day. It uses the absolute path of the binary because cron starts commands with a minimal `PATH`. It runs as the user who owns the crontab, so `~` in the config location and the default backup folder `~/.homebutler/backups/` belong to that user.
+  </Step>
+  <Step title="Choose where the output goes">
+    Cron sends a job's output to the user's mail, or drops it when mail isn't set up. To keep it in a file instead, redirect the whole entry:
+
+    ```cron
+    0 3 * * * (/usr/local/bin/homebutler backup && /usr/local/bin/homebutler backup drill --all || echo "homebutler: backup or drill failed") >> /home/you/homebutler-cron.log 2>&1
+    ```
+  </Step>
+</Steps>
+
+## How the entry reports a failure
+
+The three commands are chained with `&&` and `||`, so the exit codes decide what runs:
+
+- **`backup` fails:** the drill is skipped and the `echo` runs. `backup` exits with status 1 on any error, such as an unknown service or a bind mount whose host path is gone.
+- **`backup` succeeds:** the drill runs on the archive that was just written.
+- **The drill fails:** the `echo` runs. `backup drill` exits with status 1 when the archive can't be read, when no app in it has a health check, or when any app doesn't answer.
+
+When both commands succeed, the entry prints the backup summary and the drill result, and exits with status 0:
+
+```text
+Backup complete: /home/you/backups/backup_2026-10-25_112156.378.tar.gz
+  Services: homepage
+  Volumes:  2
+  Size:     1.8 KB
+🔍 Backup Drill — all apps
+
+  homepage  ✅ PASSED  (2s)
+
+  📊 Result: 1/1 passed
+```
+
+When the backup fails, the drill is skipped and the `echo` text is the last line:
+
+```text
+error: service "nope" not found in any compose project
+homebutler: backup or drill failed
+```
+
+Replace the `echo` with a command that reaches you, such as `mail`, `logger`, or a `curl` to a webhook. Don't use `homebutler notify test` for this. It sends a fixed test message to your notification channels and doesn't know a backup failed.
+
+## Make doctor see the drill
+
+`backup drill --all` doesn't write the drill record that [`homebutler doctor`](/changes/doctor) reads. To keep `doctor` informed, drill the apps you care about by name instead. A single-app drill writes a record, and `doctor` stays quiet about backups while the newest record is a pass that is newer than the newest archive:
+
+```cron
+0 3 * * * /usr/local/bin/homebutler backup && /usr/local/bin/homebutler backup drill vaultwarden || echo "homebutler: backup or drill failed"
+```
+
+Chain more `&& /usr/local/bin/homebutler backup drill <app>` commands for more apps. The apps that have a health check are listed in [Backup drill](/backups/drill#apps-with-a-health-check).
+
+## Limits of the schedule
+
+- **Archives are not encrypted.** Keep the backup folder readable by the cron user only. See [Limits of a backup](/backups/backup-and-restore#limits-of-a-backup).
+- **Databases need care.** `backup` doesn't pause containers. A database written to at 03:00 can end up inconsistent in the archive.
+- **Drills need the image.** The drill starts the image recorded in the archive. A host without that image pulls it during the drill, or fails the drill when it is offline.
+- **Archives written with `--to` aren't drilled.** `backup drill --all` reads the newest archive in the configured backup folder. Set `backup.dir` instead of using `--to` in the entry. See [Choose where backups go](/backups/backup-and-restore#choose-where-backups-go).

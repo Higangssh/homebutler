@@ -1,0 +1,48 @@
+---
+title: trust
+description: "Adds a remote server's SSH host key to `known_hosts` after you confirm its fingerprint."
+---
+
+# homebutler trust
+
+Adds a remote server's SSH host key to `known_hosts` after you confirm its fingerprint.
+
+```bash
+homebutler trust <server> [flags]
+```
+
+For connecting to remote servers, see [Multi-server](/running/multi-server).
+
+| Argument | Description |
+| --- | --- |
+| `server` | Server name from the `servers:` section of your config. |
+
+## Flags
+
+| Flag | Type | Default | Description |
+| --- | --- | --- | --- |
+| `--reset` | boolean | `false` | Remove the existing host keys for the server before trusting the new one. Use it after the server was reinstalled. |
+
+## Examples
+
+Answer `y` at the prompt. The messages go to standard error.
+
+```bash
+homebutler trust remote1
+```
+
+```text
+connecting to remote1 (127.0.0.1:22)...
+host key fingerprint: SHA256:ol2LV3e4JwAJxHhPyoKHRQPRxxNCGVMiPT2gwqasYYo
+trust this host? (y/n): host key for remote1 added to known_hosts
+```
+
+A name that is not in the config is an error.
+
+```bash
+homebutler trust nope
+```
+
+```text
+error: server "nope" not found in config. Available servers: [main remote1]
+```

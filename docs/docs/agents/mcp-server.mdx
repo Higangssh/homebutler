@@ -1,0 +1,239 @@
+---
+title: MCP server
+description: "Connect Claude Code, Claude Desktop, Cursor, or another MCP client to homebutler over stdio, choose between npx and an installed binary, and try it with demo data."
+---
+
+# MCP server
+
+This page connects an MCP client to homebutler so an agent can call its [44 typed tools](/mcp) instead of running shell commands. You need Node.js 16 or later for the `npx` route, or homebutler [installed](/installation) for the binary route.
+
+`homebutler mcp` speaks JSON-RPC over stdin and stdout. It opens no network port, so only the client that started it can talk to it. It reads your [config file](/reference/configuration) at startup and runs each tool on the machine where it was started, or on a remote server when the call names one.
+
+## Choose how the client starts homebutler
+
+| | `npx` | Installed binary |
+| --- | --- | --- |
+| `command` | `npx` | `homebutler` |
+| `args` | `["-y", "homebutler@latest"]` | `["mcp"]` |
+| Needs | Node.js 16 or later and access to GitHub | homebutler on the `PATH` of the client |
+| Version | The newest GitHub release at install time | The binary you installed |
+
+The npm package is a wrapper. On install it downloads the release archive for your platform from GitHub, and it puts `mcp` in front of the arguments you give it. Flags such as `--demo` and `--max-risk read` therefore follow `homebutler@latest` directly. The wrapper downloads the newest release, not the release that matches the npm package version, so pinning `homebutler@1.6.0` doesn't pin the binary. To control the version, install the binary and use the `homebutler` route.
+
+## Install the Claude Desktop extension
+
+To add homebutler to Claude Desktop without editing its config, install the extension. Each release has one per platform for macOS, Windows and Linux, with the binary inside, so you need neither Node.js nor an installed homebutler. The bundles aren't signed.
+
+| Machine | Asset |
+| --- | --- |
+| Mac, Apple silicon | `homebutler_<version>_darwin_arm64.mcpb` |
+| Mac, Intel | `homebutler_<version>_darwin_amd64.mcpb` |
+| Windows, x64 | `homebutler_<version>_windows_amd64.mcpb` |
+| Windows on Arm | `homebutler_<version>_windows_arm64.mcpb` |
+| Linux, for other clients that install `.mcpb` bundles | `homebutler_<version>_linux_arm64.mcpb`, `homebutler_<version>_linux_amd64.mcpb` |
+
+Download the file for your machine from the [latest release](https://github.com/Higangssh/homebutler/releases/latest) and open it, or drag it onto **Settings → Extensions** in Claude Desktop, then select **Install**.
+
+The extension runs `homebutler mcp --max-risk read`, as described in [Read-only mode](/agents/read-only-mode). To offer more tools, set **Highest tool risk** to `write` or `destructive` in the extension's settings. Any other value stops the server from starting.
+
+In read mode, `report` never saves a snapshot, so the extension reports changes only against snapshots saved elsewhere. Run `homebutler report` by hand or from cron, or set **Highest tool risk** to `write`.
+
+The extension reads the same config as the CLI, `~/.config/homebutler/config.yaml`. On macOS and Linux it runs with this `PATH`, so a `docker` installed anywhere else isn't found:
+
+```text
+/usr/local/bin:/usr/local/sbin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin:/snap/bin
+```
+
+On Windows it sets no `PATH` and uses the one Claude Desktop has, so `ssh.exe` and `docker` are found where Windows finds them.
+
+## Add homebutler to a client
+
+All clients read the same server definition, including ChatGPT Desktop, Windsurf, and any other MCP client that starts a stdio server. Replace `command` and `args` with the binary route if you installed homebutler.
+
+<Tabs>
+<TabItem value="claude-code" label="Claude Code">
+
+Run this in your project folder to write a project-scoped entry to `.mcp.json`:
+
+```bash
+claude mcp add --scope project homebutler -- npx -y homebutler@latest
+```
+
+Or create `.mcp.json` yourself:
+
+```json
+{
+  "mcpServers": {
+    "homebutler": {
+      "command": "npx",
+      "args": ["-y", "homebutler@latest"]
+    }
+  }
+}
+```
+
+For an installed binary, run `claude mcp add --scope project homebutler -- homebutler mcp`. Without `--scope`, the entry is local to you and the current project.
+
+</TabItem>
+<TabItem value="claude-desktop" label="Claude Desktop">
+
+Open **Settings**, select **Developer**, and select **Edit Config**. The file is `~/Library/Application Support/Claude/claude_desktop_config.json` on macOS and `%APPDATA%\Claude\claude_desktop_config.json` on Windows. Add the server and restart Claude Desktop:
+
+```json
+{
+  "mcpServers": {
+    "homebutler": {
+      "command": "homebutler",
+      "args": ["mcp"]
+    }
+  }
+}
+```
+
+Claude Desktop writes the server's standard error to `mcp-server-homebutler.log` in its logs folder.
+
+</TabItem>
+<TabItem value="cursor" label="Cursor">
+
+Create `.cursor/mcp.json` in the project, or `~/.cursor/mcp.json` for every project:
+
+```json
+{
+  "mcpServers": {
+    "homebutler": {
+      "command": "npx",
+      "args": ["-y", "homebutler@latest"]
+    }
+  }
+}
+```
+
+</TabItem>
+<TabItem value="other" label="Other clients">
+
+Any client that starts a stdio MCP server needs the same three things: a command, its arguments, and optionally environment variables. Use `homebutler` with `["mcp"]`, or `npx` with `["-y", "homebutler@latest"]`.
+
+</TabItem>
+</Tabs>
+
+## Choose the config file
+
+The server loads the config file the same way the CLI does: `--config <path>`, then `$HOMEBUTLER_CONFIG`, then `~/.config/homebutler/config.yaml`, then `./homebutler.yaml` in the client's working directory. With none of them, built-in defaults apply. To pin a file, add it to `args` or to `env`:
+
+```json
+{
+  "mcpServers": {
+    "homebutler": {
+      "command": "homebutler",
+      "args": ["--config", "/home/you/.config/homebutler/config.yaml", "mcp"],
+      "env": { "HOMEBUTLER_CONFIG": "/home/you/.config/homebutler/config.yaml" }
+    }
+  }
+}
+```
+
+Either one is enough. The [`config_validate`](/mcp/report-doctor-inventory#config_validate) tool reports which file the running server uses and which rule picked it. A config file that holds a secret and is readable by other users stops the server at startup:
+
+```text
+error: config error: config file /home/you/.config/homebutler/config.yaml contains plaintext secrets but permissions are too open (0644); run: chmod 600 /home/you/.config/homebutler/config.yaml
+```
+
+The client shows this as a server that failed to start. Run `chmod 600` on the file.
+
+## Try it with demo data
+
+`--demo` returns realistic sample data and makes no system calls, so it works on a machine with no Docker and no servers:
+
+```json
+{
+  "mcpServers": {
+    "homebutler": {
+      "command": "homebutler",
+      "args": ["mcp", "--demo"]
+    }
+  }
+}
+```
+
+Demo mode lists all 44 tools. Write and destructive tools answer with sample results and change nothing. Some demo values differ from a real run: `docker_restart` returns `"status": "restarted"` where a real call returns `"ok"`.
+
+## Check the connection
+
+Send the three requests a client sends when it starts. This runs against any binary, without a client:
+
+```bash
+printf '%s\n' \
+  '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18"}}' \
+  '{"jsonrpc":"2.0","id":2,"method":"tools/list"}' \
+  '{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"system_status","arguments":{}}}' \
+  | homebutler mcp
+```
+
+The first response names the server, and the second lists the tools:
+
+```json
+{"jsonrpc":"2.0","id":1,"result":{"protocolVersion":"2025-06-18","capabilities":{"tools":{}},"serverInfo":{"name":"homebutler","version":"1.7.0"}}}
+```
+
+<Check title="The server works when">The third response holds the machine's CPU, memory and disk figures as a JSON string in `result.content[0].text`.</Check>
+
+## What a tool returns
+
+Every tool returns typed JSON as text, not a table or a sentence to parse. A tool classed `read` changes nothing, a `write` tool changes something or sends something out, and a `destructive` tool overwrites or deletes data or stops a service. The tool list carries `readOnlyHint` and `destructiveHint` for each tool (see [Tool annotations](#tool-annotations)), so a client can ask for confirmation before it runs the riskier ones. See [MCP tools](/mcp) for the envelope, the response conventions, and every tool.
+
+To give an agent only the reads, start the server with `--max-risk read`: see [Read-only mode](/agents/read-only-mode).
+
+## Tool annotations
+
+Each tool in `tools/list` carries `readOnlyHint` and `destructiveHint`, so a client can ask before a destructive call. Both hints are sent on every tool, and they're never less cautious than the tool's class:
+
+| Class | `readOnlyHint` | `destructiveHint` |
+| --- | --- | --- |
+| `read` | `true` | `false` |
+| `destructive` | `false` | `true` |
+| `write` | `false` | `true` when one call can delete or overwrite something that was already there |
+
+A `write` tool with `destructiveHint: false` only adds something, or changes something that comes back without anyone acting: `docker_restart`, `proxmox_guest_start`, `proxmox_guest_reboot`, `wake`, `watch_add` and `notify_test`. Those calls still have effects. A restart interrupts whoever is using the container, and `notify_test` sends a real message to every channel.
+
+These `write` tools are annotated destructive because of what one call can remove:
+
+| Tool | What a call can delete or overwrite |
+| --- | --- |
+| `install_uninstall` | Runs `compose down`, which removes the app's containers. The app directory and its data stay, and anything the app wrote inside its container goes with the container. |
+| `report` | Prunes saved snapshots down to `keep`, which the caller sets. `keep: 1` leaves one. |
+| `backup_create` | Prunes older archives when `backup.retention` is configured. |
+| `watch_check` | Prunes incidents past the retention cap. |
+| `watch_remove` | Deletes the target's entry from the watch list. |
+| `backup_drill` | Prunes drill records past the newest 50. |
+| `install_app` | Rewrites an existing `docker-compose.yml`, including your edits to it. |
+
+Under `--max-risk read`, `report` is annotated as a read, and its description says it never saves a snapshot.
+
+The server doesn't send `idempotentHint` or `openWorldHint`, so a client reads the spec's defaults: not idempotent, and may reach things outside the machine. Neither default fits a whole class. Calling `docker_stop` twice does nothing more, while `docker_restart` twice restarts twice. `network_scan` pings the subnet and `notify_test` posts to a chat service, while `docker_list` asks only Docker.
+
+Annotations describe what a call does to the machine, not what it returns. A client can ignore them. `--max-risk` is enforced by the server whatever the client does with its hints. Clients on revision `2024-11-05`, which predates annotations, see them as an unknown field.
+
+## Commands without a tool
+
+Some CLI commands have no MCP tool. Run them in a terminal:
+
+- [`trust`](/cli/trust) accepts an SSH host key on first use. That is a decision for a person, so there is no tool for it, and there won't be one.
+- [`deploy`](/cli/deploy) installs homebutler on a remote server. It was kept out of the tool set that 1.0 froze, and it can come later as a new tool.
+- [`upgrade`](/cli/upgrade) replaces the running binary. [`serve`](/cli/serve), [`init`](/cli/init), `watch start` and `watch tui` run as daemons or interactively, which doesn't fit a stdio tool call.
+
+## Protocol versions
+
+homebutler implements the MCP revisions `2026-07-28`, `2025-11-25`, `2025-06-18`, `2025-03-26` and `2024-11-05`. Which one is used depends on how the client opens the session:
+
+| Client sends | Server answers |
+| --- | --- |
+| `initialize` with `2025-11-25`, `2025-06-18`, `2025-03-26` or `2024-11-05` | The same version |
+| `initialize` with `2026-07-28` | `2025-11-25` |
+| `initialize` with an unknown `protocolVersion` | `2025-11-25`, the newest legacy revision |
+| `server/discover`, or any request with the version in `_meta` | The modern revision, with `resultType` on each result |
+| `initialize` with modern `_meta` | Error `-32601`, `method not found: initialize` |
+| `ping` | An empty result. With modern `_meta`, error `-32601`. |
+| `_meta` with a version that isn't `2026-07-28` | Error `-32022`, `Unsupported protocol version`, with `data.supported` listing `2026-07-28` |
+| Any other method, such as `resources/list` | Error `-32601`, `method not found: <method>` |
+
+`server/discover` lists all five revisions in `supportedVersions`. The server offers tools only. Resources, prompts, sampling, roots, elicitation, tasks, and Streamable HTTP are out of scope, so for this stdio server every revision describes the same tools. `tools/list` returns the tools sorted by name, with `ttlMs` set to 300000 and `cacheScope` set to `public`, or `private` when `--max-risk` reduced the list.

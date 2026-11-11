@@ -1,0 +1,146 @@
+---
+title: alerts
+description: "Reads the CPU, memory, and disk thresholds once, or keeps checking them with `--watch`."
+---
+
+# homebutler alerts
+
+Reads the CPU, memory, and disk thresholds once, or keeps checking them with `--watch`.
+
+The thresholds come from `alerts.cpu`, `alerts.memory`, and `alerts.disk` in your config. Rules for self-healing come from an alerts config file.
+
+To choose thresholds and rules, see [Alerts](/monitoring/alerts).
+
+| Command | What it does |
+| --- | --- |
+| [`history`](#alerts-history) | Lists recent alert and remediation events. |
+| [`init`](#alerts-init) | Asks a few questions and writes a starter `config.yaml` with alert thresholds and rules. |
+| [`test-notify`](#alerts-test-notify) | Sends a test notification to every configured provider. |
+
+## `alerts`
+
+Run without a subcommand, `alerts` prints each reading with its threshold and a status. It exits `0` even when a reading is over its threshold.
+
+```bash
+homebutler alerts [flags]
+homebutler alerts [command]
+```
+
+| Flag | Type | Default | Description |
+| --- | --- | --- | --- |
+| `--alerts-config` | string | - | Path to a YAML file with self-healing rules. Without it, `--watch` reads `~/.homebutler/alerts.yaml` when that file exists. |
+| `--interval` | string | `30s` | Time between checks in `--watch` mode. Accepts a Go duration such as `30s` or `1m`. |
+| `--watch` | boolean | `false` | Keep checking until you press Ctrl+C. This mode looks at resources only. `watch start` also watches containers and services. |
+
+Read the thresholds once.
+
+```bash
+homebutler alerts
+```
+
+The output, shortened to the root disk. A reading over its threshold is marked with a red circle instead of a check mark:
+
+```text
+   CPU:     66.3% (threshold: 90%) ✅
+   Memory:  41.1% (threshold: 85%) ✅
+   Disk /: 7% (threshold: 90%) ✅
+```
+
+Keep checking every 5 seconds with a rules file. A rule with threshold `1` triggers at once. Press Ctrl+C to stop. The first line is a warning that other users can read the rules file.
+
+```bash
+homebutler alerts --watch --interval 5s --alerts-config /home/you/alerts-rules.yaml
+```
+
+```text
+⚠️  alerts config /home/you/alerts-rules.yaml has permissions 0644; consider chmod 0600 for security
+🛡️ Self-Healing active — watching 1 rules (interval: 5s, Ctrl+C to stop)
+
+  ⏱️  11:21:55  ⚠️  cpu-high triggered (cpu 88.1% >= 1%)
+  ⏱️  11:22:01  ✅ All clear (cpu 95%, mem 41%, disk 100%)
+  ⏱️  11:22:06  ✅ All clear (cpu 78%, mem 41%, disk 100%)
+
+👋 Stopped watching.
+```
+
+An interval that is not a duration is an error.
+
+```bash
+homebutler alerts --watch --interval abc
+```
+
+```text
+error: invalid interval "abc": time: invalid duration "abc"
+```
+
+## `alerts history`
+
+Lists recent alert and remediation events.
+
+```bash
+homebutler alerts history [flags]
+```
+
+```bash
+homebutler alerts history
+```
+
+```text
+TIME                 RULE               ACTION     DETAILS                        RESULT
+2026-10-25 11:21:55  cpu-high           notify     cpu 88.1% >= 1%                success
+```
+
+## `alerts init`
+
+Asks a few questions and writes a starter `config.yaml` with alert thresholds and rules.
+
+```bash
+homebutler alerts init [flags]
+```
+
+The questions cover the CPU, memory, and disk thresholds, which containers to watch, what to do when one goes down, and a webhook URL. The file is written to `~/.config/homebutler/config.yaml` with mode `0600`. When the file exists, the command asks before it overwrites it.
+
+`homebutler init` is the setup wizard for servers. `alerts init` is for thresholds and rules.
+
+<Warning title="Enter at the container prompt selects every container">
+
+The prompt text says that pressing Enter skips container monitoring. Pressing Enter selects all listed containers and the default action for them is `restart`. The written config then restarts any of them that goes down. To skip container monitoring, enter `0`.
+
+</Warning>
+
+With a config already present, answering `n` stops the command.
+
+```bash
+homebutler alerts init
+```
+
+```text
+/home/you2/.config/homebutler/config.yaml already exists. Overwrite? [y/N]: Aborted.
+```
+
+## `alerts test-notify`
+
+Sends a test notification to every configured provider.
+
+<Info title="Kept for older setups">
+
+The help text for this command says it remains for backward compatibility. Use `homebutler notify test` instead.
+
+</Info>
+
+```bash
+homebutler alerts test-notify [flags]
+```
+
+| Flag | Type | Default | Description |
+| --- | --- | --- | --- |
+| `--alerts-config` | string | - | Path to a legacy alerts YAML file whose notify settings are used when `config.yaml` has none. |
+
+```bash
+homebutler alerts test-notify
+```
+
+```text
+Sending test notification...
+  ✅ webhook: sent
+```

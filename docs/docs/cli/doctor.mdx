@@ -1,0 +1,63 @@
+---
+title: doctor
+description: "Runs a read-only health check on the server and lists findings by severity, each with a command to look closer."
+---
+
+# homebutler doctor
+
+Runs a read-only health check on the server and lists findings by severity, each with a command to look closer.
+
+```bash
+homebutler doctor [flags]
+```
+
+The checks cover resource pressure, stopped containers, ports open on every interface, the installed dashboard, backup age, backup directory size and drill history, notification readiness, the watch service, report baseline, config file permissions, containers that mount the Docker socket, Proxmox endpoints that accept any certificate, incident history size, and Proxmox endpoint reachability.
+
+The overall status is the worst severity found: pass, warn, or fail. `doctor` changes nothing on the server.
+
+For what each category checks and how to fix a finding, see [Doctor](/changes/doctor).
+
+## Flags
+
+| Flag | Type | Default | Description |
+| --- | --- | --- | --- |
+| `--backup-max-age` | duration | `168h0m0s` | Warn when the newest backup is older than this. Takes a Go duration such as `24h` or `90m`. The unit `d` is not accepted, so one week is `168h`. |
+| `--strict` | boolean | `false` | Exit with code 1 when the status is warn or fail. Without it, `doctor` exits `0` whatever it finds. |
+
+## Examples
+
+Run the check on a server with no backups and a Proxmox endpoint that does not answer. The output is shortened to the backup and Proxmox findings.
+
+```bash
+homebutler doctor
+```
+
+```text
+🩺 Homebutler Doctor — main
+   2026-10-25T18:13:38Z
+
+⚠️ [backup] No backups found
+   No .tar.gz backups found in /home/you/backups.
+   → Create your first backup, then verify at least one important app with a drill.
+   $ homebutler backup
+
+❌ [proxmox] Proxmox endpoint "pve" has no readable collectors
+   version: proxmox request /api2/json/version: Get "https://127.0.0.1:8599/api2/json/version": dial tcp 127.0.0.1:8599: connect: connection refused
+   → Check network reachability to the configured host and port, and any firewall rules in between.
+   $ homebutler proxmox status --endpoint "pve"
+```
+
+To fail a script or a scheduled job when anything is wrong, add `--strict`. The output, shortened to the header and the last line, ends with the error, and the exit code is `1`.
+
+```bash
+homebutler doctor --strict
+```
+
+```text
+🩺 Homebutler Doctor — main
+   2026-10-25T18:13:46Z
+
+…
+
+error: doctor found 3 warning(s) and 2 failure(s)
+```

@@ -1,0 +1,311 @@
+---
+title: Configuration
+description: Where homebutler looks for its config file, and every section and key of that file with its type, default and meaning, plus how to check it with config validate.
+---
+
+# Configuration
+
+This page lists where homebutler finds its config file and every key that file accepts, with the type, default and meaning of each. homebutler runs without a config file, using the defaults below. `homebutler init` creates one interactively; you can also write it by hand and check it with [`config validate`](#check-the-file).
+
+## Resolution order
+
+homebutler uses the first of these that applies:
+
+1. The `--config <path>` flag.
+2. The `HOMEBUTLER_CONFIG` environment variable.
+3. `~/.config/homebutler/config.yaml`, if the file exists.
+4. `./homebutler.yaml` in the current folder, if the file exists.
+
+If none applies, built-in defaults are used. The first two rules don't check that the file exists: a path you name is used as given, and a path that doesn't exist makes commands run on defaults without an error. `config validate` reports it.
+
+`config validate` shows which rule selected the file, one of these four:
+
+```text
+   File    /home/you/cfg/flag.yaml
+   Source  --config flag
+
+   File    /home/you/cfg/env.yaml
+   Source  $HOMEBUTLER_CONFIG
+
+   File    /home/you/.config/homebutler/config.yaml
+   Source  ~/.config/homebutler/config.yaml (XDG)
+
+   File    homebutler.yaml
+   Source  ./homebutler.yaml
+```
+
+### On Windows
+
+`~` is your profile folder, so rule 3 is `C:\Users\<you>\.config\homebutler\config.yaml`. `%APPDATA%` isn't searched. SSH keys and `known_hosts` are read from `C:\Users\<you>\.ssh`, where Windows' own `ssh-keygen` puts them.
+
+A server's `key:` can be written `~/.ssh/id_ed25519`, `~\.ssh\id_ed25519` or as a full path. In YAML, quote a Windows path with single quotes or leave it unquoted: double quotes treat `\U` as an escape.
+
+```yaml
+key: 'C:\Users\you\.ssh\id_ed25519'
+```
+
+### Files from earlier versions
+
+homebutler still reads these, so an older setup keeps working:
+
+| Old form | Current form | Behavior |
+| --- | --- | --- |
+| `~/.homebutler/alerts.yaml` | `notify:` and `alerts.rules` in `config.yaml` | Read only when `config.yaml` has neither `alerts.rules` nor a `notify` provider. Each use prints `warning: ~/.homebutler/alerts.yaml is deprecated, move rules/notify into config.yaml`. |
+| `~/.homebutler/watch/config.json` | `watch:` in `config.yaml` | A value in `config.yaml` wins. |
+| `backup_dir: <path>` | `backup.dir` | Both are read. `backup.dir` wins. |
+| `watch.enabled`, `watch.notify_on`, `watch.on_incident`, `watch.on_flapping`, `watch.cooldown` | The same keys under `watch.notify` | Both are read. If `watch.notify` is present, the flat keys are ignored. |
+
+## Check the file
+
+```bash
+homebutler config validate
+```
+
+`config validate` reads the config the way every other command does and reports three things: which file it used and why, what each section resolved to, and what is wrong. It makes no network connection and writes nothing.
+
+```text
+🗂  Config validation
+   File    /home/you/cfg/full.yaml
+   Source  --config flag
+
+Sections
+   ✓ servers     2 servers (local-box, nas)
+   ✓ proxmox     1 endpoint (pve)
+   ✓ wake        1 target
+   ✓ alerts      cpu 80% · memory 70% · disk 85% · ignoring 1 container(s): nightly-backup
+   ✓ notify      ntfy
+   ✓ watch       enabled=true · notify_on=incident · cooldown=10m
+   ✓ backup      /home/you/backups
+   · backup_dir  /home/you/backups
+   ✓ web         token set · dashboard can edit the config
+
+Findings
+   ⚠️ servers[1].key: Key file ~/.ssh/id_ed25519 does not exist.
+      → Connections to this server will fail when they are attempted.
+
+⚠️  Config is valid — 1 warning
+```
+
+A `✓` marks a section the file sets and `·` one it leaves out. Findings are errors (`❌`) or warnings (`⚠️`):
+
+- An **error** means something won't work, such as a duplicate server name or a threshold above 100. The command exits `1`.
+- A **warning** means the file parses but probably doesn't do what you intended. The command exits `0`, or `1` with `--strict`.
+
+homebutler ignores a key it doesn't recognize without any message, so a typo silently switches a feature off. `config validate` finds those keys and suggests the nearest top-level name:
+
+```text
+Findings
+   ⚠️ Line 1: field notifiy not found in the homebutler config
+      → Did you mean "notify"? Unrecognised keys are ignored silently, so this line currently has no effect.
+```
+
+| Flag | Meaning |
+| --- | --- |
+| `--strict` | Exit `1` when there are warnings, not only errors. |
+| `--json` | Print the result as JSON: `path`, `source`, `exists`, `sections`, `findings` and `valid`. Each finding has `severity`, `field`, `message` and `hint`. |
+| `--config <path>` | Check a specific file. |
+
+## File permissions
+
+A config file that holds a secret must not be readable by group or others. When it is, every command except [`doctor`](/changes/doctor) refuses to start, and `config validate` reports an error:
+
+```text
+error: config error: config file /home/you/cfg/perm.yaml contains plaintext secrets but permissions are too open (0644); run: chmod 600 /home/you/cfg/perm.yaml
+```
+
+Run `chmod 600` on the file. These keys count as secrets, and only when they hold a value: `servers[].password`, `proxmox[].token`, `proxmox[].action_token`, `notify.telegram.bot_token`, `notify.slack.webhook_url`, `notify.discord.webhook_url`, `notify.webhook.url`, `notify.ntfy.topic`, `notify.ntfy.token`, `notify.gotify.token` and `web.token`.
+
+## servers
+
+A list of machines. See [Multi-server](/running/multi-server) for how homebutler connects.
+
+| Key | Type | Default | Meaning |
+| --- | --- | --- | --- |
+| `name` | string | none, required | Name used by `--server`, `deploy`, `trust` and the dashboard. Must be unique. |
+| `host` | string | none | Address or hostname. Required unless `local: true`. |
+| `local` | boolean | `false` | The machine homebutler runs on. |
+| `user` | string | `root` | SSH user. |
+| `port` | integer | `22` | SSH port, 1 to 65535. |
+| `auth` | string | `key` | `key` or `password`. |
+| `key` | string | `~/.ssh/id_ed25519`, then `~/.ssh/id_rsa` | Private key path. `~/` is expanded. |
+| `password` | string | none | Required when `auth: password`. A password with `auth: key` is ignored, and `config validate` warns. |
+| `bin` | string | `homebutler` | Path of the homebutler binary on the server. |
+
+## proxmox
+
+A list of Proxmox VE API endpoints, read with an API token and no SSH. See [Proxmox VE](/apps/proxmox).
+
+| Key | Type | Default | Meaning |
+| --- | --- | --- | --- |
+| `name` | string | none, required | Endpoint name. Must be unique. |
+| `host` | string | none, required | Address or hostname. |
+| `port` | integer | `8006` | API port. |
+| `token_id` | string | none, required | API token ID, such as `monitoring@pve!readonly`. |
+| `token` | string | none | The token secret. Set this or `token_file`, not both. |
+| `token_file` | string | none | File that holds the token secret. `~/` is expanded. The file must exist. |
+| `fingerprint` | string | none | Expected certificate fingerprint. |
+| `ca_file` | string | none | CA certificate file used to verify the endpoint. |
+| `insecure` | boolean | `false` | Skip certificate verification. |
+| `timeout` | duration | `10s` | Request timeout, a positive Go duration. |
+| `action_token_id` | string | none | Token ID of a second credential used only for guest power actions. |
+| `action_token` | string | none | Secret for the action credential. Set this or `action_token_file`. |
+| `action_token_file` | string | none | File that holds the action secret. A file readable by group or others gets a warning. |
+| `guests` | list | none | Guests that `watch` expects to keep running. Other guests are not alerted on. |
+| `guests[].node` | string | none | Proxmox node name. |
+| `guests[].type` | string | none | `qemu` or `lxc`. |
+| `guests[].vmid` | integer | none | Guest ID, greater than 0. |
+
+Guest actions use only the action credential. Without one, the actions are unavailable. Using the read token ID as `action_token_id` triggers a warning.
+
+## wake
+
+A list of Wake-on-LAN targets. See [Wake-on-LAN](/apps/wake-on-lan).
+
+| Key | Type | Default | Meaning |
+| --- | --- | --- | --- |
+| `name` | string | none, required | Name passed to `wake`. |
+| `mac` | string | none, required | MAC address such as `AA:BB:CC:DD:EE:FF`. |
+| `ip` | string | none | Broadcast address for the packet. |
+
+## alerts
+
+Thresholds for the [`alerts`](/monitoring/alerts) command and the alert watcher.
+
+| Key | Type | Default | Meaning |
+| --- | --- | --- | --- |
+| `cpu` | number | `90` | CPU percentage. 0 to 100; `0` alerts on every check, so `config validate` warns. |
+| `memory` | number | `85` | Memory percentage. |
+| `disk` | number | `90` | Disk percentage, applied to every mount. |
+| `ignore` | list of strings | none | Container names whose stopping and starting isn't reported. Use the name `docker ps` shows. |
+| `rules` | list | none | Self-healing rules, below. |
+
+A rule under `alerts.rules`:
+
+| Key | Type | Default | Meaning |
+| --- | --- | --- | --- |
+| `name` | string | none, required | Unique rule name. |
+| `metric` | string | none, required | `cpu`, `memory`, `disk` or `container`. |
+| `threshold` | number | none | Percentage from 1 to 100. Required for `cpu`, `memory` and `disk`. |
+| `watch` | list of strings | none | Names to watch. Required for `container`. |
+| `kind` | string | `docker` | What the names in `watch` are: `docker`, `systemd` or `pm2`. |
+| `action` | string | none, required | `notify`, `restart` or `exec`. |
+| `exec` | string | none | Command to run. Required for `exec`. |
+| `timeout` | duration | `30s` | Limit for the `exec` command. |
+| `cooldown` | duration | none | Minimum time between firings of the rule. |
+
+If a rule fails to load, `watch` starts without the rules and the threshold and container checks still run. `config validate` reports the rule that failed.
+
+## notify
+
+Notification channels, all off until configured. A channel is used only when its block is complete; an incomplete block disables that channel and leaves the others on. [`homebutler notify test`](/monitoring/notifications) sends one message per channel.
+
+| Channel | Keys | Notes |
+| --- | --- | --- |
+| `telegram` | `bot_token`, `chat_id` | Both required. |
+| `slack` | `webhook_url` | Must start with `http://` or `https://`. |
+| `discord` | `webhook_url` | Must start with `http://` or `https://`. |
+| `webhook` | `url` | Receives homebutler's own JSON payload. |
+| `ntfy` | `url`, `topic`, `token` | `url` and `topic` required. `token` is for a protected topic. |
+| `gotify` | `url`, `token` | Both required. `token` is an application token. |
+
+## watch
+
+Settings for [`watch`](/monitoring/watch). All keys are optional.
+
+| Key | Type | Default | Meaning |
+| --- | --- | --- | --- |
+| `notify.enabled` | boolean | `false` | Send notifications for incidents. Needs a complete `notify` channel. |
+| `notify.notify_on` | string | `flapping` | `all`, `incident`, `flapping` or `off`. |
+| `notify.on_incident` | boolean | derived | Set by `notify_on`. |
+| `notify.on_flapping` | boolean | derived | Set by `notify_on`. |
+| `notify.cooldown` | duration | `5m` | Minimum time between notifications, such as `10m`. |
+| `flapping.short_window` | duration | `10m` | Short window for counting restarts. |
+| `flapping.short_threshold` | integer | `3` | Restarts in the short window that count as flapping. |
+| `flapping.long_window` | duration | `24h` | Long window for counting restarts. |
+| `flapping.long_threshold` | integer | `5` | Restarts in the long window that count as flapping. |
+| `retention.max_incidents` | integer | `200` | Incidents kept on disk, newest first. A negative number keeps all of them. |
+
+## backup
+
+Where backups go and how many to keep. See [Backup and restore](/backups/backup-and-restore).
+
+| Key | Type | Default | Meaning |
+| --- | --- | --- | --- |
+| `dir` | string | `~/.homebutler/backups` | Backup folder. A warning appears when neither it nor its parent exists. |
+| `retention.max_archives` | integer | `0` | Archives to keep. `0` keeps all. A negative number warns. |
+| `retention.max_bytes` | string | none | Size cap for the folder, such as `500MB` or `20GB`. Units `B`, `K`, `M`, `G`, `T` with an optional `B` or `iB`. An unparseable size is an error. |
+
+## web
+
+Settings for the [web dashboard](/running/web-dashboard).
+
+| Key | Type | Default | Meaning |
+| --- | --- | --- | --- |
+| `token` | string | none | Bearer token for the dashboard API. Setting it enables the dashboard's actions and makes its settings editable. The file must be mode `0600`. |
+
+## Example
+
+A file that sets every section. `config validate` accepts it when `~/pve.token` exists, and warns if `~/.ssh/id_ed25519` doesn't:
+
+```yaml
+servers:
+  - name: local-box
+    host: 127.0.0.1
+    local: true
+  - name: nas
+    host: 192.168.1.20
+    user: pi
+    port: 2222
+    auth: key
+    key: ~/.ssh/id_ed25519
+    bin: /usr/local/bin/homebutler
+proxmox:
+  - name: pve
+    host: 192.168.1.10
+    token_id: monitoring@pve!readonly
+    token_file: ~/pve.token
+    timeout: 10s
+    guests:
+      - node: pve
+        type: qemu
+        vmid: 100
+wake:
+  - name: desktop
+    mac: "AA:BB:CC:DD:EE:FF"
+    ip: "192.168.1.255"
+alerts:
+  cpu: 80
+  memory: 70
+  disk: 85
+  ignore:
+    - nightly-backup
+  rules:
+    - name: web-down
+      metric: container
+      watch: [web]
+      action: restart
+      cooldown: 5m
+notify:
+  ntfy:
+    url: https://ntfy.example.com
+    topic: homelab
+watch:
+  notify:
+    enabled: true
+    notify_on: incident
+    cooldown: 10m
+  flapping:
+    short_window: 5m
+    short_threshold: 3
+    long_window: 1h
+    long_threshold: 6
+  retention:
+    max_incidents: 100
+backup:
+  dir: /home/you/backups
+  retention:
+    max_archives: 5
+    max_bytes: 20GB
+web:
+  token: <long-random-token>
+```

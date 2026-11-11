@@ -1,0 +1,49 @@
+---
+title: notify
+description: "Sends a test message through the notification channels you configured."
+---
+
+# homebutler notify
+
+Sends a test message through the notification channels you configured.
+
+Channels are Telegram, Slack, Discord, a generic webhook, ntfy, and Gotify. Run the test before you rely on alerts or watch notifications.
+
+For the channels and their settings, see [Notifications](/monitoring/notifications).
+
+| Command | What it does |
+| --- | --- |
+| [`test`](#notify-test) | Sends one test notification through each configured provider and reports each result. |
+
+## `notify test`
+
+Sends one test notification through each configured provider and reports each result.
+
+```bash
+homebutler notify test [flags]
+```
+
+The test is sent as a triggered alert, so it takes the same path a real alert takes. Providers that are not configured are skipped.
+
+| Flag | Type | Default | Description |
+| --- | --- | --- | --- |
+| `--alerts-config` | string | - | Path to a legacy alerts YAML file whose notify settings are used when `config.yaml` has none. |
+
+```bash
+homebutler notify test
+```
+
+```text
+Sending test notification...
+  ✅ webhook: sent
+```
+
+With no notify settings at all, the command is an error.
+
+```bash
+homebutler notify test --config /home/you/min.yaml
+```
+
+```text
+error: no notification config found; configure notify in config.yaml or use --alerts-config for legacy alerts.yaml
+```

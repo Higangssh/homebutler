@@ -1,0 +1,443 @@
+---
+title: Backup
+description: "Reference for the MCP tools that create, list, drill and restore backups of Docker Compose services: backup_create, backup_list, backup_drill and backup_restore."
+sidebar_position: 6
+---
+
+# Backup
+
+The backup tools back up Docker Compose volumes and prove that an archive restores. See [Backup and restore](/backups/backup-and-restore) and [Backup drill](/backups/drill) for the commands.
+
+<Tool>
+
+### backup_list
+
+<Badge tone="success">read</Badge>
+
+Lists the archives in the backup directory with name, size and creation time. An archive in the list says nothing about whether it restores: [`backup_drill`](#backup_drill) answers that.
+
+#### Arguments
+
+| Argument | Type | Description |
+| --- | --- | --- |
+| `server` | string | Server from your config to run on. See [Run a tool on another server](/mcp#run-a-tool-on-another-server). |
+
+#### Response
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `name` | string | File name of the archive. |
+| `path` | string | Full path of the archive. Pass it as `archive` to `backup_drill` or `backup_restore`. |
+| `size` | string | Size as text, such as `1.7 KB`. |
+| `created_at` | string | When the archive was written, in RFC 3339 format with the local offset. |
+
+<Accordion title="Examples">
+
+The response is an array with one entry per archive:
+
+```json
+[
+  {
+    "name": "backup_2026-10-25_112827.006.tar.gz",
+    "path": "/home/you/.homebutler/backups/backup_2026-10-25_112827.006.tar.gz",
+    "size": "1.5 KB",
+    "created_at": "2026-10-25T11:28:28-07:00"
+  },
+  {
+    "name": "backup_2026-10-25_114141.174.tar.gz",
+    "path": "/home/you/.homebutler/backups/backup_2026-10-25_114141.174.tar.gz",
+    "size": "1.7 KB",
+    "created_at": "2026-10-25T11:41:42-07:00"
+  }
+]
+```
+
+</Accordion>
+
+</Tool>
+
+<Tool>
+
+### backup_create
+
+<Badge tone="warning">write</Badge>
+
+Backs up the volumes and bind mounts of Docker Compose services into one `.tar.gz` archive. Volumes are read while the containers run, so a database that is mid-write can land inconsistent. An archive is not evidence that it restores: run [`backup_drill`](#backup_drill) for that.
+
+#### Arguments
+
+| Argument | Type | Description |
+| --- | --- | --- |
+| `exclude` | array of strings | Host paths to leave out. A bind mount at or under one of the paths is not archived. The paths are recorded in the archive manifest, so a later restore can tell a mount that was left out from one that never existed. A single string is accepted as a list of one. With `server` set, `exclude` isn't sent to the remote server. |
+| `service` | string | Name of one Compose service to back up. Without it, every service of every Compose project on the machine is included. A name that no project has returns `service "<name>" not found in any compose project`. |
+| `to` | string | Directory to write the archive to. Defaults to `backup_dir` from the config, or `~/.homebutler/backups`. |
+| `server` | string | Server from your config to run on. See [Run a tool on another server](/mcp#run-a-tool-on-another-server). |
+
+#### Response
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `archive` | string | Path of the archive that was written. |
+| `services` | array of strings | Compose services in the archive. |
+| `volumes` | integer | Number of volumes and bind mounts in the archive. |
+| `size` | string | Size of the archive as text, such as `1.7 KB`. |
+| `pruned` | object or null, optional | What the retention rules removed after the archive was written. Left out when the config sets no retention. |
+| `pruned.freed_bytes` | integer, optional | Bytes freed. Left out when nothing was deleted. |
+| `pruned.kept` | integer | Number of archives left in the directory. |
+| `pruned.kept_bytes` | integer | Their total size, in bytes. |
+| `pruned.removed` | array of strings, optional | File names of the archives that were deleted. Left out when none were. |
+| `skipped` | array of strings, optional | Bind mounts that `exclude` left out, as `service:path`. Left out when nothing was excluded. |
+| `unmatched_excludes` | array of strings, optional | Paths in `exclude` that matched no mount. A misspelled path backs up what it was meant to skip. Left out when every path matched. |
+
+<Accordion title="Examples">
+
+Back up one service:
+
+Arguments:
+
+```json
+{
+  "service": "vaultwarden"
+}
+```
+
+Response:
+
+```json
+{
+  "archive": "/home/you/.homebutler/backups/backup_2026-10-25_112651.222.tar.gz",
+  "services": [
+    "vaultwarden"
+  ],
+  "volumes": 1,
+  "size": "1.6 KB"
+}
+```
+
+Exclude a bind mount, and a path that matches nothing. The response reports both:
+
+Arguments:
+
+```json
+{
+  "service": "notes",
+  "exclude": [
+    "/srv/bind",
+    "/nope"
+  ]
+}
+```
+
+Response:
+
+```json
+{
+  "archive": "/home/you/.homebutler/backups/backup_2026-10-25_114217.745.tar.gz",
+  "services": [
+    "notes"
+  ],
+  "volumes": 0,
+  "size": "1.5 KB",
+  "skipped": [
+    "notes:/home/you/bind"
+  ],
+  "unmatched_excludes": [
+    "/nope"
+  ]
+}
+```
+
+With `backup.retention.max_archives: 2` in the config, the response also reports what retention removed:
+
+Arguments:
+
+```json
+{
+  "service": "vaultwarden"
+}
+```
+
+Response:
+
+```json
+{
+  "archive": "/home/you/.homebutler/backups/backup_2026-10-25_114141.174.tar.gz",
+  "services": [
+    "vaultwarden"
+  ],
+  "volumes": 1,
+  "size": "1.7 KB",
+  "pruned": {
+    "removed": [
+      "backup_2026-10-25_112822.502.tar.gz",
+      "backup_2026-10-25_112651.222.tar.gz"
+    ],
+    "freed_bytes": 3379,
+    "kept": 2,
+    "kept_bytes": 3321
+  }
+}
+```
+
+A service that no Compose project has returns an error:
+
+Arguments:
+
+```json
+{
+  "service": "missing"
+}
+```
+
+Response:
+
+```text
+service "missing" not found in any compose project
+```
+
+</Accordion>
+
+</Tool>
+
+<Tool>
+
+### backup_drill
+
+<Badge tone="warning">write</Badge>
+
+Verifies a backup by booting an app from the archive in an isolated Docker environment and requiring an HTTP health check to pass. The second copy runs beside the live one on a network and a port of its own, and everything the drill created is removed afterwards. A pass means the archive isn't corrupt and the app starts on its data, not that every row is there. A drill of one app is recorded, and [`doctor`](/mcp/report-doctor-inventory#doctor) reads the record. A drill with `all` set to `true` records nothing.
+
+#### Arguments
+
+| Argument | Type | Description |
+| --- | --- | --- |
+| `all` | boolean | `true` drills every service in the archive that has a health check defined. The response then has a different shape, listed below the table. Default: `false`. |
+| `app` | string | Name of the Compose service in the archive to drill. Required unless `all` is `true`. It must be one of `nginx-proxy-manager`, `vaultwarden`, `uptime-kuma`, `pi-hole`, `gitea`, `jellyfin`, `plex`, `portainer`, `homepage` or `adguard-home`. Another name returns `no health check defined for "<name>"`. |
+| `archive` | string | Path of the archive to drill. Defaults to the newest archive in the backup directory. |
+| `server` | string | Server from your config to run on. See [Run a tool on another server](/mcp#run-a-tool-on-another-server). |
+
+#### Response
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `app` | string | The service that was drilled. |
+| `archive` | string | Path of the archive that was used. |
+| `size` | string | Size of the archive as text. |
+| `file_count` | integer | Number of files in the archive. `0` when the integrity check failed. |
+| `integrity` | boolean | `true` when the archive could be read to the end. |
+| `booted` | boolean | `true` when the container started. |
+| `boot_seconds` | integer | Seconds from `docker run` to a running container. |
+| `health_status` | integer | HTTP status the health check received. `0` when none was received. |
+| `health_port` | string | Host port the drill container was published on. Empty when the drill stopped before that step. |
+| `passed` | boolean | `true` when the archive is intact, the app booted, and the health check answered with an accepted status. |
+| `total_seconds` | integer | Seconds the drill took. |
+| `drilled_at` | string | When the drill started, in RFC 3339 format (UTC). |
+| `error` | string, optional | Why the drill failed. Left out when it passed. |
+| `logs` | string, optional | Log lines of the drill container, on a boot or health failure. Left out otherwise. |
+
+<Accordion title="Examples">
+
+With `all` set to `true` the response is an object with `results` (an array of the entries above, one per drilled service), `total`, `passed` and `failed` (counts). The object isn't part of the frozen output types.
+
+Drill a service that is in the newest archive:
+
+Arguments:
+
+```json
+{
+  "app": "vaultwarden"
+}
+```
+
+Response:
+
+```json
+{
+  "app": "vaultwarden",
+  "archive": "/home/you/.homebutler/backups/backup_2026-10-25_114141.174.tar.gz",
+  "size": "1.7 KB",
+  "file_count": 9,
+  "integrity": true,
+  "booted": true,
+  "boot_seconds": 0,
+  "health_status": 200,
+  "health_port": "37753",
+  "passed": true,
+  "total_seconds": 1,
+  "drilled_at": "2026-10-25T18:41:51Z"
+}
+```
+
+A service that isn't in the archive returns a result with `passed` set to `false`. The call itself succeeds:
+
+Arguments:
+
+```json
+{
+  "app": "gitea"
+}
+```
+
+Response:
+
+```json
+{
+  "app": "gitea",
+  "archive": "/home/you/.homebutler/backups/backup_2026-10-25_114141.174.tar.gz",
+  "size": "1.7 KB",
+  "file_count": 9,
+  "integrity": true,
+  "booted": false,
+  "boot_seconds": 0,
+  "health_status": 0,
+  "health_port": "",
+  "passed": false,
+  "error": "service \"gitea\" not found in backup",
+  "total_seconds": 0,
+  "drilled_at": "2026-10-25T18:41:53Z"
+}
+```
+
+Drill every drillable service in an archive:
+
+Arguments:
+
+```json
+{
+  "all": true
+}
+```
+
+Response:
+
+```json
+{
+  "results": [
+    {
+      "app": "vaultwarden",
+      "archive": "/home/you/.homebutler/backups/backup_2026-10-25_114141.174.tar.gz",
+      "size": "1.7 KB",
+      "file_count": 9,
+      "integrity": true,
+      "booted": true,
+      "boot_seconds": 0,
+      "health_status": 200,
+      "health_port": "41287",
+      "passed": true,
+      "total_seconds": 3,
+      "drilled_at": "2026-10-25T18:42:13Z"
+    }
+  ],
+  "total": 1,
+  "passed": 1,
+  "failed": 0
+}
+```
+
+A service without a health check returns an error:
+
+Arguments:
+
+```json
+{
+  "app": "myapp"
+}
+```
+
+Response:
+
+```text
+no health check defined for "myapp"
+```
+
+</Accordion>
+
+</Tool>
+
+<Tool>
+
+### backup_restore
+
+<Badge tone="danger">destructive</Badge>
+
+Restores Docker volumes from an archive, overwriting the data the app is running on. Confirm with the user before you call it. Bind mounts that the archive declares are never restored through this tool, because an agent can't name a host path it may write to: they are listed in `refused`.
+
+#### Arguments
+
+| Argument | Type | Description |
+| --- | --- | --- |
+| `archive` <Badge>required</Badge> | string | Path of the archive. A path that doesn't exist returns `archive not found: <path>`. |
+| `service` | string | Restore only this service from the archive. |
+| `server` | string | Server from your config to run on. See [Run a tool on another server](/mcp#run-a-tool-on-another-server). |
+
+#### Response
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `archive` | string | Path of the archive that was used. |
+| `services` | array of strings | Services restored. |
+| `volumes` | integer | Number of volumes restored. |
+| `refused` | array of objects, optional | Mounts that the restore declined, one entry each. Left out when none were declined. |
+| `refused.reason` | string | Why it was declined. The text names the CLI option `--allow-bind`, which this tool doesn't have. |
+| `refused.service` | string | Service the mount belongs to. |
+| `refused.target` | string | Host path of the mount. |
+| `refused.type` | string | Mount type, such as `bind`. |
+
+<Accordion title="Examples">
+
+Restore one service. The files in the archive are written back to the volume, and files created after the backup stay:
+
+Arguments:
+
+```json
+{
+  "archive": "/home/you/.homebutler/backups/backup_2026-10-25_114141.174.tar.gz",
+  "service": "vaultwarden"
+}
+```
+
+Response:
+
+```json
+{
+  "archive": "/home/you/.homebutler/backups/backup_2026-10-25_114141.174.tar.gz",
+  "services": [
+    "vaultwarden"
+  ],
+  "volumes": 1
+}
+```
+
+An archive of a service with a bind mount restores no volumes, and the response says why:
+
+Arguments:
+
+```json
+{
+  "archive": "/home/you/.homebutler/backups/backup_2026-10-25_114208.709.tar.gz"
+}
+```
+
+Response:
+
+```json
+{
+  "archive": "/home/you/.homebutler/backups/backup_2026-10-25_114208.709.tar.gz",
+  "services": [
+    "notes"
+  ],
+  "volumes": 0,
+  "refused": [
+    {
+      "service": "notes",
+      "type": "bind",
+      "target": "/home/you/bind",
+      "reason": "bind target /home/you/bind was not permitted; pass --allow-bind /home/you/bind to restore it"
+    }
+  ]
+}
+```
+
+</Accordion>
+
+</Tool>

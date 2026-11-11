@@ -1,0 +1,634 @@
+---
+title: Proxmox
+description: "Reference for the MCP tools that read Proxmox VE and start, reboot or shut down guests: proxmox_status, proxmox_guests, proxmox_node, proxmox_tasks, proxmox_task_status, the three proxmox_guest actions, and the Community Scripts tools."
+sidebar_position: 8
+---
+
+# Proxmox
+
+The Proxmox tools talk to the Proxmox VE API through the endpoints in the `proxmox:` section of your config, with an API token and no SSH. The tools other than `proxmox_script_list` and `proxmox_script_command` accept `endpoint` and not `server`: a call that passes the name of a remote server returns `tool "<name>" cannot be pointed at a server; use endpoint`. The two script tools take neither `endpoint` nor `server`, and the same call returns `tool "<name>" cannot be pointed at a server`. See [Proxmox VE](/apps/proxmox) for the setup.
+
+<Tool>
+
+### proxmox_status
+
+<Badge tone="success">read</Badge>
+
+Returns the Proxmox VE version, the cluster status, and the nodes, guests and storage of one endpoint. A collector that fails doesn't fail the call: its name goes into `failed_collectors`, the reason into `warnings`, and the class of failure into `failure_classes`. If the host doesn't answer at all, the other collectors are skipped and get no warning of their own.
+
+#### Arguments
+
+| Argument | Type | Description |
+| --- | --- | --- |
+| `endpoint` | string | Name of an endpoint in the `proxmox:` list of your config. It can be left out when exactly one endpoint is configured. With none configured the call returns `no Proxmox endpoints configured. Add proxmox entries to your config file`. With several, it returns `multiple Proxmox endpoints configured; specify endpoint.` and the endpoint names. |
+
+#### Response
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `version` | object | Proxmox VE version. |
+| `version.version` | string | Version string. Empty when the version collector failed. |
+| `version.release` | string | Release string. Empty when the version collector failed. |
+| `version.repo_id` | string, optional | Repository ID. Left out when Proxmox sent none. |
+| `cluster` | array of objects | Cluster and node entries from the cluster status. Empty when the cluster collector failed. |
+| `cluster.id` | string, optional | Entry ID, as Proxmox reports it. |
+| `cluster.ip` | string, optional | Node address. |
+| `cluster.level` | string, optional | Support level, as Proxmox reports it. |
+| `cluster.local` | boolean, optional | `true` for the node that answered. |
+| `cluster.name` | string, optional | Cluster or node name. |
+| `cluster.nodeid` | integer, optional | Node ID in the cluster. |
+| `cluster.nodes` | integer, optional | Number of nodes in the cluster. |
+| `cluster.online` | boolean, optional | `true` when the node is online. |
+| `cluster.quorate` | boolean, optional | `true` when the cluster has quorum. Left out when Proxmox sent none. |
+| `cluster.type` | string | `cluster` or `node`. |
+| `cluster.version` | integer, optional | Cluster configuration version. |
+| `resources` | object | Everything the token can see. |
+| `resources.nodes` | array of objects | Nodes. |
+| `resources.nodes.cpu` | number or null, optional | CPU use as a fraction (0 to 1). |
+| `resources.nodes.level` | string, optional | Support level, as Proxmox reports it. |
+| `resources.nodes.local` | boolean, optional | `true` for the node that answered. |
+| `resources.nodes.max_cpu` | number or null, optional | Number of CPUs. |
+| `resources.nodes.max_mem` | integer or null, optional | Memory installed, in bytes. |
+| `resources.nodes.mem` | integer or null, optional | Memory in use, in bytes. |
+| `resources.nodes.name` | string | Node name. |
+| `resources.nodes.ssl_fingerprint` | string, optional | Fingerprint of the node's TLS certificate. |
+| `resources.nodes.status` | string | Node status, such as `online`. |
+| `resources.nodes.uptime` | integer or null, optional | Seconds since boot. |
+| `resources.guests` | array of objects | QEMU and LXC guests in one list, with the fields listed for [`proxmox_guests`](#proxmox_guests). |
+| `resources.storage` | array of objects | Storage. |
+| `resources.storage.content` | string, optional | Content types the storage holds. |
+| `resources.storage.name` | string | Storage name. |
+| `resources.storage.node` | string, optional | Node the entry belongs to. |
+| `resources.storage.shared` | boolean, optional | `true` for shared storage. |
+| `resources.storage.status` | string, optional | Storage status. |
+| `resources.storage.total` | integer or null, optional | Size, in bytes. |
+| `resources.storage.type` | string, optional | Storage type, such as `dir` or `zfspool`. |
+| `resources.storage.used` | integer or null, optional | Space in use, in bytes. |
+| `warnings` | array of strings, optional | One message per collector that failed and ran. Collectors skipped after a connection failure get none. Left out when none failed. |
+| `failed_collectors` | array of strings, optional | Collectors that failed: `version`, `cluster` or `resources`. The `resources` collector also fails when its answer holds no nodes, no guests and no storage, which points to a token with too few permissions. Left out when all answered. |
+| `failure_classes` | object, optional | The failure class for each name in `failed_collectors`: `response`, `tls`, `authentication`, `authorization` or `transport`. Left out when none failed. |
+
+<Accordion title="Examples">
+
+With an endpoint whose host refuses connections, the call succeeds and reports the failure inside the document:
+
+```json
+{
+  "version": {
+    "version": "",
+    "release": ""
+  },
+  "cluster": [],
+  "resources": {
+    "nodes": [],
+    "guests": [],
+    "storage": []
+  },
+  "warnings": [
+    "version: proxmox request /api2/json/version: Get \"https://127.0.0.1:8199/api2/json/version\": dial tcp 127.0.0.1:8199: connect: connection refused"
+  ],
+  "failed_collectors": [
+    "version",
+    "cluster",
+    "resources"
+  ],
+  "failure_classes": {
+    "cluster": "transport",
+    "resources": "transport",
+    "version": "transport"
+  }
+}
+```
+
+With no endpoint in the config, the call returns an error:
+
+```text
+no Proxmox endpoints configured. Add proxmox entries to your config file
+```
+
+</Accordion>
+
+</Tool>
+
+<Tool>
+
+### proxmox_guests
+
+<Badge tone="success">read</Badge>
+
+Lists QEMU and LXC guests in one array, optionally filtered by node, status or type. The filters combine with AND.
+
+#### Arguments
+
+| Argument | Type | Description |
+| --- | --- | --- |
+| `endpoint` | string | Name of an endpoint in the `proxmox:` list of your config. It can be left out when exactly one endpoint is configured. With none configured the call returns `no Proxmox endpoints configured. Add proxmox entries to your config file`. With several, it returns `multiple Proxmox endpoints configured; specify endpoint.` and the endpoint names. |
+| `node` | string | Only guests on this node. |
+| `status` | string | Only guests with this status, such as `running` or `stopped`. |
+| `type` | string | Only guests of this type: `qemu` or `lxc`. |
+
+#### Response
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `cpu` | number or null, optional | CPU use as a fraction of the guest's CPUs (0 to 1). Left out when Proxmox sent none. |
+| `disk` | integer or null, optional | Disk space in use, in bytes. |
+| `lock` | string, optional | Lock held on the guest, such as `backup`. Left out when none. |
+| `max_cpu` | number or null, optional | CPUs assigned, as Proxmox reports it. Left out when Proxmox sent none. |
+| `max_disk` | integer or null, optional | Disk size, in bytes. |
+| `max_mem` | integer or null, optional | Memory assigned, in bytes. |
+| `mem` | integer or null, optional | Memory in use, in bytes. Left out when Proxmox sent none. |
+| `name` | string, optional | Guest name. Left out when Proxmox has none. |
+| `net_in` | integer or null, optional | Bytes received. |
+| `net_out` | integer or null, optional | Bytes sent. |
+| `node` | string | Node that hosts the guest. |
+| `pool` | string, optional | Resource pool. Left out when none. |
+| `status` | string | Guest status, such as `running` or `stopped`. |
+| `tags` | array of strings, optional | Tags of the guest. Left out when none. |
+| `template` | boolean | `true` for a template. |
+| `type` | string | `qemu` or `lxc`. |
+| `uptime` | integer or null, optional | Seconds since the guest started. |
+| `vmid` | integer | The guest's VMID. |
+
+<Accordion title="Examples">
+
+The response is an array of guests with the fields above. An endpoint that doesn't answer returns an error:
+
+Arguments:
+
+```json
+{
+  "type": "qemu",
+  "status": "running"
+}
+```
+
+Response:
+
+```text
+proxmox request /api2/json/cluster/resources: Get "https://127.0.0.1:8199/api2/json/cluster/resources": dial tcp 127.0.0.1:8199: connect: connection refused
+```
+
+</Accordion>
+
+</Tool>
+
+<Tool>
+
+### proxmox_node
+
+<Badge tone="success">read</Badge>
+
+Returns the detailed status of one node: CPU, load, memory, CPU model information, and boot mode.
+
+#### Arguments
+
+| Argument | Type | Description |
+| --- | --- | --- |
+| `node` <Badge>required</Badge> | string | Name of the Proxmox node, such as one from `proxmox_status`. |
+| `endpoint` | string | Name of an endpoint in the `proxmox:` list of your config. It can be left out when exactly one endpoint is configured. With none configured the call returns `no Proxmox endpoints configured. Add proxmox entries to your config file`. With several, it returns `multiple Proxmox endpoints configured; specify endpoint.` and the endpoint names. |
+
+#### Response
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `boot_info` | object | How the node booted. |
+| `boot_info.mode` | string, optional | Boot mode, such as `efi` or `bios`. |
+| `boot_info.secureboot` | boolean, optional | `true` when Secure Boot is on. Left out when Proxmox sent none. |
+| `cpu` | number or null, optional | CPU use as a fraction (0 to 1). Left out when Proxmox sent none. |
+| `cpuinfo` | object | CPU model information. |
+| `cpuinfo.cores` | integer or null, optional | Cores per socket. |
+| `cpuinfo.cpus` | integer or null, optional | Total CPUs. |
+| `cpuinfo.hvm` | string | Hardware virtualization support, as Proxmox reports it. |
+| `cpuinfo.mhz` | string | Clock speed, as a string. |
+| `cpuinfo.user_hz` | integer or null, optional | Kernel clock tick rate, as Proxmox reports it. |
+| `loadavg` | array of strings, optional | The 1, 5 and 15 minute load averages, as strings. Left out when Proxmox sent none. |
+| `memory` | object | Memory, in bytes. |
+| `memory.available` | integer or null, optional | Available. |
+| `memory.free` | integer or null, optional | Free. |
+| `memory.total` | integer or null, optional | Installed. |
+| `memory.used` | integer or null, optional | In use. |
+| `pveversion` | string, optional | Proxmox VE package version string of the node. |
+| `uptime` | integer or null, optional | Seconds since boot. |
+| `wait` | number or null, optional | I/O wait as a fraction. Left out when Proxmox sent none. |
+
+<Accordion title="Examples">
+
+An endpoint that doesn't answer returns an error:
+
+Arguments:
+
+```json
+{
+  "node": "pve"
+}
+```
+
+Response:
+
+```text
+proxmox request /api2/json/nodes/pve/status: Get "https://127.0.0.1:8199/api2/json/nodes/pve/status": dial tcp 127.0.0.1:8199: connect: connection refused
+```
+
+</Accordion>
+
+</Tool>
+
+<Tool>
+
+### proxmox_tasks
+
+<Badge tone="success">read</Badge>
+
+Returns the 50 most recent tasks of a node, running and finished.
+
+#### Arguments
+
+| Argument | Type | Description |
+| --- | --- | --- |
+| `node` <Badge>required</Badge> | string | Name of the Proxmox node, such as one from `proxmox_status`. |
+| `endpoint` | string | Name of an endpoint in the `proxmox:` list of your config. It can be left out when exactly one endpoint is configured. With none configured the call returns `no Proxmox endpoints configured. Add proxmox entries to your config file`. With several, it returns `multiple Proxmox endpoints configured; specify endpoint.` and the endpoint names. |
+
+#### Response
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `endtime` | integer, optional | End of the task, in Unix seconds. Left out while the task runs. |
+| `id` | string, optional | The guest or object the task acts on, such as a VMID. Left out when none. |
+| `node` | string | Node the task ran on. |
+| `pid` | integer, optional | Process ID of the task. Left out when 0. |
+| `pstart` | integer, optional | Process start time, as Proxmox reports it. Left out when 0. |
+| `starttime` | integer, optional | Start of the task, in Unix seconds. Left out when 0. |
+| `status` | string | Task status as Proxmox reports it, such as `OK`. |
+| `type` | string | Task type, such as `qmstart` or `vzdump`. |
+| `upid` | string | The task ID. Pass it to `proxmox_task_status`. |
+| `user` | string, optional | User that started the task. Left out when none. |
+
+<Accordion title="Examples">
+
+An endpoint that doesn't answer returns an error:
+
+Arguments:
+
+```json
+{
+  "node": "pve"
+}
+```
+
+Response:
+
+```text
+proxmox request /api2/json/nodes/pve/tasks: Get "https://127.0.0.1:8199/api2/json/nodes/pve/tasks?limit=50&source=all": dial tcp 127.0.0.1:8199: connect: connection refused
+```
+
+</Accordion>
+
+</Tool>
+
+<Tool>
+
+### proxmox_task_status
+
+<Badge tone="success">read</Badge>
+
+Returns the state of one asynchronous task, such as the one that a guest action started. The UPID is opaque: pass it exactly as an earlier call returned it.
+
+#### Arguments
+
+| Argument | Type | Description |
+| --- | --- | --- |
+| `endpoint` <Badge>required</Badge> | string | Name of an endpoint in the `proxmox:` list of your config. Required: a call that changes or inspects one task never guesses the endpoint. |
+| `node` <Badge>required</Badge> | string | Name of the Proxmox node, such as one from `proxmox_status`. |
+| `upid` <Badge>required</Badge> | string | The task ID, from `proxmox_tasks` or from the `upid` of a guest action. |
+
+#### Response
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `exitstatus` | string, optional | `OK` or the error text of a stopped task. Left out while the task runs. |
+| `id` | string, optional | The guest or object the task acts on. Left out when none. |
+| `node` | string | Node the task ran on. |
+| `pid` | integer, optional | Process ID of the task. Left out when 0. |
+| `pstart` | integer, optional | Process start time, as Proxmox reports it. Left out when 0. |
+| `result` | string | A short token for the state: `running`, `ok` (stopped with `OK`), `failed` (stopped with anything else) or `unknown`. |
+| `starttime` | integer, optional | Start of the task, in Unix seconds. Left out when 0. |
+| `status` | string | `running` or `stopped`. |
+| `type` | string | Task type, such as `qmstart`. |
+| `upid` | string | The task ID. |
+| `user` | string, optional | User that started the task. Left out when none. |
+
+<Accordion title="Examples">
+
+An endpoint name that isn't in the config returns an error:
+
+Arguments:
+
+```json
+{
+  "endpoint": "pve",
+  "node": "pve",
+  "upid": "<upid>"
+}
+```
+
+Response:
+
+```text
+proxmox endpoint "pve" not found in config. Available endpoints: []
+```
+
+</Accordion>
+
+</Tool>
+
+<Tool>
+
+### proxmox_guest_start
+
+<Badge tone="warning">write</Badge>
+
+Starts one guest after confirmation and returns the task ID of the queued start. The target is explicit: homebutler doesn't discover the node or the guest type for you. The action uses a separate credential: the endpoint needs `action_token_id` and `action_token` or `action_token_file` in the config, and homebutler never falls back to the read token. A Proxmox request that is lost after it was sent is not retried, because a retry could submit the action twice.
+
+#### Arguments
+
+| Argument | Type | Description |
+| --- | --- | --- |
+| `confirm` <Badge>required</Badge> | boolean | Must be the boolean `true`. Without it the call returns `confirmation required for Proxmox guest action: endpoint="<endpoint>" node="<node>" type="<type>" vmid=<vmid> action="<action>"; set confirm to true` and changes nothing. |
+| `endpoint` <Badge>required</Badge> | string | Name of an endpoint in the `proxmox:` list of your config. Required: a call that changes or inspects one task never guesses the endpoint. |
+| `node` <Badge>required</Badge> | string | Name of the Proxmox node that hosts the guest. Take it from the `node` field of [`proxmox_guests`](#proxmox_guests). |
+| `type` <Badge>required</Badge> | string | Guest type. One of `qemu`, `lxc`. |
+| `vmid` <Badge>required</Badge> | integer | The guest's VMID, from 1 through 999999999. Take it from the `vmid` field of [`proxmox_guests`](#proxmox_guests). |
+
+#### Response
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `action` | string | `start`, `shutdown` or `reboot`. |
+| `endpoint` | string | The endpoint that was used. |
+| `node` | string | The node that hosts the guest. |
+| `status` | string | Always `accepted`: Proxmox queued the task. Whether the guest changed state is the answer of [`proxmox_task_status`](#proxmox_task_status). |
+| `type` | string | `qemu` or `lxc`. |
+| `upid` | string | The task ID that Proxmox returned, unchanged. Pass it to `proxmox_task_status`. |
+| `vmid` | integer | The guest's VMID. |
+
+<Accordion title="Examples">
+
+Without `confirm`, the call returns an error and changes nothing:
+
+Arguments:
+
+```json
+{
+  "endpoint": "pve",
+  "node": "pve",
+  "type": "qemu",
+  "vmid": 100
+}
+```
+
+Response:
+
+```text
+confirmation required for Proxmox guest action: endpoint="pve" node="pve" type="qemu" vmid=100 action="start"; set confirm to true
+```
+
+With `confirm` set but no action credential in the config, the call returns an error before it reads any token:
+
+Arguments:
+
+```json
+{
+  "endpoint": "pve",
+  "node": "pve",
+  "type": "qemu",
+  "vmid": 100,
+  "confirm": true
+}
+```
+
+Response:
+
+```text
+no action credential configured for Proxmox endpoint "pve"; guest actions require action_token_id and action_token or action_token_file — see docs/proxmox.md
+```
+
+</Accordion>
+
+</Tool>
+
+<Tool>
+
+### proxmox_guest_reboot
+
+<Badge tone="warning">write</Badge>
+
+Reboots one guest after confirmation and returns the task ID of the queued reboot. The action uses a separate credential: the endpoint needs `action_token_id` and `action_token` or `action_token_file` in the config, and homebutler never falls back to the read token. A Proxmox request that is lost after it was sent is not retried, because a retry could submit the action twice.
+
+#### Arguments
+
+| Argument | Type | Description |
+| --- | --- | --- |
+| `confirm` <Badge>required</Badge> | boolean | Must be the boolean `true`. Without it the call returns `confirmation required for Proxmox guest action: endpoint="<endpoint>" node="<node>" type="<type>" vmid=<vmid> action="<action>"; set confirm to true` and changes nothing. |
+| `endpoint` <Badge>required</Badge> | string | Name of an endpoint in the `proxmox:` list of your config. Required: a call that changes or inspects one task never guesses the endpoint. |
+| `node` <Badge>required</Badge> | string | Name of the Proxmox node that hosts the guest. Take it from the `node` field of [`proxmox_guests`](#proxmox_guests). |
+| `type` <Badge>required</Badge> | string | Guest type. One of `qemu`, `lxc`. |
+| `vmid` <Badge>required</Badge> | integer | The guest's VMID, from 1 through 999999999. Take it from the `vmid` field of [`proxmox_guests`](#proxmox_guests). |
+
+#### Response
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `action` | string | `start`, `shutdown` or `reboot`. |
+| `endpoint` | string | The endpoint that was used. |
+| `node` | string | The node that hosts the guest. |
+| `status` | string | Always `accepted`: Proxmox queued the task. Whether the guest changed state is the answer of [`proxmox_task_status`](#proxmox_task_status). |
+| `type` | string | `qemu` or `lxc`. |
+| `upid` | string | The task ID that Proxmox returned, unchanged. Pass it to `proxmox_task_status`. |
+| `vmid` | integer | The guest's VMID. |
+
+<Accordion title="Examples">
+
+A type other than `qemu` or `lxc` returns an error:
+
+Arguments:
+
+```json
+{
+  "endpoint": "pve",
+  "node": "pve",
+  "type": "vm",
+  "vmid": 100,
+  "confirm": true
+}
+```
+
+Response:
+
+```text
+proxmox guest type must be qemu or lxc
+```
+
+</Accordion>
+
+</Tool>
+
+<Tool>
+
+### proxmox_guest_shutdown
+
+<Badge tone="danger">destructive</Badge>
+
+Shuts one guest down gracefully after confirmation and returns the task ID of the queued shutdown. There is no tool for a hard stop. The action uses a separate credential: the endpoint needs `action_token_id` and `action_token` or `action_token_file` in the config, and homebutler never falls back to the read token. A Proxmox request that is lost after it was sent is not retried, because a retry could submit the action twice.
+
+#### Arguments
+
+| Argument | Type | Description |
+| --- | --- | --- |
+| `confirm` <Badge>required</Badge> | boolean | Must be the boolean `true`. Without it the call returns `confirmation required for Proxmox guest action: endpoint="<endpoint>" node="<node>" type="<type>" vmid=<vmid> action="<action>"; set confirm to true` and changes nothing. |
+| `endpoint` <Badge>required</Badge> | string | Name of an endpoint in the `proxmox:` list of your config. Required: a call that changes or inspects one task never guesses the endpoint. |
+| `node` <Badge>required</Badge> | string | Name of the Proxmox node that hosts the guest. Take it from the `node` field of [`proxmox_guests`](#proxmox_guests). |
+| `type` <Badge>required</Badge> | string | Guest type. One of `qemu`, `lxc`. |
+| `vmid` <Badge>required</Badge> | integer | The guest's VMID, from 1 through 999999999. Take it from the `vmid` field of [`proxmox_guests`](#proxmox_guests). |
+
+#### Response
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `action` | string | `start`, `shutdown` or `reboot`. |
+| `endpoint` | string | The endpoint that was used. |
+| `node` | string | The node that hosts the guest. |
+| `status` | string | Always `accepted`: Proxmox queued the task. Whether the guest changed state is the answer of [`proxmox_task_status`](#proxmox_task_status). |
+| `type` | string | `qemu` or `lxc`. |
+| `upid` | string | The task ID that Proxmox returned, unchanged. Pass it to `proxmox_task_status`. |
+| `vmid` | integer | The guest's VMID. |
+
+<Accordion title="Examples">
+
+A VMID outside the range returns an error:
+
+Arguments:
+
+```json
+{
+  "endpoint": "pve",
+  "node": "pve",
+  "type": "lxc",
+  "vmid": 0,
+  "confirm": true
+}
+```
+
+Response:
+
+```text
+proxmox VMID must be between 1 and 999999999
+```
+
+</Accordion>
+
+</Tool>
+
+<Tool>
+
+### proxmox_script_list
+
+<Badge tone="success">read</Badge>
+
+Lists the curated Proxmox VE Community Scripts catalog. The catalog is compiled into the binary and the call reaches no network. The tool takes no `endpoint` argument.
+
+#### Arguments
+
+This tool takes no arguments.
+
+#### Response
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `slug` | string | Short name. Pass it to `proxmox_script_command`. |
+| `name` | string | Display name. |
+| `description` | string | What the script installs. |
+
+<Accordion title="Examples">
+
+The response is an array with one entry per script:
+
+```json
+[
+  {
+    "slug": "docker",
+    "name": "Docker",
+    "description": "Docker CE and Docker Compose in an LXC"
+  },
+  {
+    "slug": "homeassistant",
+    "name": "Home Assistant",
+    "description": "Home Assistant Core in an LXC"
+  },
+  {
+    "slug": "nginxproxymanager",
+    "name": "Nginx Proxy Manager",
+    "description": "Nginx Proxy Manager in an LXC"
+  },
+  {
+    "slug": "pihole",
+    "name": "Pi-hole",
+    "description": "Pi-hole DNS ad-blocker in an LXC"
+  },
+  {
+    "slug": "postgresql",
+    "name": "PostgreSQL",
+    "description": "PostgreSQL database server in an LXC"
+  }
+]
+```
+
+</Accordion>
+
+</Tool>
+
+<Tool>
+
+### proxmox_script_command
+
+<Badge tone="success">read</Badge>
+
+Renders the install command for one Community Script, pinned to one commit of the upstream repository. homebutler never fetches or runs the script: the user reviews the command and runs it on the Proxmox host.
+
+#### Arguments
+
+| Argument | Type | Description |
+| --- | --- | --- |
+| `slug` <Badge>required</Badge> | string | Script slug, from `proxmox_script_list`. An unknown slug returns `unknown Proxmox Community Script "<slug>"; use the script catalog to see available slugs`. |
+
+#### Response
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `slug` | string | The slug you passed. |
+| `command` | string | The command to run on the Proxmox host. |
+| `warning` | string | A notice that the script is not reviewed by homebutler and runs as root on the Proxmox host. Show it to the user with the command. |
+
+<Accordion title="Examples">
+
+Arguments:
+
+```json
+{
+  "slug": "docker"
+}
+```
+
+Response:
+
+```json
+{
+  "slug": "docker",
+  "command": "bash -c \"$(curl -fsSL https://raw.githubusercontent.com/community-scripts/ProxmoxVE/fadcb0c375547861f991c09ff8dec196c380d428/ct/docker.sh)\"",
+  "warning": "This script is not reviewed by homebutler. It is fetched from community-scripts/ProxmoxVE and runs as root on the Proxmox host."
+}
+```
+
+</Accordion>
+
+</Tool>

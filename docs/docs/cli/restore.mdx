@@ -1,0 +1,85 @@
+---
+title: restore
+description: "Restores the volumes and bind mounts from a backup archive."
+---
+
+# homebutler restore
+
+Restores the volumes and bind mounts from a backup archive.
+
+```bash
+homebutler restore <archive> [flags]
+```
+
+Named volumes are restored in place with a throwaway container. Bind mounts are restored only to host paths that you list with `--allow-bind`, because the paths come from the archive. A mount that is refused is reported, and the command still exits `0`.
+
+Files in the archive replace files with the same path in the target volumes. Files that are only in the volume stay.
+
+For restore steps and checks, see [Backup and restore](/backups/backup-and-restore).
+
+| Argument | Description |
+| --- | --- |
+| `archive` | Path to a `.tar.gz` file from `homebutler backup`. |
+
+## Flags
+
+| Flag | Type | Default | Description |
+| --- | --- | --- | --- |
+| `--allow-bind` | string, repeatable | - | Host path a bind mount may be restored to. Repeat for several paths. Without it, bind mounts in the archive are refused. |
+| `--service` | string | - | Restore this service only. |
+
+## Examples
+
+Restore an archive whose service has a bind mount. The bind mount is refused and the output names the flag that allows it.
+
+```bash
+homebutler restore /home/you/backups/backup_2026-10-25_111638.976.tar.gz
+```
+
+```text
+Restore complete from: /home/you/backups/backup_2026-10-25_111638.976.tar.gz
+  Services: uptime-kuma, media
+  Volumes:  1
+
+⚠️  Refused 1 mount(s) the archive asked for:
+  /srv/media (bind, service media)
+    → bind target /srv/media was not permitted; pass --allow-bind /srv/media to restore it
+```
+
+Name the path to restore it as well.
+
+```bash
+homebutler restore /home/you/backups/backup_2026-10-25_111638.976.tar.gz --allow-bind /srv/media
+```
+
+```text
+Restore complete from: /home/you/backups/backup_2026-10-25_111638.976.tar.gz
+  Services: uptime-kuma, media
+  Volumes:  2
+```
+
+Restore one service and print JSON.
+
+```bash
+homebutler restore /home/you/backups/backup_2026-10-25_111638.976.tar.gz --service uptime-kuma --json
+```
+
+```text
+{
+  "archive": "/home/you/backups/backup_2026-10-25_111638.976.tar.gz",
+  "services": [
+    "uptime-kuma"
+  ],
+  "volumes": 1
+}
+```
+
+A missing archive is an error.
+
+```bash
+homebutler restore /home/you/nothing.tar.gz
+```
+
+```text
+error: archive not found: /home/you/nothing.tar.gz
+```

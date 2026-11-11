@@ -1,0 +1,71 @@
+---
+title: completion
+description: "Prints a shell completion script for bash, zsh, fish, or PowerShell."
+---
+
+# homebutler completion
+
+Prints a shell completion script for bash, zsh, fish, or PowerShell.
+
+Each subcommand's `--help` shows how to load its script in the current session and how to install it for every session.
+
+| Command | What it does |
+| --- | --- |
+| [`bash`](#completion-bash) | Prints the completion script for bash. |
+| [`fish`](#completion-fish) | Prints the completion script for fish. |
+| [`powershell`](#completion-powershell) | Prints the completion script for PowerShell. |
+| [`zsh`](#completion-zsh) | Prints the completion script for zsh. |
+
+## `completion bash`
+
+Prints the completion script for bash.
+
+```bash
+homebutler completion bash
+```
+
+| Flag | Type | Default | Description |
+| --- | --- | --- | --- |
+| `--no-descriptions` | boolean | `false` | Leave the descriptions out of the completion suggestions. |
+
+Load completion in the current bash session.
+
+```bash
+source <(homebutler completion bash)
+```
+
+## `completion fish`
+
+Prints the completion script for fish.
+
+```bash
+homebutler completion fish [flags]
+```
+
+| Flag | Type | Default | Description |
+| --- | --- | --- | --- |
+| `--no-descriptions` | boolean | `false` | Leave the descriptions out of the completion suggestions. |
+
+## `completion powershell`
+
+Prints the completion script for PowerShell.
+
+```bash
+homebutler completion powershell [flags]
+```
+
+| Flag | Type | Default | Description |
+| --- | --- | --- | --- |
+| `--no-descriptions` | boolean | `false` | Leave the descriptions out of the completion suggestions. |
+
+## `completion zsh`
+
+Prints the completion script for zsh.
+
+```bash
+homebutler completion zsh [flags]
+```
+
+| Flag | Type | Default | Description |
+| --- | --- | --- | --- |
+| `--no-descriptions` | boolean | `false` | Leave the descriptions out of the completion suggestions. |

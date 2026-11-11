@@ -1,0 +1,395 @@
+---
+title: Watch
+description: "Reference for the MCP tools that manage and check the restart watch list: watch_list, watch_add, watch_remove, watch_check and watch_history."
+sidebar_position: 5
+---
+
+# Watch
+
+The watch tools manage the watch list and read what the watcher recorded. They run no supervisor: see [Watch](/monitoring/watch) for the service that polls the list.
+
+<Tool>
+
+### watch_list
+
+<Badge tone="success">read</Badge>
+
+Lists the targets on the watch list with their kind and what the last check recorded. A systemd or PM2 target, and a container that did not exist when it was added, has no `last_checked`.
+
+#### Arguments
+
+| Argument | Type | Description |
+| --- | --- | --- |
+| `server` | string | Server from your config to run on. See [Run a tool on another server](/mcp#run-a-tool-on-another-server). |
+
+#### Response
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `container` | string | Name of the target. |
+| `kind` | string | `docker`, `systemd` or `pm2`. |
+| `added_at` | string | When the target was added, as local time in the form `2026-10-25 11:16:37`. |
+| `restart_count` | integer | Restart count recorded at the last check. |
+| `last_checked` | string, optional | When the target was last checked, in the same form as `added_at`. Set when a Docker container that exists is added. Left out for a systemd or PM2 target and for a container that did not exist when it was added. |
+
+<Accordion title="Examples">
+
+The response is an array with one entry per target:
+
+```json
+[
+  {
+    "container": "web",
+    "kind": "docker",
+    "added_at": "2026-10-25 11:16:37",
+    "restart_count": 0,
+    "last_checked": "2026-10-25 11:18:29"
+  },
+  {
+    "container": "nginx-hb",
+    "kind": "systemd",
+    "added_at": "2026-10-25 11:16:41",
+    "restart_count": 0
+  }
+]
+```
+
+</Accordion>
+
+</Tool>
+
+<Tool>
+
+### watch_add
+
+<Badge tone="warning">write</Badge>
+
+Adds a Docker container, systemd unit or PM2 app to the watch list. The tool writes the list and nothing starts watching it: a supervisor has to be installed with `homebutler watch install`, which only the operator can do. Adding a target twice returns `added: false`, not an error.
+
+#### Arguments
+
+| Argument | Type | Description |
+| --- | --- | --- |
+| `container` <Badge>required</Badge> | string | Name of the container, systemd unit or PM2 app. For a systemd unit or PM2 app whose name differs, pass the real name in `unit`. |
+| `kind` | string | What the target is. One of `docker`, `systemd`, `pm2`. Default: `docker`. |
+| `unit` | string | The actual unit or app name when it differs from `container`. With `server` set, `unit` isn't sent to the remote server. |
+| `server` | string | Server from your config to run on. See [Run a tool on another server](/mcp#run-a-tool-on-another-server). With `server` set, the server's list changes and the call returns the error `invalid JSON from remote: invalid character 'A' looking for beginning of value`. |
+
+#### Response
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `container` | string | The name you passed. |
+| `kind` | string | The kind that was recorded. |
+| `added` | boolean | `true` when the target was added. `false` when it was already on the list. |
+
+<Accordion title="Examples">
+
+Arguments:
+
+```json
+{
+  "container": "web"
+}
+```
+
+Response:
+
+```json
+{
+  "container": "web",
+  "kind": "docker",
+  "added": true
+}
+```
+
+Adding the same target again is not an error:
+
+Arguments:
+
+```json
+{
+  "container": "web"
+}
+```
+
+Response:
+
+```json
+{
+  "container": "web",
+  "kind": "docker",
+  "added": false
+}
+```
+
+Add a systemd unit under a name of your choice:
+
+Arguments:
+
+```json
+{
+  "container": "nginx-hb",
+  "kind": "systemd",
+  "unit": "nginx.service"
+}
+```
+
+Response:
+
+```json
+{
+  "container": "nginx-hb",
+  "kind": "systemd",
+  "added": true
+}
+```
+
+A kind outside the list returns an error:
+
+Arguments:
+
+```json
+{
+  "container": "x",
+  "kind": "k8s"
+}
+```
+
+Response:
+
+```text
+invalid kind "k8s": must be one of docker, systemd, pm2
+```
+
+</Accordion>
+
+</Tool>
+
+<Tool>
+
+### watch_remove
+
+<Badge tone="warning">write</Badge>
+
+Removes a target from the watch list and leaves its recorded incidents in place. Only the list changes: whatever supervises the target keeps running until the operator stops it.
+
+#### Arguments
+
+| Argument | Type | Description |
+| --- | --- | --- |
+| `container` <Badge>required</Badge> | string | Name of the target to remove, as it appears in `watch_list`. |
+| `server` | string | Server from your config to run on. See [Run a tool on another server](/mcp#run-a-tool-on-another-server). With `server` set, the server's list changes and the call returns the error `invalid JSON from remote: invalid character 'R' looking for beginning of value`. |
+
+#### Response
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `container` | string | The name you passed. |
+| `removed` | boolean | Always `true`. A name that isn't on the list returns an error instead. |
+
+<Accordion title="Examples">
+
+Arguments:
+
+```json
+{
+  "container": "nginx-hb"
+}
+```
+
+Response:
+
+```json
+{
+  "container": "nginx-hb",
+  "removed": true
+}
+```
+
+Removing a name that isn't on the list returns an error:
+
+Arguments:
+
+```json
+{
+  "container": "nginx-hb"
+}
+```
+
+Response:
+
+```text
+container "nginx-hb" is not in the watch list
+```
+
+</Accordion>
+
+</Tool>
+
+<Tool>
+
+### watch_check
+
+<Badge tone="warning">write</Badge>
+
+Runs a one-shot restart check on the docker targets and reports restarts since the last check. A check compares a Docker container with the state recorded when it was added or last checked. A container with no recorded state only has its state recorded. systemd and PM2 targets can't be inspected this way, so they are listed in `skipped` instead of being reported as healthy.
+
+#### Arguments
+
+| Argument | Type | Description |
+| --- | --- | --- |
+| `server` | string | Server from your config to run on. See [Run a tool on another server](/mcp#run-a-tool-on-another-server). |
+
+#### Response
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `checked` | integer | Number of Docker targets in the check, counting a target whose container could not be inspected. |
+| `skipped` | array of objects, optional | Targets that a one-shot check can't inspect. Left out when none were skipped. |
+| `skipped.name` | string | Name of the target. |
+| `skipped.kind` | string | `systemd` or `pm2`. |
+| `incidents` | array of objects, optional | Restarts detected since the last check, each saved as an incident. Each entry has the fields listed for [`watch_history`](#watch_history), except that a one-shot check does not set `exit_code`, `flapping` or `crash_analysis`. Left out when no restart was detected. |
+
+<Accordion title="Examples">
+
+Call it after a watched container restarted. The response lists the restart as an incident and the systemd target as skipped:
+
+```json
+{
+  "checked": 1,
+  "skipped": [
+    {
+      "name": "nginx-hb",
+      "kind": "systemd"
+    }
+  ],
+  "incidents": [
+    {
+      "id": "web-20261025-111829.336-222688",
+      "container": "web",
+      "detected_at": "2026-10-25T11:18:29.336197989-07:00",
+      "restart_count": 0,
+      "prev_started_at": "2026-10-25T18:17:49.380993521Z",
+      "curr_started_at": "2026-10-25T18:18:23.202192496Z",
+      "pre_logs": "(captured at detection — see post_logs for current state)",
+      "post_logs": "listening on 18102\nlistening on 18102\nlistening on 18102\nlistening on 18102"
+    }
+  ]
+}
+```
+
+</Accordion>
+
+</Tool>
+
+<Tool>
+
+### watch_history
+
+<Badge tone="success">read</Badge>
+
+Lists the recorded restart incidents, newest first. The captured logs are left out unless `include_logs` is `true`, because every incident carries up to a hundred lines of output twice.
+
+#### Arguments
+
+| Argument | Type | Description |
+| --- | --- | --- |
+| `container` | string | Only incidents for this target. |
+| `include_logs` | boolean | `true` fills `pre_logs` and `post_logs`. Otherwise both are empty strings. Default: `false`. |
+| `limit` | integer | Return the most recent N incidents. `0` returns all of them. Default: `10`. |
+| `server` | string | Server from your config to run on. See [Run a tool on another server](/mcp#run-a-tool-on-another-server). |
+
+#### Response
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `id` | string | Incident ID: the container name, the detection time and a suffix. |
+| `container` | string | Name of the watched target. |
+| `detected_at` | string | When homebutler detected the restart, in RFC 3339 format with the local offset. |
+| `restart_count` | integer | Restart count recorded with the incident. A one-shot check records Docker's count for the container. An incident from a running watcher records `0`. |
+| `prev_started_at` | string | When the previous run started, in RFC 3339 format (UTC). An empty string when the monitor doesn't know. |
+| `curr_started_at` | string | When the new run started, in RFC 3339 format (UTC). An empty string when the monitor doesn't know. |
+| `pre_logs` | string | Log lines from before the restart. A one-shot check can't read them and writes a placeholder sentence. The incident written by a running watcher holds the captured lines. Empty unless `include_logs` is `true`. |
+| `post_logs` | string | Log lines from after the restart. Empty unless `include_logs` is `true`. |
+| `crash_analysis` | object or null, optional | A classification of why the process ended. Set by a running watcher. |
+| `crash_analysis.category` | string | One of `oom`, `segfault`, `sigterm`, `panic`, `dependency`, `fatal_error`, `timeout`, `error`, `clean_restart` or `unknown`. |
+| `crash_analysis.confidence` | string | `high`, `medium` or `low`. |
+| `crash_analysis.exit_code` | integer | Exit code the analysis used. |
+| `crash_analysis.patterns` | array of strings, optional | Log patterns that matched. Left out when none. |
+| `crash_analysis.reason` | string | One sentence on the cause, such as `Process killed by OOM killer`. |
+| `crash_analysis.signal` | string, optional | Signal that ended the process, such as `SIGKILL`. Left out when none. |
+| `exit_code` | integer or null, optional | Exit code of the process that ended, when the backend reported one. Left out when unknown, because `0` is a real exit code. |
+| `flapping` | object or null, optional | Whether the target restarts too often. Set by a running watcher. |
+| `flapping.count` | integer | Number of restarts in the window. |
+| `flapping.is_flapping` | boolean | `true` when the restart count in a window reached its threshold. |
+| `flapping.level` | string | `acute` (restarts in the short window) or `chronic` (restarts in the long window). On a host whose time zone is west of UTC the level is always `chronic`. |
+| `flapping.since` | string | Time of the oldest restart in the window, in RFC 3339 format with a `Z` suffix. On a host whose time zone is not UTC the value is the local clock time. |
+| `flapping.window` | string | `short` or `long`. |
+| `oom_killed` | boolean, optional | `true` when the process was killed for running out of memory. Left out otherwise. |
+| `proxmox_class` | string, optional | For a Proxmox incident, the failure behind `proxmox_state`: `configuration`, `tls`, `authentication`, `authorization`, `response`, `transport` or `empty_result`. |
+| `proxmox_state` | string, optional | For a Proxmox incident, the state it moved into: `unavailable`, `acl_filtered` or `guest_down`. |
+| `recovered` | boolean, optional | `true` for a transition back to healthy. Left out otherwise. |
+| `source` | string, optional | Left out for Docker, systemd and PM2 targets. `proxmox` for an incident from a Proxmox endpoint. |
+
+<Accordion title="Examples">
+
+Without `include_logs`, the log fields are empty:
+
+Arguments:
+
+```json
+{
+  "limit": 1
+}
+```
+
+Response:
+
+```json
+[
+  {
+    "id": "web-20261025-111829.336-222688",
+    "container": "web",
+    "detected_at": "2026-10-25T11:18:29.336197989-07:00",
+    "restart_count": 0,
+    "prev_started_at": "2026-10-25T18:17:49.380993521Z",
+    "curr_started_at": "2026-10-25T18:18:23.202192496Z",
+    "pre_logs": "",
+    "post_logs": ""
+  }
+]
+```
+
+With `include_logs`, the fields hold the captured text. The incident came from a one-shot check, so `pre_logs` is the placeholder sentence:
+
+Arguments:
+
+```json
+{
+  "limit": 1,
+  "include_logs": true,
+  "container": "web"
+}
+```
+
+Response:
+
+```json
+[
+  {
+    "id": "web-20261025-111829.336-222688",
+    "container": "web",
+    "detected_at": "2026-10-25T11:18:29.336197989-07:00",
+    "restart_count": 0,
+    "prev_started_at": "2026-10-25T18:17:49.380993521Z",
+    "curr_started_at": "2026-10-25T18:18:23.202192496Z",
+    "pre_logs": "(captured at detection — see post_logs for current state)",
+    "post_logs": "listening on 18102\nlistening on 18102\nlistening on 18102\nlistening on 18102"
+  }
+]
+```
+
+</Accordion>
+
+</Tool>

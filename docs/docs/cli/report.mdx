@@ -1,0 +1,83 @@
+---
+title: report
+description: "Compares the server with the previous snapshot and prints what needs attention, what changed, and the current state."
+---
+
+# homebutler report
+
+Compares the server with the previous snapshot and prints what needs attention, what changed, and the current state.
+
+```bash
+homebutler report [flags]
+```
+
+Each run collects system, container, and port state into a snapshot and saves it under `~/.homebutler/reports/snapshots/`. The first run has nothing to compare with, so it prints a baseline. Later runs compare against the snapshot before them.
+
+The report has four sections: Needs Attention, Notable Changes, Current Status, and Suggested Actions. With `--json` the same data comes back as one JSON object.
+
+To read each section of the report and act on it, see [Report](/changes/report).
+
+## Flags
+
+| Flag | Type | Default | Description |
+| --- | --- | --- | --- |
+| `--keep` | integer | `30` | Number of snapshots to keep after a save. Older snapshots are deleted. A value below `1` is treated as `1`. |
+| `--no-save` | boolean | `false` | Print the report without writing a snapshot. The next run still compares against the last saved snapshot. Read-only MCP servers use this mode. |
+
+<Note title="Every run saves a snapshot">
+
+Each run without `--no-save` writes one snapshot file, whatever the time since the last run. Running `report` three times in a minute leaves three snapshots, and `--keep` counts those files.
+
+</Note>
+
+## Examples
+
+Run the report a second time after a container started publishing port 8505. The report names the new port and the new container under Notable Changes. The output is shortened: the lines for other containers and for other disks on the host are removed.
+
+```bash
+homebutler report
+```
+
+```text
+🏠 Homebutler Report — main
+   2026-10-25T18:25:46Z  ·  compared with 2026-10-25T18:22:43Z
+
+── Needs Attention ───────────────────────────────────────────
+   ⚠️  22 container(s) stopped
+   ⚠️  Port :8505/tcp is now reachable from every interface, answered by extra (node:lts-alpine) — it was not before
+
+── Notable Changes ───────────────────────────────────────────
+   new    :8505/tcp      now extra (node:lts-alpine)
+   new    extra   now running
+
+── Current Status ────────────────────────────────────────────
+   Host                   homelab (linux/amd64), uptime 15h 7m
+   CPU                    85.0% (4 cores), Memory: 3.3/7.8 GB (42%)
+   Disk /                 1.3/19.0 GB (7%)
+   Containers             26 running, 22 stopped
+   Public ports           34
+
+── Suggested Actions ─────────────────────────────────────────
+   → Verify :8505/tcp should be reachable from every interface, answered by extra (node:lts-alpine).
+```
+
+To preview the report without saving a snapshot, add `--no-save`. The first run with `--no-save` says no baseline was created.
+
+```bash
+homebutler report --no-save
+```
+
+The output, shortened to the first lines:
+
+```text
+🏠 Homebutler Report — main
+   2026-10-25T18:13:28Z
+
+📋 This is the butler's first look around — baseline preview only (--no-save).
+
+── Needs Attention ───────────────────────────────────────────
+   ⚠️  10 container(s) stopped
+
+── Notable Changes ───────────────────────────────────────────
+   First inspection — no previous snapshot found. --no-save skipped baseline creation.
+```

@@ -1,0 +1,299 @@
+---
+title: proxmox
+description: "Reads status, guests, nodes, and tasks from Proxmox VE, and starts, shuts down, or reboots a guest."
+---
+
+# homebutler proxmox
+
+Reads status, guests, nodes, and tasks from Proxmox VE, and starts, shuts down, or reboots a guest.
+
+Proxmox commands connect to endpoints from the `proxmox:` section of your config. They do not accept `--server` or `--all`; use `--endpoint`.
+
+For endpoint setup and tokens, see [Proxmox](/apps/proxmox).
+
+| Command | What it does |
+| --- | --- |
+| [`guest`](#proxmox-guest) | Starts, shuts down, or reboots one guest. |
+| [`guests`](#proxmox-guests) | Lists the virtual machines and containers on an endpoint. |
+| [`node`](#proxmox-node) | Shows the status of one Proxmox node. |
+| [`script`](#proxmox-script) | Lists a curated set of Proxmox VE Community Scripts and prints their install commands. |
+| [`status`](#proxmox-status) | Shows the version, cluster, and resource counts of one endpoint. |
+| [`task`](#proxmox-task) | Shows one task by its UPID. |
+| [`tasks`](#proxmox-tasks) | Lists recent tasks, per node. |
+
+## `proxmox guest`
+
+Starts, shuts down, or reboots one guest.
+
+Guest actions use a separate credential, `action_token_id` with `action_token` or `action_token_file`. The read token is never used. Each action names its target with four flags and needs `--confirm`.
+
+| Command | What it does |
+| --- | --- |
+| [`reboot`](#proxmox-guest-reboot) | Reboots one guest. |
+| [`shutdown`](#proxmox-guest-shutdown) | Shuts down one guest. |
+| [`start`](#proxmox-guest-start) | Starts one guest. |
+
+## `proxmox guest reboot`
+
+Reboots one guest.
+
+```bash
+homebutler proxmox guest reboot [flags]
+```
+
+| Flag | Type | Default | Description |
+| --- | --- | --- | --- |
+| `--confirm` | boolean | `false` | Confirm the target named by the other four flags. Without it, the command stops with an error that shows the command to repeat with `--confirm`. |
+| `--endpoint` | string | - | Endpoint name from the config. Required. |
+| `--node` | string | - | Node the guest is on. Required. |
+| `--type` | string | - | Guest type: `qemu` or `lxc`. Required. |
+| `--vmid` | integer | - | Guest ID. Required. |
+
+## `proxmox guest shutdown`
+
+Shuts down one guest.
+
+```bash
+homebutler proxmox guest shutdown [flags]
+```
+
+| Flag | Type | Default | Description |
+| --- | --- | --- | --- |
+| `--confirm` | boolean | `false` | Confirm the target named by the other four flags. Without it, the command stops with an error that shows the command to repeat with `--confirm`. |
+| `--endpoint` | string | - | Endpoint name from the config. Required. |
+| `--node` | string | - | Node the guest is on. Required. |
+| `--type` | string | - | Guest type: `qemu` or `lxc`. Required. |
+| `--vmid` | integer | - | Guest ID. Required. |
+
+## `proxmox guest start`
+
+Starts one guest.
+
+```bash
+homebutler proxmox guest start [flags]
+```
+
+| Flag | Type | Default | Description |
+| --- | --- | --- | --- |
+| `--confirm` | boolean | `false` | Confirm the target named by the other four flags. Without it, the command stops with an error that shows the command to repeat with `--confirm`. |
+| `--endpoint` | string | - | Endpoint name from the config. Required. |
+| `--node` | string | - | Node the guest is on. Required. |
+| `--type` | string | - | Guest type: `qemu` or `lxc`. Required. |
+| `--vmid` | integer | - | Guest ID. Required. |
+
+Without `--confirm`, nothing is sent.
+
+```bash
+homebutler proxmox guest start --endpoint pve --node pve1 --type qemu --vmid 100
+```
+
+```text
+error: confirmation required for Proxmox guest action: endpoint="pve" node="pve1" type="qemu" vmid=100 action="start"; rerun with --endpoint "pve" --node "pve1" --type "qemu" --vmid 100 --confirm
+```
+
+Without an action credential, the command stops before any network call.
+
+```bash
+homebutler proxmox guest start --endpoint pve --node pve1 --type qemu --vmid 100 --confirm
+```
+
+```text
+error: no action credential configured for Proxmox endpoint "pve"; guest actions require action_token_id and action_token or action_token_file — see docs/proxmox.md
+```
+
+## `proxmox guests`
+
+Lists the virtual machines and containers on an endpoint.
+
+```bash
+homebutler proxmox guests [flags]
+```
+
+| Flag | Type | Default | Description |
+| --- | --- | --- | --- |
+| `--endpoint` | string | - | Endpoint name from the config. Optional when exactly one endpoint is configured. |
+| `--node` | string | - | Show only the guests on this node. |
+| `--status` | string | - | Show only guests with this status: `running` or `stopped`. |
+
+A status other than the two values is an error.
+
+```bash
+homebutler proxmox guests --status paused
+```
+
+```text
+error: --status must be running or stopped
+```
+
+## `proxmox node`
+
+Shows the status of one Proxmox node.
+
+```bash
+homebutler proxmox node <name> [flags]
+```
+
+| Argument | Description |
+| --- | --- |
+| `name` | Node name. |
+
+| Flag | Type | Default | Description |
+| --- | --- | --- | --- |
+| `--endpoint` | string | - | Endpoint name from the config. Optional when exactly one endpoint is configured. |
+
+## `proxmox script`
+
+Lists a curated set of Proxmox VE Community Scripts and prints their install commands.
+
+homebutler does not run the scripts. It prints the command, pinned to a commit, for you to review and run on the Proxmox host.
+
+| Command | What it does |
+| --- | --- |
+| [`list`](#proxmox-script-list) | Lists the scripts in the built-in catalog. |
+| [`show`](#proxmox-script-show) | Prints the install command for one script. |
+
+## `proxmox script list`
+
+Lists the scripts in the built-in catalog.
+
+```bash
+homebutler proxmox script list [flags]
+```
+
+```bash
+homebutler proxmox script list
+```
+
+```text
+Community Scripts
+docker	Docker	Docker CE and Docker Compose in an LXC
+homeassistant	Home Assistant	Home Assistant Core in an LXC
+nginxproxymanager	Nginx Proxy Manager	Nginx Proxy Manager in an LXC
+pihole	Pi-hole	Pi-hole DNS ad-blocker in an LXC
+postgresql	PostgreSQL	PostgreSQL database server in an LXC
+```
+
+## `proxmox script show`
+
+Prints the install command for one script. It does not run it.
+
+```bash
+homebutler proxmox script show <slug> [flags]
+```
+
+| Argument | Description |
+| --- | --- |
+| `slug` | Script slug from `proxmox script list`. |
+
+```bash
+homebutler proxmox script show homeassistant
+```
+
+```text
+Community Script command
+Slug: homeassistant
+Command: bash -c "$(curl -fsSL https://raw.githubusercontent.com/community-scripts/ProxmoxVE/fadcb0c375547861f991c09ff8dec196c380d428/ct/homeassistant.sh)"
+
+⚠️  This script is not reviewed by homebutler. It is fetched from community-scripts/ProxmoxVE and runs as root on the Proxmox host.
+
+Review it, then run it yourself on the Proxmox host; homebutler does not run it for you.
+```
+
+An unknown slug is an error.
+
+```bash
+homebutler proxmox script show nope
+```
+
+```text
+error: unknown Proxmox Community Script "nope"; use the script catalog to see available slugs
+```
+
+## `proxmox status`
+
+Shows the version, cluster, and resource counts of one endpoint.
+
+```bash
+homebutler proxmox status [flags]
+```
+
+When a collector fails, the command prints a warning for it and still exits `0`.
+
+| Flag | Type | Default | Description |
+| --- | --- | --- | --- |
+| `--endpoint` | string | - | Endpoint name from the config. Optional when only one endpoint is configured. |
+
+Against an endpoint that does not answer:
+
+```bash
+homebutler proxmox status
+```
+
+```text
+Proxmox endpoint: pve
+Version: unavailable
+Cluster: unavailable
+Resources: unavailable
+Warning: version: proxmox request /api2/json/version: Get "https://127.0.0.1:8599/api2/json/version": dial tcp 127.0.0.1:8599: connect: connection refused
+```
+
+An endpoint name that is not in the config is an error.
+
+```bash
+homebutler proxmox status --endpoint nope
+```
+
+```text
+error: proxmox endpoint "nope" not found in config. Available endpoints: [pve]
+```
+
+Proxmox commands reject the multi-server flags.
+
+```bash
+homebutler proxmox status --server main
+```
+
+```text
+error: proxmox status reaches Proxmox through its API, chosen with --endpoint; --server is not supported
+```
+
+## `proxmox task`
+
+Shows one task by its UPID.
+
+```bash
+homebutler proxmox task <upid> [flags]
+```
+
+| Argument | Description |
+| --- | --- |
+| `upid` | Task ID in the form `UPID:...`, as listed by `proxmox tasks`. |
+
+| Flag | Type | Default | Description |
+| --- | --- | --- | --- |
+| `--endpoint` | string | - | Endpoint name from the config. Required. |
+| `--node` | string | - | Node the task ran on. Required. |
+
+Both flags are required.
+
+```bash
+homebutler proxmox task UPID:x
+```
+
+```text
+error: --endpoint is required for Proxmox task status
+```
+
+## `proxmox tasks`
+
+Lists recent tasks, per node.
+
+```bash
+homebutler proxmox tasks [flags]
+```
+
+| Flag | Type | Default | Description |
+| --- | --- | --- | --- |
+| `--endpoint` | string | - | Endpoint name from the config. Optional when exactly one endpoint is configured. |
+| `--limit` | integer | `50` | Maximum tasks to list per node. |
+| `--node` | string | - | Show only the tasks of this node. |

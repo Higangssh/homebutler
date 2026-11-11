@@ -1,0 +1,208 @@
+---
+title: Report
+description: Run homebutler report to compare the server with its last snapshot, read the three columns and eight change kinds, and use the same answer from a script with --json.
+---
+
+# Report
+
+`homebutler report` collects the system, containers, processes and listening ports, compares them with the newest saved snapshot, and prints what changed. Run it from cron, by hand, or through an agent; the first run saves a baseline and every later run compares against the one before it.
+
+```bash
+homebutler report
+```
+
+| Flag | Default | What it does |
+| --- | --- | --- |
+| `--keep <n>` | `30` | Snapshots to keep after saving. Older ones are deleted. A value below `1` keeps one. |
+| `--no-save` | off | Prints the report and writes no snapshot. The next run still compares against the last saved one. |
+| `--json` | off | Prints the complete, ungrouped report as JSON. See [Use the report from a script](#use-the-report-from-a-script). |
+
+## Read a report
+
+A report has up to four sections, in this order: **Needs Attention**, **Notable Changes**, **Current Status** and **Suggested Actions**. The header names the snapshot the report compared against:
+
+```text
+🏠 Homebutler Report — homelab
+   2026-10-25T18:14:03Z  ·  compared with 2026-10-25T18:13:41Z
+```
+
+"What changed" means since that snapshot, not since a fixed interval. A report run hourly and one run monthly use the same kinds of line over very different spans, and the header is how you tell them apart.
+
+Each line in **Notable Changes** has three columns:
+
+- **Kind:** one of eight fixed words. The kind reaches `--json` unchanged, so scripts branch on it.
+- **Subject:** what the change happened to, such as a container name, a listener (`:8201/tcp`), a mount, or an executable.
+- **Detail:** what happened, written for a person. The wording can change between releases, so don't parse it.
+
+### The eight change kinds
+
+homebutler compares containers and ports by identity, not by count. Six containers before and six after is a change when one of them is a different container.
+
+| Kind | Means |
+| --- | --- |
+| `gone` | A container, listener or process that was there and isn't. |
+| `new` | One that is there and wasn't. |
+| `replaced` | The same name with a different container underneath, or a process whose one invocation changed. |
+| `image` | The same container with a different image. |
+| `state` | The same container in a different state, such as `running → exited`, or a process that keeps restarting. |
+| `port` | The same port answered by a different process. |
+| `disk` | A mount whose used space moved by more than 0.5 GB. |
+| `skipped` | A comparison that couldn't be made. It is never an all-clear. |
+
+Each line below came from a real run on the test machine. `gone` and `new` name a container that disappeared and one that appeared:
+
+```text
+   gone      old                 was running
+   new       late                now running
+```
+
+`replaced` means the container ID changed under the same name, which is what `docker compose up -d` does when it recreates a service. The detail gives the old and new IDs. A process is `replaced` only when exactly one invocation of that executable ran before and exactly one runs now, and they differ:
+
+```text
+   replaced  rep                 recreated, d3a80c895de7 → 6c916d09907e
+   replaced  hbsleep                     same name, different invocation
+```
+
+`image` fires when the container kept its ID and the image it reports changed. In this run the `imgproxy:v1` tag was removed after the container started, so Docker reported the container's image by ID. `port` fires when the same port is answered by a different process, here a replacement container on port 8201:
+
+```text
+   image     imgproxy                 imgproxy:v1 → ebfe2f904627
+   port      :8201/tcp                  web (node:lts-alpine) → web2 (node:lts-alpine)
+```
+
+`state` names the old and new state of a container that kept its ID and image:
+
+```text
+   state  late  running → exited
+```
+
+`disk` shows the signed change in used space on a mount, with one decimal. This reading came from writing a 700 MB file:
+
+```text
+   disk      /                           +0.7 GB since last report
+```
+
+`skipped` appears when a collector didn't answer, covered in [When a collector doesn't answer](#when-a-collector-doesnt-answer).
+
+When nothing changed, the terminal prints `No significant changes since last report.` and `--json` returns `"notable_changes": []`.
+
+### Grouped lines
+
+More than five changes of one kind collapse into one line that names three subjects and counts the rest. Eight containers stopped between two reports read like this:
+
+```text
+   state     8 containers                app, worker-1, worker-2, +5
+```
+
+Grouping applies to the terminal only. `--json` lists every change. A change that renders identically to another, such as a published port that Docker binds on both IPv4 and IPv6, appears once in both outputs.
+
+## What is left out
+
+A report that lists everything changes every time, so these are excluded on purpose:
+
+- **Uptime and status text.** `Up 4 hours` becomes `Up 9 hours` between any two runs.
+- **CPU and memory readings.** Both move on every sample. Memory above 85% still appears under Needs Attention.
+- **Restarts without a state change.** A container that restarted and came back is in the state it was in.
+- **Processes younger than one minute.** A process counts once a snapshot has seen it running for a minute. Until then it is neither `new` nor `gone`, so something that never runs for a minute and then stops isn't reported. A saved snapshot keeps young processes, so a container recreated just before a report isn't called new the next day.
+- **Daemons systemd starts on demand.** On Linux, a service whose unit file is `static`, that nothing wants or requires, and that a D-Bus name or socket starts gets no `new` or `gone` line. `fwupd` and `packagekit` on Ubuntu are examples. `polkitd` can be too, so its stopping isn't reported on a host where nothing requires it. `udisks2` has a bus name, but it is enabled and wanted by `graphical.target`, so it is reported. `ModemManager` is compared as usual on Ubuntu, where something requires it. A service that a timer or path unit starts, such as `apt-daily` or `fstrim`, isn't on demand: one still running a minute later has hung, and it is reported as `new`. When homebutler can't determine the service, the process is compared like any other. That covers macOS, hosts without systemd, a process in a user session or a container, a cgroup that can't be read, and a `systemctl` call that fails or doesn't answer within 2 seconds. The snapshot marks an on-demand process with `on_demand: true`, because a `gone` is judged from the older snapshot.
+- **Processes that belong to a container or to `watch`.** This covers anything running inside a container, Docker's per-container `containerd-shim` and `docker-proxy`, and the helpers `watch start` runs. The container line already reports the container. The tradeoff is that a command line changing inside a container that kept running isn't reported. The `watch` process itself is compared, so it stopping is reported.
+- **Command lines.** A snapshot stores each process's name, as the kernel reports it (`ps` `comm`), and a 12-character hash of its full command line, never the arguments, because arguments carry secrets.
+
+A daemon that restarted with the same command line just before a report is the same daemon, and gets no line. One that restarted just before the last report and has started again since gets `state  <name>  restarting — under a minute old at this report and the last`, which can also mean a daemon reloaded on a schedule. A crash loop that changes its command line each time is a different invocation each time, so it shows as `gone` once. An on-demand daemon young at two reports in a row isn't `restarting`, since being started again is what it does.
+
+A process is identified by its name and that hash. `python3 /opt/old.py` becoming `python3 /opt/new.py` is a `replaced`. When one of several `python3` processes exits, the report says `gone` with the detail `1 invocation, others still running`, because nothing was replaced.
+
+## Needs Attention
+
+**Needs Attention** lists what is worth acting on now, whether or not it changed. It has three sources:
+
+- **Thresholds on the current reading:** memory above 85%, a disk above 85%, and containers that are stopped.
+- **Ports that became reachable:** a port reachable from every interface now that wasn't before, or a public port answered by a different process.
+- **Containers that stopped:** one that was running at the last report and isn't now, and one that was recreated or took a new image and isn't running.
+
+Each entry carries a `kind` in `--json`: `memory`, `disk`, `container` or `port`. Past five stopped containers, the entries collapse into one line: `8 containers stopped since the last report: app, worker-1, worker-2, +5`. A line in the `port` source reads:
+
+```text
+   ⚠️  Port :8201/tcp is answered by web2 (node:lts-alpine) now, and was not at the last report
+```
+
+homebutler computes Needs Attention from the snapshots, never from the rendered change lines, so a change in a line's wording doesn't change what needs attention.
+
+**Suggested Actions** repeats the same findings as a command to run, such as `homebutler docker logs fresh`. The doctor command applies different thresholds for disk and CPU, listed in [Doctor](/changes/doctor).
+
+## When a collector doesn't answer
+
+A section whose collector didn't answer is reported as `skipped`, not compared. If Docker is down at either snapshot, homebutler doesn't report every container as gone. The collectors are `docker`, `ports` and `processes`. With `DOCKER_HOST` pointing at a socket that doesn't exist, a report prints:
+
+```text
+── Notable Changes ───────────────────────────────────────────
+   skipped  containers           not compared — Docker did not answer
+```
+
+The status section says the same, and a warning ends the report: `docker: docker daemon is not running: exit status 1`. In `--json`, the container counts are `null` and the failed collector is named:
+
+```json
+{
+  "running_count": null,
+  "stopped_count": null,
+  "warnings": ["docker: docker daemon is not running: exit status 1"],
+  "failed_collectors": ["docker"]
+}
+```
+
+Check `failed_collectors` before you trust a count. A `null` count means nobody counted, and `0` means the collector answered and found none.
+
+The first run, and a run after the previous snapshot became unreadable, also produce a `skipped` line. That line says `First inspection — baseline snapshot created.` or `Nothing compared — the previous snapshot could not be read. A new baseline was created.`
+
+## Snapshots
+
+Each saved run writes `~/.homebutler/reports/snapshots/snapshot_<timestamp>.json`, such as `snapshot_20261025T181341Z.json`. After saving, homebutler deletes the oldest files until `--keep` remain. Pruning counts files, not days, so the span `--keep` covers depends on how often you run `report`. Snapshots are ordered by the timestamp in the file name.
+
+A snapshot holds the system reading, the container list, the listening ports, the process identities, and which collectors failed. On the test machine, with 42 containers and 34 process identities, a snapshot was 17 KB. The largest measured case is a desktop macOS with 639 process identities, where a snapshot is about 50 KB and `--keep 30` holds roughly 1.5 MB. Weigh that before raising `--keep`.
+
+## Use the report from a script
+
+`homebutler report --json` returns every section as typed fields, with no grouping and no truncation. Branch on `kind` and read `target` for the subject:
+
+```bash
+homebutler report --json | python3 -c '
+import json, sys
+for c in json.load(sys.stdin)["notable_changes"]:
+    print(c["kind"], c["target"])
+'
+```
+
+On the run that stopped `fresh`, the entries for that container were:
+
+```json
+{
+  "needs_attention": [
+    {
+      "kind": "container",
+      "target": "fresh",
+      "text": "fresh stopped since the last report"
+    }
+  ],
+  "notable_changes": [
+    {
+      "kind": "state",
+      "target": "fresh",
+      "detail": "running → exited",
+      "text": "state: fresh — running → exited"
+    }
+  ]
+}
+```
+
+The same response carries `is_baseline`, `snapshot_saved`, `compared_to` (the timestamp of the snapshot it compared against), the `system` reading, and `suggested_actions`. An action with a runnable command also carries `command`, `runner` and `tool`:
+
+```json
+{
+  "text": "Check why fresh is not running: homebutler docker logs fresh",
+  "command": "homebutler docker logs fresh",
+  "runner": "mcp",
+  "tool": "docker_logs"
+}
+```
+
+An agent reads the same data from the `report` MCP tool. See [JSON output](/reference/json-output) for the full field list.

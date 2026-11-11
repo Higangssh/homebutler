@@ -1,0 +1,163 @@
+---
+title: Inventory and ports
+description: Scan the server for containers and listening ports with inventory, export a Mermaid diagram, and read the same data with ports, processes and status.
+---
+
+# Inventory and ports
+
+`homebutler inventory` shows what the server runs and what it listens on in one tree, and exports the same data as a Mermaid diagram. The `ports`, `processes` and `status` commands show one slice each. All of them read the machine as it is now and save nothing; to compare against an earlier state, use [Report](/changes/report).
+
+## Scan the inventory
+
+```bash
+homebutler inventory scan
+```
+
+`inventory show` is the same command under another name. The scan prints a summary, the system reading, every container with its image and published ports, and every listening port. Shortened to this test's containers:
+
+```text
+🏠 Home Network
+   Server  homelab (homelab)
+   Summary ✅ 24 running · ⚪ 30 stopped · 🌍 15 public ports · 🔒 3 local ports
+
+📊 System
+   └─ linux/amd64 · CPU 36% · Mem 3.1/7.8GB · Up 15h 18m
+
+📦 Containers (54)
+   ├─ ✅ app · running
+   │  ├─ image node:lts-alpine
+   │  └─ exposes :8220 → 18220/tcp
+   ├─ ✅ hook · running
+   │  ├─ image node:lts-alpine
+   │  └─ exposes :8210 → 18210/tcp
+```
+
+The container tree is followed by two port sections:
+
+- **App Ports:** listeners that a container publishes. Each line names the container.
+- **System Ports:** every other listener, named by the process behind it, or `unknown` when the process isn't visible.
+
+A 🌍 marks a listener bound to every interface (`0.0.0.0`, `::` or `*`), and a 🔒 marks one bound to a single address such as `127.0.0.1`.
+
+```text
+🌐 App Ports (13)
+   ├─ 🌍 :8220/tcp · app
+   ├─ 🌍 :8210/tcp · hook
+
+🧩 System Ports (5)
+   ├─ 🔒 :53/tcp · unknown
+   ├─ 🌍 :22/tcp · unknown
+```
+
+### How ports map to containers
+
+Docker publishes a port through a root-owned `docker-proxy` process, and an ordinary user can't read the process behind a socket they don't own. homebutler reads the mapping from `docker ps` instead: a listener whose port matches a published container port is attributed to that container, with no extra privilege. A published port that has no match, or a port Docker doesn't publish, shows the process name when the system reveals it and `unknown` when it doesn't. Run the command with `sudo` to see more process names.
+
+### Show only exposed ports
+
+`--filter exposed` limits the output to listeners reachable from every interface. It is the only filter.
+
+```bash
+homebutler inventory scan --filter exposed
+```
+
+```text
+🏠 Home Network
+   Server  homelab
+
+🌐 Exposed Ports
+   ├─ :8220/tcp · app
+   ├─ :8210/tcp · hook
+   ├─ :8201/tcp · web2
+```
+
+The same listener bound on both IPv4 and IPv6 appears once. When the port scan ran and found nothing public, the section reads `(none)`. Any other filter value fails with `error: unsupported filter "bogus" (supported: exposed)`.
+
+## Export a diagram
+
+```bash
+homebutler inventory export --format mermaid
+```
+
+`mermaid` is the only format and the default; `--format dot` fails with `error: unsupported format: "dot" (supported: mermaid)`. The output is a `graph TD` diagram that you can paste into any Mermaid renderer. It has one node for the server, one per container, and one per listener, with a dotted `exposes` edge from a container to each port it publishes. Lines for this test's containers:
+
+```text
+graph TD
+  home["🏠 Home Network"] --> homelab["🖥 homelab<br/>homelab"]
+  homelab --> c14["📦 app<br/>running"]
+  homelab --> c15["📦 hook<br/>running"]
+  homelab --> p11["🌍 :8220/tcp<br/>app"]
+  c14 -. exposes .-> p11
+```
+
+## List ports
+
+```bash
+homebutler ports
+```
+
+`ports` prints every listening TCP socket as a table: protocol, address, port and process. UDP sockets are not listed. An IPv4 and an IPv6 listener on the same port are two rows. When the system hides some process names, a warning follows the table:
+
+```text
+PROTO  ADDRESS              PORT     PROCESS
+tcp    0.0.0.0              18220    
+tcp    0.0.0.0              18210    
+tcp    [::]                 18220    
+
+⚠️  Some process names are missing. Try: sudo homebutler ports
+```
+
+With `--json`, `ports` returns an array. Each entry has `protocol`, `address`, `port`, and `container` when a container publishes the port:
+
+```json
+{
+  "protocol": "tcp",
+  "address": "0.0.0.0",
+  "port": "8220",
+  "container": "app (node:lts-alpine)"
+}
+```
+
+## List processes
+
+```bash
+homebutler processes --sort mem --limit 3
+```
+
+`processes` has the alias `ps`. It lists the top processes by CPU or memory, then counts all processes and names any zombies.
+
+| Flag | Default | What it does |
+| --- | --- | --- |
+| `--sort <cpu\|mem>` | `cpu` | Sorts by CPU or memory use. |
+| `--limit <n>` | `10` | Shows the top `n` processes. `0` shows all. |
+
+```text
+📊 Top processes (by Memory)
+
+       PID   CPU%   MEM%       RSS  PROCESS
+    282567    3.2   26.3      2.0G  python3
+      1888    4.5    1.2     98.3M  dockerd
+
+Total: 119 processes | 🧟 6 zombies ⚠️
+  PID 282919: [defunct] python3
+```
+
+With `--json`, the result has `processes` (each with `pid`, `name`, `cpu`, `mem`, `rss` in KB, `state`), `total`, and `zombies`.
+
+## Check the machine
+
+```bash
+homebutler status
+```
+
+`status` prints the hostname, platform, uptime, CPU, memory and one line per disk. With `--json` it returns the same readings as typed fields. `doctor` and `alerts` compare these readings with their thresholds.
+
+```text
+🖥  homelab (linux/amd64)
+   Uptime:  15h 20m
+   CPU:     0.2% (4 cores)
+   Memory:  3.0 / 7.8 GB (38.8%)
+   Disk /: 1 / 19 GB (7%)
+```
+
+`homebutler inventory` runs on this machine only and refuses `--server` and `--all`. To scan another machine from an agent, pass `server` to the [`inventory_scan`](/mcp/report-doctor-inventory#inventory_scan) tool.

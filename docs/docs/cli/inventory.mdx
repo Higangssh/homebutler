@@ -1,0 +1,102 @@
+---
+title: inventory
+description: "Collects the server, its containers, and its open ports into one tree, or exports the same data as a Mermaid diagram."
+---
+
+# homebutler inventory
+
+Collects the server, its containers, and its open ports into one tree, or exports the same data as a Mermaid diagram.
+
+`inventory` does not run on remote servers: it refuses `--server` and `--all` and exits `1`.
+
+For reading the tree and the exposed-ports view, see [Inventory](/changes/inventory).
+
+| Command | What it does |
+| --- | --- |
+| [`export`](#inventory-export) | Prints the inventory in a structured format. |
+| [`scan`](#inventory-scan) | Scans the local server and prints the inventory as a tree. |
+| [`show`](#inventory-show) | Does the same as `inventory scan`. |
+
+## `inventory export`
+
+Prints the inventory in a structured format. The only format is a Mermaid flowchart.
+
+```bash
+homebutler inventory export [flags]
+```
+
+| Flag | Type | Default | Description |
+| --- | --- | --- | --- |
+| `--format` | string | `mermaid` | Export format. `mermaid` is the only value. |
+
+Export the inventory as Mermaid. The output is shortened to the first lines.
+
+```bash
+homebutler inventory export --format mermaid
+```
+
+```text
+graph TD
+  home["🏠 Home Network"] --> main["🖥 main<br/>127.0.0.1"]
+```
+
+Any other format is an error.
+
+```bash
+homebutler inventory export --format dot
+```
+
+```text
+error: unsupported format: "dot" (supported: mermaid)
+```
+
+## `inventory scan`
+
+Scans the local server and prints the inventory as a tree.
+
+```bash
+homebutler inventory scan [flags]
+```
+
+| Flag | Type | Default | Description |
+| --- | --- | --- | --- |
+| `--filter` | string | - | Show only part of the inventory. The one supported value is `exposed`, which lists the ports open on every interface. Not allowed with `--json`, which always returns the full inventory. |
+
+List the exposed ports. The output is shortened to the lines for the containers created for this page.
+
+```bash
+homebutler inventory scan --filter exposed
+```
+
+```text
+🏠 Home Network
+   Server  main
+
+🌐 Exposed Ports
+   ├─ :8501/tcp · webhook-sink
+   ├─ :8500/tcp · web
+   ├─ :22/tcp · unknown
+   └─ :8601/tcp · unknown
+```
+
+An unsupported filter value is an error.
+
+```bash
+homebutler inventory scan --filter bad
+```
+
+```text
+error: unsupported filter "bad" (supported: exposed)
+```
+
+## `inventory show`
+
+Does the same as `inventory scan`.
+
+```bash
+homebutler inventory show [flags]
+```
+
+| Flag | Type | Default | Description |
+| --- | --- | --- | --- |
+| `--filter` | string | - | Show only part of the inventory. The one supported value is `exposed`. Not allowed with `--json`. |

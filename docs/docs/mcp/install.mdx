@@ -1,0 +1,385 @@
+---
+title: Install
+description: "Reference for the MCP tools that list, install, check, uninstall and purge self-hosted apps: install_list, install_app, install_status, install_uninstall and install_purge."
+sidebar_position: 7
+---
+
+# Install
+
+The install tools manage the self-hosted apps that homebutler can install with Docker Compose. None of them accepts `server`: they act on the machine that runs the MCP server. See [Install apps](/apps/install-apps) for the commands.
+
+<Tool>
+
+### install_list
+
+<Badge tone="success">read</Badge>
+
+Lists the self-hosted apps that `install_app` can install. The catalog is compiled into the binary, so the call reaches no network and returns the same apps on every machine, in an order that changes between calls. The tool takes no `server` argument.
+
+#### Arguments
+
+This tool takes no arguments.
+
+#### Response
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `name` | string | App name. Pass it as `app` to the other install tools. |
+| `description` | string | What the app does. |
+| `default_port` | string | Host port the app uses when `install_app` gets no `port`. |
+| `container_port` | string | Port the app listens on inside its container. |
+| `data_path` | string | Path inside the container where the app keeps its data. |
+
+<Accordion title="Examples">
+
+The response is an array with one entry per app, 15 in total. Shortened here to three, in the order of one call:
+
+```json
+[
+  {
+    "name": "mealie",
+    "description": "Self-hosted recipe manager and meal planner",
+    "default_port": "9925",
+    "container_port": "9000",
+    "data_path": "/app/data"
+  },
+  {
+    "name": "plex",
+    "description": "Plex Media Server - organize and stream your media",
+    "default_port": "32400",
+    "container_port": "32400",
+    "data_path": "/config"
+  },
+  {
+    "name": "gitea",
+    "description": "Lightweight self-hosted Git service",
+    "default_port": "3002",
+    "container_port": "3000",
+    "data_path": "/data"
+  }
+]
+```
+
+</Accordion>
+
+</Tool>
+
+<Tool>
+
+### install_status
+
+<Badge tone="success">read</Badge>
+
+Reports the state of an installed app, as its containers report it. An app that homebutler didn't install is not known here. The tool takes no `server` argument.
+
+#### Arguments
+
+| Argument | Type | Description |
+| --- | --- | --- |
+| `app` <Badge>required</Badge> | string | Name of the app, as listed by [`install_list`](#install_list). |
+
+#### Response
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `app` | string | The app name you passed. |
+| `state` | string | The container state that Docker Compose reports, such as `running`. `stopped` when the app has no containers. |
+
+<Accordion title="Examples">
+
+Check an app after installing it:
+
+Arguments:
+
+```json
+{
+  "app": "it-tools"
+}
+```
+
+Response:
+
+```json
+{
+  "app": "it-tools",
+  "state": "running"
+}
+```
+
+After `install_uninstall`, the app's folder is still there and its containers are gone:
+
+Arguments:
+
+```json
+{
+  "app": "it-tools"
+}
+```
+
+Response:
+
+```json
+{
+  "app": "it-tools",
+  "state": "stopped"
+}
+```
+
+After `install_purge`, or for an app that was never installed, the call returns an error:
+
+Arguments:
+
+```json
+{
+  "app": "it-tools"
+}
+```
+
+Response:
+
+```text
+it-tools is not installed
+```
+
+</Accordion>
+
+</Tool>
+
+<Tool>
+
+### install_app
+
+<Badge tone="warning">write</Badge>
+
+Installs a self-hosted app with a generated `docker-compose.yml` under `~/.homebutler/apps/<app>`. It checks Docker, the port and duplicates first, and a refusal comes back as a result with the reasons, not as an error. The tool takes no `server` argument.
+
+#### Arguments
+
+| Argument | Type | Description |
+| --- | --- | --- |
+| `app` <Badge>required</Badge> | string | Name of the app to install, as listed by [`install_list`](#install_list). A name outside the list returns `unknown app "<name>", use install_list to see available apps`. |
+| `port` | integer | Host port to publish the app on. The app's `default_port` is used when you leave it out. |
+
+#### Response
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `status` | string | Outcome: `installed`, `failed`, `uninstalled` or `purged`. |
+| `app` | string | The app the call was about. |
+| `port` | string, optional | Host port the app was published on. Present only when `status` is `installed`. |
+| `path` | string, optional | Folder that holds the app's `docker-compose.yml` and data. Present only when `status` is `installed`. |
+| `state` | string, optional | Container state after the install, such as `running`. Present only when `status` is `installed`. |
+| `data_preserved` | boolean or null, optional | `true` when the app's data stays on disk and `false` when it was deleted. Present for `uninstalled` and `purged`. |
+| `warning` | string, optional | Present when an earlier install's state couldn't be carried over. |
+| `issues` | array of strings, optional | Why the install was refused. Present only when `status` is `failed`. |
+
+<Accordion title="Examples">
+
+Install an app on a port of your choice:
+
+Arguments:
+
+```json
+{
+  "app": "it-tools",
+  "port": 8104
+}
+```
+
+Response:
+
+```json
+{
+  "status": "installed",
+  "app": "it-tools",
+  "port": "8104",
+  "path": "/home/you/.homebutler/apps/it-tools",
+  "state": "running"
+}
+```
+
+A port that is taken returns `status` `failed` and the reasons. The call itself succeeds:
+
+Arguments:
+
+```json
+{
+  "app": "it-tools",
+  "port": 8101
+}
+```
+
+Response:
+
+```json
+{
+  "status": "failed",
+  "app": "it-tools",
+  "issues": [
+    "port 8101 is already in use by in use.\n    Use --port <number> to pick a different port"
+  ]
+}
+```
+
+Installing an app that is already running returns every reason that applies:
+
+Arguments:
+
+```json
+{
+  "app": "it-tools",
+  "port": 8104
+}
+```
+
+Response:
+
+```json
+{
+  "status": "failed",
+  "app": "it-tools",
+  "issues": [
+    "port 8104 is already in use by in use.\n    Use --port <number> to pick a different port",
+    "it-tools is already running.\n    Run: homebutler install uninstall it-tools"
+  ]
+}
+```
+
+An app outside the catalog returns an error:
+
+Arguments:
+
+```json
+{
+  "app": "nope"
+}
+```
+
+Response:
+
+```text
+unknown app "nope", use install_list to see available apps
+```
+
+</Accordion>
+
+</Tool>
+
+<Tool>
+
+### install_uninstall
+
+<Badge tone="warning">write</Badge>
+
+Stops an installed app and removes its containers. The app folder and its volumes stay on disk. [`install_purge`](#install_purge) deletes them. The tool takes no `server` argument.
+
+#### Arguments
+
+| Argument | Type | Description |
+| --- | --- | --- |
+| `app` <Badge>required</Badge> | string | Name of the app, as listed by [`install_list`](#install_list). |
+
+#### Response
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `status` | string | Outcome: `installed`, `failed`, `uninstalled` or `purged`. |
+| `app` | string | The app the call was about. |
+| `data_preserved` | boolean or null, optional | `true` when the app's data stays on disk and `false` when it was deleted. Present for `uninstalled` and `purged`. |
+| `warning` | string, optional | Present when part of the app's data is in Docker volumes outside the app directory. |
+| `issues` | array of strings, optional | Why the install was refused. Present only when `status` is `failed`. |
+| `path` | string, optional | Folder that holds the app's `docker-compose.yml` and data. Present only when `status` is `installed`. |
+| `port` | string, optional | Host port the app was published on. Present only when `status` is `installed`. |
+| `state` | string, optional | Container state after the install, such as `running`. Present only when `status` is `installed`. |
+
+<Accordion title="Examples">
+
+Arguments:
+
+```json
+{
+  "app": "it-tools"
+}
+```
+
+Response:
+
+```json
+{
+  "status": "uninstalled",
+  "app": "it-tools",
+  "data_preserved": true
+}
+```
+
+</Accordion>
+
+</Tool>
+
+<Tool>
+
+### install_purge
+
+<Badge tone="danger">destructive</Badge>
+
+Stops an installed app and deletes everything: containers, config and volumes. Nothing restores it, and no backup is taken first. Take one with [`backup_create`](/mcp/backup#backup_create) before the call if the data matters. The tool takes no `server` argument.
+
+#### Arguments
+
+| Argument | Type | Description |
+| --- | --- | --- |
+| `app` <Badge>required</Badge> | string | Name of the app, as listed by [`install_list`](#install_list). |
+
+#### Response
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `status` | string | Outcome: `installed`, `failed`, `uninstalled` or `purged`. |
+| `app` | string | The app the call was about. |
+| `data_preserved` | boolean or null, optional | `true` when the app's data stays on disk and `false` when it was deleted. Present for `uninstalled` and `purged`. |
+| `kept_volumes` | array of strings, optional | Volumes that still exist after the purge. Present only when not empty. |
+| `unchecked_volumes` | array of strings, optional | Volumes Docker couldn't be asked about. Present only when not empty. |
+| `issues` | array of strings, optional | Why the install was refused. Present only when `status` is `failed`. |
+| `path` | string, optional | Folder that holds the app's `docker-compose.yml` and data. Present only when `status` is `installed`. |
+| `port` | string, optional | Host port the app was published on. Present only when `status` is `installed`. |
+| `state` | string, optional | Container state after the install, such as `running`. Present only when `status` is `installed`. |
+
+<Accordion title="Examples">
+
+Arguments:
+
+```json
+{
+  "app": "it-tools"
+}
+```
+
+Response:
+
+```json
+{
+  "status": "purged",
+  "app": "it-tools",
+  "data_preserved": false
+}
+```
+
+Purging an app that isn't installed returns an error:
+
+Arguments:
+
+```json
+{
+  "app": "it-tools"
+}
+```
+
+Response:
+
+```text
+it-tools is not installed
+```
+
+</Accordion>
+
+</Tool>

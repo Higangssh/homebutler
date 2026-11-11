@@ -1,0 +1,258 @@
+---
+title: Proxmox VE
+description: Connect homebutler to a Proxmox VE API endpoint with least-privilege tokens, read cluster, guest, node and task status, start, shut down or reboot guests, and watch guests.
+---
+
+# Proxmox VE
+
+homebutler reads a Proxmox VE node or cluster through its HTTPS API and can start, shut down or reboot guests, with no agent on the node. This page covers creating the API tokens, adding the endpoint to your config, and the `homebutler proxmox` commands. You need a Proxmox VE host that your machine can reach on port 8006, and root access on it to create the tokens.
+
+A Proxmox endpoint is not an SSH server. It goes under `proxmox:` in the config, separate from `servers:`, and the commands refuse `--server` and `--all` with exit code 1.
+
+## Create API tokens
+
+homebutler uses two tokens. The read token only looks. The action token can only power guests on and off. Creating the action token is optional. Without it, the guest commands refuse to run.
+
+<Info title="Where these commands run">
+The `pveum` commands run in a shell on the Proxmox node. They are the commands from homebutler's own setup notes and weren't run against a Proxmox server while writing this page.
+</Info>
+
+### The read token
+
+Create a user, a token without shared privileges, and grant the built-in `PVEAuditor` role to both the user and the token:
+
+```bash
+pveum user add monitoring@pve --comment "least-privilege API user for homebutler"
+pveum user token add monitoring@pve readonly --privsep 1
+pveum acl modify / --users 'monitoring@pve' --roles PVEAuditor --propagate 1
+pveum acl modify / --tokens 'monitoring@pve!readonly' --roles PVEAuditor --propagate 1
+pveum user token permissions monitoring@pve readonly
+```
+
+The `token add` command prints the token value once. Save it in a file that only your user can read, such as `~/.config/homebutler/pve.token`, containing the value and nothing else. Proxmox doesn't show it again. If you lose the value, remove the token and create it again.
+
+A token with privilege separation has only the permissions that its own ACL and its user's ACL both grant. Granting `PVEAuditor` to the user alone leaves the token able to sign in but returning empty lists. Grant the role at `/`, because the cluster status view needs `Sys.Audit` on `/`. A newly granted token can return `403 Permission check failed (/, Sys.Audit)` for a short time while the permissions propagate.
+
+`proxmox task` reads a task with the read token. A user can read its own tasks, and reading a task that another user started needs `Sys.Audit` on the task's node. A guest action runs as the action token's user, so checking its task relies on that privilege. The `PVEAuditor` grant at `/` includes it.
+
+### The action token
+
+Give guest actions their own user, a role with only `VM.PowerMgmt`, and grant it on the guests homebutler may control:
+
+```bash
+pveum user add power@pve --comment "least-privilege guest-action API user for homebutler"
+pveum user token add power@pve action --privsep 1
+pveum role add HomeButlerPower -privs VM.PowerMgmt
+pveum acl modify /vms/100 --users 'power@pve' --roles HomeButlerPower
+pveum acl modify /vms/100 --tokens 'power@pve!action' --roles HomeButlerPower
+```
+
+Repeat the last two commands for each guest ID (VMID) you want to control. Save the action token value in a second file, such as `~/.config/homebutler/pve-action.token`.
+
+<Warning title="Keep the two credentials apart">
+Don't put the action token on the read token's user, and don't use `--privsep 0` for it. A token's effective access is the intersection of its own ACLs and its user's ACLs, so anything else granted to a shared user widens what the action token can do. Never grant `HomeButlerPower` to the read user, and never grant `PVEAuditor` to the action user.
+</Warning>
+
+## Add the endpoint
+
+Add one entry per Proxmox host under `proxmox:`:
+
+```yaml
+proxmox:
+  - name: pve
+    host: 192.168.1.10
+    token_id: monitoring@pve!readonly
+    token_file: ~/.config/homebutler/pve.token
+    action_token_id: power@pve!action
+    action_token_file: ~/.config/homebutler/pve-action.token
+    fingerprint: "AB:CD:EF:..."
+```
+
+| Key | Required | What it sets |
+| --- | --- | --- |
+| `name` | Yes | The name you pass to `--endpoint`. Names must be unique. |
+| `host` | Yes | The address of the Proxmox host. |
+| `port` | No | The API port. The default is 8006. |
+| `token_id` | Yes | The read token's ID, such as `monitoring@pve!readonly`. |
+| `token_file` | One of the two | A file holding the read token value. `~/` is expanded. |
+| `token` | One of the two | The read token value inline. Set either this or `token_file`, not both. |
+| `action_token_id` | No | The action token's ID. Setting it turns guest actions on. |
+| `action_token_file` | With `action_token_id` | A file holding the action token value. |
+| `action_token` | With `action_token_id` | The action token value inline. Set either this or `action_token_file`, not both. |
+| `fingerprint` | No | The SHA-256 fingerprint of the node's certificate. |
+| `ca_file` | No | A PEM file of the certificate authority that signed the node's certificate. |
+| `insecure` | No | Set to `true` to skip certificate verification. |
+| `timeout` | No | A duration such as `10s`. The default is 10 seconds. |
+| `guests` | No | Guests that `watch` expects to stay running. See [Watch guests](#watch-guests). |
+
+Prefer `token_file`. Inline tokens work, and homebutler leaves them out of JSON output. `homebutler config validate` checks the entries before you use them. For a read token file that exists and an action token file that group members can read, it reports:
+
+```text
+✓ proxmox     2 endpoints (pve, lab)
+
+⚠️ proxmox[0].action_token_file: Action token file /home/you/.config/homebutler/pve-action.token is readable by group or others (0644).
+   → This credential grants VM.PowerMgmt. Run: chmod 600 /home/you/.config/homebutler/pve-action.token
+```
+
+It reports an error for a missing name, host or token ID, both `token` and `token_file`, a token file that doesn't exist, a malformed `timeout`, a duplicate endpoint name, or a `guests` entry with a bad type or ID. An `action_token_id` equal to `token_id` produces a warning, because the two credentials aren't separate.
+
+### Certificates
+
+Verification is on by default, with TLS 1.2 or later. Proxmox ships a self-signed certificate, so the default fails until you choose how to trust it. homebutler uses the first of these that you set:
+
+1. `fingerprint` pins the node's certificate. Chain and hostname checks are replaced by a comparison of the certificate's SHA-256 hash.
+2. `ca_file` trusts your certificate authority and keeps the normal certificate and hostname checks.
+3. `insecure: true` turns verification off. Anyone on the network path can then read the token and impersonate the node.
+
+To get the fingerprint over a connection you trust:
+
+```bash
+openssl s_client -connect 192.168.1.10:8006 </dev/null 2>/dev/null | openssl x509 -noout -fingerprint -sha256
+```
+
+Colons in the value are optional. Each failure ends with its own message:
+
+| Situation | Message ends with |
+| --- | --- |
+| Self-signed certificate, and none of the three settings | `tls: failed to verify certificate: x509: certificate signed by unknown authority` |
+| `fingerprint` doesn't match | `proxmox TLS certificate fingerprint mismatch` |
+| `fingerprint` isn't a SHA-256 value | `proxmox fingerprint must be a SHA-256 certificate fingerprint` |
+| `ca_file` can't be read | `read Proxmox CA file: open /path/to/ca.pem: no such file or directory` |
+
+[`homebutler doctor`](/changes/doctor) checks every endpoint. With `insecure: true` it warns `Proxmox endpoint "pve" accepts any certificate`, and for an endpoint that can't be reached it reports `Proxmox endpoint "pve" has no readable collectors`.
+
+## Read status
+
+With one endpoint configured, `--endpoint` is optional. With more, name one, or the command stops and lists them:
+
+```text
+error: multiple Proxmox endpoints configured; specify endpoint. Available endpoints: [pve lab]
+```
+
+| Command | What it shows |
+| --- | --- |
+| `proxmox status` | The version, the cluster name, quorum and online nodes, and counts of nodes, guests and storage. |
+| `proxmox guests` | Every QEMU and LXC guest: VMID, type, node, status and name. Filter with `--node <name>` and `--status running` or `--status stopped`. |
+| `proxmox node <name>` | The PVE version, CPU use and uptime of one node. |
+| `proxmox tasks` | Recent tasks: node, type, status and ID. `--node <name>` limits it to one node. `--limit <n>` caps the tasks per node and defaults to 50. |
+| `proxmox task <upid> --endpoint <name> --node <name>` | One task's status. |
+
+`--json` prints the full typed result. CPU values stay as Proxmox fractions from 0 to 1, byte counts stay integers, and QEMU and LXC guests share one `guests` list.
+
+When part of an endpoint can't be read, `status` prints `unavailable` for that line and a `Warning:` line with the reason, and exits with status 0. With the endpoint's port closed, it prints:
+
+```text
+Proxmox endpoint: pve
+Version: unavailable
+Cluster: unavailable
+Resources: unavailable
+Warning: version: proxmox request /api2/json/version: Get "https://127.0.0.1:8399/api2/json/version": dial tcp 127.0.0.1:8399: connect: connection refused
+```
+
+In `--json` output the same failure appears under `warnings`, `failed_collectors` and `failure_classes`, where the class is one of `configuration`, `response`, `tls`, `authentication`, `authorization` or `transport`. An empty list from an endpoint that signed in usually means the token lacks permissions, not that the cluster is empty.
+
+## Control a guest
+
+`proxmox guest start`, `shutdown` and `reboot` send one power action. All five flags are required, even when only one endpoint exists, because homebutler never guesses the node or the guest type:
+
+```bash
+homebutler proxmox guest shutdown --endpoint pve --node pve1 --type lxc --vmid 101 --confirm
+```
+
+| Flag | Value |
+| --- | --- |
+| `--endpoint` | The endpoint name. |
+| `--node` | The Proxmox node that hosts the guest. |
+| `--type` | `qemu` for a virtual machine, `lxc` for a container. |
+| `--vmid` | The guest ID. |
+| `--confirm` | Required. Without it, nothing is sent. |
+
+Without `--confirm`, the command prints the full target and the flags to repeat, and exits with status 1. It never prompts:
+
+```text
+error: confirmation required for Proxmox guest action: endpoint="pve" node="pve1" type="qemu" vmid=100 action="start"; rerun with --endpoint "pve" --node "pve1" --type "qemu" --vmid 100 --confirm
+```
+
+An endpoint with no action token refuses the action. homebutler doesn't fall back to the read token:
+
+```text
+error: no action credential configured for Proxmox endpoint "lab"; guest actions require action_token_id and action_token or action_token_file — see docs/proxmox.md
+```
+
+A request that Proxmox accepts prints `Guest action accepted`, the target and a `UPID`, the ID of the task Proxmox created. Accepted means Proxmox queued the task, not that the guest finished changing state. Check the task:
+
+```bash
+homebutler proxmox task 'UPID:pve1:...' --endpoint pve --node pve1
+```
+
+The output has `Status`, `Result` and, for a finished task, `Exit status`. `Result` is one of three words: `running` while the task is in progress, `ok` when it stopped with exit status `OK`, and `failed` for any other exit status.
+
+These rules protect against an accidental or doubled action:
+
+- **No retries.** homebutler never repeats a failed action request. After a timeout or a dropped connection, Proxmox may have received it. Look at the task list before you run the command again.
+- **Graceful shutdown only.** `shutdown` asks the guest to shut down. homebutler has no hard stop, which on a QEMU guest is the same as pulling the power plug. It also doesn't create, delete, migrate, reset, suspend, resume or snapshot guests.
+- **One request per command.** homebutler doesn't poll a task until it finishes, send arbitrary API actions, or use root-only action overrides. Run `proxmox task` when you want a task's state.
+
+Over MCP, `proxmox_guest_start` and `proxmox_guest_reboot` are write tools, `proxmox_guest_shutdown` is destructive, and each needs `confirm: true`. See [Read-only mode](/agents/read-only-mode).
+
+## Watch guests
+
+`homebutler watch start` polls every endpoint along with your containers and services. It records an incident when an endpoint becomes unavailable (configuration, TLS, authentication, an unexpected response or a timeout), when an endpoint signs in but returns nothing or a 403, and when a guest listed under `guests:` stops running. A recovery incident follows when the problem clears.
+
+List the guests to watch by the three values Proxmox needs to find them:
+
+```yaml
+proxmox:
+  - name: pve
+    host: 192.168.1.10
+    token_id: monitoring@pve!readonly
+    token_file: ~/.config/homebutler/pve.token
+    guests:
+      - node: pve1
+        type: qemu
+        vmid: 100
+      - node: pve1
+        type: lxc
+        vmid: 101
+```
+
+A guest that isn't listed is never alerted on, whether it is stopped on purpose or not. The watcher only reads. See [Watch](/monitoring/watch) for starting it and reading incidents.
+
+## Run homebutler inside a guest
+
+A homebutler running in an LXC container or a virtual machine reports on that guest, not on the node underneath it. To see the node, add it under `proxmox:` as an endpoint. To see other machines, add them under `servers:` and reach them over SSH. See [Multi-server](/running/multi-server).
+
+## Community Scripts
+
+`proxmox script` prints install commands for a short, curated list of Proxmox VE Community Scripts. It contacts no Proxmox host and needs no endpoint. List the catalog:
+
+```bash
+homebutler proxmox script list
+```
+
+```text
+Community Scripts
+docker	Docker	Docker CE and Docker Compose in an LXC
+homeassistant	Home Assistant	Home Assistant Core in an LXC
+nginxproxymanager	Nginx Proxy Manager	Nginx Proxy Manager in an LXC
+pihole	Pi-hole	Pi-hole DNS ad-blocker in an LXC
+postgresql	PostgreSQL	PostgreSQL database server in an LXC
+```
+
+Print the command for one script by its slug, the first column:
+
+```bash
+homebutler proxmox script show docker
+```
+
+```text
+Community Script command
+Slug: docker
+Command: bash -c "$(curl -fsSL https://raw.githubusercontent.com/community-scripts/ProxmoxVE/fadcb0c375547861f991c09ff8dec196c380d428/ct/docker.sh)"
+
+⚠️  This script is not reviewed by homebutler. It is fetched from community-scripts/ProxmoxVE and runs as root on the Proxmox host.
+
+Review it, then run it yourself on the Proxmox host; homebutler does not run it for you.
+```
+
+The command is pinned to one commit of the upstream repository, so the script you read today is the script you run later. homebutler only prints the command. Read the script, then run the command yourself in a shell on the Proxmox host. An unknown slug exits with status 1: `error: unknown Proxmox Community Script "nope"; use the script catalog to see available slugs`. With `--json`, the output has `slug`, `command` and `warning`.

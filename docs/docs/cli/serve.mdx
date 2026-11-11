@@ -1,0 +1,154 @@
+---
+title: serve
+description: "Starts the web dashboard."
+---
+
+# homebutler serve
+
+Starts the web dashboard.
+
+The dashboard runs for as long as the command does. To keep it running after logout, use `serve install`.
+
+For the dashboard and its token, see [Web dashboard](/running/web-dashboard).
+
+| Command | What it does |
+| --- | --- |
+| [`install`](#serve-install) | Registers the dashboard with the host so it survives logout and reboot. |
+| [`installed`](#serve-installed) | Reports whether the dashboard unit is registered, and the address it serves. |
+| [`uninstall`](#serve-uninstall) | Stops the dashboard unit and removes its file. |
+
+## `serve`
+
+Binds to `127.0.0.1:8080` by default. With a token set, every API request needs it. Without one, the dashboard is read-only.
+
+```bash
+homebutler serve [flags]
+homebutler serve [command]
+```
+
+| Flag | Type | Default | Description |
+| --- | --- | --- | --- |
+| `--demo` | boolean | `false` | Show realistic demo data and make no real system calls. |
+| `--host` | string | `127.0.0.1` | Address to bind to. |
+| `--port` | integer | `8080` | Port for the dashboard. |
+| `--token` | string | - | Bearer token for the API. Visible in `ps` to other users, so prefer `web.token` in the config file, or `HOMEBUTLER_TOKEN` in a container. `--token` wins over `web.token`, which wins over `HOMEBUTLER_TOKEN`. An empty value counts as unset. |
+
+<Note title="In a container">
+
+Inside a container, `serve` refuses to bind to an address other than loopback unless a token is set.
+
+</Note>
+
+Run the dashboard with demo data and a token.
+
+```bash
+homebutler serve --demo --host 127.0.0.1 --port 8503 --token <token>
+```
+
+```text
+homebutler dashboard (DEMO MODE): http://127.0.0.1:8503
+```
+
+In another terminal, a request without the token is refused and one with the token succeeds.
+
+```bash
+curl -i -X POST http://127.0.0.1:8503/api/docker/demo/restart
+```
+
+The response, shortened: the `Date` header is removed.
+
+```text
+HTTP/1.1 401 Unauthorized
+Content-Type: application/json
+Content-Length: 25
+
+{"error":"unauthorized"}
+```
+
+```bash
+curl -i -X POST -H "Authorization: Bearer <token>" http://127.0.0.1:8503/api/docker/demo/restart
+```
+
+The response, shortened: the `Date` header is removed.
+
+```text
+HTTP/1.1 200 OK
+Content-Type: application/json
+Content-Length: 54
+
+{"action":"restart","container":"demo","status":"ok"}
+```
+
+A port that is in use is an error.
+
+```bash
+homebutler serve --demo --port 8500
+```
+
+```text
+homebutler dashboard (DEMO MODE): http://127.0.0.1:8500
+error: port 8500 is already in use. Try a different port:
+  homebutler serve --port 8501
+```
+
+## `serve install`
+
+Registers the dashboard with the host so it survives logout and reboot.
+
+```bash
+homebutler serve install [flags]
+```
+
+The command writes a user-level unit named `dev.homebutler.serve`: a systemd user unit on Linux, a launchd agent on macOS. The unit records the address and nothing else. It reads the token from `web.token` in the config file at startup.
+
+| Flag | Type | Default | Description |
+| --- | --- | --- | --- |
+| `--force` | boolean | `false` | Replace a unit that already exists. |
+| `--host` | string | `127.0.0.1` | Address the installed dashboard binds to. |
+| `--port` | integer | `8080` | Port the installed dashboard binds to. |
+
+On a host where the systemd user manager is not reachable, the unit file is written and the start fails.
+
+```bash
+homebutler serve install --host 127.0.0.1 --port 8510
+```
+
+```text
+error: wrote /home/you/.config/systemd/user/dev.homebutler.serve.service but could not start it: systemctl --user enable --now dev.homebutler.serve.service: exit status 1
+Failed to connect to bus: No such file or directory
+```
+
+## `serve installed`
+
+Reports whether the dashboard unit is registered, and the address it serves.
+
+```bash
+homebutler serve installed [flags]
+```
+
+```bash
+homebutler serve installed
+```
+
+```text
+Installed: /home/you/.config/systemd/user/dev.homebutler.serve.service (systemd)
+Serving:   http://127.0.0.1:8510
+```
+
+## `serve uninstall`
+
+Stops the dashboard unit and removes its file.
+
+```bash
+homebutler serve uninstall [flags]
+```
+
+```bash
+homebutler serve uninstall
+```
+
+```text
+⚠️  could not stop it cleanly: systemctl --user disable --now dev.homebutler.serve.service: exit status 1
+Failed to connect to bus: No such file or directory
+✅ removed /home/you/.config/systemd/user/dev.homebutler.serve.service
+```

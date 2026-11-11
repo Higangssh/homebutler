@@ -1,0 +1,138 @@
+---
+title: CLI reference
+description: "Every homebutler command, subcommand, and flag, with the configuration lookup order, global flags, output, and exit codes."
+---
+
+# CLI reference
+
+This reference lists every command and flag of homebutler 1.7.0, with the lookup order for the config file, the global flags, how output is written, and the exit codes.
+
+## Usage
+
+```bash
+homebutler [command] [flags]
+homebutler <command> --help
+homebutler help <command>
+```
+
+Run `homebutler` with no command to print the command list. A command name that does not exist is an error: `error: unknown command "frobnicate" for "homebutler"`.
+
+## Configuration file
+
+homebutler looks for the config file in this order and uses the first one it finds:
+
+1. The path in `--config`.
+2. The path in the `HOMEBUTLER_CONFIG` environment variable.
+3. `~/.config/homebutler/config.yaml`.
+4. `./homebutler.yaml` in the current folder.
+
+When none exists, built-in defaults apply: alert thresholds of 90% CPU, 85% memory, and 90% disk. A `--config` path that does not exist also falls back to the defaults and prints no error. `homebutler config validate` reports it. The keys are listed in [Configuration](/reference/configuration).
+
+## Global flags
+
+Every command accepts these flags.
+
+| Flag | Type | Default | Description |
+| --- | --- | --- | --- |
+| `--all` | boolean | `false` | Run on every configured server in parallel. `backup drill` has its own `--all` with a different meaning. |
+| `--config` | string | - | Path to the config file. Takes priority over `HOMEBUTLER_CONFIG` and the default locations. |
+| `--json` | boolean | `false` | Print JSON instead of text. `version` ignores it. The shape of each result is in [JSON output](/reference/json-output). |
+| `--server` | string | - | Run on one configured server, by the name in the `servers:` section. |
+| `-v`, `--verbose` | boolean | `false` | Show detailed error information. |
+
+`--server` reaches another machine from `alerts` (without a subcommand), `backup`, `backup list`, `backup drill`, `restore`, `docker` and its subcommands, `doctor`, `network scan`, `ports`, `processes`, `report`, `status`, and `wake`. The remote server runs the command with its own homebutler binary. `--all` runs only `status`, `alerts`, `doctor`, `report`, `processes`, `ports`, `docker list`, `docker stats`, `backup list` and `network scan`. See [Multi-server](/running/multi-server#run-a-command-on-every-server).
+
+`deploy` needs `--server` or `--all` to know where to install. `upgrade` takes `--all` and refuses `--server`. `proxmox` refuses both flags and takes `--endpoint`. `completion` accepts either flag and ignores it. Every other command runs on this machine only, and exits `1` if you pass either flag.
+
+`--verbose` changes the message only for errors that come with a suggested fix, such as a folder the current user cannot write to. Without it the error ends with the command to rerun:
+
+```bash
+homebutler backup --service uptime-kuma --to /root/missing
+```
+
+```text
+error: cannot create backup dir /root/missing — rerun with: sudo homebutler backup --to /root/missing --service uptime-kuma
+```
+
+With `-v` the error shows the system message and the suggestion on its own line:
+
+```bash
+homebutler backup --service uptime-kuma --to /root/missing -v
+```
+
+```text
+error: cannot create backup dir /root/missing: mkdir /root/missing: permission denied
+
+  ⚠️  Try: sudo homebutler backup --to /root/missing --service uptime-kuma
+```
+
+## Output
+
+Commands print text for people by default and JSON with `--json`. A few commands print their text to standard error: `install list`, `install status`, `install uninstall`, `install purge`, `upgrade`, `trust`, and the progress lines of `deploy`. Use `2>&1` to capture it.
+
+Errors print as one line, `error: <message>`, to standard error, followed by lines that start with an arrow when the command knows a next step.
+
+## Exit codes
+
+| Code | Meaning |
+| --- | --- |
+| `0` | The command ran. Commands that report findings, such as `doctor`, `alerts`, `report`, and `proxmox status`, exit `0` even when the findings are bad. |
+| `1` | The command failed: a flag or argument error, a missing config entry, a failed connection, or a check you asked to fail the run. |
+
+These checks turn findings into exit code `1`: `doctor --strict` for warnings and failures, `config validate --strict` for warnings, `config validate` for errors, and `backup drill` when an app does not come back. A single `--all` drill with one failed app also exits `1`.
+
+With `--all`, a command exits `1` when any server couldn't be asked or its command failed there. Every server is still printed first, and standard error names the ones that failed, such as `status failed on 1 of 2 servers: edge`.
+
+## Commands
+
+Each command links to its page. Pages for commands with subcommands hold one section per subcommand.
+
+### Know what changed
+
+| Command | What it does |
+| --- | --- |
+| [`report`](/cli/report) | Compares the server with the previous snapshot and prints what needs attention, what changed, and the current state. |
+| [`doctor`](/cli/doctor) | Runs a read-only health check on the server and lists findings by severity, each with a command to look closer. |
+| [`status`](/cli/status) | Prints CPU usage, memory, disk usage, and uptime for the server. |
+| [`inventory`](/cli/inventory) | Collects the server, its containers, and its open ports into one tree, or exports the same data as a Mermaid diagram. Subcommands: `export`, `scan`, `show`. |
+| [`ports`](/cli/ports) | Lists open ports with the process that holds each one. |
+| [`processes`](/cli/processes) | Shows the top processes by CPU or memory, and lists zombie processes. |
+
+### Watch and alerts
+
+| Command | What it does |
+| --- | --- |
+| [`watch`](/cli/watch) | Tracks container restarts, captures the logs around each one, and keeps a history you can browse. Subcommands: `add`, `check`, `history`, `install`, `installed`, `list`, `remove`, `show`, `start`, `tui`, `uninstall`. |
+| [`alerts`](/cli/alerts) | Reads the CPU, memory, and disk thresholds once, or keeps checking them with `--watch`. Subcommands: `history`, `init`, `test-notify`. |
+| [`notify`](/cli/notify) | Sends a test message through the notification channels you configured. Subcommands: `test`. |
+
+### Backups
+
+| Command | What it does |
+| --- | --- |
+| [`backup`](/cli/backup) | Archives the volumes and bind mounts of your Docker Compose services into one `tar.gz` file. Subcommands: `drill`, `list`. |
+| [`restore`](/cli/restore) | Restores the volumes and bind mounts from a backup archive. |
+
+### Manage your server
+
+| Command | What it does |
+| --- | --- |
+| [`docker`](/cli/docker) | Lists, restarts, and stops containers, and shows their logs, stats, processes, and configuration. Subcommands: `inspect`, `list`, `logs`, `restart`, `stats`, `stop`, `top`. |
+| [`install`](/cli/install) | Installs a self-hosted app with Docker Compose, and stops or removes it later. Subcommands: `list`, `purge`, `status`, `uninstall`. |
+| [`proxmox`](/cli/proxmox) | Reads status, guests, nodes, and tasks from Proxmox VE, and starts, shuts down, or reboots a guest. Subcommands: `guest`, `guests`, `node`, `script`, `status`, `task`, `tasks`. |
+| [`wake`](/cli/wake) | Sends a Wake-on-LAN magic packet to a MAC address or to a device from your config. |
+| [`network`](/cli/network) | Discovers the devices on the local network. Subcommands: `scan`. |
+
+### Running homebutler
+
+| Command | What it does |
+| --- | --- |
+| [`init`](/cli/init) | Asks questions and writes the config file, with the local machine and any remote servers. |
+| [`config`](/cli/config) | Inspects the configuration homebutler reads. Subcommands: `validate`. |
+| [`serve`](/cli/serve) | Starts the web dashboard. Subcommands: `install`, `installed`, `uninstall`. |
+| [`mcp`](/cli/mcp) | Starts the MCP server on standard input and output, so an AI agent can call homebutler tools. |
+| [`deploy`](/cli/deploy) | Installs the homebutler binary on remote servers over SSH. |
+| [`upgrade`](/cli/upgrade) | Upgrades homebutler on this machine and on every configured remote server to the latest release. |
+| [`trust`](/cli/trust) | Adds a remote server's SSH host key to `known_hosts` after you confirm its fingerprint. |
+| [`version`](/cli/version) | Prints the homebutler version, build date, and Go version. |
+| [`completion`](/cli/completion) | Prints a shell completion script for bash, zsh, fish, or PowerShell. Subcommands: `bash`, `fish`, `powershell`, `zsh`. |
