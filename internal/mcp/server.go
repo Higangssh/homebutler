@@ -762,7 +762,7 @@ func (s *Server) executeTool(name string, args map[string]any) (any, error) {
 		}
 		// "already watched" is an outcome rather than a failure: an agent that
 		// retries should not be told the second attempt broke something.
-		return WatchAddResult{Container: container, Kind: kind, Added: added}, nil
+		return watch.WatchAddResult{Container: container, Kind: kind, Added: added}, nil
 	case "watch_remove":
 		container := stringArg(args, "container")
 		if container == "" {
@@ -779,7 +779,7 @@ func (s *Server) executeTool(name string, args map[string]any) (any, error) {
 		if !removed {
 			return nil, fmt.Errorf("container %q is not in the watch list", container)
 		}
-		return WatchRemoveResult{Container: container, Removed: true}, nil
+		return watch.WatchRemoveResult{Container: container, Removed: true}, nil
 	case "alerts_history":
 		return alerts.LoadHistory()
 	case "notify_test":
@@ -1077,21 +1077,16 @@ func (s *Server) executeRemote(srv *config.ServerConfig, tool string, args map[s
 		return nil, fmt.Errorf("tool %q has no remote command mapping", tool)
 	}
 
-	out, err := remote.Run(srv, remoteArgs...)
+	out, err := runRemote(srv, remoteArgs...)
 	if err != nil {
 		return nil, err
 	}
-	if tool == "docker_top" {
-		return remoteDockerTop(out)
-	}
-
-	// Return raw JSON from remote as-is
-	var result any
-	if err := json.Unmarshal(out, &result); err != nil {
-		return nil, fmt.Errorf("invalid JSON from remote: %w", err)
-	}
-	return result, nil
+	return remoteAnswer(tool, args, out)
 }
+
+// runRemote is remote.Run, held in a variable so a test can answer for the
+// remote homebutler with what a given release prints.
+var runRemote = remote.Run
 
 // remoteDockerTop passes each command in a remote docker top answer through
 // docker.CommandName. A remote homebutler from before #356 returns command

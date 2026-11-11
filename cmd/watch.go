@@ -155,6 +155,11 @@ Examples:
 			if err != nil {
 				return err
 			}
+			// What watch_add answers with, because the MCP server forwards a
+			// call naming a server to this command and hands back what it prints.
+			if jsonOutput {
+				return output(watch.WatchAddResult{Container: name, Kind: kind, Added: added}, true)
+			}
 			if !added {
 				fmt.Printf("%s %q is already being watched.\n", kind, name)
 				return nil
@@ -240,6 +245,9 @@ func newWatchRemoveCmd() *cobra.Command {
 			if !removed {
 				return fmt.Errorf("container %q is not in the watch list", name)
 			}
+			if jsonOutput {
+				return output(watch.WatchRemoveResult{Container: name, Removed: true}, true)
+			}
 			fmt.Printf("Removed %q from watch list.\n", name)
 			if cmdline := service.RestartNote(); cmdline != "" {
 				fmt.Printf("  The running service reads the watch list at startup:\n    %s\n", cmdline)
@@ -268,7 +276,9 @@ func newWatchCheckCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			if len(targets) == 0 {
+			// An empty list still answers in JSON: watch_check forwards here
+			// for a server, and a sentence is not a RunResult.
+			if len(targets) == 0 && !jsonOutput {
 				fmt.Println("No targets being watched.")
 				return nil
 			}

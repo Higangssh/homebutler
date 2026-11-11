@@ -164,3 +164,18 @@ type RunResult struct {
 	Skipped   []SkippedTarget `json:"skipped,omitempty"`
 	Incidents []Incident      `json:"incidents,omitempty"`
 }
+
+// WatchAddResult is what `watch_add` and `watch add --json` answer with.
+// Added is false when the target was already watched, which is not a failure.
+type WatchAddResult struct {
+	Container string `json:"container"`
+	Kind      string `json:"kind"`
+	Added     bool   `json:"added"`
+}
+
+// WatchRemoveResult is what `watch_remove` and `watch remove --json` answer
+// with.
+type WatchRemoveResult struct {
+	Container string `json:"container"`
+	Removed   bool   `json:"removed"`
+}

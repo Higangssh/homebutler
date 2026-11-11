@@ -25,20 +25,6 @@ type ConfigValidateResult struct {
 	Result   *config.ValidationResult `json:"result"`
 }
 
-// WatchAddResult is what `watch_add` answers with. Added is false when the
-// target was already watched, which is not a failure.
-type WatchAddResult struct {
-	Container string `json:"container"`
-	Kind      string `json:"kind"`
-	Added     bool   `json:"added"`
-}
-
-// WatchRemoveResult is what `watch_remove` answers with.
-type WatchRemoveResult struct {
-	Container string `json:"container"`
-	Removed   bool   `json:"removed"`
-}
-
 // InstallResult is what the three install actions answer with.
 //
 // One shape for all three, because `install_app` used to answer with
