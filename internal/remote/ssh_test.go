@@ -153,7 +153,19 @@ func dialTestSSHClient(t *testing.T, addr string) *gossh.Client {
 	return client
 }
 
+// tempHome gives the test an empty home directory of its own, so whatever
+// creates ~/.ssh/known_hosts creates it there and not in the home of whoever
+// runs the suite. USERPROFILE is where os.UserHomeDir looks on Windows.
+func tempHome(t *testing.T) string {
+	t.Helper()
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	return home
+}
+
 func TestNewKnownHostsCallback(t *testing.T) {
+	tempHome(t)
 	cb, err := newKnownHostsCallback()
 	if err != nil {
 		t.Fatalf("newKnownHostsCallback() error: %v", err)
@@ -165,13 +177,10 @@ func TestNewKnownHostsCallback(t *testing.T) {
 
 func TestNewKnownHostsCallback_CreatesFile(t *testing.T) {
 	// Verify that ~/.ssh/known_hosts exists after calling newKnownHostsCallback
-	home, err := os.UserHomeDir()
-	if err != nil {
-		t.Skip("cannot determine home directory")
-	}
+	home := tempHome(t)
 	path := filepath.Join(home, ".ssh", "known_hosts")
 
-	_, err = newKnownHostsCallback()
+	_, err := newKnownHostsCallback()
 	if err != nil {
 		t.Fatalf("newKnownHostsCallback() error: %v", err)
 	}
@@ -301,6 +310,7 @@ func TestConnect_Timeout(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping timeout test in short mode")
 	}
+	tempHome(t)
 	// Connect to a non-routable address to trigger timeout
 	srv := &config.ServerConfig{
 		Name:     "timeout",
@@ -321,6 +331,7 @@ func TestConnect_Timeout(t *testing.T) {
 
 func TestConnect_ConnectionRefused(t *testing.T) {
 	// Connect to localhost on an unlikely port — should fail fast with connection refused
+	tempHome(t)
 	srv := &config.ServerConfig{
 		Name:     "refused",
 		Host:     "127.0.0.1",
