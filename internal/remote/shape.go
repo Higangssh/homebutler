@@ -48,8 +48,8 @@ func ProcessList(out []byte) ([]json.RawMessage, error) {
 	if isJSONArray(out) {
 		return decodeList(out)
 	}
-	var doc map[string]json.RawMessage
-	if err := json.Unmarshal(out, &doc); err != nil {
+	doc, err := Object(out)
+	if err != nil {
 		return nil, err
 	}
 	procs, ok := doc["processes"]
@@ -76,8 +76,8 @@ func PortsResult(out []byte) (map[string]json.RawMessage, error) {
 		}
 		return map[string]json.RawMessage{"ports": data}, nil
 	}
-	var doc map[string]json.RawMessage
-	if err := json.Unmarshal(out, &doc); err != nil {
+	doc, err := Object(out)
+	if err != nil {
 		return nil, err
 	}
 	raw, ok := doc["ports"]
@@ -93,5 +93,21 @@ func PortsResult(out []byte) (map[string]json.RawMessage, error) {
 		return nil, err
 	}
 	doc["ports"] = data
+	return doc, nil
+}
+
+// Object decodes a remote answer that has to be a JSON object. Output that
+// is not JSON at all keeps its syntax error; JSON that is something else, a
+// list, a string or null, is ErrUnexpectedShape, because the remote did
+// answer, just not with this.
+func Object(out []byte) (map[string]json.RawMessage, error) {
+	if !json.Valid(out) {
+		var v any
+		return nil, json.Unmarshal(out, &v)
+	}
+	var doc map[string]json.RawMessage
+	if err := json.Unmarshal(out, &doc); err != nil || doc == nil {
+		return nil, ErrUnexpectedShape
+	}
 	return doc, nil
 }

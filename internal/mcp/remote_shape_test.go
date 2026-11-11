@@ -181,6 +181,10 @@ func TestOlderRemoteSentencesBecomeTheRightOutcome(t *testing.T) {
 		{"open_ports", nil, `[]`, `{"ports":[]}`},
 		{"open_ports", nil, `{"ports":null}`, `{"ports":[]}`},
 		{"watch_check", nil, "No targets being watched.\n", `{"checked":0}`},
+		{"watch_check", nil, "No containers being watched.\n", `{"checked":0}`},
+		// Lists are never null through MCP, and ProcessList already reads
+		// null as the empty list; the answer has to carry that one.
+		{"processes", nil, `{"processes":null,"total":0}`, `{"processes":[],"total":0}`},
 		{"watch_add", map[string]any{"container": "web"}, "Added docker \"web\" to watch list.\n", `{"container":"web","kind":"docker","added":true}`},
 		{"watch_add", map[string]any{"container": "web", "kind": "pm2"}, "pm2 \"web\" is already being watched.\n", `{"container":"web","kind":"pm2","added":false}`},
 		{"watch_remove", map[string]any{"container": "web"}, "Removed \"web\" from watch list.\n", `{"container":"web","removed":true}`},
@@ -205,25 +209,31 @@ func TestOlderRemoteSentencesBecomeTheRightOutcome(t *testing.T) {
 }
 
 // An answer in neither shape is an error, not an empty result that reads as
-// "nothing is listening" or "nothing happened".
+// "nothing is listening" or "nothing happened". JSON in the wrong shape says
+// so; only output that is not JSON is called invalid JSON.
 func TestRemoteAnswersInNeitherShapeAreRefused(t *testing.T) {
+	const shape, invalid = "unexpected answer from remote", "invalid JSON from remote"
 	cases := []struct {
 		tool string
 		args map[string]any
 		out  string
+		want string
 	}{
-		{"open_ports", nil, `{"ports":{"a":1}}`},
-		{"open_ports", nil, `{"ports":"22"}`},
-		{"open_ports", nil, `{"hostname":"pi"}`},
-		{"processes", nil, `{"processes":{"a":1},"total":1}`},
-		{"processes", nil, `{"hostname":"pi"}`},
-		{"processes", nil, `[{"pid":1,"name":"init"}]`},
-		{"watch_check", nil, `[]`},
-		{"watch_check", nil, "Checked 1 docker target(s).\n"},
-		{"watch_add", map[string]any{"container": "web"}, "error: something else\n"},
-		{"watch_add", map[string]any{"container": "web"}, `[]`},
-		{"watch_remove", map[string]any{"container": "web"}, "nope\n"},
-		{"watch_remove", map[string]any{"container": "web"}, `null`},
+		{"open_ports", nil, `{"ports":{"a":1}}`, shape},
+		{"open_ports", nil, `{"ports":"22"}`, shape},
+		{"open_ports", nil, `"22"`, shape},
+		{"open_ports", nil, `{"hostname":"pi"}`, shape},
+		{"open_ports", nil, `{"ports":[`, invalid},
+		{"processes", nil, `{"processes":{"a":1},"total":1}`, shape},
+		{"processes", nil, `{"hostname":"pi"}`, shape},
+		{"processes", nil, `null`, shape},
+		{"processes", nil, `[{"pid":1,"name":"init"}]`, "older than 0.12.0"},
+		{"watch_check", nil, `[]`, shape},
+		{"watch_check", nil, "Checked 1 docker target(s).\n", invalid},
+		{"watch_add", map[string]any{"container": "web"}, "error: something else\n", shape},
+		{"watch_add", map[string]any{"container": "web"}, `[]`, shape},
+		{"watch_remove", map[string]any{"container": "web"}, "nope\n", shape},
+		{"watch_remove", map[string]any{"container": "web"}, `null`, shape},
 	}
 	for _, tc := range cases {
 		args := map[string]any{"server": "pi"}
@@ -238,8 +248,8 @@ func TestRemoteAnswersInNeitherShapeAreRefused(t *testing.T) {
 			t.Errorf("%s from %q answered %s, want an error", tc.tool, tc.out, data)
 			continue
 		}
-		if !strings.Contains(err.Error(), "remote") {
-			t.Errorf("%s from %q: error %q does not say the remote answered it", tc.tool, tc.out, err)
+		if !strings.Contains(err.Error(), tc.want) {
+			t.Errorf("%s from %q: error %q, want it to say %q", tc.tool, tc.out, err, tc.want)
 		}
 	}
 }

@@ -7,7 +7,6 @@ import (
 	"os"
 	"testing"
 
-	"github.com/Higangssh/homebutler/internal/mcp"
 	"github.com/Higangssh/homebutler/internal/watch"
 	"github.com/spf13/cobra"
 )
@@ -65,21 +64,21 @@ func TestWatchCommandsPrintTheToolAnswerUnderJSON(t *testing.T) {
 		t.Errorf("check with nothing watched = %+v", check)
 	}
 
-	var added mcp.WatchAddResult
+	var added watch.WatchAddResult
 	strictInto(t, runWatchJSON(t, newWatchAddCmd(), "--kind", "pm2", "api"), &added)
-	if added != (mcp.WatchAddResult{Container: "api", Kind: "pm2", Added: true}) {
+	if added != (watch.WatchAddResult{Container: "api", Kind: "pm2", Added: true}) {
 		t.Errorf("add = %+v", added)
 	}
 
-	var again mcp.WatchAddResult
+	var again watch.WatchAddResult
 	strictInto(t, runWatchJSON(t, newWatchAddCmd(), "--kind", "pm2", "api"), &again)
 	if again.Added {
 		t.Errorf("adding it twice = %+v, want added false", again)
 	}
 
-	var removed mcp.WatchRemoveResult
+	var removed watch.WatchRemoveResult
 	strictInto(t, runWatchJSON(t, newWatchRemoveCmd(), "api"), &removed)
-	if removed != (mcp.WatchRemoveResult{Container: "api", Removed: true}) {
+	if removed != (watch.WatchRemoveResult{Container: "api", Removed: true}) {
 		t.Errorf("remove = %+v", removed)
 	}
 }

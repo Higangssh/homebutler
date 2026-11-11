@@ -479,11 +479,6 @@ mcp.InventoryExportResult.format:string
 mcp.ProxmoxScriptCommandResult.command:string
 mcp.ProxmoxScriptCommandResult.slug:string
 mcp.ProxmoxScriptCommandResult.warning:string
-mcp.WatchAddResult.added:bool
-mcp.WatchAddResult.container:string
-mcp.WatchAddResult.kind:string
-mcp.WatchRemoveResult.container:string
-mcp.WatchRemoveResult.removed:bool
 network.Device.hostname?:string
 network.Device.ip:string
 network.Device.mac?:string
@@ -724,6 +719,11 @@ watch.RunResult.incidents?:[]Incident
 watch.RunResult.skipped?.kind:string
 watch.RunResult.skipped?.name:string
 watch.RunResult.skipped?:[]SkippedTarget
+watch.WatchAddResult.added:bool
+watch.WatchAddResult.container:string
+watch.WatchAddResult.kind:string
+watch.WatchRemoveResult.container:string
+watch.WatchRemoveResult.removed:bool
 watch.WatchedTarget.added_at:string
 watch.WatchedTarget.container:string
 watch.WatchedTarget.kind:string

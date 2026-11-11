@@ -762,7 +762,7 @@ func (s *Server) executeTool(name string, args map[string]any) (any, error) {
 		}
 		// "already watched" is an outcome rather than a failure: an agent that
 		// retries should not be told the second attempt broke something.
-		return WatchAddResult{Container: container, Kind: kind, Added: added}, nil
+		return watch.WatchAddResult{Container: container, Kind: kind, Added: added}, nil
 	case "watch_remove":
 		container := stringArg(args, "container")
 		if container == "" {
@@ -779,7 +779,7 @@ func (s *Server) executeTool(name string, args map[string]any) (any, error) {
 		if !removed {
 			return nil, fmt.Errorf("container %q is not in the watch list", container)
 		}
-		return WatchRemoveResult{Container: container, Removed: true}, nil
+		return watch.WatchRemoveResult{Container: container, Removed: true}, nil
 	case "alerts_history":
 		return alerts.LoadHistory()
 	case "notify_test":
