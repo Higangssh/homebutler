@@ -31,3 +31,20 @@ test('the config tab shows where the config was read from', async ({ page }) => 
   await expect(page.getByText('Config file')).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Alert Thresholds' })).toBeVisible();
 });
+
+// Both cards rendered nothing against a real server: Top Processes for an SSH
+// server, Network Ports for this machine. The demo answers in the shape the
+// real routes do, so a card that stops reading that shape fails here.
+test('the process and port cards list what each server answers', async ({ page }) => {
+  await page.goto('/');
+
+  const processes = page.locator('.card').filter({ has: page.getByRole('heading', { name: 'Top Processes' }) });
+  const ports = page.locator('.card').filter({ has: page.getByRole('heading', { name: 'Network Ports' }) });
+
+  await expect(processes.getByRole('cell', { name: 'postgres' })).toBeVisible();
+  await expect(ports.getByText('7 open')).toBeVisible();
+
+  await page.locator('header select').selectOption('raspberry-pi');
+  await expect(processes.getByRole('cell', { name: 'pihole-FTL' })).toBeVisible();
+  await expect(ports.getByText('3 open')).toBeVisible();
+});
