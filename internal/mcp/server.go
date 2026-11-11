@@ -749,6 +749,14 @@ func (s *Server) executeTool(name string, args map[string]any) (any, error) {
 		if !slices.Contains(watch.Kinds(), kind) {
 			return nil, fmt.Errorf("invalid kind %q: must be one of %s", kind, strings.Join(watch.Kinds(), ", "))
 		}
+		// The rule `watch add` applies, which is what a call naming a server
+		// meets on the far side, so the two routes refuse the same names.
+		if !watch.ValidName(container) {
+			return nil, fmt.Errorf("invalid name: %s", container)
+		}
+		if unit := stringArg(args, "unit"); unit != "" && !watch.ValidName(unit) {
+			return nil, fmt.Errorf("invalid unit: %s", unit)
+		}
 		dir, err := watch.WatchDir()
 		if err != nil {
 			return nil, err
@@ -1023,6 +1031,14 @@ func (s *Server) executeRemote(srv *config.ServerConfig, tool string, args map[s
 	case "watch_list":
 		remoteArgs = []string{"watch", "list", "--json"}
 	case "watch_add":
+		// Checked here as well as on the far side, because a remote on 1.7.0
+		// or older takes a name starting with '-'.
+		if c := stringArg(args, "container"); !watch.ValidName(c) {
+			return nil, fmt.Errorf("invalid name: %s", c)
+		}
+		if unit := stringArg(args, "unit"); unit != "" && !watch.ValidName(unit) {
+			return nil, fmt.Errorf("invalid unit: %s", unit)
+		}
 		remoteArgs = []string{"watch", "add", stringArg(args, "container"), "--json"}
 		kind := stringArg(args, "kind")
 		if kind == "" {
