@@ -10,7 +10,10 @@
 
   async function refresh() {
     try {
-      ports = await getPorts(server);
+      // /api/ports answers {"ports": [...]}, for this machine and for a
+      // named server alike.
+      const result = await getPorts(server);
+      ports = result.ports ?? [];
       error = '';
     } catch (err) {
       error = err.message;
