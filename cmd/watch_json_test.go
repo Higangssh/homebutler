@@ -82,3 +82,51 @@ func TestWatchCommandsPrintTheToolAnswerUnderJSON(t *testing.T) {
 		t.Errorf("remove = %+v", removed)
 	}
 }
+
+// watch_add with a unit, pointed at a server, sends it as --unit, so the
+// command has to keep it. Without it the target was watched under its display
+// name, which for a systemd unit named differently is a unit that is not there.
+func TestWatchAddKeepsTheUnit(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("HOMEBUTLER_CONFIG", "")
+
+	runWatchJSON(t, newWatchAddCmd(), "--kind", "systemd", "web", "--unit", "nginx.service")
+
+	dir, err := watch.WatchDir()
+	if err != nil {
+		t.Fatal(err)
+	}
+	targets, err := watch.LoadTargets(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(targets) != 1 || targets[0].Container != "web" || targets[0].Unit != "nginx.service" {
+		t.Fatalf("targets = %+v, want web watched as nginx.service", targets)
+	}
+}
+
+// The unit reaches the same commands the name does, so it is held to the same
+// rule.
+func TestWatchAddRefusesAUnitTheNameRuleRefuses(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("HOMEBUTLER_CONFIG", "")
+	// --unit=--help would reach systemctl as `systemctl restart --help`,
+	// which exits 0; -- -web would reach docker as an option.
+	for _, args := range [][]string{
+		{"--kind", "systemd", "web", "--unit", "nginx service; rm"},
+		{"--kind", "systemd", "web", "--unit=--help"},
+		{"--kind", "docker", "--", "-web"},
+	} {
+		cmd := newWatchAddCmd()
+		cmd.SetArgs(args)
+		cmd.SetOut(io.Discard)
+		cmd.SetErr(io.Discard)
+		if err := cmd.Execute(); err == nil {
+			t.Errorf("watch add %q was accepted", args)
+		}
+	}
+	dir, _ := watch.WatchDir()
+	if targets, _ := watch.LoadTargets(dir); len(targets) != 0 {
+		t.Fatalf("a refused target was stored: %+v", targets)
+	}
+}

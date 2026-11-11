@@ -2,6 +2,7 @@ package mcp
 
 import (
 	"bufio"
+	"encoding/csv"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -748,6 +749,14 @@ func (s *Server) executeTool(name string, args map[string]any) (any, error) {
 		if !slices.Contains(watch.Kinds(), kind) {
 			return nil, fmt.Errorf("invalid kind %q: must be one of %s", kind, strings.Join(watch.Kinds(), ", "))
 		}
+		// The rule `watch add` applies, which is what a call naming a server
+		// meets on the far side, so the two routes refuse the same names.
+		if !watch.ValidName(container) {
+			return nil, fmt.Errorf("invalid name: %s", container)
+		}
+		if unit := stringArg(args, "unit"); unit != "" && !watch.ValidName(unit) {
+			return nil, fmt.Errorf("invalid unit: %s", unit)
+		}
 		dir, err := watch.WatchDir()
 		if err != nil {
 			return nil, err
@@ -1022,6 +1031,14 @@ func (s *Server) executeRemote(srv *config.ServerConfig, tool string, args map[s
 	case "watch_list":
 		remoteArgs = []string{"watch", "list", "--json"}
 	case "watch_add":
+		// Checked here as well as on the far side, because a remote on 1.7.0
+		// or older takes a name starting with '-'.
+		if c := stringArg(args, "container"); !watch.ValidName(c) {
+			return nil, fmt.Errorf("invalid name: %s", c)
+		}
+		if unit := stringArg(args, "unit"); unit != "" && !watch.ValidName(unit) {
+			return nil, fmt.Errorf("invalid unit: %s", unit)
+		}
 		remoteArgs = []string{"watch", "add", stringArg(args, "container"), "--json"}
 		kind := stringArg(args, "kind")
 		if kind == "" {
@@ -1031,6 +1048,13 @@ func (s *Server) executeRemote(srv *config.ServerConfig, tool string, args map[s
 			kind = watch.KindDocker
 		}
 		remoteArgs = append(remoteArgs, "--kind", kind)
+		// --unit is newer than every released remote. One that does not know
+		// it refuses the flag before touching its watch list, and that refusal
+		// is reported, rather than the target being added under the wrong
+		// name. Left off when unset, so an older remote still takes the call.
+		if unit := stringArg(args, "unit"); unit != "" {
+			remoteArgs = append(remoteArgs, "--unit", unit)
+		}
 	case "watch_remove":
 		remoteArgs = []string{"watch", "remove", stringArg(args, "container"), "--json"}
 	case "alerts_history":
@@ -1046,6 +1070,11 @@ func (s *Server) executeRemote(srv *config.ServerConfig, tool string, args map[s
 		}
 		if to := stringArg(args, "to"); to != "" {
 			remoteArgs = append(remoteArgs, "--to", to)
+		}
+		// --exclude arrived in 0.40.0, and a remote older than that refuses
+		// the flag before archiving anything.
+		for _, path := range stringSliceArg(args, "exclude") {
+			remoteArgs = append(remoteArgs, "--exclude="+sliceFlagValue(path))
 		}
 	case "backup_drill":
 		remoteArgs = []string{"backup", "drill", "--json"}
@@ -1090,6 +1119,17 @@ func (s *Server) executeRemote(srv *config.ServerConfig, tool string, args map[s
 		out = answer
 	}
 	return remoteAnswer(tool, args, out)
+}
+
+// sliceFlagValue writes one value of a string-slice flag so the remote reads
+// it back whole. pflag reads each value as a CSV record, so a path with a
+// comma in it would arrive as two paths; CSV quoting is what it undoes.
+func sliceFlagValue(v string) string {
+	var b strings.Builder
+	w := csv.NewWriter(&b)
+	_ = w.Write([]string{v})
+	w.Flush()
+	return strings.TrimSuffix(b.String(), "\n")
 }
 
 // runRemote is remote.Run, held in a variable so a test can answer for the
