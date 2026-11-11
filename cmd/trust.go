@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"bufio"
+	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -46,6 +47,12 @@ func newTrustCmd() *cobra.Command {
 				return strings.TrimSpace(strings.ToLower(answer)) == "y"
 			})
 			if err != nil {
+				// The new key was written; it is the old one that is still
+				// accepted, so "left as it was" would be untrue.
+				var stale *remote.StillTrustedError
+				if errors.As(err, &stale) {
+					return err
+				}
 				if reset {
 					return fmt.Errorf("%w; known_hosts was left as it was", err)
 				}

@@ -93,10 +93,28 @@ type trustFixture struct {
 	staleKey   ssh.PublicKey
 }
 
+// plainEntry is how homebutler itself writes a host down.
+func plainEntry(addr string, key ssh.PublicKey) string {
+	return knownhosts.Line([]string{addr}, key)
+}
+
+// hashedEntry is how OpenSSH writes one with HashKnownHosts yes, the default
+// on Debian and Ubuntu.
+func hashedEntry(addr string, key ssh.PublicKey) string {
+	line := knownhosts.Line([]string{"placeholder"}, key)
+	return knownhosts.HashHostname(knownhosts.Normalize(addr)) + strings.TrimPrefix(line, "placeholder")
+}
+
 func newTrustFixture(t *testing.T, addr string) *trustFixture {
+	t.Helper()
+	return newTrustFixtureWith(t, addr, plainEntry)
+}
+
+func newTrustFixtureWith(t *testing.T, addr string, write func(string, ssh.PublicKey) string) *trustFixture {
 	t.Helper()
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home) // os.UserHomeDir on Windows
 	if err := os.MkdirAll(filepath.Join(home, ".ssh"), 0o700); err != nil {
 		t.Fatal(err)
 	}
@@ -104,7 +122,7 @@ func newTrustFixture(t *testing.T, addr string) *trustFixture {
 	stale := otherHostKey(t)
 	known := "# kept by hand\n" +
 		knownhosts.Line([]string{"192.0.2.50:22"}, otherHostKey(t)) + "\n" +
-		knownhosts.Line([]string{addr}, stale) + "\n"
+		write(addr, stale) + "\n"
 	knownHosts := filepath.Join(home, ".ssh", "known_hosts")
 	if err := os.WriteFile(knownHosts, []byte(known), 0o600); err != nil {
 		t.Fatal(err)
@@ -189,6 +207,21 @@ func TestTrustResetWithNoAnswerLeavesKnownHostsAsItWas(t *testing.T) {
 	}
 }
 
+// accepts says whether the fixture's known_hosts lets key through for addr,
+// asked the way a connection asks it.
+func (f *trustFixture) accepts(t *testing.T, addr string, key ssh.PublicKey) bool {
+	t.Helper()
+	cb, err := knownhosts.New(f.knownHosts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	remote, err := net.ResolveTCPAddr("tcp", addr)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return cb(addr, remote, key) == nil
+}
+
 func TestTrustResetAnsweredYesReplacesTheEntry(t *testing.T) {
 	addr, hostKey := sshHostAt(t)
 	f := newTrustFixture(t, addr)
@@ -199,18 +232,10 @@ func TestTrustResetAnsweredYesReplacesTheEntry(t *testing.T) {
 	got := string(f.after(t))
 
 	// The entry for this host is the new key, and only the new key.
-	cb, err := knownhosts.New(f.knownHosts)
-	if err != nil {
-		t.Fatal(err)
+	if !f.accepts(t, addr, hostKey) {
+		t.Fatalf("the host's new key is not trusted afterwards:\n%s", got)
 	}
-	remote, err := net.ResolveTCPAddr("tcp", addr)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := cb(addr, remote, hostKey); err != nil {
-		t.Fatalf("the host's new key is not trusted afterwards: %v\n%s", err, got)
-	}
-	if err := cb(addr, remote, f.staleKey); err == nil {
+	if f.accepts(t, addr, f.staleKey) {
 		t.Fatalf("the old key is still trusted after --reset:\n%s", got)
 	}
 	if n := strings.Count(got, knownhosts.Normalize(addr)+" "); n != 1 {
@@ -225,6 +250,56 @@ func TestTrustResetAnsweredYesReplacesTheEntry(t *testing.T) {
 		if !strings.Contains(got, line+"\n") {
 			t.Fatalf("--reset dropped a line it had no business with: %q\n%s", line, got)
 		}
+	}
+}
+
+// OpenSSH on Debian and Ubuntu hashes the host names it records. The old key
+// left under a hashed name stayed trusted beside the new one, and the command
+// still said "replaced".
+func TestTrustResetReplacesAHashedEntry(t *testing.T) {
+	addr, hostKey := sshHostAt(t)
+	f := newTrustFixtureWith(t, addr, hashedEntry)
+
+	if err := runTrustReset(t, "y\n"); err != nil {
+		t.Fatalf("trust --reset: %v", err)
+	}
+	got := f.after(t)
+	if f.accepts(t, addr, f.staleKey) {
+		t.Fatalf("the old key under a hashed name is still trusted after --reset:\n%s", got)
+	}
+	if !f.accepts(t, addr, hostKey) {
+		t.Fatalf("the host's new key is not trusted afterwards:\n%s", got)
+	}
+}
+
+// A wildcard line is someone's own rule for many hosts and is not rewritten,
+// but when it still accepts the old key the command says so and fails, rather
+// than reporting the key replaced.
+func TestTrustResetSaysWhenAPatternStillTrustsTheOldKey(t *testing.T) {
+	addr, hostKey := sshHostAt(t)
+	_, port, err := net.SplitHostPort(addr)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pattern := ""
+	f := newTrustFixtureWith(t, addr, func(_ string, key ssh.PublicKey) string {
+		line := knownhosts.Line([]string{"placeholder"}, key)
+		pattern = "[127.0.0.*]:" + port + strings.TrimPrefix(line, "placeholder")
+		return pattern
+	})
+
+	err = runTrustReset(t, "y\n")
+	if err == nil {
+		t.Fatal("trust --reset reported success while a pattern still trusts the old key")
+	}
+	if !strings.Contains(err.Error(), pattern) || strings.Contains(err.Error(), "left as it was") {
+		t.Fatalf("the error does not name the pattern line, or says nothing was written: %v", err)
+	}
+	if !f.accepts(t, addr, hostKey) {
+		t.Fatalf("the new key was not recorded:\n%s", f.after(t))
+	}
+	if !strings.Contains(string(f.after(t)), pattern+"\n") {
+		t.Fatalf("the pattern line was rewritten:\n%s", f.after(t))
 	}
 }
 
