@@ -253,6 +253,7 @@ homebutler watch add nginx              # Interactive: choose Docker / systemd /
 homebutler watch add --kind docker nginx          # or specify directly
 homebutler watch add --kind systemd nginx.service
 homebutler watch add --kind pm2 my-api
+homebutler watch add --kind systemd web --unit nginx.service   # listed as web, checked as nginx.service
 homebutler watch list                   # See what you're watching
 ```
 

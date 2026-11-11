@@ -74,7 +74,7 @@ func newWatchTUICmd() *cobra.Command {
 }
 
 func newWatchAddCmd() *cobra.Command {
-	var kind string
+	var kind, unit string
 
 	cmd := &cobra.Command{
 		Use:   "add [name]",
@@ -87,7 +87,8 @@ Examples:
   homebutler watch add nginx                      # interactive type selection
   homebutler watch add --kind docker nginx        # non-interactive
   homebutler watch add --kind systemd nginx.service
-  homebutler watch add --kind pm2 my-api`,
+  homebutler watch add --kind pm2 my-api
+  homebutler watch add --kind systemd web --unit nginx.service`,
 		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			kindChanged := cmd.Flags().Changed("kind")
@@ -145,13 +146,18 @@ Examples:
 			if !isValidTargetName(name) {
 				return fmt.Errorf("invalid name: %s", name)
 			}
+			// The unit goes to the same docker, systemctl and pm2 commands the
+			// name would, so it is held to the same rule.
+			if unit != "" && !isValidTargetName(unit) {
+				return fmt.Errorf("invalid unit: %s", unit)
+			}
 
 			dir, err := watch.WatchDir()
 			if err != nil {
 				return err
 			}
 
-			added, err := watch.AddTarget(dir, watch.Target{Container: name, Kind: kind})
+			added, err := watch.AddTarget(dir, watch.Target{Container: name, Kind: kind, Unit: unit})
 			if err != nil {
 				return err
 			}
@@ -174,6 +180,7 @@ Examples:
 	}
 
 	cmd.Flags().StringVar(&kind, "kind", "docker", "Target kind: docker, systemd, or pm2")
+	cmd.Flags().StringVar(&unit, "unit", "", "Actual container, unit, or app name when it differs from the name given (default: the name)")
 	return cmd
 }
 
@@ -859,18 +866,7 @@ func promptSelect(scanner *bufio.Scanner, prompt string, options, labels []strin
 	}
 }
 
-func isValidTargetName(name string) bool {
-	if len(name) == 0 || len(name) > 128 {
-		return false
-	}
-	for _, c := range name {
-		if (c < 'a' || c > 'z') && (c < 'A' || c > 'Z') &&
-			(c < '0' || c > '9') && c != '-' && c != '_' && c != '.' {
-			return false
-		}
-	}
-	return true
-}
+func isValidTargetName(name string) bool { return watch.ValidName(name) }
 
 // alertsLoadWarning is what watch start prints when loadAlertsConfig fails.
 // Only the rules are lost: the threshold watcher reads cfg.Alerts, which

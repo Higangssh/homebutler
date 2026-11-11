@@ -10,6 +10,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"syscall"
 	"time"
@@ -184,6 +185,12 @@ func remoteVersionVia(client *ssh.Client) string {
 	return version
 }
 
+// unknownFlag is homebutler refusing a flag its release does not define:
+// cobra's error as main prints it, at the start of a line. Unanchored, a
+// cobra error from docker quoted inside `failed to restart web: …` read as an
+// old homebutler.
+var unknownFlag = regexp.MustCompile(`(?m)^error: unknown flag: (--\S+)`)
+
 // remoteCommandError explains a command the far side refused.
 //
 // "unknown command" almost always means the homebutler over there is older
@@ -206,6 +213,22 @@ func remoteCommandError(server *config.ServerConfig, remoteVersion string, args 
 		}
 		return classified(ClassRemote, "[%s] the homebutler on %s is %s, and does not have %s\n%s",
 			server.Name, server.Name, remoteVersion, command, hint)
+	}
+
+	// The same gap one flag at a time: an argument a newer client forwards
+	// with a flag the remote's release does not have yet. The flag is refused
+	// before the command runs, so nothing on the remote has changed.
+	if m := unknownFlag.FindStringSubmatch(text); m != nil && remoteVersion != "" {
+		command := "command"
+		if len(args) > 0 {
+			command = "`" + args[0] + "`"
+		}
+		hint := "  → Bring them level: homebutler upgrade"
+		if LocalVersion != "" {
+			hint = fmt.Sprintf("  → This one is %s. Bring them level: homebutler upgrade", LocalVersion)
+		}
+		return classified(ClassRemote, "[%s] the homebutler on %s is %s, and its %s does not have %s\n%s",
+			server.Name, server.Name, remoteVersion, command, m[1], hint)
 	}
 
 	return classified(ClassRemote, "[%s] remote command failed: %w\n  → Output: %s\n  → Check if homebutler is installed on the remote server: homebutler deploy %s",
