@@ -5,6 +5,7 @@ import (
 	"crypto/hmac"
 	"crypto/sha1"
 	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net"
@@ -25,18 +26,35 @@ const (
 	dialTimeout = 10 * time.Second
 )
 
-// Run executes a homebutler command on a remote server via SSH.
-// It expects homebutler to be installed on the remote host.
+// Run executes a homebutler command on a remote server via SSH and returns
+// what it printed on stdout. It expects homebutler to be installed on the
+// remote host.
+//
+// A command that ran and exited non-zero fails with an *ExitError, which
+// keeps what it printed on each stream. Some commands print their whole
+// answer and then exit non-zero because the answer is a failure, a backup
+// drill that did not come back being one; Answered gets that answer back.
 func Run(server *config.ServerConfig, args ...string) ([]byte, error) {
+	out, _, err := RunSplit(server, args...)
+	return out, err
+}
+
+// RunSplit is Run that also returns what the command printed on stderr
+// when it succeeded, for a caller that passes both streams on.
+//
+// The streams used to come back as one. Anything the remote wrote to
+// stderr, a deprecation warning included, was then part of the JSON a
+// caller decoded, and a failing exit hid the answer printed before it.
+func RunSplit(server *config.ServerConfig, args ...string) (stdout, stderr []byte, err error) {
 	client, err := connect(server)
 	if err != nil {
-		return nil, err // connect() already returns detailed error messages
+		return nil, nil, err // connect() already returns detailed error messages
 	}
 	defer client.Close()
 
 	session, err := client.NewSession()
 	if err != nil {
-		return nil, classified(ClassRemote, "[%s] failed to open SSH session: %w\n  → Check if the server is accepting new connections", server.Name, err)
+		return nil, nil, classified(ClassRemote, "[%s] failed to open SSH session: %w\n  → Check if the server is accepting new connections", server.Name, err)
 	}
 	defer session.Close()
 
@@ -45,16 +63,103 @@ func Run(server *config.ServerConfig, args ...string) ([]byte, error) {
 	// remote shell from expanding either, the same mistake as #303.
 	binPath, err := quotePath(server.SSHBinPath())
 	if err != nil {
-		return nil, classified(ClassRemote, "[%s] %w", server.Name, err)
+		return nil, nil, classified(ClassRemote, "[%s] %w", server.Name, err)
 	}
 	// Quote all arguments to prevent shell injection
 	cmd := fmt.Sprintf("export PATH=$HOME/.local/bin:$HOME/bin:$HOME/go/bin:/opt/homebrew/bin:/usr/local/bin:/usr/local/sbin:/snap/bin:$PATH; %s %s", binPath, util.ShellQuoteArgs(args))
-	out, err := session.CombinedOutput(cmd)
-	if err != nil {
-		return nil, remoteCommandError(server, remoteVersionVia(client), args, out, err)
+	var outBuf, errBuf bytes.Buffer
+	session.Stdout = &outBuf
+	session.Stderr = &errBuf
+	if err := session.Run(cmd); err != nil {
+		// The reason is on stderr. Only when there is none is stdout the
+		// best account of what happened.
+		reason := errBuf.Bytes()
+		if len(bytes.TrimSpace(reason)) == 0 {
+			reason = outBuf.Bytes()
+		}
+		failure := remoteCommandError(server, remoteVersionVia(client), args, reason, err)
+		var exit *ssh.ExitError
+		if errors.As(err, &exit) {
+			return nil, nil, &ExitError{
+				Status: exit.ExitStatus(),
+				Stdout: outBuf.Bytes(),
+				Stderr: errBuf.Bytes(),
+				Err:    failure,
+			}
+		}
+		return nil, nil, failure
 	}
 
-	return out, nil
+	return outBuf.Bytes(), errBuf.Bytes(), nil
+}
+
+// ExitError is a remote homebutler that ran and exited non-zero. Its message
+// is the one Run has always given, stderr included; Stdout and Stderr are
+// what it printed on each.
+type ExitError struct {
+	Status int
+	Stdout []byte
+	Stderr []byte
+	Err    error // the message, stderr included
+}
+
+func (e *ExitError) Error() string { return e.Err.Error() }
+func (e *ExitError) Unwrap() error { return e.Err }
+
+// Answered reports what a remote command printed on stdout before it exited
+// non-zero, when that is a JSON document. Under --json such a command printed
+// its whole answer, and the exit status is its verdict on it, as with a
+// backup drill that failed or a notification channel that did not send.
+//
+// Whether the answer stands is the caller's decision, because a non-zero exit
+// after a complete document is not always a verdict. Anything that is not a
+// remote exit with JSON on stdout, a connection that failed or a missing
+// binary among them, reports false.
+func Answered(err error) ([]byte, bool) {
+	var exit *ExitError
+	if !errors.As(err, &exit) {
+		return nil, false
+	}
+	out := bytes.TrimSpace(exit.Stdout)
+	if len(out) == 0 || !json.Valid(out) {
+		return nil, false
+	}
+	return exit.Stdout, true
+}
+
+// Reason is the remote's own account of why it exited non-zero: the last
+// line it printed on stderr that starts `error: `, without that prefix,
+// which is the line homebutler's main prints on the way out. It is empty for
+// an error that is not a remote exit, or one that printed no such line.
+func Reason(err error) string {
+	var exit *ExitError
+	if !errors.As(err, &exit) {
+		return ""
+	}
+	_, reason := SplitReason(exit.Stderr)
+	return reason
+}
+
+// SplitReason separates the remote's closing error from what it printed on
+// stderr before it. The error starts at the last line beginning `error: `
+// and runs to the end, since an error can carry a hint on the lines after it.
+// A warning printed earlier, such as the alerts.yaml deprecation, is in
+// before, in order, so it can be shown on its own line as it is when the
+// command runs here. With no `error: ` line, before is all of stderr and
+// reason is empty.
+func SplitReason(stderr []byte) (before []byte, reason string) {
+	text := string(stderr)
+	start := -1
+	if strings.HasPrefix(text, "error: ") {
+		start = 0
+	}
+	if i := strings.LastIndex(text, "\nerror: "); i >= 0 {
+		start = i + 1
+	}
+	if start < 0 {
+		return stderr, ""
+	}
+	return []byte(text[:start]), strings.TrimSpace(strings.TrimPrefix(text[start:], "error: "))
 }
 
 // configLocation names the file a fix belongs in: the one this server was

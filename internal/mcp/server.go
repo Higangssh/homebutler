@@ -1108,7 +1108,15 @@ func (s *Server) executeRemote(srv *config.ServerConfig, tool string, args map[s
 
 	out, err := runRemote(srv, remoteArgs...)
 	if err != nil {
-		return nil, err
+		answer, ok := remote.Answered(err)
+		if !ok {
+			return nil, err
+		}
+		failed, isVerdict := failingVerdicts[tool]
+		if !isVerdict || !failed(answer) {
+			return nil, err
+		}
+		out = answer
 	}
 	return remoteAnswer(tool, args, out)
 }

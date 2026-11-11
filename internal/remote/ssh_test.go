@@ -33,6 +33,16 @@ type testSSHServer struct {
 
 func startTestSSHServer(t *testing.T, handler func(string) (string, uint32)) *testSSHServer {
 	t.Helper()
+	return startTestSSHServerStreams(t, func(cmd string) (string, string, uint32) {
+		out, code := handler(cmd)
+		return out, "", code
+	})
+}
+
+// startTestSSHServerStreams is startTestSSHServer with a handler that writes
+// stdout and stderr apart.
+func startTestSSHServerStreams(t *testing.T, handler func(string) (string, string, uint32)) *testSSHServer {
+	t.Helper()
 
 	privateKey, err := rsa.GenerateKey(rand.Reader, 2048)
 	if err != nil {
@@ -100,8 +110,9 @@ func startTestSSHServer(t *testing.T, handler func(string) (string, uint32)) *te
 								var payload struct{ Value string }
 								_ = gossh.Unmarshal(req.Payload, &payload)
 								req.Reply(true, nil)
-								out, code := handler(payload.Value)
+								out, errOut, code := handler(payload.Value)
 								_, _ = io.WriteString(ch, out)
+								_, _ = io.WriteString(ch.Stderr(), errOut)
 								status := struct{ Status uint32 }{Status: code}
 								_, _ = ch.SendRequest("exit-status", false, gossh.Marshal(&status))
 								return
