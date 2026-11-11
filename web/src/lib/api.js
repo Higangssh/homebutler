@@ -237,17 +237,30 @@ export function saveProxmox(revision, endpoints) {
 // The comparison, without saving one: a dashboard that polls must not turn
 // into a snapshot every fifteen seconds and prune the baseline somebody
 // wanted.
-export function getReport() {
-  return fetchJSON('/api/report');
+export function getReport(server) {
+  return fetchJSON(withServer('/api/report', server));
 }
 
 // Saving is its own request, and a write like any other.
-export function saveSnapshot() {
-  return fetchJSON('/api/report/snapshot', { method: 'POST' });
+export function saveSnapshot(server) {
+  return fetchJSON(withServer('/api/report/snapshot', server), { method: 'POST' });
 }
 
-export function getDoctor() {
-  return fetchJSON('/api/doctor');
+export function getDoctor(server) {
+  return fetchJSON(withServer('/api/doctor', server));
+}
+
+// defaultServer is the one the dashboard opens on: the local machine when it
+// can be read, and otherwise the first server that can. Inside a container the
+// local server is listed but not visible, and opening on it would show the
+// same refusal in every card. A server list from before visible existed has
+// no such field, and is read as all visible.
+export function defaultServer(servers) {
+  const visible = servers.filter(s => s.visible !== false);
+  const local = visible.find(s => s.local);
+  if (local) return local.name;
+  if (visible.length) return visible[0].name;
+  return servers.length ? servers[0].name : '';
 }
 
 // Actions.

@@ -8,6 +8,7 @@ import (
 
 	"github.com/Higangssh/homebutler/internal/config"
 	"github.com/Higangssh/homebutler/internal/remote"
+	"github.com/Higangssh/homebutler/internal/system"
 	"github.com/spf13/cobra"
 )
 
@@ -200,6 +201,12 @@ func maybeRouteRemote(cmd *cobra.Command) (bool, error) {
 		server := cfg.FindServer(serverName)
 		if server == nil {
 			return true, fmt.Errorf("server %q not found in config. Available servers: %s", serverName, listServerNames(cfg))
+		}
+		// Naming a local server asks about that machine, which a container
+		// cannot see; answering with the container's own readings would put
+		// the server's name on them.
+		if server.Local && fanOuts[commandPath(cmd)].describesHost && system.InContainer() {
+			return true, errContainerCannotSeeHost
 		}
 		if !server.Local {
 			remoteArgs := forwardedArgs(cmd, os.Args[1:])
