@@ -1,6 +1,6 @@
 import type { SidebarsConfig } from '@docusaurus/plugin-content-docs';
 
-// Two levels (see INFORMATION-ARCHITECTURE.md, "Sidebar levels"):
+// Two levels:
 // group()  = a heading that never collapses; its items are always visible.
 // folder() = a collapsible subtopic of 3+ pages inside a group; closed until it holds the current page.
 type Item = string | Record<string, unknown>;
@@ -30,7 +30,6 @@ const sidebars: SidebarsConfig = {
     ]),
     group('Reference', ['reference/configuration', 'reference/json-output', 'troubleshooting']),
   ],
-  // Generated from `homebutler <command> --help` into docs/cli/ by `npm run gen-cli`
   cli: [
     group('Overview', ['cli/index']),
     group('Know what changed', ['cli/report', 'cli/doctor', 'cli/status', 'cli/inventory', 'cli/ports', 'cli/processes']),

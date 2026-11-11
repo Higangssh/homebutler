@@ -9,7 +9,6 @@
     "serve": "docusaurus serve",
     "clear": "docusaurus clear",
     "gen-api": "node scripts/gen-api.mjs",
-    "gen-cli": "node scripts/gen-cli.mjs",
     "clean-api": "node -e \"require('fs').rmSync('docs/reference/api',{recursive:true,force:true});require('fs').rmSync('src/generated',{recursive:true,force:true})\"",
     "prestart": "node scripts/gen-api.mjs",
     "prebuild": "node scripts/gen-api.mjs"
