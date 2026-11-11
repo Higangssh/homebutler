@@ -110,11 +110,23 @@ func TestWatchAddKeepsTheUnit(t *testing.T) {
 func TestWatchAddRefusesAUnitTheNameRuleRefuses(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 	t.Setenv("HOMEBUTLER_CONFIG", "")
-	cmd := newWatchAddCmd()
-	cmd.SetArgs([]string{"--kind", "systemd", "web", "--unit", "nginx service; rm"})
-	cmd.SetOut(io.Discard)
-	cmd.SetErr(io.Discard)
-	if err := cmd.Execute(); err == nil {
-		t.Fatal("an invalid unit was accepted")
+	// --unit=--help would reach systemctl as `systemctl restart --help`,
+	// which exits 0; -- -web would reach docker as an option.
+	for _, args := range [][]string{
+		{"--kind", "systemd", "web", "--unit", "nginx service; rm"},
+		{"--kind", "systemd", "web", "--unit=--help"},
+		{"--kind", "docker", "--", "-web"},
+	} {
+		cmd := newWatchAddCmd()
+		cmd.SetArgs(args)
+		cmd.SetOut(io.Discard)
+		cmd.SetErr(io.Discard)
+		if err := cmd.Execute(); err == nil {
+			t.Errorf("watch add %q was accepted", args)
+		}
+	}
+	dir, _ := watch.WatchDir()
+	if targets, _ := watch.LoadTargets(dir); len(targets) != 0 {
+		t.Fatalf("a refused target was stored: %+v", targets)
 	}
 }

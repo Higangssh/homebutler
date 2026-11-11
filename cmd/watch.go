@@ -866,18 +866,7 @@ func promptSelect(scanner *bufio.Scanner, prompt string, options, labels []strin
 	}
 }
 
-func isValidTargetName(name string) bool {
-	if len(name) == 0 || len(name) > 128 {
-		return false
-	}
-	for _, c := range name {
-		if (c < 'a' || c > 'z') && (c < 'A' || c > 'Z') &&
-			(c < '0' || c > '9') && c != '-' && c != '_' && c != '.' {
-			return false
-		}
-	}
-	return true
-}
+func isValidTargetName(name string) bool { return watch.ValidName(name) }
 
 // alertsLoadWarning is what watch start prints when loadAlertsConfig fails.
 // Only the rules are lost: the threshold watcher reads cfg.Alerts, which
