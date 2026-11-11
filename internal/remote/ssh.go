@@ -515,11 +515,43 @@ func linesStillTrusting(path, kept, addr string, newKey ssh.PublicKey) ([]string
 		if err != nil || marker != "" || bytes.Equal(key.Marshal(), newKey.Marshal()) {
 			continue
 		}
-		if cb(addr, remoteAddr, key) == nil {
+		// The whole file accepting the key does not say this line is why:
+		// another line may hold the same key. Asking the line alone does,
+		// and asking the whole file first keeps an @revoked line in charge.
+		if cb(addr, remoteAddr, key) != nil {
+			continue
+		}
+		alone, err := lineAccepts(filepath.Dir(path), trimmed, addr, remoteAddr, key)
+		if err != nil {
+			return nil, err
+		}
+		if alone {
 			stale = append(stale, trimmed)
 		}
 	}
 	return stale, nil
+}
+
+// lineAccepts says whether a known_hosts holding only line accepts key for
+// addr. knownhosts reads files only, so the line gets one of its own.
+func lineAccepts(dir, line, addr string, remoteAddr net.Addr, key ssh.PublicKey) (bool, error) {
+	f, err := os.CreateTemp(dir, ".known_hosts.homebutler-line-*")
+	if err != nil {
+		return false, fmt.Errorf("failed to read known_hosts back: %w", err)
+	}
+	defer os.Remove(f.Name())
+	_, werr := f.WriteString(line + "\n")
+	if cerr := f.Close(); werr == nil {
+		werr = cerr
+	}
+	if werr != nil {
+		return false, fmt.Errorf("failed to read known_hosts back: %w", werr)
+	}
+	cb, err := knownhosts.New(f.Name())
+	if err != nil {
+		return false, fmt.Errorf("failed to read known_hosts back: %w", err)
+	}
+	return cb(addr, remoteAddr, key) == nil, nil
 }
 
 // withoutHostKeys returns known_hosts content with every entry for addr

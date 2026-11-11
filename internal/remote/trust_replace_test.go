@@ -100,7 +100,10 @@ func TestReplaceDropsEveryEntryForTheHost(t *testing.T) {
 func TestReplaceNamesAPatternThatStillTrustsTheOldKey(t *testing.T) {
 	old, fresh := newHostKey(t), newHostKey(t)
 	pattern := entry("192.168.0.*", old)
-	path, err := replaceIn(t, pattern+"\n", fresh)
+	// Another host with the same key is not why this one still trusts it,
+	// and naming it would send someone to edit the wrong line.
+	sameKeyElsewhere := entry("192.0.2.50", old)
+	path, err := replaceIn(t, sameKeyElsewhere+"\n"+pattern+"\n", fresh)
 
 	var stale *StillTrustedError
 	if !errors.As(err, &stale) {
