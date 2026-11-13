@@ -6,7 +6,19 @@ A container cannot see the machine it runs on: `status` would read the
 container's own `/proc`, `ports` its own sockets. So the image runs `serve` and
 reaches the machines in `servers:` over SSH — the path multi-server already
 uses. A server marked `local: true` is reported as not visible from a container
-rather than answered with the container's numbers.
+rather than answered with the container's numbers. The dashboard's routes that
+read this machine — `/api/status`, `/api/servers/<name>/status` for a
+`local: true` server, `/api/processes`, `/api/alerts`, `/api/ports`,
+`/api/report`, `/api/report/snapshot` and `/api/doctor`, with no `server` or
+one marked `local: true` — answer `501` with that reason. So do `--all`, on the
+`local: true` server's line, and `--server` naming it, for `status`, `alerts`,
+`ports`, `processes`, `report`, `doctor` and `network scan`.
+
+The dashboard in the image opens on the first server in `servers:` it can read,
+which is an SSH one. A `local: true` server is still in the picker, labelled
+`(local, not visible from this container)`, and picking it shows the reason in
+each card. The Report tab reports on the server in the picker, and
+**Save a snapshot** saves one on that server.
 
 `homebutler mcp` in the image holds to the same rule. A call that leaves
 `server` out, or names a `local: true` server, is refused by `system_status`,

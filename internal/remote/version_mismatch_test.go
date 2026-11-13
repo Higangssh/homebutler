@@ -85,3 +85,28 @@ func TestTheExplanationSurvivesAnUnknownLocalVersion(t *testing.T) {
 		t.Fatalf("the explanation lost its point: %v", err)
 	}
 }
+
+// An argument a newer client forwards with a flag the remote's release does
+// not have is the same gap one flag at a time, and says so. The flag is
+// refused before the command runs, so nothing there changed.
+func TestAnOlderRemoteNamesTheFlagItLacks(t *testing.T) {
+	old := LocalVersion
+	LocalVersion = "1.8.0"
+	t.Cleanup(func() { LocalVersion = old })
+
+	err := remoteCommandError(&config.ServerConfig{Name: "pi"}, "1.5.0",
+		[]string{"watch", "add", "web", "--json", "--kind", "systemd", "--unit", "nginx.service"},
+		[]byte("error: unknown flag: --unit"), errors.New("Process exited with status 1"))
+
+	for _, want := range []string{"1.5.0", "1.8.0", "`watch`", "--unit", "homebutler upgrade"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Fatalf("the failure does not mention %q: %v", want, err)
+		}
+	}
+	if strings.Contains(err.Error(), "homebutler deploy") {
+		t.Fatalf("still points at deploy: %v", err)
+	}
+	if class := Classify(err); class != ClassRemote {
+		t.Fatalf("classed %q, want %q", class, ClassRemote)
+	}
+}

@@ -98,6 +98,7 @@ func isolatedHome(t *testing.T) string {
 		t.Fatal(err)
 	}
 	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home) // os.UserHomeDir on Windows
 	return home
 }
 
@@ -180,7 +181,7 @@ func TestAPasswordIsSentToAHostThatWasTrusted(t *testing.T) {
 	server := startRecordingSSHServer(t)
 	target := serverAt(t, server.addr)
 
-	if err := TrustServer(target, func(string) bool { return true }); err != nil {
+	if err := TrustServer(target, false, func(string) bool { return true }); err != nil {
 		t.Fatalf("trusting the host: %v", err)
 	}
 	known, err := os.ReadFile(filepath.Join(home, ".ssh", "known_hosts"))

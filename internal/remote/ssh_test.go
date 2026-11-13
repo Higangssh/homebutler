@@ -33,6 +33,16 @@ type testSSHServer struct {
 
 func startTestSSHServer(t *testing.T, handler func(string) (string, uint32)) *testSSHServer {
 	t.Helper()
+	return startTestSSHServerStreams(t, func(cmd string) (string, string, uint32) {
+		out, code := handler(cmd)
+		return out, "", code
+	})
+}
+
+// startTestSSHServerStreams is startTestSSHServer with a handler that writes
+// stdout and stderr apart.
+func startTestSSHServerStreams(t *testing.T, handler func(string) (string, string, uint32)) *testSSHServer {
+	t.Helper()
 
 	privateKey, err := rsa.GenerateKey(rand.Reader, 2048)
 	if err != nil {
@@ -100,8 +110,9 @@ func startTestSSHServer(t *testing.T, handler func(string) (string, uint32)) *te
 								var payload struct{ Value string }
 								_ = gossh.Unmarshal(req.Payload, &payload)
 								req.Reply(true, nil)
-								out, code := handler(payload.Value)
+								out, errOut, code := handler(payload.Value)
 								_, _ = io.WriteString(ch, out)
+								_, _ = io.WriteString(ch.Stderr(), errOut)
 								status := struct{ Status uint32 }{Status: code}
 								_, _ = ch.SendRequest("exit-status", false, gossh.Marshal(&status))
 								return
@@ -153,7 +164,19 @@ func dialTestSSHClient(t *testing.T, addr string) *gossh.Client {
 	return client
 }
 
+// tempHome gives the test an empty home directory of its own, so whatever
+// creates ~/.ssh/known_hosts creates it there and not in the home of whoever
+// runs the suite. USERPROFILE is where os.UserHomeDir looks on Windows.
+func tempHome(t *testing.T) string {
+	t.Helper()
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	return home
+}
+
 func TestNewKnownHostsCallback(t *testing.T) {
+	tempHome(t)
 	cb, err := newKnownHostsCallback()
 	if err != nil {
 		t.Fatalf("newKnownHostsCallback() error: %v", err)
@@ -165,13 +188,10 @@ func TestNewKnownHostsCallback(t *testing.T) {
 
 func TestNewKnownHostsCallback_CreatesFile(t *testing.T) {
 	// Verify that ~/.ssh/known_hosts exists after calling newKnownHostsCallback
-	home, err := os.UserHomeDir()
-	if err != nil {
-		t.Skip("cannot determine home directory")
-	}
+	home := tempHome(t)
 	path := filepath.Join(home, ".ssh", "known_hosts")
 
-	_, err = newKnownHostsCallback()
+	_, err := newKnownHostsCallback()
 	if err != nil {
 		t.Fatalf("newKnownHostsCallback() error: %v", err)
 	}
@@ -301,6 +321,7 @@ func TestConnect_Timeout(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping timeout test in short mode")
 	}
+	tempHome(t)
 	// Connect to a non-routable address to trigger timeout
 	srv := &config.ServerConfig{
 		Name:     "timeout",
@@ -321,6 +342,7 @@ func TestConnect_Timeout(t *testing.T) {
 
 func TestConnect_ConnectionRefused(t *testing.T) {
 	// Connect to localhost on an unlikely port — should fail fast with connection refused
+	tempHome(t)
 	srv := &config.ServerConfig{
 		Name:     "refused",
 		Host:     "127.0.0.1",
@@ -661,20 +683,6 @@ func TestRemoteGetVersionAndWhichErrors(t *testing.T) {
 	}
 }
 
-func TestRemoveHostKeys_NonexistentFile(t *testing.T) {
-	// Create a temp known_hosts that we control
-	srv := &config.ServerConfig{
-		Name: "test",
-		Host: "10.99.99.99",
-		Port: 22,
-	}
-	// RemoveHostKeys on real known_hosts file — should not error even if key not present
-	err := RemoveHostKeys(srv)
-	if err != nil {
-		t.Errorf("RemoveHostKeys should not error for non-matching keys: %v", err)
-	}
-}
-
 // A dev build is left alone, which is not a failure: upgrade from a go
 // install binary said "error" and exited 1 every time.
 func TestSelfUpgrade_DevBuild(t *testing.T) {
@@ -828,27 +836,6 @@ func TestNormalizeArch_Extended(t *testing.T) {
 			t.Errorf("normalizeArch(%q) = %q, want %q", tc.in, got, tc.want)
 		}
 	}
-}
-
-func TestRemoveHostKeys_WithEntries(t *testing.T) {
-	// Create a temp known_hosts file
-	tmpDir := t.TempDir()
-	origHome := os.Getenv("HOME")
-	// We can't easily override HOME for knownHostsPath, so test against the real file
-	// Instead, test the logic directly by writing and reading a temp file
-	tmpFile := filepath.Join(tmpDir, "known_hosts")
-	content := "[10.0.0.1]:22 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAITest1\n" +
-		"[10.0.0.2]:22 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAITest2\n" +
-		"# comment line\n" +
-		"[10.0.0.1]:2222 ssh-rsa AAAAB3NzaC1yc2EAAAABITest3\n"
-	os.WriteFile(tmpFile, []byte(content), 0600)
-
-	// Verify the file was written
-	data, _ := os.ReadFile(tmpFile)
-	if len(data) == 0 {
-		t.Fatal("failed to write test known_hosts")
-	}
-	_ = origHome
 }
 
 func TestDeployResultJSON(t *testing.T) {

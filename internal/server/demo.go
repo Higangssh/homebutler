@@ -255,13 +255,14 @@ func (s *Server) demoAlerts(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// demoPorts returns realistic demo ports data.
+// demoPorts returns realistic demo ports data, in the shape /api/ports
+// answers with for real.
 func (s *Server) demoPorts(w http.ResponseWriter, r *http.Request) {
 	name := demoServerName(r)
 
 	switch name {
 	case "":
-		writeJSON(w, []map[string]any{
+		writeJSON(w, map[string]any{"ports": []map[string]any{
 			{"protocol": "tcp", "address": "0.0.0.0", "port": "80", "pid": "1234", "process": "nginx"},
 			{"protocol": "tcp", "address": "0.0.0.0", "port": "443", "pid": "1234", "process": "nginx"},
 			{"protocol": "tcp", "address": "127.0.0.1", "port": "5432", "pid": "2345", "process": "postgres"},
@@ -269,19 +270,19 @@ func (s *Server) demoPorts(w http.ResponseWriter, r *http.Request) {
 			{"protocol": "tcp", "address": "0.0.0.0", "port": "3000", "pid": "6789", "process": "grafana"},
 			{"protocol": "tcp", "address": "0.0.0.0", "port": "8080", "pid": "4567", "process": "homebutler"},
 			{"protocol": "tcp", "address": "0.0.0.0", "port": "9090", "pid": "7890", "process": "prometheus"},
-		})
+		}})
 	case "nas-box":
-		writeJSON(w, []map[string]any{
+		writeJSON(w, map[string]any{"ports": []map[string]any{
 			{"protocol": "tcp", "address": "0.0.0.0", "port": "445", "pid": "1100", "process": "smbd"},
 			{"protocol": "tcp", "address": "0.0.0.0", "port": "32400", "pid": "1200", "process": "plex"},
 			{"protocol": "tcp", "address": "0.0.0.0", "port": "22", "pid": "200", "process": "sshd"},
-		})
+		}})
 	case "raspberry-pi":
-		writeJSON(w, []map[string]any{
+		writeJSON(w, map[string]any{"ports": []map[string]any{
 			{"protocol": "tcp", "address": "0.0.0.0", "port": "53", "pid": "800", "process": "pihole-FTL"},
 			{"protocol": "tcp", "address": "0.0.0.0", "port": "80", "pid": "900", "process": "lighttpd"},
 			{"protocol": "tcp", "address": "0.0.0.0", "port": "22", "pid": "300", "process": "sshd"},
-		})
+		}})
 	default:
 		demoOfflineError(w, name)
 	}
@@ -458,16 +459,16 @@ func (s *Server) demoSaveNotify(w http.ResponseWriter, r *http.Request) {
 // demoServers returns realistic demo server list.
 func (s *Server) demoServers(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, []map[string]any{
-		{"name": "homelab-server", "host": "192.168.1.10", "local": true, "status": "ok"},
-		{"name": "nas-box", "host": "192.168.1.20", "local": false, "status": "ok"},
-		{"name": "raspberry-pi", "host": "192.168.1.30", "local": false, "status": "ok"},
-		{"name": "media-server", "host": "192.168.1.40", "local": false, "status": "ok"},
-		{"name": "dev-vm", "host": "192.168.1.50", "local": false, "status": "ok"},
-		{"name": "backup-nas", "host": "192.168.1.60", "local": false, "status": "error"},
-		{"name": "docker-host", "host": "192.168.1.70", "local": false, "status": "ok"},
-		{"name": "k3s-node-1", "host": "192.168.1.80", "local": false, "status": "ok"},
-		{"name": "k3s-node-2", "host": "192.168.1.81", "local": false, "status": "ok"},
-		{"name": "vpn-gateway", "host": "192.168.1.90", "local": false, "status": "error"},
+		{"name": "homelab-server", "host": "192.168.1.10", "local": true, "visible": true, "status": "ok"},
+		{"name": "nas-box", "host": "192.168.1.20", "local": false, "visible": true, "status": "ok"},
+		{"name": "raspberry-pi", "host": "192.168.1.30", "local": false, "visible": true, "status": "ok"},
+		{"name": "media-server", "host": "192.168.1.40", "local": false, "visible": true, "status": "ok"},
+		{"name": "dev-vm", "host": "192.168.1.50", "local": false, "visible": true, "status": "ok"},
+		{"name": "backup-nas", "host": "192.168.1.60", "local": false, "visible": true, "status": "error"},
+		{"name": "docker-host", "host": "192.168.1.70", "local": false, "visible": true, "status": "ok"},
+		{"name": "k3s-node-1", "host": "192.168.1.80", "local": false, "visible": true, "status": "ok"},
+		{"name": "k3s-node-2", "host": "192.168.1.81", "local": false, "visible": true, "status": "ok"},
+		{"name": "vpn-gateway", "host": "192.168.1.90", "local": false, "visible": true, "status": "error"},
 	})
 }
 

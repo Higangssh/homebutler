@@ -1,6 +1,7 @@
 <script>
   import { onMount } from 'svelte';
   import {
+    defaultServer,
     getConfig,
     getServers,
     getServerStatus,
@@ -77,8 +78,7 @@
   async function loadServers() {
     try {
       servers = await getServers();
-      const local = servers.find(s => s.local);
-      if (local) selectedServer = local.name;
+      selectedServer = defaultServer(servers);
     } catch {}
   }
 
@@ -142,11 +142,11 @@
         onclick={() => activeTab = 'config'}
       >Config</button>
     </nav>
-    {#if activeTab === 'dashboard' && servers.length > 0}
+    {#if (activeTab === 'dashboard' || activeTab === 'report') && servers.length > 0}
       <div class="header-right">
         <select bind:value={selectedServer}>
           {#each servers as srv}
-            <option value={srv.name}>{srv.name}{srv.local ? ' (local)' : ''}</option>
+            <option value={srv.name}>{srv.name}{srv.local ? (srv.visible === false ? ' (local, not visible from this container)' : ' (local)') : ''}</option>
           {/each}
         </select>
       </div>
@@ -169,7 +169,7 @@
         <WakeCard />
       </div>
     {:else if activeTab === 'report'}
-      <ReportCard />
+      <ReportCard server={selectedServer} />
     {:else if activeTab === 'watch'}
       <WatchCard {canAct} />
     {:else if activeTab === 'apps'}

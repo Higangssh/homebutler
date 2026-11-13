@@ -201,13 +201,13 @@ func (s *Server) executeDemoTool(name string, args map[string]any) (any, error) 
 		// Demo mode writes nothing, so it answers as the state after the call:
 		// the target is on the list. Reporting added=false would be the shape
 		// of "already there", which is a different outcome and not this one.
-		return WatchAddResult{
+		return watch.WatchAddResult{
 			Container: stringArg(args, "container"),
 			Kind:      demoKind(args),
 			Added:     true,
 		}, nil
 	case "watch_remove":
-		return WatchRemoveResult{Container: stringArg(args, "container"), Removed: true}, nil
+		return watch.WatchRemoveResult{Container: stringArg(args, "container"), Removed: true}, nil
 	case "notify_test":
 		// One channel that worked and one that did not, so a caller meets the
 		// shape it has to handle rather than an all-green answer that teaches
