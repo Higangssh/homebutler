@@ -1,0 +1,47 @@
+---
+title: status
+description: "Prints CPU usage, memory, disk usage, and uptime for the server."
+---
+
+# homebutler status
+
+Prints CPU usage, memory, disk usage, and uptime for the server.
+
+```bash
+homebutler status [flags]
+```
+
+Disk usage is listed per mounted filesystem.
+
+The same fields appear in JSON form in [JSON output](/reference/json-output).
+
+## Examples
+
+Print the status of the local server.
+
+```bash
+homebutler status
+```
+
+The output, shortened to the root disk:
+
+```text
+🖥  homelab (linux/amd64)
+   Uptime:  15h 12m
+   CPU:     36.4% (4 cores)
+   Memory:  3.2 / 7.8 GB (40.9%)
+   Disk /: 1 / 19 GB (7%)
+```
+
+To run it on a configured remote server, add `--server` and the name from your config.
+
+```bash
+homebutler status --server remote1
+```
+
+With a server whose SSH key is not authorized, the command stops with the connection error:
+
+```text
+error: [remote1] failed to load SSH key (/home/you/nokey): open /home/you/nokey: no such file or directory
+  → Check this server's 'key' in /home/you/.config/homebutler/config.yaml
+```

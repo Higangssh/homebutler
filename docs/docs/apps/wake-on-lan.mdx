@@ -1,0 +1,135 @@
+---
+title: Wake-on-LAN and network scan
+description: Wake a machine with a Wake-on-LAN magic packet by name or MAC address, save wake targets in the config, and list the devices on your local network with network scan.
+---
+
+# Wake-on-LAN and network scan
+
+`homebutler wake` sends a Wake-on-LAN magic packet to a machine, and `homebutler network scan` lists the devices on your local network with their MAC addresses. Used together, the scan finds a device's MAC address and `wake` turns the device on. Both commands work on the machine you run them on, and that machine has to be on the same local network as the target.
+
+## Wake a machine
+
+Pass a MAC address to `wake`. This example uses a made-up address:
+
+```bash
+homebutler wake 02:00:00:aa:bb:cc
+```
+
+```text
+✅ Magic packet sent to 02:00:00:aa:bb:cc (broadcast: 255.255.255.255)
+```
+
+The command sends one UDP packet to port 9 of the broadcast address. The packet is 102 bytes: six bytes of `0xFF` followed by the MAC address repeated 16 times. The MAC address can use colons or dashes.
+
+A successful result means the packet left your machine. It doesn't mean the target woke. Wake-on-LAN has no reply, so check that the target is up with `homebutler network scan`, or by reaching it over SSH.
+
+For the packet to wake anything, the target's network card and firmware need Wake-on-LAN enabled, and the packet has to reach the target's network segment. A broadcast stays on the local network, so run `wake` from a machine on the same network as the target, or give the broadcast address of that network as the second argument:
+
+```bash
+homebutler wake 02:00:00:aa:bb:cc 192.168.5.255
+```
+
+```text
+✅ Magic packet sent to 02:00:00:aa:bb:cc (broadcast: 192.168.5.255)
+```
+
+With `--json`, the result has `action`, `mac`, `broadcast` and `status`, where `status` is `sent`:
+
+```json
+{
+  "action": "wake",
+  "mac": "02:00:00:aa:bb:cc",
+  "broadcast": "192.168.5.255",
+  "status": "sent"
+}
+```
+
+### Save wake targets
+
+A named target saves you from typing the MAC address. Add targets under `wake:` in your config. See [Configuration](/reference/configuration) for the config file.
+
+```yaml
+wake:
+  - name: nas
+    mac: "02:00:00:aa:bb:cc"
+    ip: 192.168.5.255
+  - name: desktop
+    mac: "02-00-00-dd-ee-ff"
+```
+
+| Key | Required | What it sets |
+| --- | --- | --- |
+| `name` | Yes | The name you pass to `wake`. |
+| `mac` | Yes | The target's MAC address, with colons or dashes. |
+| `ip` | No | The broadcast address to send to. Despite the key's name, this is a broadcast address such as `192.168.5.255`, not the target's own address. The default is `255.255.255.255`. |
+
+Then wake the target by name:
+
+```bash
+homebutler wake nas
+```
+
+```text
+✅ Magic packet sent to 02:00:00:aa:bb:cc (broadcast: 192.168.5.255)
+```
+
+A broadcast address on the command line takes precedence over the target's `ip`. A name that isn't in the config is read as a MAC address and fails:
+
+```text
+error: invalid MAC address: nope (expected format: AA:BB:CC:DD:EE:FF)
+```
+
+`homebutler config validate` checks the `wake:` entries for a name and a valid MAC address. A bad entry produces errors such as these:
+
+```text
+❌ wake[0].mac: Invalid MAC address "02:00:00:aa:bb".
+   → Expected format: AA:BB:CC:DD:EE:FF
+❌ wake[1].name: Wake target name is required.
+```
+
+An MCP agent can send a packet with the `wake` tool, which takes a `target` and an optional `broadcast`. The [web dashboard](/running/web-dashboard) lists your wake targets and sends a packet for a configured name when you use its token.
+
+## Scan the local network
+
+`homebutler network scan` finds the devices that answered on your local network:
+
+```bash
+homebutler network scan
+```
+
+On a Docker host whose only neighbors are containers, the table lists their addresses and ends with the number of devices found:
+
+```text
+IP                 MAC                  HOSTNAME
+10.212.0.4         8e:77:9d:85:7f:b9    web-3.app-net
+10.212.0.1         72:55:61:7c:be:07    -
+10.212.0.2         46:8e:5c:e3:b2:fd    web-1.app-net
+10.212.0.3         72:f8:c9:ac:8b:b1    web-2.app-net
+
+4 devices found.
+```
+
+`HOSTNAME` shows the name that a reverse DNS lookup returns for the address, or `-` when there is none. With `--json`, each device has `ip`, `mac`, `status` (always `up`) and, when a name was found, `hostname`:
+
+```json
+{
+  "ip": "172.17.0.4",
+  "mac": "96:37:0d:c6:0e:a6",
+  "status": "up"
+}
+```
+
+### How the scan works
+
+1. homebutler takes the subnet of the first IPv4 address, other than loopback, that the operating system lists for your network interfaces.
+2. It pings every address in that subnet, 50 at a time.
+3. It reads the machine's ARP table with `arp -an` and keeps the entries that have a MAC address.
+4. It looks up a hostname for each address.
+
+The scan gives up after 30 seconds with `network scan timed out after 30s`. Devices that are off, asleep or on another subnet don't appear. The 30-second limit can be too short for a subnet larger than a `/24`. If the machine has several network interfaces, such as Docker bridges, the first address listed decides which subnet is scanned.
+
+The scan needs the `arp` command on the machine. Without `ping`, the pings fail silently and the scan lists only the devices already in the ARP table. When `arp` is missing, the scan stops with:
+
+```text
+error: failed to read ARP table: exec: "arp": executable file not found in $PATH
+```

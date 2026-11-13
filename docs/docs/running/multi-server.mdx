@@ -1,0 +1,285 @@
+---
+title: Multi-server
+description: Add servers to the homebutler config, trust their SSH host keys, deploy the binary to them, and run any command on one server or on all of them.
+---
+
+# Multi-server
+
+This page shows how to run homebutler commands on other machines from one place. You list the machines in the config, trust their SSH host keys, put the homebutler binary on them with `deploy`, and then add `--server <name>` or `--all` to a command.
+
+homebutler reaches a server over SSH and runs the `homebutler` binary installed there with the same command. The binary has to exist on the server and be new enough to know the command you run. Nothing runs on the server between commands: no daemon and no open port. [Proxmox VE](/apps/proxmox) endpoints are the exception and are read through the Proxmox API.
+
+## Add servers to the config
+
+Servers go under `servers:` in your [config file](/reference/configuration#resolution-order). The entry for the machine you run homebutler on sets `local: true` and needs no SSH settings.
+
+```yaml
+servers:
+  - name: homelab
+    host: 192.168.1.10
+    local: true
+  - name: edge
+    host: 192.168.1.20
+    user: butler
+    port: 2222
+```
+
+| Key | Default | Meaning |
+| --- | --- | --- |
+| `name` | none, required | The name you pass to `--server`, `deploy` and `trust`. Names must be unique. |
+| `host` | none, required unless `local: true` | Address or hostname to connect to. |
+| `local` | `false` | Marks the machine homebutler runs on. Commands run directly, not over SSH. |
+| `user` | `root` | SSH user. |
+| `port` | `22` | SSH port. |
+| `auth` | `key` | `key` or `password`. |
+| `key` | tries `~/.ssh/id_ed25519`, then `~/.ssh/id_rsa` | Path to the private key. A leading `~/` is expanded. |
+| `password` | none | Used when `auth: password`. A config that holds a password must be mode `0600`. |
+| `bin` | `homebutler` | Path of the homebutler binary on the server. |
+
+`homebutler init` writes these entries interactively. Run `homebutler config validate` after editing the file by hand: it reports missing hosts, duplicate names, ports out of range, unknown `auth` values and key files that don't exist. See [Configuration](/reference/configuration).
+
+Use keys when you can. With `auth: password`, homebutler refuses to connect until you trust the host key yourself, as the next section describes.
+
+To set up a key, create one on the machine you run homebutler on and copy it to the server. Replace `<user>` and `<host>` with the server's `user` and `host` values:
+
+```bash
+ssh-keygen -t ed25519 -C "homebutler"
+ssh-copy-id <user>@<host>
+```
+
+`ssh-keygen` writes `~/.ssh/id_ed25519` by default, the first key homebutler tries, so the server entry needs no `key` line.
+
+## Trust host keys
+
+homebutler checks every server against `~/.ssh/known_hosts`. What happens on the first connection depends on the authentication mode:
+
+- **Key authentication** records the host key on first use and continues. The first command prints the fingerprint it recorded:
+
+  ```text
+  [192.168.1.20:22] trusting new SSH host key for 192.168.1.20:22: SHA256:dezeFLiWXyGKhgapLJ594+IyyfX9wXbJtSZDa1TQ4Ys
+  ```
+
+- **Password authentication** stops. homebutler doesn't send a password to a host you haven't trusted:
+
+  ```text
+  error: [pw] this host is not in ~/.ssh/known_hosts, and this server signs in with a password (192.168.1.20:22)
+    homebutler will not send a password to a host it has not been told to trust: whatever answers at that
+    address would receive it, and a wrong address looks exactly like a wrong password afterwards.
+    → Check that the address is the machine you mean, then: homebutler trust pw
+  ```
+
+To check a fingerprint before you accept it, run `trust`. It connects, prints the fingerprint, and writes the key to `known_hosts` when you answer `y`:
+
+```bash
+homebutler trust edge
+```
+
+```text
+connecting to edge (192.168.1.20:22)...
+host key fingerprint: SHA256:dezeFLiWXyGKhgapLJ594+IyyfX9wXbJtSZDa1TQ4Ys
+trust this host? (y/n): host key for edge added to known_hosts
+```
+
+Any other answer cancels with `error: trust cancelled by user`.
+
+When a server's key changes, for example after a reinstall, homebutler refuses to connect:
+
+```text
+error: [edge] ⚠️  SSH HOST KEY CHANGED (192.168.1.20:22)
+  The server's host key does not match the one in ~/.ssh/known_hosts.
+  This could mean:
+    1. The server was reinstalled or its SSH keys were regenerated
+    2. A man-in-the-middle attack is in progress
+
+  → If you trust this change: homebutler trust edge --reset
+  → If unexpected: do NOT connect and investigate
+```
+
+`trust <name> --reset` removes the old entries for that address first, then asks again.
+
+## Put homebutler on each server
+
+`deploy` copies the binary to a server and runs `version` on it to check the upload:
+
+```bash
+homebutler deploy --server edge
+homebutler deploy --all
+```
+
+`--all` deploys to every server that isn't `local`. Without `--local`, `deploy` asks GitHub for the latest release, downloads the build that matches the server's operating system and architecture, and checks its SHA-256 against the release's `checksums.txt`.
+
+For a server that can't reach GitHub, or to deploy a build you made yourself, pass the binary with `--local`. The binary has to match the server's operating system and architecture:
+
+```bash
+homebutler deploy --server edge --local ./homebutler-linux-amd64
+```
+
+To build that binary on a machine with Go, run `go build` in a checkout of the homebutler source, with `GOOS` and `GOARCH` set for the server. This example builds for a 64-bit ARM server such as a Raspberry Pi:
+
+```bash
+CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -o homebutler-linux-arm64
+homebutler deploy --server edge --local ./homebutler-linux-arm64
+```
+
+```text
+deploying to edge (127.0.0.1)...
+  ✓ edge: installed to /home/butler/.local/bin/homebutler (linux/amd64)
+```
+
+`deploy` also prints a JSON array on standard output, one object per server with `server`, `arch`, `source` (`github` or `local`), `status` (`ok` or `error`) and `message`. Every server is tried. If any fails, the command then exits `1` and names them, such as `deploy failed on 1 of 2 servers: edge`.
+
+### Where the binary goes
+
+`deploy` installs to the first place that works:
+
+1. `/usr/local/bin`, when the SSH user can write there.
+2. `/usr/local/bin` through `sudo -n`, when the user has passwordless sudo.
+3. `~/.local/bin` on the server. In this case `deploy` appends `export PATH="$PATH:<dir>"` to each of `~/.profile`, `~/.bashrc` and `~/.zshrc` that exists.
+
+The upload uses `scp -t` on the server, so the server needs an `scp` program. On a minimal Alpine system, that is the `openssh-client-common` package.
+
+Every remote command adds `~/.local/bin`, `~/bin`, `~/go/bin`, `/opt/homebrew/bin`, `/usr/local/bin`, `/usr/local/sbin` and `/snap/bin` to `PATH` before it runs `homebutler`, so a binary in any of those is found without editing shell files. If the binary lives elsewhere, set `bin:` on the server entry.
+
+## Run commands on servers
+
+Add `--server <name>` to run one command on one server. The output is the same as running the command on that machine:
+
+```bash
+homebutler status --server edge
+```
+
+```text
+🖥  83a36d1859e5 (linux/amd64)
+   Uptime:  14h 55m
+   CPU:     92.4% (4 cores)
+   Memory:  3.0 / 7.8 GB (39.1%)
+   Disk /: 14 / 59 GB (25%)
+```
+
+`--server` also accepts a `local` entry and runs the command on the local machine. An unknown name lists the choices:
+
+```text
+error: server "nope" not found in config. Available servers: [homelab edge]
+```
+
+`--server` and `--all` reach another machine from `status`, `alerts`, `ports`, `processes`, `report`, `doctor`, `wake`, `network scan`, the `docker` commands, `backup`, `backup list`, `backup drill`, `restore` and `deploy`. `upgrade` takes `--all`. Every other command runs on this machine only and refuses both flags:
+
+```text
+error: install runs on this machine only; --server is not supported
+```
+
+## Run a command on every server
+
+Add `--all` to run a command on every server in parallel. It works with `status`, `alerts`, `doctor`, `report`, `processes`, `ports`, `docker list`, `docker stats`, `backup list` and `network scan`. Other commands stop before any server is asked:
+
+```text
+error: docker restart does not run with --all; use --server <name> for one server. --all runs: alerts, backup list, docker list, docker stats, doctor, network scan, ports, …
+```
+
+The line is shortened. `docker restart`, `docker stop`, `backup`, `restore` and `wake` change a machine, and `docker logs`, `docker top` and `docker inspect` read one container on one server, so name the server with `--server`. `report --all` saves a snapshot on every server; add `--no-save` to compare without saving. `backup drill --all` is a different flag: it drills every app in one archive.
+
+Add `--json` to get each server's full answer:
+
+```bash
+homebutler status --all --json
+```
+
+The output, shortened to the keys that matter:
+
+```text
+[
+  {
+    "server": "homelab",
+    "data": {
+      "schema_version": 1,
+      "hostname": "homelab",
+      …
+    }
+  },
+  {
+    "server": "edge",
+    "data": {
+      "schema_version": 1,
+      "hostname": "83a36d1859e5",
+      …
+    }
+  }
+]
+```
+
+A server that fails has an `error` string in place of `data`, so one unreachable server doesn't hide the others. Without `--json`, `--all` prints one line per server, and each command has its own line:
+
+```bash
+homebutler status --all
+homebutler report --all --no-save
+```
+
+```text
+📡 homelab      CPU    4% | Mem   40% | Disk    7% | Up 4h 17m
+📡 edge         CPU    2% | Mem   40% | Disk   18% | Up 4h 17m
+📡 homelab      3 need attention | 31 notable changes | since 2026-10-24T20:09:56Z
+📡 edge         0 need attention | 1 notable change | first snapshot, nothing to compare
+```
+
+Each server is asked for JSON whether or not you pass `--json`, and the line is built from that answer. A reading the answer didn't carry shows as `-`. A server that answers with something this version can't summarize gets a `⚠️` line saying so, and doesn't count as failed. With `--json`, its answer appears whole under `data`.
+
+A server that can't answer gets a `❌` line with the reason:
+
+```text
+❌ edge         [edge] SSH connection failed (127.0.0.1:2298): dial tcp 127.0.0.1:2298: connect: connection refused
+```
+
+The run still prints every server, then exits `1` and names the servers that failed on standard error:
+
+```text
+error: status failed on 1 of 2 servers: edge
+```
+
+A server that can never run the command counts as failed too. On a server without Docker, `docker list --all` and `docker stats --all` exit `1` on every run, so a cron job or script over that set of servers always fails. `doctor --strict --all` exits `1` when any server didn't pass, including servers that were unreachable or answered with something it can't read: `doctor did not pass on 2 of 2 servers: homelab, edge`.
+
+Commands that keep state, such as [`report`](/changes/report), keep it on the machine they run on. `report --server edge` stores its snapshots under the server's `~/.homebutler/`, so the first run on a server is a baseline and the next one compares with it:
+
+```bash
+homebutler report --server edge
+```
+
+```text
+🏠 Homebutler Report — 83a36d1859e5
+   2026-10-25T18:14:20Z  ·  compared with 2026-10-25T18:14:19Z
+
+── Notable Changes ───────────────────────────────────────────
+   skipped  containers  not compared — Docker did not answer
+   skipped  ports       not compared — the port collector did not answer
+   skipped  processes   not compared — the process collector did not answer
+…
+```
+
+On this server Docker isn't installed and the `ss` program is missing, so the report names the collectors that didn't answer instead of guessing.
+
+## Keep versions level
+
+A server that runs an older binary fails on commands it doesn't have. The error names both versions:
+
+```text
+error: [edge] the homebutler on edge is 0.17.0, and does not have `report`
+  → This one is 1.7.0. Bring them level: homebutler upgrade
+```
+
+[`homebutler upgrade`](/running/upgrading) updates the local binary and every remote server.
+
+## Related pages
+
+<CardGroup cols={2}>
+  <Card title="Configuration" icon="gear" href="/reference/configuration">
+    Every `servers:` key, and the checks `config validate` runs on them.
+  </Card>
+  <Card title="Upgrading" icon="arrow" href="/running/upgrading">
+    Update the local binary and every remote server together.
+  </Card>
+  <Card title="Troubleshooting" icon="warning" href="/troubleshooting">
+    SSH, host key and remote binary errors, with their fixes.
+  </Card>
+  <Card title="Web dashboard" icon="terminal" href="/running/web-dashboard">
+    See every configured server in one browser view.
+  </Card>
+</CardGroup>

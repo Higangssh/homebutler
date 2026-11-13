@@ -1,0 +1,170 @@
+---
+title: backup
+description: "Archives the volumes and bind mounts of your Docker Compose services into one `tar.gz` file."
+---
+
+# homebutler backup
+
+Archives the volumes and bind mounts of your Docker Compose services into one `tar.gz` file.
+
+Services are found through `docker compose ls`, so only containers started by Docker Compose are included. The archive also holds the Compose files and a `manifest.json` that records every mount.
+
+Archives go to `backup.dir` or `backup_dir` in your config, and to `~/.homebutler/backups` when neither is set.
+
+For what a backup contains and how to schedule one, see [Backup and restore](/backups/backup-and-restore) and [Scheduled backups](/backups/scheduled).
+
+| Command | What it does |
+| --- | --- |
+| [`drill`](#backup-drill) | Boots a backed-up app in an isolated container and checks that it answers. |
+| [`list`](#backup-list) | Lists the archives in the backup directory. |
+
+## `backup`
+
+```bash
+homebutler backup [flags]
+homebutler backup [command]
+```
+
+| Flag | Type | Default | Description |
+| --- | --- | --- | --- |
+| `--exclude` | string, repeatable | - | Host path to leave out. Repeat for several paths. Excludes bind mounts at or under the path, and records them in the archive. A path that matches no mount is reported. |
+| `--service` | string | - | Back up this Compose service only. The name is the service name in the Compose file. |
+| `--to` | string | - | Directory to write the archive to, instead of the configured backup directory. |
+
+Back up one service.
+
+```bash
+homebutler backup --service uptime-kuma
+```
+
+```text
+Backup complete: /home/you/backups/backup_2026-10-25_111634.343.tar.gz
+  Services: uptime-kuma
+  Volumes:  1
+  Size:     871 B
+```
+
+Back up everything, send the archive to another folder, and leave out one bind mount. The second `--exclude` matches nothing, and the output says so.
+
+```bash
+homebutler backup --to /home/you/archive --exclude /srv/media --exclude /srv/typo
+```
+
+```text
+Backup complete: /home/you/archive/backup_2026-10-25_111649.038.tar.gz
+  Services: uptime-kuma, media
+  Volumes:  1
+  Size:     982 B
+
+  Excluded 1 bind mount(s), recorded in the archive:
+    media:/srv/media
+
+⚠️  1 --exclude path(s) matched no bind mount, so nothing was left out for them:
+    /srv/typo
+```
+
+A service that is not in any Compose project is an error.
+
+```bash
+homebutler backup --service nope
+```
+
+```text
+error: service "nope" not found in any compose project
+```
+
+## `backup drill`
+
+Boots a backed-up app in an isolated container and checks that it answers.
+
+```bash
+homebutler backup drill [service] [flags]
+```
+
+The drill extracts the archive, starts the app's image with the restored volumes on a temporary network and a free host port, and requests the app's health path. It removes the container, network, and files afterwards.
+
+The drill supports the apps that have a built-in health check: `nginx-proxy-manager`, `vaultwarden`, `uptime-kuma`, `pi-hole`, `gitea`, `jellyfin`, `plex`, `portainer`, `homepage`, and `adguard-home`. The service name must match the Compose service name in the archive.
+
+The command exits `1` when the app does not come back, so a scheduled job sees the failure.
+
+For the full procedure, see [Backup drill](/backups/drill).
+
+| Argument | Description |
+| --- | --- |
+| `service` | Service to drill. Required unless you use `--all`. |
+
+| Flag | Type | Default | Description |
+| --- | --- | --- | --- |
+| `--all` | boolean | `false` | Drill every supported app in the archive. Takes no service name. For this command `--all` means all apps in the archive, not all servers. |
+| `--archive` | string | - | Archive to drill. The default is the newest archive in the backup directory. |
+
+```bash
+homebutler backup drill uptime-kuma
+```
+
+The output, shortened: the timing line is removed.
+
+```text
+🔍 Backup Drill — uptime-kuma
+
+  📦 Backup: /home/you/backups/backup_2026-10-25_111638.976.tar.gz
+  📏 Size: 1.1 KB
+  🔐 Integrity: ✅ tar valid (7 files)
+
+  🚀 Boot: ✅ container started in 2s
+  🌐 Health: ✅ HTTP 200 on port 33813
+
+  ✅ DRILL PASSED
+```
+
+Drill every supported app in the newest archive.
+
+```bash
+homebutler backup drill --all
+```
+
+```text
+🔍 Backup Drill — all apps
+
+  uptime-kuma  ✅ PASSED  (5s)
+
+  📊 Result: 1/1 passed
+```
+
+A service with no health check is an error.
+
+```bash
+homebutler backup drill media
+```
+
+```text
+error: no health check defined for "media"
+```
+
+## `backup list`
+
+Lists the archives in the backup directory.
+
+```bash
+homebutler backup list [flags]
+```
+
+```bash
+homebutler backup list
+```
+
+```text
+NAME                                     SIZE       CREATED
+backup_2026-10-25_111634.343.tar.gz      871 B      2026-10-25T11:16:38-07:00
+backup_2026-10-25_111638.976.tar.gz      1.1 KB     2026-10-25T11:16:41-07:00
+```
+
+With no archives:
+
+```bash
+homebutler backup list
+```
+
+```text
+No backups found.
+```

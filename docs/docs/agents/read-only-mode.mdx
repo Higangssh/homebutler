@@ -1,0 +1,129 @@
+---
+title: Read-only mode
+description: "Start the homebutler MCP server with --max-risk read so an agent can look at your servers but cannot change them, and see what the mode offers, refuses, and still exposes."
+---
+
+# Read-only mode
+
+This page shows how to start the MCP server so an agent can look at your servers but can't change anything through homebutler. Read-only mode offers 28 of the 44 [tools](/mcp): the 27 classed `read`, plus `report`, which runs without saving a snapshot.
+
+## Start the server in read-only mode
+
+Add `--max-risk read` to the arguments in your [client config](/agents/mcp-server):
+
+<Tabs>
+<TabItem value="binary" label="Installed binary">
+
+```json
+{
+  "mcpServers": {
+    "homebutler": {
+      "command": "homebutler",
+      "args": ["mcp", "--max-risk", "read"]
+    }
+  }
+}
+```
+
+</TabItem>
+<TabItem value="npx" label="npx">
+
+```json
+{
+  "mcpServers": {
+    "homebutler": {
+      "command": "npx",
+      "args": ["-y", "homebutler@latest", "--max-risk", "read"]
+    }
+  }
+}
+```
+
+</TabItem>
+</Tabs>
+
+`--max-risk` sets the highest risk class the server offers. It takes `read`, `write` or `destructive`, and the default is `destructive`, which offers every tool. Any other value stops the server at startup:
+
+```text
+error: --max-risk must be read, write or destructive, not "bogus"
+```
+
+With `write`, the server offers 40 tools and leaves out the four `destructive` ones: `backup_restore`, `docker_stop`, `install_purge` and `proxmox_guest_shutdown`.
+
+## What the server offers and refuses
+
+A tool above the ceiling is left out of `tools/list`, and calling it by name is refused. Both are in place because a client that knows a tool's name can call it without listing it. The refusal is a normal result with `isError` set, and the text names the ceiling and the tool's class:
+
+```text
+tool "docker_stop" is not available: this server was started with --max-risk read, and docker_stop is classed destructive
+```
+
+The same message, with the tool name and class swapped in, comes back for `docker_restart` (write), `backup_restore` (destructive), `watch_add` (write), `wake` (write), `notify_test` (write), `install_purge` (destructive), `proxmox_guest_start` (write) and `proxmox_guest_shutdown` (destructive). A name that isn't a tool returns `unknown tool: <name>`.
+
+The server marks a reduced list as `private`: `tools/list` returns `cacheScope` set to `private`, so a gateway doesn't share it with a client of a server that runs with every tool.
+
+## What a read tool still returns
+
+Read-only mode stops changes. A read tool still returns what it reads, to the agent and into its conversation:
+
+- `docker_logs`, and `watch_history` with `include_logs`, return log lines, which hold whatever the app printed, credentials included.
+- `docker_inspect` leaves out environment values and returns host mount paths and container addresses.
+- `docker_top` names each process by the kernel's process name, with nothing from its command line. Unlike `processes`, it includes kernel threads.
+- `docker_top` and the Proxmox task reads name users, such as `root@pam`.
+- `backup_list` and `doctor` name paths on the host.
+- `system_status`, `open_ports` and `inventory_scan` return hostnames, addresses and what is listening.
+- `config_validate` returns the config path, server and Proxmox endpoint names, and the backup directory. When it finds a key or token file path, a MAC address, or a notify URL wrong, it quotes that value.
+
+A notify URL in `config_validate` output is quoted only as far as its host:
+
+- A scheme written at the start stays, so a typo shows: `discord.com/…`, `htps://discord.com/…`.
+- A `user:password@` before the host shows as `…@`.
+- The path and query, where webhook tokens live, are left out.
+- A URL whose host can't be picked out is quoted as `…`, after the scheme if one was written.
+- A token written as the host itself, such as `<token>.ntfy.sh`, still shows, because nothing tells it apart from a hostname.
+
+## Report without saving
+
+`report` is classed `write` because it saves a snapshot. In read-only mode it is still offered, and it always runs as if `no_save` were `true`: it compares with the newest snapshot that exists, saved by cron or by hand, and writes nothing. Whatever `no_save` or `keep` the agent sends is overridden.
+
+```json
+{ "no_save": false, "keep": 1 }
+```
+
+The response has `snapshot_saved` set to `false`, and the folder of snapshots has the same number of files before and after the call:
+
+```json
+{
+  "schema_version": 1,
+  "is_baseline": false,
+  "snapshot_saved": false,
+  "compared_to": "2026-10-25T18:16:25Z"
+}
+```
+
+That is the response shortened to the fields that matter here. With no snapshot to compare with, `report` doesn't create a baseline. `notable_changes` holds one `skipped` line, and `snapshot_saved` is `false`:
+
+```json
+{
+  "kind": "skipped",
+  "target": "",
+  "text": "First inspection — no previous snapshot found. --no-save skipped baseline creation."
+}
+```
+
+Take the baseline outside the agent, for example with `homebutler report` in a terminal or a cron job. See [Report](/changes/report).
+
+## What read-only mode does not hide
+
+Read-only mode limits what an agent can change. It doesn't limit what the agent can read.
+
+- **Logs and container details.** `docker_logs` returns log lines and `docker_inspect` returns a container's image, mounts, networks and ports. Either can contain a credential that something printed. `docker_inspect` doesn't return environment variable values. `docker_top` returns only each process's name, which can be a thread name such as `MainThread`, without its command line.
+- **The shape of the machine.** `open_ports`, `inventory_scan`, `processes` and `system_status` return what is listening, what runs, and the host name, and they do it for every server in the config when the agent names each one.
+- **Outside requests.** "Read" means no state changes on this machine or a remote one. It includes asking things outside them. `network_scan` pings every address on the local subnet. The Proxmox reads, and the endpoint check in `doctor`, send HTTP requests to the Proxmox API you configured. `proxmox_script_command` returns a `curl` line for a Community Script and never runs it.
+- **Other ways in.** The mode covers this MCP server process only. The CLI, `homebutler serve` and any other tool on the machine are unaffected.
+
+Remote reads are SSH round trips to the server named in the call, so an agent that polls in a loop costs that server a connection each time.
+
+<Warning title="Read mode is a limit on one process">
+  An agent with a shell on the same machine can still run `homebutler docker restart`. Combine `--max-risk read` with a client that doesn't give the agent a shell if you need the agent to be unable to change anything.
+</Warning>

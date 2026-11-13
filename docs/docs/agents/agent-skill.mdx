@@ -1,0 +1,62 @@
+---
+title: Agent skill
+description: "Install the homebutler agent skill, a SKILL.md file that tells an agent to use the MCP tools first and how to treat read, write and destructive tools, and see how it relates to the MCP server."
+---
+
+# Agent skill
+
+The homebutler agent skill is a single file, `SKILL.md`, that tells an agent how to use homebutler. This page covers what the skill says, how to install it, and how it relates to the [MCP server](/agents/mcp-server). The skill carries instructions only: it adds no tools, and the agent still needs the MCP server or the `homebutler` binary to do anything.
+
+## What the skill tells the agent
+
+The skill is written for an agent and is pinned to a homebutler version. Its main points:
+
+- **Use the MCP server, not the shell.** Start `homebutler mcp` and call tools. Shell commands are for the few things no tool exposes: `init`, `trust`, `watch install`, `watch tui`, `serve`, `deploy` and `upgrade`.
+- **Respect the risk classes.** The skill lists the tools by class: 27 `read`, 13 `write`, 4 `destructive`. Read tools need no confirmation, but the agent should read the machine it was asked about rather than every machine, and summarize logs and port tables instead of pasting them into a shared conversation. Write tools run when the request implies them, and the agent says afterwards what changed. A destructive tool runs only when the operator asked for that action on that target in the current turn.
+- **Start with `report`.** "What changed?" is answered by comparing with the last snapshot, so the skill tells the agent to call `report` first, not to sweep every tool.
+- **Branch on words, not sentences.** Changes carry a `kind` such as `replaced` or `port`. Suggested actions and `doctor` findings carry `runner` (`mcp`, `cli` or `shell`) and `tool`, so the agent checks `runner` before it offers to fix something.
+- **Treat refusals as answers.** When a tool refuses for lack of confirmation, the agent says what would be destroyed and lets the operator decide. It doesn't resend the call with the confirmation set.
+
+The skill also covers `trust` and password authentication, `watch` versus `watch tui`, `serve` and its token, notifications, Proxmox credentials, backups and drills, and installing apps.
+
+## Install the skill
+
+The skill lives in the repository at `skills/SKILL.md`. Its front matter sets `name` to `homebutler`.
+
+<Tabs>
+<TabItem value="claude-code" label="Claude Code">
+
+Claude Code reads a personal skill from `~/.claude/skills/<name>/SKILL.md` and a project skill from `.claude/skills/<name>/SKILL.md`. Download the file into a `homebutler` folder:
+
+```bash
+mkdir -p ~/.claude/skills/homebutler
+curl -fsSL https://raw.githubusercontent.com/Higangssh/homebutler/main/skills/SKILL.md -o ~/.claude/skills/homebutler/SKILL.md
+```
+
+Then ask the agent about your server, such as "What changed on my server since yesterday?", or invoke the skill by name with `/homebutler`.
+
+</TabItem>
+<TabItem value="openclaw" label="OpenClaw">
+
+The skill is published to ClawHub as `@higangssh/homebutler`. Install it with OpenClaw:
+
+```bash
+openclaw skills install @higangssh/homebutler
+```
+
+The skill's front matter lists `homebutler` as a required binary, so OpenClaw expects it on the `PATH`.
+
+</TabItem>
+</Tabs>
+
+Check the installed file against the repository when you update homebutler. The skill pins the homebutler version it installs and gives its release checksums, so a copy from an older release tells the agent to install an older version.
+
+## How the skill and the MCP server fit together
+
+| | Skill | MCP server |
+| --- | --- | --- |
+| Is | Instructions in a text file | A running process with 44 tools |
+| Gives the agent | When to call a tool, which risk classes need an operator, what to do with a refusal | The tools and their typed responses |
+| Enforces | Nothing: the agent follows it | The `--max-risk` ceiling and the `confirm` arguments |
+
+Use both. The skill makes an agent careful, and the server makes the careful path the only one available. To stop an agent from changing anything whatever it decides, run the server with [`--max-risk read`](/agents/read-only-mode).

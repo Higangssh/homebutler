@@ -1,0 +1,145 @@
+---
+title: Docker containers
+description: List, inspect, read logs from, restart and stop Docker containers with homebutler docker, and how homebutler finds the Docker socket.
+---
+
+# Docker containers
+
+`homebutler docker` lists your containers, shows their resource use, configuration, processes and logs, and restarts or stops them. It runs the `docker` CLI on the machine, so you need `docker` on your `PATH` and a user that can reach the Docker daemon.
+
+The outputs on this page show only the example containers `homepage`, `notes` and `logger`. Your output lists every container on the machine.
+
+| Command | What it does | Risk class |
+| --- | --- | --- |
+| `docker list` | Lists containers, running and stopped. | read |
+| `docker stats` | Shows CPU, memory, network and disk use of running containers. | read |
+| `docker inspect <container>` | Summarizes one container's configuration and state. | read |
+| `docker top <container>` | Lists the processes inside a container. | read |
+| `docker logs <container> [lines]` | Prints the end of a container's logs. | read |
+| `docker restart <container>` | Restarts a container. | write |
+| `docker stop <container>` | Stops a container. | destructive |
+
+Every command accepts `--json`. To run a command on another machine, add `--server <name>` for a server from your config, or `--all` for every server with `docker list` and `docker stats`. See [Multi-server](/running/multi-server).
+
+## Check your containers
+
+`docker list` prints one row per container. `ls` is an alias:
+
+```bash
+homebutler docker list
+```
+
+```text
+CONTAINER            IMAGE                          STATE      STATUS
+homepage     web:1                  running    Running · 4m
+notes        node:lts-alpine                running    Running · 13m
+```
+
+A stopped container shows `exited` in `STATE` and a `Stopped · ...` status. With `--json`, each container has `id` (12 characters), `name`, `image`, `status`, `state`, and `ports`. The table leaves `ports` out.
+
+`docker stats` takes a one-time sample for the running containers:
+
+```bash
+homebutler docker stats
+```
+
+```text
+CONTAINER            CPU %      MEM USAGE                MEM %      NET I/O              BLOCK I/O            PIDS
+logger       0.00%      10.94MiB / 7.755GiB      0.14%      586B / 126B          0B / 0B              7
+notes        0.00%      360KiB / 7.755GiB        0.00%      1.53kB / 126B        4.1kB / 12.3kB       1
+```
+
+`docker inspect` shows the image, state, restart policy, published ports, mounts and networks. It never prints environment variable values, so the output is safe to paste into a ticket:
+
+```bash
+homebutler docker inspect logger
+```
+
+```text
+📦 logger
+   Image     web:1
+   State     running (up 0m)
+   Restart   unless-stopped · 0 restarts
+   Ports     0.0.0.0:8310 → 3000/tcp, [::]:8310 → 3000/tcp
+   Networks  bridge (172.17.0.13)
+```
+
+The `Mounts` line appears when the container has mounts, and `Health` when the image defines a health check. With `--json`, the same data is under `ports`, `mounts`, `networks` and `health`.
+
+`docker top` reads the process list from the host with `docker top`. It doesn't open a shell in the container. The table shows each process's full command line. With `--json`, `command` holds the kernel's name for the process, such as `MainThread` for the main thread of a Node.js process:
+
+```bash
+homebutler docker top homepage
+```
+
+```text
+PID      USER         COMMAND
+393880   root         node -e require("http").createServer((q,r)=>r.end("ok")).listen(3000)
+```
+
+### Read logs
+
+`docker logs` prints the last 50 lines by default. Pass a number to change that:
+
+```bash
+homebutler docker logs logger 3
+```
+
+```text
+=== logger (last 3 lines) ===
+tick 6
+tick 7
+tick 8
+```
+
+Output the container wrote to standard error is included. The line count must be a whole number, and a container name may contain only letters, digits, `-`, `_` and `.`, up to 128 characters, and can't start with `-`:
+
+```text
+error: invalid line count: abc (must be a positive integer)
+error: invalid container name: bad name
+```
+
+With `--json`, the result has `container`, `lines` and `logs`, where `logs` is one string with the lines joined by `\n`.
+
+## Restart or stop a container
+
+`docker restart` and `docker stop` act on one container by name and print the result:
+
+```bash
+homebutler docker restart logger
+homebutler docker stop logger
+```
+
+```text
+✅ restart: logger
+✅ stop: logger
+```
+
+With `--json`, the result is `action`, `container` and `status`, where `status` is `ok`. A name that doesn't exist exits with status 1 and Docker's message:
+
+```text
+error: failed to restart nosuch-c: Error response from daemon: No such container: nosuch-c
+```
+
+<Warning title="The command line doesn't ask for confirmation">
+`homebutler docker stop <container>` stops the container as soon as you press Enter. The confirmation step lives in the other interfaces: the [web dashboard](/running/web-dashboard) needs its token and a `confirm` field for a stop, and an MCP client sees `docker_stop` as a destructive tool that [read-only mode](/agents/read-only-mode) hides.
+</Warning>
+
+## How homebutler finds Docker
+
+Every command calls the `docker` CLI, so homebutler talks to the same daemon your shell does. Before the first call, it picks the socket in this order:
+
+1. If `DOCKER_HOST` is set, homebutler leaves it alone.
+2. If `/var/run/docker.sock` exists, the default is used.
+3. If `~/.colima/default/docker.sock` exists, homebutler sets `DOCKER_HOST` to it. This covers Colima on macOS.
+4. If `/run/user/<uid>/podman/podman.sock` exists, homebutler sets `DOCKER_HOST` to it. This covers rootless Podman on Linux.
+
+Docker Desktop on macOS needs no step of its own, because the `docker` CLI finds its socket through its own context. Podman works through the same `docker` command, for example when Podman provides one through its Docker compatibility package.
+
+When the daemon can't be reached, `list` and `stats` report it:
+
+```text
+error: docker daemon is not running: exit status 1
+```
+
+This is also what a wrong `DOCKER_HOST` produces. If the `docker` binary isn't on `PATH`, `list` and `stats` print `docker is not installed (binary not found in PATH)`.

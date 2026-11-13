@@ -1,0 +1,68 @@
+---
+title: wake
+description: "Sends a Wake-on-LAN magic packet to a MAC address or to a device from your config."
+---
+
+# homebutler wake
+
+Sends a Wake-on-LAN magic packet to a MAC address or to a device from your config.
+
+```bash
+homebutler wake <mac-address|name> [broadcast] [flags]
+```
+
+The packet is a UDP broadcast to port 9. The broadcast address is, in order: the second argument, the `broadcast` value of the matching `wake:` entry, then `255.255.255.255`.
+
+For the `wake:` config section, see [Wake-on-LAN](/apps/wake-on-lan).
+
+| Argument | Description |
+| --- | --- |
+| `mac-address\|name` | A MAC address in the form `AA:BB:CC:DD:EE:FF` or `AA-BB-CC-DD-EE-FF`, or a `name` from the `wake:` section of your config. |
+| `broadcast` | Broadcast address. Optional. |
+
+## Examples
+
+Wake a device by name.
+
+```bash
+homebutler wake desktop
+```
+
+```text
+✅ Magic packet sent to AA:BB:CC:DD:EE:FF (broadcast: 127.0.0.1)
+```
+
+Wake a MAC address with the default broadcast address.
+
+```bash
+homebutler wake AA:BB:CC:DD:EE:02
+```
+
+```text
+✅ Magic packet sent to AA:BB:CC:DD:EE:02 (broadcast: 255.255.255.255)
+```
+
+With `--json` the result is an object.
+
+```bash
+homebutler wake desktop --json
+```
+
+```text
+{
+  "action": "wake",
+  "mac": "AA:BB:CC:DD:EE:FF",
+  "broadcast": "127.0.0.1",
+  "status": "sent"
+}
+```
+
+A name that is not in the config is read as a MAC address, and fails.
+
+```bash
+homebutler wake nothing
+```
+
+```text
+error: invalid MAC address: nothing (expected format: AA:BB:CC:DD:EE:FF)
+```

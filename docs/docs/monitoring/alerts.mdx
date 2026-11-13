@@ -1,0 +1,173 @@
+---
+title: Alert thresholds
+description: Check CPU, memory and disk against thresholds with homebutler alerts, watch continuously with --watch, ignore containers that stop on purpose, and define alert rules that notify, restart or run a command.
+---
+
+# Alert thresholds
+
+`homebutler alerts` compares CPU, memory and every disk with your thresholds and reports each as `ok`, `warning` or `critical`. Add `--watch` to repeat the check, set `alerts.ignore` to silence containers that stop on purpose, and define `alerts.rules` to restart or repair something when a threshold trips.
+
+## Check the thresholds
+
+```bash
+homebutler alerts
+```
+
+```text
+   CPU:     31.7% (threshold: 90%) ✅
+   Memory:  40.5% (threshold: 85%) ✅
+   Disk /: 7% (threshold: 90%) ✅
+```
+
+The thresholds come from the `alerts` section of your config. Without one, the defaults apply.
+
+| Key | Default | Unit |
+| --- | --- | --- |
+| `alerts.cpu` | `90` | Percent |
+| `alerts.memory` | `85` | Percent |
+| `alerts.disk` | `90` | Percent, applied to each mount |
+
+```yaml
+alerts:
+  cpu: 80
+  memory: 70
+  disk: 85
+```
+
+`config validate` reports a value outside 0 to 100 as an error and a value of `0` as a warning, because `0` alerts on every check. A reading is `critical` at or above the threshold, `warning` from 90% of the threshold up to it, and `ok` below that. With `--json`, each of `cpu`, `memory` and the entries in `disks` carries `status`, `current` and `threshold`:
+
+```json
+{
+  "cpu": {
+    "status": "ok",
+    "current": 10.63,
+    "threshold": 90
+  },
+  "memory": {
+    "status": "ok",
+    "current": 40.56,
+    "threshold": 85
+  }
+}
+```
+
+[Doctor](/changes/doctor) uses the same thresholds for its `system` findings.
+
+## Watch continuously
+
+```bash
+homebutler alerts --watch --interval 1m
+```
+
+`--watch` checks on every interval and prints a line only when a state changes. `--interval` takes a Go duration such as `30s` or `5m` and defaults to `30s`. An invalid value fails with `error: invalid interval "2x": time: unknown unit "x" in duration "2x"`. Press Ctrl+C to stop.
+
+The first check reports everything that is already over a threshold, then each later change, including recovery. The same watch reports containers: one that leaves `running` is `critical`, and when it returns, an `ok` line follows.
+
+```text
+🔍 Watching local server (interval: 5s, Ctrl+C to stop)
+
+[11:34:09] 🔴 Container 'nightly' is exited
+[11:34:19] ✅ Container 'nightly' recovered (running)
+```
+
+A container that stays stopped is reported once when it stops, not on every check. If it is already stopped when the watcher starts, that is reported once too.
+
+`homebutler watch start` runs these same checks, so a [watch](/monitoring/watch) service already covers thresholds and containers. It also runs the rules below, which `alerts --watch` doesn't read from `config.yaml`. `watch start` sends each event to your [notification channels](/monitoring/notifications). `alerts --watch` prints events to the terminal and sends none, including the events of rules loaded with `--alerts-config`.
+
+## Ignore containers that stop on purpose
+
+A container that a cron job stops every night would notify you on every stop and every recovery. List it under `alerts.ignore` and neither is reported. `alerts.ignore` was added in 1.2.0.
+
+```yaml
+alerts:
+  ignore:
+    - nightly-backup
+```
+
+Names are container names as `docker ps` shows them. Every other container is still watched. In the test run, `nightly` stopped and restarted under two configs. With it listed, `alerts --watch` printed nothing about it. Without it, the two lines above appeared. The ignore list doesn't apply to `alerts.rules`. `config validate` lists the ignored names under `alerts` and warns about an empty entry.
+
+## Alert rules
+
+A rule in `alerts.rules` watches one metric and takes an action when it trips. `watch start` evaluates the rules on every interval and prints `Rules: <n> loaded, remediation active` when it starts.
+
+```yaml
+alerts:
+  rules:
+    - name: web-down
+      metric: container
+      watch:
+        - web
+        - db
+      action: restart
+      cooldown: 5m
+    - name: disk-full
+      metric: disk
+      threshold: 90
+      action: exec
+      exec: docker image prune -f
+      timeout: 60s
+      cooldown: 1h
+```
+
+| Key | Required | What it does |
+| --- | --- | --- |
+| `name` | yes | A unique name. It appears in the output, in notifications and in the history. |
+| `metric` | yes | `cpu`, `memory`, `disk` or `container`. |
+| `threshold` | for `cpu`, `memory`, `disk` | A percentage from 1 to 100. The rule trips at or above it. The `disk` metric uses the fullest mount. |
+| `watch` | for `container` | The names to check. The rule trips when any of them isn't running or doesn't exist. |
+| `kind` | no | What the `watch` names are: `docker` (default), `systemd` or `pm2`. It chooses the restart command. |
+| `action` | yes | `notify`, `restart` or `exec`. |
+| `exec` | for `exec` | A shell command, run with `sh -c`. |
+| `timeout` | no | How long an `exec` command may run. Default `30s`. |
+| `cooldown` | no | The shortest time before the rule can trip again. Without it, the rule trips on every interval while the condition holds. |
+
+`config validate` checks every rule and fails on an unknown metric or action, a missing name, a duplicate name, a threshold outside 1 to 100, a `container` rule with no `watch`, and an `exec` rule with no command. It warns about unknown keys inside a rule. When rules fail to load, `watch start` continues with the thresholds and without the rules.
+
+The three actions:
+
+- **`notify`:** sends the event to your channels and records it.
+- **`restart`:** restarts each name in `watch`, using `docker restart`, `systemctl restart` or `pm2 restart` by `kind`. A target that is currently flapping is skipped, because restarting a loop feeds it, and the output says `skipped while flapping`. See [Watch](/monitoring/watch#detect-restart-loops).
+- **`exec`:** runs the command and records its output. A command containing a destructive pattern such as `rm -rf /`, `mkfs`, `dd if=`, `shutdown` or `reboot` is refused.
+
+This run used three rules with low thresholds so each action fired:
+
+```text
+  ⏱️  11:34:56  ⚠️  cpu-note triggered (cpu 29.9% >= 1%)
+  ⏱️  11:34:56  ⚠️  exec-demo triggered (memory 40.7% >= 1%)
+                 → Executing: echo remediation ran
+                 → ✅ remediation ran
+```
+
+The refused command from a rule that ran `echo reboot now`:
+
+```text
+  ⏱️  11:42:14  ⚠️  blocked-demo triggered (memory 38.9% >= 1%)
+                 → Executing: echo reboot now
+                 → ❌ blocked dangerous command: echo reboot now
+```
+
+When no rule trips, each interval prints `All clear` with the current CPU, memory and disk percentages.
+
+### Alert history
+
+Every rule that trips is recorded in `~/.homebutler/alerts-history.json`, which keeps the latest 500 entries.
+
+```bash
+homebutler alerts history
+```
+
+The table shows the latest 20 entries. Details longer than 30 characters are cut with `...`.
+
+```text
+TIME                 RULE               ACTION     DETAILS                        RESULT
+2026-10-25 11:28:03  svc-down           restart    app is exited          success
+2026-10-25 11:34:56  cpu-note           notify     cpu 29.9% >= 1%                success
+2026-10-25 11:34:56  exec-demo          exec       memory 40.7% >= 1%             success
+2026-10-25 11:34:56  unit-down          restart    missing is not found    failed
+```
+
+With `--json`, the command returns all stored entries with `timestamp`, `rule`, `metric`, `details`, `action_taken` and `action_result`. Without history, it prints `No alert history found.`
+
+## Create a starter config
+
+`homebutler alerts init` asks questions and writes `~/.config/homebutler/config.yaml` with mode `0600`, asking before it overwrites an existing file. Rules and notification settings in an older `~/.homebutler/alerts.yaml` are still read as a fallback, with a deprecation warning. Move them into `config.yaml`.

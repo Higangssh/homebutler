@@ -1,0 +1,250 @@
+---
+title: Web dashboard
+description: Start the homebutler web dashboard, keep it running as a service, protect it with a token, and read its report from a widget or script.
+---
+
+# Web dashboard
+
+This page shows how to run the homebutler web dashboard: starting it, choosing who can reach it, what the token unlocks, and how to read the report from another tool. The dashboard is built into the binary, so it needs no Node.js, no database and no extra install.
+
+## Start the dashboard
+
+```bash
+homebutler serve
+```
+
+```text
+homebutler dashboard: http://127.0.0.1:8080
+```
+
+The dashboard runs until you stop the command. Open the address in a browser.
+
+| Flag | Default | Meaning |
+| --- | --- | --- |
+| `--host` | `127.0.0.1` | Address to bind. `0.0.0.0` listens on every interface. |
+| `--port` | `8080` | Port to listen on. |
+| `--token` | none | Bearer token that every API request must carry. The `web.token` config key does the same. With neither set, `serve` reads `HOMEBUTLER_TOKEN`. |
+| `--demo` | off | Serve fixed sample data and make no system calls. |
+
+Binding to a public address prints a warning, and a second line when there is no token:
+
+```text
+⚠️  WARNING: binding to 0.0.0.0 exposes the dashboard to all network interfaces.
+   Set web.token in the config, or HOMEBUTLER_TOKEN in a container, to require authentication.
+homebutler dashboard: http://0.0.0.0:8080
+```
+
+A port that is taken stops the command with a suggestion:
+
+```text
+error: port 8080 is already in use. Try a different port:
+  homebutler serve --port 8081
+```
+
+`--demo` serves sample servers and containers, so you can look around without touching a real machine.
+
+<Note title="Go builds have no dashboard">
+  A binary installed with `go install` doesn't include the dashboard. `serve` then shows a page that says so. Use Homebrew, the install script or a release binary instead. See [Installation](/installation).
+</Note>
+
+### Reach it from another machine
+
+To open the dashboard from another computer, tunnel to it over SSH instead of binding a public address:
+
+```bash
+ssh -L 8080:localhost:8080 you@your-server
+```
+
+Then open `http://localhost:8080` on your own computer. If you bind a public address, set a token and put a reverse proxy with TLS in front: the token crosses the network in plain text otherwise.
+
+## What the dashboard shows
+
+The header has five tabs and, on the Dashboard tab, a server picker listing every entry in `servers:`.
+
+| Tab | What it answers | Contents |
+| --- | --- | --- |
+| **Dashboard** | What is true right now | Cards: **Server Overview**, **Proxmox VE**, **System Status**, **Docker Containers**, **Top Processes**, **Alerts**, **Network Ports**, **Wake-on-LAN**. |
+| **Report** | What changed since the last snapshot | **What changed**, **Needs attention**, **Notable changes**, **Suggested actions** and **Doctor**. |
+| **Watch** | What went down, and why | **Watched** targets and **Incidents**, with the logs captured at the time. |
+| **Apps** | Which apps are installed | The app catalog with install, uninstall and purge. |
+| **Config** | How homebutler is set up | **Servers**, **Alert Thresholds**, **Proxmox**, **Notifications** and **Wake-on-LAN Devices**. |
+
+The Dashboard tab's cards show:
+
+| Card | Shows |
+| --- | --- |
+| **Server Overview** | Every configured server with a status dot, CPU, memory and uptime. |
+| **Proxmox VE** | Cluster quorum, nodes, QEMU and LXC guests, storage, and collector warnings. |
+| **System Status** | CPU, memory and disk as color-coded bars. |
+| **Docker Containers** | Running and stopped containers, with uptime written as `Running · 4d`. |
+| **Top Processes** | The top 10 processes by CPU, with PID, CPU% and MEM%. |
+| **Alerts** | Each threshold as `OK`, `WARNING` or `CRITICAL`. |
+| **Network Ports** | Open ports with the process behind each. |
+| **Wake-on-LAN** | A wake button for each configured device. |
+
+Opening the Report tab doesn't save a snapshot, so loading it never changes what the next comparison uses. Saving one is a button, and it counts as an action.
+
+## Protect it with a token
+
+Set the token once in the config file:
+
+```yaml
+web:
+  token: <long-random-token>
+```
+
+A config file that holds a token must be mode `0600`. `homebutler serve --token <token>` overrides the file for one run, but puts the token in the process list for every user on the machine.
+
+With a token set, every `/api/` request needs the header, and the browser asks for the token before it shows anything:
+
+```bash
+curl -H "Authorization: Bearer <long-random-token>" http://127.0.0.1:8080/api/version
+```
+
+```text
+{"version":"1.7.0"}
+```
+
+A missing or wrong token gets `401` with `{"error":"unauthorized"}`.
+
+Without a token, the dashboard is read-only. The routes that change something are not registered, so they answer `404` and look the same as a path that doesn't exist:
+
+```text
+HTTP/1.1 404 Not Found
+{"error":"no such endpoint"}
+```
+
+The **Config** tab is read-only in that case too. `GET /api/config` reports whether settings can be edited in its `editable` field, which is `false` without a token and `true` with one.
+
+### The three action tiers
+
+With a token, the dashboard can act. How much it asks for depends on whether the action can be undone by another action.
+
+| Tier | The request carries | Actions |
+| --- | --- | --- |
+| Token | The bearer token | Restart a container, create a backup, run a drill, install or uninstall an app, add or remove a watch target, run a watch check, save a report snapshot, wake a device, send a test notification, start or reboot a Proxmox guest, save settings. |
+| Token and confirm | The token and `"confirm": true` in the body | Stop a container, shut down a Proxmox guest. These come back when you start them again. |
+| Token and confirm name | The token and `"confirm_name"` in the body, equal to the target | Restore a backup, purge an app and its data. The data doesn't come back, so you type the name of the thing you mean to lose. |
+
+A request that skips the confirmation is refused with `400` and a message that says what to send:
+
+```bash
+curl -X POST -H "Authorization: Bearer <token>" http://127.0.0.1:8080/api/docker/web/stop
+```
+
+```text
+{"error":"docker_stop stops a running service: send confirm=true to say that is what you meant"}
+```
+
+`confirm` has to be the JSON boolean `true`; the string `"true"` is refused. For purge and restore, the error names the value to send:
+
+```text
+{"error":"install_purge cannot be undone: send confirm_name=\"uptime-kuma\" to say that is the one you meant"}
+```
+
+`GET /api/capabilities` lists everything homebutler can do, with its risk class and, for each action, the HTTP method and path.
+
+## Keep it running
+
+`serve` stops with its terminal. To have the system start it for you, install a user service:
+
+```bash
+homebutler serve install --port 8080
+homebutler serve installed
+homebutler serve uninstall
+```
+
+`serve install` writes a systemd user unit on Linux or a launchd agent on macOS, then enables and starts it. `serve installed` reports whether the unit exists and the address it serves, and takes `--json`. `serve uninstall` stops the service and deletes the unit. Reinstalling needs `--force`, which stops the running service before writing the new unit. Overwriting the file alone isn't enough, because launchd keeps the old address live until the agent is unloaded.
+
+The service is user-level because the config it reads lives in your home folder. On macOS, a LaunchDaemon would also outlive the logged-in session that Docker Desktop needs.
+
+```text
+Installed: /home/you/.config/systemd/user/dev.homebutler.serve.service (systemd)
+Serving:   http://127.0.0.1:8080
+```
+
+The unit holds the address and, when you pass `--config`, the config path. It never holds the token: the service reads `web.token` from the config file at startup. To bind a public address, set `web.token` first. Without one, the install is refused:
+
+```text
+error: refusing to install a dashboard on 0.0.0.0 with no token: it would answer anyone who can reach this machine, and it stays up until you uninstall it
+  → set web.token in /home/you/.config/homebutler/config.yaml, or install on 127.0.0.1
+```
+
+On Linux, a user unit stops when you log out unless lingering is on. `serve install` prints the `loginctl enable-linger` command when it isn't. [`homebutler doctor`](/changes/doctor) reports an installed dashboard that is bound to a public address while the config has no token.
+
+## Read the report from another tool
+
+`GET /api/report` returns the same JSON as `homebutler report --json` without saving a snapshot, plus a `summary` object with two counts:
+
+```bash
+curl -H "Authorization: Bearer <token>" http://127.0.0.1:8080/api/report
+```
+
+The top-level keys, then the summary, from a baseline report on a host without Docker. `compared_to` appears when a previous snapshot exists, and `warnings` and `failed_collectors` appear when a collector fails:
+
+```text
+schema_version, timestamp, server_name, is_baseline, snapshot_saved, system, running_count, stopped_count, public_port_count, status, needs_attention, notable_changes, suggested_actions, warnings, failed_collectors, summary
+{"needs_attention": 2, "notable_changes": 1}
+```
+
+`needs_attention` and `notable_changes` are lists, and a widget can't count a list, so `summary` holds their lengths. Add `?server=<name>` to read another configured server over SSH. That response has the same `summary`, and the request saves nothing on that server. To save a snapshot there, use `POST /api/report/snapshot?server=<name>` or run `homebutler report` from cron on that machine.
+
+### Add a Homepage card
+
+To show on a [Homepage](https://gethomepage.dev) dashboard whether anything needs your attention, add this `customapi` widget to `services.yaml`:
+
+```yaml
+- Homelab:
+    - homebutler:
+        href: http://your-server:8080
+        description: what changed since the last snapshot
+        widget:
+          type: customapi
+          url: http://your-server:8080/api/report
+          refreshInterval: 60000
+          headers:
+            Authorization: Bearer <long-random-token>
+          mappings:
+            - field: summary.needs_attention
+              label: Needs attention
+              format: number
+            - field: summary.notable_changes
+              label: Changes
+              format: number
+            - field: running_count
+              label: Running
+            - field: stopped_count
+              label: Stopped
+```
+
+| Label | Field | What it counts |
+| --- | --- | --- |
+| Needs attention | `summary.needs_attention` | Findings worth acting on: a stopped container, memory or a disk over 85%, or a port newly open to every interface. `0` is the number you want. |
+| Changes | `summary.notable_changes` | Lines in the change list, including one for each comparison that couldn't be made. |
+| Running | `running_count` | Docker containers running now. |
+| Stopped | `stopped_count` | Docker containers stopped now. |
+
+Save a snapshot before relying on Changes. With no snapshot, Changes shows `1`, the line that says so. Loading the widget never saves one.
+
+Running and Stopped show `-` when Docker doesn't answer. homebutler sends `null` for both in that case. Their mappings leave out `format: number` on purpose, because that format renders `null` as `NaN`.
+
+`refreshInterval` is in milliseconds. Every request collects the whole report again, and Homepage's default is 10 seconds. Without a token on `serve`, remove the `headers` block.
+
+Homepage's default block display shows the first four fields of a card, and `display: list` shows all of them. This card was checked against Homepage 2.7.0: pasted with only the address and token filled in, it showed all four values, and `-` for Running and Stopped while Docker was unreachable.
+
+Replace `your-server` with an address the Homepage container can reach. Homepage makes the request from its own server, so the token never reaches the browser. If both run in Docker on one machine, `localhost` points at the Homepage container; use the machine's LAN address, or `host.docker.internal` on Docker Desktop.
+
+For Homepage in a container to reach it, `serve` has to bind an address beyond `127.0.0.1`. The token then crosses the network, so put `serve` behind a reverse proxy with TLS or a tunnel. The settings screen shows a warning when it sees a public bind.
+
+The routes and the `report --json` fields are part of the [1.0 compatibility promise](/reference/json-output). The page's HTML and styling are not.
+
+## Related pages
+
+<CardGroup cols={2}>
+  <Card title="Run in a container" icon="terminal" href="/running/container">
+    Serve the dashboard from the container image.
+  </Card>
+  <Card title="Configuration" icon="gear" href="/reference/configuration">
+    The `web` section and the other config keys.
+  </Card>
+</CardGroup>

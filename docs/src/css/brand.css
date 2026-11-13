@@ -1,0 +1,101 @@
+/*
+ * homebutler brand layer, loaded after theme.css.
+ * Distilled from the product's own UI and artwork: the web dashboard's CSS tokens (web/src/app.css),
+ * the dashboard and Report-tab screenshots, the report and doctor terminal cards (assets/*.svg), the
+ * social preview and homebutler.dev. GitHub-dark surfaces, the dashboard's blue accent, and its
+ * red / green / amber severity colours.
+ */
+
+:root {
+  --hb-red: #cf222e;
+  --hb-green: #1a7f37;
+  --hb-amber: #9a6700;
+  --hb-cyan: #0a7ea4;
+  /* The terminal cards are dark in both modes, like the README's report and doctor cards */
+  --hb-term-bg: #11151c;
+  --hb-term-bar: #1b212a;
+  --hb-term-line: #2a323d;
+  --hb-term-text: #c9d1d9;
+}
+[data-theme='dark'] {
+  --hb-red: #f85149;
+  --hb-green: #3fb950;
+  --hb-amber: #d29922;
+  --hb-cyan: #00add8;
+}
+
+/* Wordmark "Homebutler" as homebutler.dev writes it: semibold, tight tracking, in the website header's colour (#fafafa on dark; the heading ink in light mode, where near-white would vanish) */
+.ds-brand__wordmark { font-weight: 600; letter-spacing: -0.025em; color: var(--ds-heading); }
+[data-theme='dark'] .ds-brand__wordmark { color: #fafafa; }
+
+/* Callouts in the dashboard's severity colours */
+.ds-callout--note, .ds-callout--info { --ds-callout-fg: var(--ds-primary); }
+.ds-callout--tip { --ds-callout-fg: var(--hb-cyan); }
+.ds-callout--check { --ds-callout-fg: var(--hb-green); }
+.ds-callout--warning { --ds-callout-fg: var(--hb-amber); }
+
+/* Step counters: outlined pills, like the kind and severity badges on the Report tab */
+.ds-step::before {
+  background: transparent;
+  color: var(--ds-primary);
+  border: 1px solid var(--ds-primary-line);
+}
+
+/* Badges: outlined, coloured text, no fill (Report tab: replaced / port / new, FAIL / WARN / PASS) */
+.ds-badge { background: transparent !important; border: 1px solid currentColor; }
+
+/* Command output (```text blocks) as the README's terminal card: dark frame, title bar, window dots */
+.markdown div[class*='codeBlockContainer']:has(> div > pre.language-text) {
+  background: var(--hb-term-bg);
+  border: 1px solid var(--hb-term-line);
+  padding-top: 28px;
+  position: relative;
+  overflow: hidden;
+}
+.markdown div[class*='codeBlockContainer']:has(> div > pre.language-text)::before {
+  content: '';
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 28px;
+  background:
+    radial-gradient(circle at 16px 14px, #ff5f56 5px, transparent 5.5px),
+    radial-gradient(circle at 34px 14px, #ffbd2e 5px, transparent 5.5px),
+    radial-gradient(circle at 52px 14px, #27c93f 5px, transparent 5.5px),
+    var(--hb-term-bar);
+  border-bottom: 1px solid var(--hb-term-line);
+}
+.markdown pre.language-text.prism-code,
+[data-theme='dark'] .markdown pre.language-text.prism-code {
+  background-color: var(--hb-term-bg) !important;
+  color: var(--hb-term-text) !important;
+}
+.markdown pre.language-text .token-line,
+.markdown pre.language-text .token { color: var(--hb-term-text) !important; }
+.markdown div[class*='codeBlockContainer']:has(> div > pre.language-text) button { color: #8b949e; }
+
+/* Code blocks: flat GitHub-style frames, 6px corners, no tinted double frame */
+div[class*='codeBlockContainer'] {
+  --ds-frame: var(--ds-code-bg);
+  --ds-frame-line: var(--ds-border);
+  border-radius: 6px; padding: 0;
+}
+div[class*='codeBlockContent'], pre.prism-code, .prism-code { border-radius: 6px; }
+div[class*='codeBlockContent'], pre.prism-code, .prism-code { background-color: var(--ds-code-bg) !important; }
+.markdown div[class*='codeBlockContainer']:has(> div > pre.language-text) div[class*='codeBlockContent'] {
+  background: var(--hb-term-bg); border-radius: 0;
+}
+.markdown pre.language-text.prism-code { border-radius: 0; }
+
+/* The mascot under the introduction's opening paragraph */
+.markdown img.hb-intro-character { display: block; width: 160px; height: auto; margin: 0.5rem auto 1.75rem; }
+
+/* "Docs" label after the name: the Report tab's outlined badge (accent text and border, no fill) */
+.ds-brand__suffix {
+  font-family: var(--ds-font); font-size: 0.68rem; font-weight: 600; letter-spacing: 0.06em;
+  color: var(--ds-primary); background: transparent; border: 1px solid var(--ds-primary);
+  padding: 0.24rem 0.4rem 0.2rem; border-radius: 6px;
+}
+/* Room for icon + name + Docs label + theme switch on one row */
+html:root { --doc-sidebar-width: 316px; }
+.ds-sidebar .ds-brand { gap: 0.45rem; }
+.ds-sidebar .ds-brand__wordmark { font-size: 1.1rem; }

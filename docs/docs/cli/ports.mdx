@@ -1,0 +1,33 @@
+---
+title: ports
+description: "Lists open ports with the process that holds each one."
+---
+
+# homebutler ports
+
+Lists open ports with the process that holds each one.
+
+```bash
+homebutler ports [flags]
+```
+
+Process names for sockets owned by other users need root. When some names are missing, the output ends with a line suggesting `sudo homebutler ports`.
+
+## Examples
+
+List the open ports. The output is shortened to the first rows.
+
+```bash
+homebutler ports
+```
+
+```text
+PROTO  ADDRESS              PORT     PROCESS
+tcp    0.0.0.0              8080     
+tcp    127.0.0.1            53       
+tcp    0.0.0.0              3399     
+tcp    0.0.0.0              18502    
+tcp    0.0.0.0              18501    
+tcp    0.0.0.0              18500    
+tcp    0.0.0.0              18611    
+```

@@ -1,0 +1,199 @@
+---
+title: Doctor
+description: Run homebutler doctor for a read-only health check of resources, containers, ports, backups, watch and notifications, with a severity, a category and the next command on every finding.
+---
+
+# Doctor
+
+`homebutler doctor` checks the machine for the problems that usually hurt a self-hosted server and prints one finding per problem. Each finding has a severity, a category, an explanation, and the command to run next. The check is read-only: it changes nothing on the machine.
+
+```bash
+homebutler doctor
+```
+
+The output starts with an overall status and the finding counts. This run used a config that sets `alerts.memory` to `10`, so memory counts as almost full:
+
+```text
+🩺 Homebutler Doctor — homelab
+   2026-10-25T18:37:49Z
+
+❌ Status: FAIL  · pass 0 / warn 7 / fail 2
+
+❌ [system] Memory is almost full
+   Memory is 40%, threshold is 10%.
+   → Find memory-heavy processes now; otherwise containers may be killed unexpectedly.
+   $ homebutler ps --sort mem
+```
+
+Each finding has up to four lines: the severity icon, `[category]` and title; the detail; the action (`→`); and the command (`$`).
+
+| Flag | Default | What it does |
+| --- | --- | --- |
+| `--strict` | off | Exits with code `1` when the status is `warn` or `fail`. |
+| `--backup-max-age <duration>` | `168h` | Warns when the newest backup is older than this. Takes a Go duration such as `72h`. |
+| `--json` | off | Prints the result as JSON. |
+
+## Severities and exit codes
+
+A finding is `pass`, `warn` or `fail`. The overall `status` is `fail` if any finding fails, otherwise `warn` if any finding warns, otherwise `pass`.
+
+| Severity | Icon | Means |
+| --- | --- | --- |
+| `pass` | ✅ | The check ran and found nothing to fix. |
+| `warn` | ⚠️ | Worth a look. The server may be working. |
+| `fail` | ❌ | Something is broken or about to be. |
+
+Without `--strict`, `doctor` exits `0` whatever the status, because the diagnosis succeeded. The run above printed `Status: FAIL` and exited `0`. With `--strict`, a `warn` or `fail` status prints the findings and then exits `1` with this message on stderr:
+
+```text
+error: doctor found 8 warning(s) and 2 failure(s)
+```
+
+A `pass` status exits `0` with or without `--strict`. An invalid argument, such as `--backup-max-age 5x`, exits `1`:
+
+```text
+error: invalid argument "5x" for "--backup-max-age" flag: time: unknown unit "x" in duration "5x"
+```
+
+Use `--strict` in cron or CI so a warning stops the job.
+
+## Categories
+
+Every finding carries one of eleven `category` values. A script can filter on them: the list is fixed.
+
+| Category | What it covers |
+| --- | --- |
+| `system` | CPU, memory and disk against the `alerts` thresholds. |
+| `docker` | Stopped containers, and running containers that mount the Docker socket. |
+| `exposure` | Ports listening on all interfaces, and the installed web dashboard. |
+| `backup` | Whether backups exist, how old they are, whether they were drilled, and directory size. |
+| `report` | Whether a [report](/changes/report) baseline exists. |
+| `notifications` | Whether a notification channel exists and whether `watch` will use it. |
+| `watch` | Whether anything polls the watch list, and how full the incident history is. |
+| `config` | Config file permissions. |
+| `proxmox` | Proxmox VE endpoints: certificate trust and reachability. |
+| `incomplete` | A collector failed, so `doctor` could not check everything. |
+| `overall` | The single `pass` finding printed when no other finding exists: `No obvious issues found`. |
+
+## What each check looks at
+
+### System
+
+`system` compares the current reading with the `alerts` thresholds in your config. Without a config, the defaults apply. See [Alert thresholds](/monitoring/alerts).
+
+| Finding | Severity | Fires when |
+| --- | --- | --- |
+| `CPU is unusually busy` | `warn` | CPU is at or above `alerts.cpu` (default 90). |
+| `Memory is almost full` | `fail` | Memory is at or above `alerts.memory` (default 85). |
+| `Disk is almost full` | `fail` | A mount is at or above `alerts.disk` (default 90). One finding per mount. |
+| `Could not read system health` | `warn` | The system reading failed. |
+
+### Docker and exposure
+
+| Finding | Severity | Fires when |
+| --- | --- | --- |
+| `N container(s) are stopped` | `warn` | Any container is in a state other than `running`. The detail lists the names. |
+| `<name> mounts the Docker socket` | `warn` | A running container has `/var/run/docker.sock` mounted. It can create containers on the host as root. One finding per container. |
+| `N port(s) are listening on all interfaces` | `warn` | Any listener is bound to `0.0.0.0`, `::` or `*`. |
+| `Dashboard installed on <address>` | `pass` | A `serve install` unit exists. The detail says whether it is reachable only from this machine or from the network with `web.token` set. |
+| `An installed dashboard does not say what it binds` | `warn` | The unit names no `--host` and `--port`. |
+| `The installed dashboard answers the network with no token` | `fail` | The unit binds a non-loopback address and `web.token` is not set. |
+
+### Backups
+
+`doctor` reads the backup directory (`backup.dir`, `backup_dir`, or `~/.homebutler/backups/`) and takes each `.tar.gz` file's modification time as its age. The test run used an archive dated 10 days back:
+
+```text
+⚠️ [backup] Latest backup is older than expected
+   Latest backup is 10d old; expected within 7d.
+   → Run a fresh backup. If this app matters, follow up with a backup drill.
+   $ homebutler backup
+
+⚠️ [backup] No backup has ever been drilled
+   Backups exist and none has been restored to see whether it comes back.
+   → Drill one app to find out whether the archive is worth having.
+   $ homebutler backup drill --all
+```
+
+| Finding | Fires when |
+| --- | --- |
+| `No backups found` | The directory has no `.tar.gz` file. |
+| `Latest backup is older than expected` | The newest archive is older than `--backup-max-age`. |
+| `No backup has ever been drilled` | Archives exist and no [drill](/backups/drill) record does. |
+| `The newest backup has never been drilled` | The last drill predates the newest archive. |
+| `The last drill did not come back` | The most recent drill failed. |
+| `Backups have no retention limit and the directory is large` | The directory holds 20 GB or more and `backup.retention` is not set. |
+| `Could not check backups`, `Could not read backup timestamps`, `Could not check drill history`, `Could not read the drill history` | The directory or a record could not be read. |
+
+All backup findings are `warn`, so `--strict` exits `1` on a host that has backups and has never drilled one.
+
+The MCP `doctor` tool takes the same threshold as `backup_max_age_hours`, an integer number of hours.
+
+### Report, watch and notifications
+
+| Finding | Severity | Fires when |
+| --- | --- | --- |
+| `No report baseline yet` (`report`) | `warn` | `~/.homebutler/reports/snapshots/` has no snapshot. |
+| `No notification channel configured` (`notifications`) | `warn` | `notify` has no channel with all of its required keys. |
+| `Notifications are configured and switched off for watch` (`notifications`) | `warn` | A channel exists, the watch list is not empty, and `watch.notify.enabled` is `false`. |
+| `Watch notifications are on` (`notifications`) | `pass` | `watch.notify.enabled` is `true`, a notification channel is configured and the watch list is not empty. The detail says what `notify_on` sends. |
+| `N target(s) on the watch list and no service installed to check them` (`watch`) | `warn` | Targets exist and no [`watch install`](/monitoring/watch#run-watch-as-a-service) unit is installed. |
+| `N target(s) watched by an installed service` (`watch`) | `pass` | A unit is installed. |
+| `N of M incidents kept` (`watch`) | `warn` | The incident count reaches 80% of `watch.retention.max_incidents`. |
+
+The `watch` check looks for the unit file and doesn't ask systemd or launchd whether the service is running.
+
+### Config and Proxmox
+
+| Finding | Severity | Fires when |
+| --- | --- | --- |
+| `Config holds plaintext secrets and is readable by others (0644)` (`config`) | `fail` | The config file has secrets and is readable by other users. homebutler refuses to load it until you run `chmod 600`. |
+| `Proxmox endpoint "<name>" accepts any certificate` (`proxmox`) | `warn` | The endpoint sets `insecure: true`. |
+| `Proxmox endpoint "<name>" is fully readable` (`proxmox`) | `pass` | Version, cluster status and resources all answered. |
+| `Proxmox endpoint "<name>" is only partially readable` (`proxmox`) | `warn` | Some collectors answered. |
+| `Proxmox endpoint "<name>" could not be configured` (`proxmox`) | `fail` | The endpoint settings could not be loaded, such as a `token_file` that doesn't exist. The detail carries the error. |
+| `Proxmox endpoint "<name>" has no readable collectors` (`proxmox`) | `fail` | None answered. The action depends on whether the failure was configuration, TLS, authentication, authorization, the response, or the network. |
+
+Both of these came from the test run:
+
+```text
+❌ [config] Config holds plaintext secrets and is readable by others (0644)
+   open.yaml can be read by any user on this machine, and homebutler will refuse to load it.
+   → Restrict it to your account.
+   $ chmod 600 open.yaml
+
+⚠️ [docker] sock mounts the Docker socket
+   A container with /var/run/docker.sock mounted can create containers on the host as root, so it holds host root however unprivileged it looks. Some images need it; most do not.
+   → Confirm this container is one that needs it, and remove the mount if it is not.
+   $ homebutler docker inspect sock
+```
+
+### Incomplete
+
+When a collector fails, `doctor` adds an `incomplete` finding for each warning and still runs the checks it can. With `DOCKER_HOST` pointing at a missing socket:
+
+```text
+⚠️ [incomplete] Doctor could not check everything
+   docker: docker daemon is not running: exit status 1
+   → Fix this first so doctor can give a complete answer.
+   $ homebutler doctor
+```
+
+## Use doctor from a script
+
+`--json` returns the status, the counts and every finding. A finding carries `runner` and `tool` when it has a `command`. `runner` is `mcp` when an MCP tool runs the command and `tool` names it, `cli` when only the CLI can, and `shell` for a command that isn't homebutler's.
+
+```json
+{
+  "severity": "fail",
+  "category": "system",
+  "title": "Memory is almost full",
+  "detail": "Memory is 40%, threshold is 10%.",
+  "action": "Find memory-heavy processes now; otherwise containers may be killed unexpectedly.",
+  "command": "homebutler ps --sort mem",
+  "runner": "mcp",
+  "tool": "processes"
+}
+```
+
+The top level carries `schema_version`, `timestamp`, `server_name`, `status` and `summary` (`pass`, `warn` and `fail` counts). The `watch install` and `serve install` commands are CLI-only because the unit records the path of the binary that installs it. See [JSON output](/reference/json-output) for the rest.

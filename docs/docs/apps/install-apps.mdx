@@ -1,0 +1,199 @@
+---
+title: Install apps
+description: Install one of 15 self-hosted apps with Docker Compose using homebutler install, check it, stop it, and delete it, with the default port and notes for each app.
+---
+
+# Install apps
+
+`homebutler install <app>` writes a Docker Compose file for one of 15 self-hosted apps, starts it, and tracks it so you can check, stop, or delete it later. You need Docker with the Compose plugin and a free host port.
+
+| Command | What it does |
+| --- | --- |
+| `install list` | Lists the apps (alias `ls`). |
+| `install <app>` | Checks the machine, writes the compose file, and starts the app. |
+| `install status <app>` | Shows whether the app's containers are running. |
+| `install uninstall <app>` | Stops and removes the containers and keeps the data (alias `rm`). |
+| `install purge <app>` | Stops the app and deletes its containers, volumes and data. |
+
+Progress messages go to standard error. `install list` prints the app list as JSON with `--json`.
+
+## Install an app
+
+To see the apps and their descriptions, run `homebutler install list`. Then install one. This example installs Uptime Kuma on port 8301:
+
+```bash
+homebutler install uptime-kuma --port 8301
+```
+
+```text
+🔍 Checking prerequisites for uptime-kuma...
+✅ All checks passed
+
+📦 Installing uptime-kuma
+  Port:    8301 (default: 3001)
+  Path:    /home/you/.homebutler/apps/uptime-kuma
+
+✅ Installation complete!
+🌐 Access: http://localhost:8301
+📁 Config: /home/you/.homebutler/apps/uptime-kuma/docker-compose.yml
+
+💡 Useful commands:
+  homebutler install status uptime-kuma
+  homebutler docker logs uptime-kuma
+  homebutler install uninstall uptime-kuma
+```
+
+If the image isn't on the machine yet, Docker pulls it while the command runs.
+
+| Flag | What it does |
+| --- | --- |
+| `--port <number>` | Sets the host port, from 1 to 65535. Without it, the app's default port is used. |
+| `--media <path>` | Mounts a media folder, read-only. Applies to `plex` and `jellyfin` only; other apps ignore it. |
+| `--dry-run` | Runs the checks, prints the compose file and the `docker compose up -d` command, and starts nothing. |
+
+`--port` sets the port you open in the browser. Some apps publish other fixed host ports as well, listed in the table below.
+
+### What install writes
+
+Each app gets a folder under `~/.homebutler/apps/`:
+
+```text
+~/.homebutler/apps/
+├── installed.json
+└── uptime-kuma/
+    ├── docker-compose.yml
+    └── data/
+```
+
+`docker-compose.yml` is generated from a template for the app. Most apps keep their data in `data/` as a bind mount. `installed.json` records each installed app's name, folder and port. Running `install <app>` again after an uninstall overwrites the compose file. To keep changes you made to it, start the app with `docker compose -f <file> up -d` instead.
+
+To see a compose file before anything starts, use `--dry-run`. This example also mounts a media folder:
+
+```bash
+homebutler install jellyfin --media /home/you/media --port 8302 --dry-run
+```
+
+```yaml
+services:
+  jellyfin:
+    image: jellyfin/jellyfin:latest
+    container_name: jellyfin
+    restart: unless-stopped
+    ports:
+      - "8302:8096"
+    volumes:
+      - "/home/you/.homebutler/apps/jellyfin/data/config:/config"
+      - "/home/you/.homebutler/apps/jellyfin/data/cache:/cache"
+      - "/home/you/media:/media:ro"
+    environment:
+      - PUID=501
+      - PGID=1000
+```
+
+The compose file goes to standard output, so you can redirect it. `PUID` and `PGID` are the user and group ID of the user who runs `install`. The container name is the app's name, except for `pi-hole`, whose container is named `pihole`. Each app can be installed once on a machine.
+
+### Pre-checks
+
+Before it writes anything, `install` runs these checks and prints every problem it finds:
+
+1. `docker` is installed, the daemon answers, and `docker compose` is available. The first failing check ends the run, so you see one problem at a time.
+2. The host port isn't in use by a process or a published container port.
+3. For `pi-hole` and `adguard-home`, port 53 is free and the other DNS app isn't installed.
+4. For `nginx-proxy-manager`, ports 80 and 443 are free.
+5. The app isn't already running.
+
+A failed check ends the command with status 1 and nothing installed. For example, installing an app that is running:
+
+```text
+🔍 Checking prerequisites for uptime-kuma...
+❌ Pre-check failed:
+  • uptime-kuma is already running.
+    Run: homebutler install uninstall uptime-kuma
+error: fix the issues above and try again
+```
+
+## Check, stop, and delete an app
+
+`install status` asks Docker Compose for the state of the app's containers:
+
+```bash
+homebutler install status uptime-kuma
+```
+
+```text
+🟢 uptime-kuma: running
+```
+
+After the containers are gone the same command prints `🔴 uptime-kuma: stopped`. It exits with status 0 in both cases, and with status 1 when the app was never installed (`error: uptime-kuma is not installed`).
+
+`install uninstall` runs `docker compose down`. It removes the containers and network and leaves the folder and its data in place:
+
+```bash
+homebutler install uninstall uptime-kuma
+```
+
+```text
+🛑 Stopping uptime-kuma...
+✅ Stopped and removed containers
+💡 Data preserved at: /home/you/.homebutler/apps/uptime-kuma
+   To delete everything: homebutler install purge uptime-kuma
+```
+
+Install the app again with the same `install <app>` command to start it on the preserved data.
+
+<Warning title="Purge deletes the app's data">
+`install purge` runs `docker compose down -v`, removes leftover anonymous volumes of the app, and deletes the app's folder, including `data/`. Back the app up first with [`homebutler backup`](/backups/backup-and-restore).
+</Warning>
+
+```bash
+homebutler install purge uptime-kuma
+```
+
+```text
+⚠️  Purging uptime-kuma (containers + data)...
+✅ Completely removed
+```
+
+`purge` lists any Docker volume that is still there afterward, as `kept volume <name> (still exists)`. A purged app can't be purged or checked again: both commands print `error: uptime-kuma is not installed`.
+
+## Available apps
+
+Image tags are `latest` except where noted. Data folders are under `~/.homebutler/apps/<app>/data/`. `--port` sets the host port that maps to the container port in the third column.
+
+| App | Default port | Container port | Notes |
+| --- | --- | --- | --- |
+| `uptime-kuma` | 3001 | 3001 | Image `louislam/uptime-kuma:1`. Data in `data/`. |
+| `plex` | 32400 | 32400 | `--media` mounts a folder at `/data`, read-only. Config and transcode folders under `data/`. |
+| `vaultwarden` | 8080 | 80 | Data in `data/`. |
+| `filebrowser` | 8081 | 80 | Files in `data/`, accounts and settings in `config/` and `database/` beside it. See the note below. |
+| `it-tools` | 8082 | 80 | Keeps no data. |
+| `jellyfin` | 8096 | 8096 | `--media` mounts a folder at `/media`, read-only. Config and cache folders under `data/`. |
+| `gitea` | 3002 | 3000 | Also publishes host port 2222 for SSH (container port 22). Data in `data/`. |
+| `homepage` | 3010 | 3000 | Config in `data/config`. |
+| `stirling-pdf` | 8083 | 8080 | Image `frooodle/s-pdf`. Configs in `data/configs`. |
+| `speedtest-tracker` | 8084 | 80 | Image `lscr.io/linuxserver/speedtest-tracker`. Config in `data/config`. |
+| `mealie` | 9925 | 9000 | Data in `data/data`. |
+| `pi-hole` | 8088 | 80 | Also publishes host port 53 (TCP and UDP) and adds the `NET_ADMIN` capability. See the DNS notes below. |
+| `adguard-home` | 3000 | 3000 | Also publishes host port 53 (TCP and UDP). The port serves the setup screen. See the DNS notes below. |
+| `portainer` | 9443 | 9443 | Mounts the Docker socket. Served over HTTPS with a self-signed certificate. |
+| `nginx-proxy-manager` | 81 | 81 | Also publishes host ports 80 and 443. Data and certificates under `data/`. |
+
+### App-specific notes
+
+- **Portainer:** `install` prints `⚠️  Portainer requires Docker socket access. It will have full control over all containers.` before it installs. The socket path is `/var/run/docker.sock` when it exists, then `~/.colima/default/docker.sock`, then the Docker Desktop socket at `~/Library/Containers/com.docker.docker/Data/docker.sock`. `DOCKER_HOST` doesn't change it.
+- **Pi-hole and AdGuard Home:** port 53 must be free on the host. On Linux, `systemd-resolved` often holds it, and the pre-check suggests `sudo systemctl disable --now systemd-resolved`. Installing one while the other is installed is reported as a problem, because two DNS servers on one host conflict. Point your devices or router at the host's IP address once the app runs.
+- **Nginx Proxy Manager:** after the install, `install` prints `Default login: admin@example.com / changeme. Change immediately!`.
+- **filebrowser:** its upstream project is archived and gets no further releases or security fixes. The container runs as the user who installed it. If an install from before 1.4.0 still has its container, `uninstall` copies the accounts and settings out of its volumes first. If you changed the owner of `data/` to uid 1000 so uploads worked, change it back to your own user. An install already removed by an earlier release doesn't get its database back automatically, and `install` warns about it. To recover the newest copy from the unused volumes:
+
+  ```bash
+  homebutler install uninstall filebrowser
+  for v in $(docker volume ls -q --filter dangling=true); do
+    docker run --rm -v "$v":/v:ro busybox test -f /v/filebrowser.db && docker volume inspect -f '{{.CreatedAt}} {{.Name}}' "$v"
+  done
+  docker create --name filebrowser-recover -v <volume>:/database busybox
+  rm ~/.homebutler/apps/filebrowser/database/filebrowser.db
+  docker cp filebrowser-recover:/database/. ~/.homebutler/apps/filebrowser/database/
+  docker rm filebrowser-recover
+  homebutler install filebrowser
+  ```
+- **Plex and Jellyfin:** without `--media`, no media folder is mounted and the output suggests installing again with `--media /path/to/movies`. Run `install uninstall` first, because the pre-check stops an install of a running app.

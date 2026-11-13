@@ -1,0 +1,58 @@
+---
+title: How it works
+description: How homebutler compares snapshots, serves the same answer to people and agents, reaches other machines over SSH, and where it keeps its files.
+---
+
+# How it works
+
+homebutler runs when you call it, compares what it finds with what it saved last time, and reports the difference. It has no daemon and no database, so the machines it watches run nothing between commands.
+
+## Snapshots
+
+`homebutler report` collects the system, containers, processes and ports into a snapshot and compares it with the newest snapshot in `~/.homebutler/reports/snapshots/`. The first run saves a baseline. Each later run saves a new snapshot and keeps the latest 30, or the number you set with `--keep`.
+
+The comparison works on identity, not counts. A container recreated under the same name keeps the container count the same, and homebutler reports it as `replaced` with the old and new container IDs. A comparison that can't be made, such as when Docker was down during either snapshot, is reported as `skipped`. See [Report](/changes/report) for every kind of change.
+
+## One core, four interfaces
+
+| Interface | Transport | Reaches |
+| --- | --- | --- |
+| CLI | stdout and stderr | A person at a terminal, scripts, cron |
+| MCP server | JSON-RPC over stdio | Agents in MCP clients |
+| Web dashboard | HTTP on port 8080 | A browser |
+| TUI dashboard | The terminal | A person watching every server live |
+
+Every interface calls the same code. `report --json` and the `report` MCP tool return the same fields, and `GET /api/report` returns those plus `summary`, so a script, an agent and the dashboard read the same answer. The CLI and the MCP server open no ports. The web dashboard binds to `127.0.0.1` unless you pass `--host`.
+
+## Risk classes
+
+Every MCP tool is classed `read`, `write` or `destructive`:
+
+- **read:** looks and changes nothing, such as `system_status` or `docker_list`.
+- **write:** changes something you can undo by doing something else, such as `docker_restart` or `install_app`.
+- **destructive:** stops a service or deletes data, such as `docker_stop` or `install_purge`.
+
+An agent started with `--max-risk read` isn't offered the `write` and `destructive` tools, except `report`, which runs without saving a snapshot. See [Read-only mode](/agents/read-only-mode). The web dashboard applies the same split: actions need a token, and destructive ones also need a confirmation. See [Web dashboard](/running/web-dashboard).
+
+## Other machines
+
+To run a command on another machine, homebutler connects over SSH and runs the `homebutler` binary installed there with the same command. `homebutler deploy` puts the binary on each server, and `homebutler upgrade` updates them all. `--server <name>` targets one server from your config and `--all` runs on every server in parallel.
+
+Proxmox VE is the exception: homebutler reads a Proxmox endpoint through its API with a token, not over SSH. See [Proxmox VE](/apps/proxmox).
+
+## What leaves the machine
+
+homebutler sends no telemetry and collects no usage data. It makes a network call when a command asks for one, such as `upgrade` fetching a release from GitHub or an alert going to your notification channel.
+
+Its output is about your machines, even in read mode. It includes hostnames, addresses, open ports, user names, host paths, and log lines from `docker logs`, so check where you paste it.
+
+## Where files live
+
+| Path | Holds |
+| --- | --- |
+| `~/.config/homebutler/config.yaml` | Your config. See [Configuration](/reference/configuration) for the other locations homebutler checks. |
+| `~/.homebutler/reports/snapshots/` | Report snapshots |
+| `~/.homebutler/watch/` | The watch list and incident history |
+| `~/.homebutler/backups/` | Backup archives, unless `backup_dir` is set |
+| `~/.homebutler/apps/` | One folder per installed app, with its `docker-compose.yml` and data |
+| `~/.homebutler/alerts-history.json` | Alert history |

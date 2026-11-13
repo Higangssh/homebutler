@@ -1,0 +1,32 @@
+---
+title: network
+description: "Discovers the devices on the local network."
+---
+
+# homebutler network
+
+Discovers the devices on the local network.
+
+| Command | What it does |
+| --- | --- |
+| [`scan`](#network-scan) | Pings every address in the subnet of the first network interface and lists the devices in the ARP table. |
+
+## `network scan`
+
+Pings every address in the subnet of the first network interface and lists the devices in the ARP table.
+
+```bash
+homebutler network scan [flags]
+```
+
+The scan needs the `arp` program on the host. It stops after 30 seconds. Hostnames come from reverse DNS lookups.
+
+On a host without `arp` installed:
+
+```bash
+homebutler network scan
+```
+
+```text
+error: failed to read ARP table: exec: "arp": executable file not found in $PATH
+```

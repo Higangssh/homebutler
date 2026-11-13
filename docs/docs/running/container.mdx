@@ -1,0 +1,117 @@
+---
+title: Run in a container
+description: Run the homebutler image as a web dashboard that watches other machines over SSH, with the mounts, token and host key setup it needs.
+---
+
+# Run in a container
+
+This page shows how to run the homebutler container image as a dashboard hub that watches your other machines over SSH. The image is the hub, not the probe: a container can't see the machine it runs on, so you add that machine to `servers:` like any other.
+
+You need Docker on the machine that hosts the hub, and the [homebutler binary on each server](/running/multi-server#put-homebutler-on-each-server) the hub should watch.
+
+## Start the hub
+
+The image is `ghcr.io/higangssh/homebutler`. Its default command is `serve --host 0.0.0.0 --port 8080`, and it reads its config from `/config/config.yaml`. Start it with a config folder, a state volume, your SSH folder and a token:
+
+```bash
+docker run -d --name homebutler -p 8080:8080 \
+  -v ~/.config/homebutler:/config \
+  -v homebutler-state:/root/.homebutler \
+  -v ~/.ssh:/root/.ssh:ro \
+  -e HOMEBUTLER_TOKEN="$(openssl rand -hex 16)" \
+  ghcr.io/higangssh/homebutler:latest
+```
+
+To print the token when you need it to sign in:
+
+```bash
+docker exec homebutler printenv HOMEBUTLER_TOKEN
+```
+
+Or as a compose file:
+
+```yaml
+services:
+  homebutler:
+    image: ghcr.io/higangssh/homebutler:latest
+    container_name: homebutler
+    environment:
+      HOMEBUTLER_TOKEN: ${HOMEBUTLER_TOKEN:?set it in .env}
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./config:/config
+      - homebutler-state:/root/.homebutler
+      - ~/.ssh:/root/.ssh:ro
+    restart: unless-stopped
+
+volumes:
+  homebutler-state:
+```
+
+Set `HOMEBUTLER_TOKEN` in the environment or in a `.env` file next to the compose file. Open `http://localhost:8080` and paste the token when the dashboard asks for it.
+
+### What each mount holds
+
+| Mount | Holds | Why this way |
+| --- | --- | --- |
+| `/config` | `config.yaml` with your `servers:` | Read-write, because the dashboard's **Config** tab saves to it. |
+| `/root/.homebutler` | [Report](/changes/report) snapshots and [watch](/monitoring/watch) incidents | Put it on a volume. Without one, every restart makes the next report a new baseline. |
+| `/root/.ssh` | The private key and `known_hosts` | Read-only, so nothing in the container adds to your trusted hosts. |
+
+A `config.yaml` that contains a password or a token must be mode `0600`, or homebutler refuses to load it.
+
+## Use a token
+
+Outside a container, `serve` on a non-loopback address only prints a warning when you give it no token. Inside a container it refuses to start:
+
+```text
+error: refusing to serve 0.0.0.0 from a container without a token: this dashboard would be reachable from the network with nothing in front of it
+  → set HOMEBUTLER_TOKEN in the container's environment, or bind 127.0.0.1 and put a proxy in front
+```
+
+The check looks for `/.dockerenv`, `/run/.containerenv` or the environment variable `HOMEBUTLER_CONTAINER=1`, which the image sets.
+
+`serve` uses the first of these that is set:
+
+1. `--token` on the command line, which is visible in `ps`.
+2. `web.token` in the mounted `config.yaml`.
+3. `HOMEBUTLER_TOKEN` in the environment. Compose, Unraid, Portainer and TrueNAS can pass it as a secret.
+
+When a `web.token` or `--token` takes precedence, `serve` says so on standard error:
+
+```text
+HOMEBUTLER_TOKEN is set but ignored: web.token in /config/config.yaml takes precedence
+```
+
+An empty `HOMEBUTLER_TOKEN`, as an unfilled template field leaves it, counts as unset, so the container refuses to start. The settings screen never writes the variable's value into `config.yaml`, and no API response carries it. `docker inspect` shows it. To edit settings from the dashboard, you still need a mounted `config.yaml`.
+
+The token travels in an `Authorization` header over plain HTTP. Put a reverse proxy with TLS, or an SSH tunnel, in front of port 8080 if the dashboard is reachable beyond your own machine. See [Web dashboard](/running/web-dashboard) for what the token unlocks.
+
+## Trust each server's host key
+
+The hub mounts `~/.ssh` read-only, so it can't record a host key on first use. The first request to a server that isn't in `known_hosts` fails:
+
+```text
+error: [edge] the host key for edge-host:22 is new, and ~/.ssh/known_hosts is read-only here: cannot write known_hosts: open /root/.ssh/known_hosts: read-only file system
+  → Trust it where the key lives, then restart this container: homebutler trust edge
+```
+
+In the dashboard, the same failure shows as a server with the status `unavailable` and the message `The host key does not match the one homebutler trusts. Check it from a terminal before connecting again.`
+
+Trust the server from a machine where `~/.ssh` is writable, with the same config, and restart the hub:
+
+```bash
+homebutler trust edge
+docker restart homebutler
+```
+
+Servers with `auth: password` always need this step, as they do outside a container.
+
+## What the container can't do
+
+- **Report on its own host.** Mark the host `local: true` in `servers:` and the dashboard shows it as `unavailable` with this message: `homebutler is running in a container, which cannot see the machine it is on. Watch that machine either by running homebutler on it directly, or by adding it to servers: and reaching it over SSH.` `GET /api/status` answers `501` with the same sentence. `GET /api/servers/<name>/status` for that server answers `200` with the container's own numbers. To watch the host, add it as an SSH server with its own address.
+- **Answer MCP calls about the host.** `homebutler mcp` in the image refuses `system_status`, `open_ports`, `processes`, `network_scan`, `alerts`, `inventory_scan`, `inventory_export`, `report` and `doctor` when a call leaves out `server` or names a `local: true` server. The error is the same sentence the dashboard shows. Calls that name a server reached over SSH work as usual.
+- **Read the host's Docker.** The image has no Docker CLI, and the setup above mounts no Docker socket. `homebutler docker list` inside the container prints `error: docker is not installed (binary not found in PATH)`.
+- **Run `watch`.** `watch` supervises containers on the machine it runs on, which here is the container. Run `watch` on the machines you monitor instead.
+- **Answer CLI commands about the host.** `docker exec homebutler homebutler status` prints the container's own numbers, under the container's ID as the hostname. Use the dashboard, or `--server <name>`, for the machines in `servers:`.

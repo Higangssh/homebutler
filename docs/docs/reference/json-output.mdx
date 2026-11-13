@@ -1,0 +1,160 @@
+---
+title: JSON output and stability
+description: How homebutler's --json output is shaped, which fields and words are frozen since 1.0, and which parts of the output are meant for people and can change.
+---
+
+# JSON output and stability
+
+This page describes the shape of homebutler's `--json` output and states what 1.0 freezes: the parts a script, an agent or a widget can rely on across releases, and the parts written for people that can change. The same fields come back from the CLI, the [MCP server](/agents/mcp-server) and the [web dashboard's](/running/web-dashboard) routes.
+
+## Get JSON
+
+`--json` is a flag on every command. Commands that return data print JSON on standard output:
+
+```bash
+homebutler status --json
+```
+
+```json
+{
+  "schema_version": 1,
+  "hostname": "homelab",
+  "os": "linux",
+  "arch": "amd64",
+  "uptime": "14h 55m",
+  "cpu": {
+    "usage_percent": 72.81,
+    "cores": 4
+  },
+  "memory": {
+    "total_gb": 7.75,
+    "used_gb": 3.03,
+    "usage_percent": 39.08
+  },
+  "disks": [
+    {
+      "mount": "/",
+      "total_gb": 19,
+      "used_gb": 1.2,
+      "usage_percent": 7
+    }
+  ],
+  "time": "2026-10-25T11:13:43-07:00"
+}
+```
+
+The output above is shortened to one disk. Three behaviors apply to every command:
+
+- Errors go to standard error as text, such as `error: server "nope" not found in config. Available servers: [homelab]`, and the exit code is `1`. JSON mode doesn't change that.
+- `version` prints its single line of text with or without `--json`.
+- With `--all`, the JSON is an array with one object per server: `{"server": "<name>", "data": {…}}` or `{"server": "<name>", "error": "<message>"}`. See [Multi-server](/running/multi-server#run-commands-on-servers).
+
+## What is frozen
+
+From 1.0, these don't change except in a major release. A script that depends on them keeps working across upgrades:
+
+| Frozen | Meaning |
+| --- | --- |
+| Field names and types | Every key is `snake_case`. A field that changes type, such as a string becoming an object, counts as a break. |
+| `schema_version` | `report`, `doctor` and `status` carry `schema_version: 1` at the top level. It changes only in a major release. |
+| Lists are never `null` | A list field is `[]` and a map field is `{}` when empty, in the CLI, MCP and HTTP output alike. |
+| Absence is `null` | `null` marks a value that is not known, such as `running_count` when Docker didn't answer. |
+| `failed_collectors` | Names the collectors that didn't answer, from a fixed set per command. |
+| Vocabularies | The words listed below. |
+| MCP tools | Names, argument names and types, and risk classes (`read`, `write`, `destructive`). |
+| HTTP routes | Path, method, and what the caller must send (token, `confirm`, `confirm_name`). |
+| `doctor` exit codes | Including with `--strict`. |
+| Documented config keys | Names and meanings, as in [Configuration](/reference/configuration). |
+| Saved snapshots | `report` reads snapshots written by any release from 0.18.0 on. |
+| `watch` incident start times | `prev_started_at` and `curr_started_at` are RFC 3339 timestamps in UTC, or an empty string when unknown. |
+
+Frozen means the shape. The shape of a field does not promise that the value is always present: some keys are optional, and the output omits them when empty. Read an optional key with a default.
+
+### Empty lists and unknown values
+
+An empty answer is an empty list, not `null`:
+
+```bash
+homebutler watch list --json
+```
+
+```json
+[]
+```
+
+A count that couldn't be measured is `null`, and the collector that failed is named in `failed_collectors`. This `report` ran with Docker and `ss` missing from `PATH`, shortened to the fields involved:
+
+```text
+failed_collectors ["docker", "ports", "processes"]
+running_count null
+stopped_count null
+public_port_count null
+```
+
+Treat a count as trustworthy only when its collector isn't in `failed_collectors`. The set is closed for each command: `report` can name `docker`, `ports` and `processes`; `inventory_scan` can name `docker` and `ports`; `proxmox_status` can name `version`, `cluster` and `resources`. The dashboard's own refresh uses a different key, `refresh_failed_collectors`.
+
+### Words that fields can hold
+
+| Field | Words |
+| --- | --- |
+| `report` change `kind` | `gone`, `new`, `replaced`, `image`, `state`, `port`, `disk`, `skipped` |
+| `doctor` finding `severity` | `pass`, `warn`, `fail` |
+| `doctor` finding `category` | `backup`, `config`, `docker`, `exposure`, `incomplete`, `notifications`, `overall`, `proxmox`, `report`, `system`, `watch` |
+| Suggested command `runner` | `mcp`, `cli`, `shell` |
+| `alerts` `status` | `ok`, `warning`, `critical` |
+| `config validate` `severity` | `error`, `warning` |
+| `watch` target `kind` | `docker`, `systemd`, `pm2` |
+| Crash `category` | `oom`, `segfault`, `sigterm`, `panic`, `dependency`, `fatal_error`, `timeout`, `error`, `clean_restart`, `unknown` |
+| Crash `confidence` | `high`, `medium`, `low` |
+| Install `status` | `installed`, `failed`, `uninstalled`, `purged` |
+| Proxmox guest action | `start`, `shutdown`, `reboot` |
+
+New words can be added in a minor release. A word is removed or renamed only in a major release, so branch on the words you know and handle the others as unknown.
+
+## Sentences and typed fields
+
+Some fields hold a sentence written for a person. `report --json` has `status` and `warnings` as arrays of strings, and each change and finding has a `text`; `doctor` findings have `title`, `detail` and `action`. These fields keep their names and stay arrays of strings. The words inside them can change, so don't parse them.
+
+When you need a value, use the typed field next to the sentence. A report change has `kind`, `target` and `detail` alongside `text`:
+
+```json
+{
+  "kind": "new",
+  "target": ":8080/tcp",
+  "text": "new: :8080/tcp"
+}
+```
+
+A suggested action has `command`, `runner` and `tool` alongside `text`, when the action maps to a command. A typed field you need that doesn't exist is a gap worth [reporting](https://github.com/Higangssh/homebutler/issues) rather than a reason to split a sentence.
+
+## What is not frozen
+
+- Terminal output: layout, colors, wording and emoji. Use `--json` for anything a program reads.
+- Log lines, including what `serve` prints.
+- Tool and flag descriptions.
+- The order of items in a list. Sort by a field you depend on.
+- The dashboard's HTML, CSS and bundle. The routes it calls are frozen.
+- Unknown config keys: homebutler ignores them, and the warning that `config validate` prints can change.
+- Anything this site doesn't document.
+
+Adding a tool, an optional field, a config key, a route or a `kind` word is allowed in any release, with a changelog entry. A caller that ignores fields it doesn't know keeps working.
+
+## How a frozen item gets replaced
+
+1. The replacement is added, and both work.
+2. The old item is marked deprecated in the changelog, and in its own description where it has one.
+3. Both stay for at least one minor release.
+4. The old item is removed in the next major release.
+
+A rename follows the same path, because a rename is a removal and an addition.
+
+## Related pages
+
+<CardGroup cols={2}>
+  <Card title="Upgrading" icon="arrow" href="/running/upgrading">
+    What an upgrade changes, and how to bring every server level.
+  </Card>
+  <Card title="Report" icon="search" href="/changes/report">
+    The eight kinds of change and the fields of a report.
+  </Card>
+</CardGroup>

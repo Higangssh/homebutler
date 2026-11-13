@@ -1,0 +1,248 @@
+---
+title: Troubleshooting
+description: Fix the errors homebutler prints when connecting to servers, deploying and upgrading, serving the dashboard, reading the config, and installing apps.
+---
+
+# Troubleshooting
+
+## Servers and SSH
+
+### `SSH HOST KEY CHANGED`
+
+```text
+error: [edge] ⚠️  SSH HOST KEY CHANGED (192.168.1.20:22)
+  The server's host key does not match the one in ~/.ssh/known_hosts.
+  This could mean:
+    1. The server was reinstalled or its SSH keys were regenerated
+    2. A man-in-the-middle attack is in progress
+
+  → If you trust this change: homebutler trust edge --reset
+  → If unexpected: do NOT connect and investigate
+```
+
+The server presents a different host key from the one saved in `~/.ssh/known_hosts`. If you reinstalled the server or regenerated its keys, run `homebutler trust edge --reset`, compare the fingerprint it prints with the server's, and answer `y`. If you changed nothing, don't connect.
+
+### `this host is not in ~/.ssh/known_hosts, and this server signs in with a password`
+
+```text
+error: [pw] this host is not in ~/.ssh/known_hosts, and this server signs in with a password (192.168.1.20:22)
+  homebutler will not send a password to a host it has not been told to trust: whatever answers at that
+  address would receive it, and a wrong address looks exactly like a wrong password afterwards.
+  → Check that the address is the machine you mean, then: homebutler trust pw
+```
+
+Servers with `auth: password` don't record host keys on first use. Check the address, then run `homebutler trust <name>`. See [Trust host keys](/running/multi-server#trust-host-keys).
+
+### `~/.ssh/known_hosts is read-only here`
+
+```text
+error: [edge] the host key for edge-host:22 is new, and ~/.ssh/known_hosts is read-only here: cannot write known_hosts: open /root/.ssh/known_hosts: read-only file system
+  → Trust it where the key lives, then restart this container: homebutler trust edge
+```
+
+The container mounts `~/.ssh` read-only, so it can't record a new host key. Run `homebutler trust <name>` on a machine where the folder is writable, then restart the container. See [Run in a container](/running/container#trust-each-servers-host-key).
+
+### `failed to load SSH key`
+
+```text
+error: [nokey] failed to load SSH key (/home/you/missing_key): open /home/you/missing_key: no such file or directory
+  → Check this server's 'key' in /home/you/.config/homebutler/config.yaml
+```
+
+The file named in `key:` can't be read. With no `key:` set, homebutler tries `~/.ssh/id_ed25519` and `~/.ssh/id_rsa`, and fails with `no SSH key found (tried ~/.ssh/id_ed25519, ~/.ssh/id_rsa). Specify key path in config or use auth: password` when neither parses. `homebutler config validate` warns about a key file that doesn't exist before you connect.
+
+### `unable to authenticate`
+
+```text
+error: [pw] SSH connection failed (192.168.1.20:22): ssh: handshake failed: ssh: unable to authenticate, attempted methods [none password], no supported methods remain
+  → Check: server online? correct host/port? firewall rules?
+  → Config: /home/you/.config/homebutler/config.yaml
+```
+
+The server answered and refused the credentials. Check `user`, `auth` and the key or password in the config, and that the server's SSH daemon allows that method for that user.
+
+### `connection refused` or `connection timed out`
+
+```text
+error: [dead] SSH connection failed (192.168.1.30:22): dial tcp 192.168.1.30:22: connect: connection refused
+  → Check: server online? correct host/port? firewall rules?
+  → Config: /home/you/.config/homebutler/config.yaml
+```
+
+Nothing answers at that address and port. Check `host` and `port` in the config and that the SSH daemon is running. A host that doesn't answer at all reports `connection timed out` after 10 seconds.
+
+### `sh: homebutler: not found`
+
+```text
+error: [edge] remote command failed: Process exited with status 127
+  → Output: sh: homebutler: not found
+  → Check if homebutler is installed on the remote server: homebutler deploy edge
+```
+
+The SSH connection works, but the server has no `homebutler` on its `PATH`. Install it with `homebutler deploy --server edge`, or set `bin:` on the server entry to the binary's path. The `deploy edge` in the hint is missing the `--server` flag; the command to run is the one above.
+
+### `the homebutler on <server> is <version>, and does not have <command>`
+
+```text
+error: [edge] the homebutler on edge is 0.17.0, and does not have `report`
+  → This one is 1.7.0. Bring them level: homebutler upgrade
+```
+
+The server runs an older binary that predates the command. Run `homebutler upgrade`. See [Upgrading](/running/upgrading).
+
+### `docker is not installed` or `"ss": executable file not found` on a server
+
+```text
+   ⚠️  docker: docker is not installed (binary not found in PATH)
+   ⚠️  ports: failed to list ports: exec: "ss": executable file not found in $PATH
+   ⚠️  processes: exit status 1
+```
+
+The command ran on the server, but the server lacks a program the command needs. `report` marks those parts `skipped` and names the collectors in `failed_collectors`. Install Docker, or the package that provides `ss`, on the server. `homebutler docker list --server edge` fails with `error: [edge] remote command failed: Process exited with status 1`, and a line `→ Output: error: docker is not installed (binary not found in PATH)`.
+
+### `deploy`, `upgrade` or an `--all` command fails on one server
+
+`deploy`, `upgrade` and every command run with `--all` try every server and print each result, then exit `1` if any failed. The message names them, such as `deploy failed on 1 of 2 servers: edge` or `status failed on 1 of 2 servers: edge`. For the detail, read the server's `❌` line, the `status` of each entry in the JSON that `deploy` prints, the `status` in `upgrade --json`, or the `error` entry in `--all --json`.
+
+### `runs on this machine only; --server is not supported`
+
+```text
+error: install runs on this machine only; --server is not supported
+```
+
+The command can't reach another server. Run it without the flag, on the machine it should act on. [Multi-server](/running/multi-server) lists the commands that take `--server` and `--all`.
+
+### `does not run with --all`
+
+```text
+error: docker restart does not run with --all; use --server <name> for one server. --all runs: alerts, backup list, docker list, docker stats, doctor, network scan, ports, …
+```
+
+The line is shortened. Name one server with `--server`.
+
+## Dashboard and container
+
+### `refusing to serve ... from a container without a token`
+
+```text
+error: refusing to serve 0.0.0.0 from a container without a token: this dashboard would be reachable from the network with nothing in front of it
+  → set HOMEBUTLER_TOKEN in the container's environment, or bind 127.0.0.1 and put a proxy in front
+```
+
+Inside a container, `serve` on a non-loopback address requires a token. Set `HOMEBUTLER_TOKEN`, or set `web.token` in the config, or bind `127.0.0.1`. An empty `HOMEBUTLER_TOKEN` counts as unset. See [Run in a container](/running/container#use-a-token).
+
+### `port 8080 is already in use`
+
+```text
+error: port 8080 is already in use. Try a different port:
+  homebutler serve --port 8081
+```
+
+Another process listens on that port. Pick another one with `--port`.
+
+### Dashboard buttons return `404 no such endpoint`
+
+```text
+HTTP/1.1 404 Not Found
+{"error":"no such endpoint"}
+```
+
+Without a token, the routes that change something don't exist, and the Config tab is read-only. Set `web.token` in the config, or start with `--token`, and restart `serve`. See [Protect it with a token](/running/web-dashboard#protect-it-with-a-token).
+
+### `401 unauthorized`
+
+```text
+{"error":"unauthorized"}
+```
+
+A dashboard with a token requires `Authorization: Bearer <token>` on every `/api/` request. Send the header, or enter the token in the browser when it asks.
+
+### A server shows `unavailable` with `homebutler is running in a container`
+
+```text
+homebutler is running in a container, which cannot see the machine it is on. Watch that machine either by running homebutler on it directly, or by adding it to servers: and reaching it over SSH.
+```
+
+A server marked `local: true` can't be read from inside a container. Replace it with an SSH entry for the host. See [What the container can't do](/running/container#what-the-container-cant-do).
+
+### `refusing to install a dashboard on ... with no token`
+
+```text
+error: refusing to install a dashboard on 0.0.0.0 with no token: it would answer anyone who can reach this machine, and it stays up until you uninstall it
+  → set web.token in /home/you/.config/homebutler/config.yaml, or install on 127.0.0.1
+```
+
+`serve install` won't register a public, unauthenticated dashboard. Set `web.token` or install on `127.0.0.1`. When a unit already exists, the error is `<path> already exists; pass --force to overwrite it`.
+
+## Configuration
+
+### A setting has no effect
+
+```text
+Findings
+   ⚠️ Line 1: field notifiy not found in the homebutler config
+      → Did you mean "notify"? Unrecognised keys are ignored silently, so this line currently has no effect.
+```
+
+homebutler ignores keys it doesn't recognize. Run `homebutler config validate`, which lists them with line numbers. `config validate --strict` exits `1` on warnings, which suits a CI check.
+
+### Commands ignore the config file I named
+
+`--config` and `HOMEBUTLER_CONFIG` aren't checked for existence, so a mistyped path runs on built-in defaults without an error. `homebutler config validate` reports:
+
+```text
+   ❌ Config file /home/you/cfg/none.yaml does not exist.
+      → It was selected by --config flag. Commands fall back to built-in defaults rather than failing, so this is easy to miss.
+```
+
+### `permissions are too open`
+
+```text
+error: config error: config file /home/you/cfg/perm.yaml contains plaintext secrets but permissions are too open (0644); run: chmod 600 /home/you/cfg/perm.yaml
+```
+
+A config with a password, token or webhook URL can't be group- or world-readable. Run the `chmod 600` command from the message. `homebutler doctor` still runs, so it can report the problem.
+
+### `~/.homebutler/alerts.yaml is deprecated`
+
+```text
+warning: ~/.homebutler/alerts.yaml is deprecated, move rules/notify into config.yaml
+```
+
+homebutler read the legacy alerts file because `config.yaml` has no `notify` or `alerts.rules`. Move those sections into `config.yaml` and delete the old file. See [Files from earlier versions](/reference/configuration#files-from-earlier-versions).
+
+## Installing apps
+
+### `Port 53 is in use`
+
+```text
+🔍 Checking prerequisites for pi-hole...
+❌ Pre-check failed:
+  • Port 53 is in use (possibly systemd-resolved). Disable it: sudo systemctl disable --now systemd-resolved
+error: fix the issues above and try again
+```
+
+Pi-hole and AdGuard Home need port 53. Something else on the machine holds it, often `systemd-resolved` on Linux. Free the port, then install again. Nothing was installed.
+
+### `unknown app`
+
+```text
+error: unknown app "pihole". Available: vaultwarden, filebrowser, mealie, portainer, uptime-kuma, it-tools, gitea, speedtest-tracker, pi-hole, homepage, stirling-pdf, adguard-home, plex, jellyfin, nginx-proxy-manager
+```
+
+App names are exact. Use a name from the list, such as `pi-hole`.
+
+## Upgrades
+
+### `upgrade` fails with a permission error
+
+`upgrade` replaces the binary in its own folder. When your user can't write there, the error suggests `sudo homebutler upgrade`. On a remote server whose binary another user owns, run `homebutler deploy --server <name>`, which installs through `sudo` where the account has it.
+
+## Report a bug
+
+Open an issue at [github.com/Higangssh/homebutler/issues](https://github.com/Higangssh/homebutler/issues) and include:
+
+- The output of `homebutler version`.
+- The command you ran, and its output with `-v` (verbose errors) added.
+- The output of `homebutler config validate --json`, with any secrets removed.
+- For a server problem, the server's operating system and `homebutler version` run on it.

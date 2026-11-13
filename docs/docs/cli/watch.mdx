@@ -1,0 +1,404 @@
+---
+title: watch
+description: "Tracks container restarts, captures the logs around each one, and keeps a history you can browse."
+---
+
+# homebutler watch
+
+Tracks container restarts, captures the logs around each one, and keeps a history you can browse.
+
+Watch records live under `~/.homebutler/watch/`: the watch list in `targets.json`, one JSON file per incident under `incidents/`.
+
+`watch` runs on the machine you type it on: it refuses `--server` and `--all` and exits `1`.
+
+To set up watching end to end, see [Watch](/monitoring/watch).
+
+| Command | What it does |
+| --- | --- |
+| [`add`](#watch-add) | Adds a Docker container, a systemd unit, or a PM2 app to the watch list. |
+| [`check`](#watch-check) | Checks every Docker target on the watch list once and records any restart it finds. |
+| [`history`](#watch-history) | Lists the recorded restart incidents. |
+| [`install`](#watch-install) | Registers `watch start` with the host so monitoring survives logout and reboot. |
+| [`installed`](#watch-installed) | Reports whether the watch unit is registered, and where it is. |
+| [`list`](#watch-list) | Shows the watch list with restart counts and the time of the last check. |
+| [`remove`](#watch-remove) | Removes a target from the watch list. |
+| [`show`](#watch-show) | Prints one incident: the restart times, the crash analysis, and the logs captured after the restart. |
+| [`start`](#watch-start) | Monitors the watch list in the foreground until you press Ctrl+C. |
+| [`tui`](#watch-tui) | Opens the terminal dashboard that monitors every configured server. |
+| [`uninstall`](#watch-uninstall) | Stops the watch unit and removes its file. |
+
+## `watch add`
+
+Adds a Docker container, a systemd unit, or a PM2 app to the watch list.
+
+```bash
+homebutler watch add [name] [flags]
+```
+
+| Argument | Description |
+| --- | --- |
+| `name` | Container name, systemd unit name (for example `nginx.service`), or PM2 app name. Optional. Without a name and with kind `docker`, the command lists the running containers and exits. |
+
+| Flag | Type | Default | Description |
+| --- | --- | --- | --- |
+| `--kind` | string | `docker` | What the name refers to: `docker`, `systemd`, or `pm2`. Without `--kind`, a name makes the command ask you to pick the type, which fails when input is not a terminal. |
+
+<Note title="Names are not checked when you add them">
+
+The watch list accepts a systemd or PM2 name that does not exist on the host. `watch add --kind systemd nothing.service` prints `Added systemd "nothing.service" to watch list.` and the entry stays in the list.
+
+</Note>
+
+Add a container.
+
+```bash
+homebutler watch add --kind docker web
+```
+
+```text
+Added docker "web" to watch list.
+```
+
+Without `--kind` and without a terminal, the command stops.
+
+```bash
+homebutler watch add web < /dev/null
+```
+
+```text
+error: --kind flag is required when stdin is not a terminal
+```
+
+An unknown kind is an error.
+
+```bash
+homebutler watch add --kind nomad x
+```
+
+```text
+error: invalid kind "nomad": must be docker, systemd, or pm2
+```
+
+## `watch check`
+
+Checks every Docker target on the watch list once and records any restart it finds.
+
+```bash
+homebutler watch check [flags]
+```
+
+Targets of kind `systemd` and `pm2` are skipped, because only `watch start` can monitor them. The command lists the skipped targets.
+
+```bash
+homebutler watch check
+```
+
+```text
+Checked 1 docker target(s).
+No restarts detected.
+
+⚠️  Skipped 2 target(s) that check cannot inspect:
+  nothing.service (systemd)
+  api (pm2)
+  → These are only monitored while running: homebutler watch start
+```
+
+## `watch history`
+
+Lists the recorded restart incidents.
+
+```bash
+homebutler watch history [flags]
+```
+
+Alias: `incidents`.
+
+| Flag | Type | Default | Description |
+| --- | --- | --- | --- |
+| `--container` | string | - | Show only the incidents of this target. |
+| `--limit` | integer | - | Show only the most recent N incidents. `0` shows all of them. |
+| `--logs` | boolean | `false` | Include the captured logs in `--json` output. The table never shows logs. |
+
+```bash
+homebutler watch history
+```
+
+```text
+CONTAINER             INCIDENT ID                           DETECTED              INFO
+web           web-20261025-111946.106-1e2bb7  2026-10-25 11:19:46   unknown
+```
+
+Filter by target. With no incidents for that target the command prints a single line.
+
+```bash
+homebutler watch history --container nothing
+```
+
+```text
+No restart history recorded.
+```
+
+## `watch install`
+
+Registers `watch start` with the host so monitoring survives logout and reboot.
+
+```bash
+homebutler watch install [flags]
+```
+
+homebutler runs no daemon of its own. The command writes a user-level unit named `dev.homebutler.watch`: a systemd user unit on Linux, a launchd agent on macOS. It then enables and starts the unit. The unit runs `homebutler watch start`.
+
+The unit is user-level because the watch list lives in your home folder.
+
+| Flag | Type | Default | Description |
+| --- | --- | --- | --- |
+| `--force` | boolean | `false` | Replace a unit that already exists. Without it, an existing unit is an error. |
+
+On a host where the systemd user manager is not reachable, the unit file is written and the start fails. The output shows the error. Run `watch uninstall` to remove the file.
+
+```bash
+homebutler watch install
+```
+
+```text
+error: wrote /home/you/.config/systemd/user/dev.homebutler.watch.service but could not start it: systemctl --user enable --now dev.homebutler.watch.service: exit status 1
+Failed to connect to bus: No such file or directory
+```
+
+A second install stops at the existing unit.
+
+```bash
+homebutler watch install
+```
+
+```text
+error: /home/you/.config/systemd/user/dev.homebutler.watch.service already exists; pass --force to overwrite it
+```
+
+## `watch installed`
+
+Reports whether the watch unit is registered, and where it is.
+
+```bash
+homebutler watch installed [flags]
+```
+
+Before the install:
+
+```bash
+homebutler watch installed
+```
+
+```text
+Not installed. systemd would be written to /home/you/.config/systemd/user/dev.homebutler.watch.service
+    homebutler watch install
+```
+
+After the unit file was written:
+
+```bash
+homebutler watch installed
+```
+
+```text
+Installed: /home/you/.config/systemd/user/dev.homebutler.watch.service (systemd)
+```
+
+## `watch list`
+
+Shows the watch list with restart counts and the time of the last check.
+
+```bash
+homebutler watch list [flags]
+```
+
+Alias: `ls`.
+
+```bash
+homebutler watch list
+```
+
+```text
+NAME                      KIND       ADDED                  RESTARTS   LAST CHECKED
+web               docker     2026-10-25 11:19:26    0          2026-10-25 11:19:26
+nothing.service   systemd    2026-10-25 11:19:27    -          -
+api               pm2        2026-10-25 11:19:27    -          -
+```
+
+## `watch remove`
+
+Removes a target from the watch list.
+
+```bash
+homebutler watch remove <container> [flags]
+```
+
+| Argument | Description |
+| --- | --- |
+| `container` | The name used in `watch add`. |
+
+```bash
+homebutler watch remove api
+```
+
+```text
+Removed "api" from watch list.
+```
+
+A name that is not in the list is an error.
+
+```bash
+homebutler watch remove api
+```
+
+```text
+error: container "api" is not in the watch list
+```
+
+## `watch show`
+
+Prints one incident: the restart times, the crash analysis, and the logs captured after the restart.
+
+```bash
+homebutler watch show <incident-id> [flags]
+```
+
+| Argument | Description |
+| --- | --- |
+| `incident-id` | The incident ID from the first column of `watch history`. |
+
+```bash
+homebutler watch show web-20261025-111946.106-1e2bb7
+```
+
+```text
+Incident:  web-20261025-111946.106-1e2bb7
+Container: web
+Detected:  2026-10-25 11:19:46
+Previous Start: 
+Current Start:  2026-10-25T18:19:45.519969168Z
+
+=== Crash Analysis ===
+Category:   unknown
+Reason:     SIGKILL, not reported as OOM-killed
+Confidence: low
+Signal:     SIGKILL
+
+=== Post-Restart Logs ===
+```
+
+An ID that does not exist is an error.
+
+```bash
+homebutler watch show nope
+```
+
+```text
+error: incident "nope" not found
+```
+
+## `watch start`
+
+Monitors the watch list in the foreground until you press Ctrl+C.
+
+```bash
+homebutler watch start [flags]
+```
+
+Docker targets are followed through Docker events, so a restart is seen as it happens. Systemd and PM2 targets are polled every `--interval`. The same process also checks the CPU, memory, and disk thresholds from your config and runs the rules from your alerts config.
+
+To keep it running after you log out, use `watch install`.
+
+| Flag | Type | Default | Description |
+| --- | --- | --- | --- |
+| `--interval` | string | `30s` | How often to poll systemd and PM2 targets and the resource thresholds. Accepts a Go duration such as `30s` or `1m`. The minimum is `5s`. |
+
+Start monitoring with a 5 second interval, then restart a watched container from another terminal. The output is shortened: the lines about other containers on the host are removed.
+
+```bash
+homebutler watch start --interval 5s
+```
+
+```text
+Starting monitors (polling interval=5s). Press Ctrl+C to stop.
+  Docker targets: 1, Systemd targets: 1, PM2 targets: 1
+  Proxmox endpoints: 1
+[11:19:28] ⚠️ CPU         85.1% (threshold: 90%)
+[11:19:37] ✅ CPU        recovered (44.4%)
+[11:19:51] INCIDENT: web (incident web-20261025-111946.106-1e2bb7)
+  Crash: SIGKILL, not reported as OOM-killed (unknown, confidence: low)
+
+Stopping all monitors.
+```
+
+An interval below the minimum is an error.
+
+```bash
+homebutler watch start --interval 1s
+```
+
+```text
+error: interval must be at least 5s
+```
+
+So is an interval that is not a duration.
+
+```bash
+homebutler watch start --interval abc
+```
+
+```text
+error: invalid interval "abc": time: invalid duration "abc"
+```
+
+## `watch tui`
+
+Opens the terminal dashboard that monitors every configured server.
+
+```bash
+homebutler watch tui [flags]
+```
+
+The dashboard needs a terminal. Without one the command stops.
+
+The dashboard is described in [Terminal dashboard](/running/tui).
+
+Run it with no terminal attached.
+
+```bash
+homebutler watch tui < /dev/null
+```
+
+```text
+error: could not open a new TTY: open /dev/tty: no such device or address
+```
+
+## `watch uninstall`
+
+Stops the watch unit and removes its file.
+
+```bash
+homebutler watch uninstall [flags]
+```
+
+```bash
+homebutler watch uninstall
+```
+
+The output on a host where the supervisor could not be reached. The file is removed either way:
+
+```text
+⚠️  could not stop it cleanly: systemctl --user disable --now dev.homebutler.watch.service: exit status 1
+Failed to connect to bus: No such file or directory
+✅ removed /home/you/.config/systemd/user/dev.homebutler.watch.service
+```
+
+With no unit installed, the command is an error.
+
+```bash
+homebutler watch uninstall
+```
+
+```text
+error: no unit installed at /home/you/.config/systemd/user/dev.homebutler.watch.service
+```

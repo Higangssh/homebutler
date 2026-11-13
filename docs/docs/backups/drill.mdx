@@ -1,0 +1,192 @@
+---
+title: Backup drill
+description: Boot an app from a backup archive on its own network and port, check that it answers an HTTP health check, and record the result for doctor.
+---
+
+# Backup drill
+
+`homebutler backup drill` starts a second copy of an app from a backup archive and requires the copy to answer an HTTP health check. A passing drill shows that the archive unpacks and the app runs on its data. You need the `docker` CLI and an archive made by [`homebutler backup`](/backups/backup-and-restore).
+
+## Run a drill
+
+Pass the name of an app that the archive holds. The drill uses the newest archive in the backup folder:
+
+```bash
+homebutler backup drill uptime-kuma
+```
+
+```text
+🔍 Backup Drill — uptime-kuma
+
+  📦 Backup: /home/you/backups/backup_2026-10-25_111645.532.tar.gz
+  📏 Size: 28.2 KB
+  🔐 Integrity: ✅ tar valid (6 files)
+
+  🚀 Boot: ✅ container started in 2s
+  🌐 Health: ✅ HTTP 200 on port 39991
+  ⏱️  Total: 18s
+
+  ✅ DRILL PASSED
+```
+
+The app name is the Compose service name in the archive, and it has to be one of the apps in the table below. The number in the `Integrity` line counts the entries in the archive, and the port on the `Health` line is a free host port that the drill picked for this run.
+
+| Flag | What it does |
+| --- | --- |
+| `--archive <path>` | Drills that archive instead of the newest one in the backup folder. |
+| `--all` | Drills every app in the archive that has a health check, in alphabetical order. Takes no app name. |
+| `--json` | Prints the result as JSON. |
+
+The newest archive is the last one in the folder when sorted by file name, which is the order of the timestamps in the names.
+
+### Apps with a health check
+
+The drill knows how to check these apps. An app counts as a match by its service name in the archive.
+
+| App | Path | Accepted status codes | Container port |
+| --- | --- | --- | --- |
+| `adguard-home` | `/` | 200, 302 | 3000 |
+| `gitea` | `/` | 200 | 3000 |
+| `homepage` | `/` | 200 | 3000 |
+| `jellyfin` | `/health` | 200 | 8096 |
+| `nginx-proxy-manager` | `/` | 200, 301 | 81 |
+| `pi-hole` | `/admin` | 200, 301 | 80 |
+| `plex` | `/web` | 200, 301, 302 | 32400 |
+| `portainer` | `/` | 200, 301, 302 | 9000 |
+| `uptime-kuma` | `/` | 200 | 3001 |
+| `vaultwarden` | `/alive` | 200 | 80 |
+
+For any other app, the drill stops before it starts anything:
+
+```text
+error: no health check defined for "it-tools"
+```
+
+### What a drill does
+
+1. Finds the archive and counts its entries with `tar`. A damaged archive fails here.
+2. Reads `manifest.json` and finds the app in it.
+3. Creates a Docker network named `drill-net-<id>` and asks the operating system for a free host port.
+4. Unpacks each of the app's mounts into a temporary folder.
+5. Starts the app's image, as recorded in the manifest, in a container named `drill-<app>-<id>`. The container joins the new network, mounts the unpacked folders at the original container paths, and publishes the health check's container port on the free host port.
+6. Waits up to 60 seconds for the container to run. The container exiting early ends the wait with a failure.
+7. Requests the health check path on `localhost`, every 2 seconds for up to 30 seconds, until the status code is one of the accepted ones.
+8. Removes the container, the network and the temporary folder, whether the drill passed or failed.
+
+The running copy of the app isn't touched. The image has to be on the machine or pullable, because the drill starts it by name from the manifest.
+
+### A failed drill
+
+A drill that doesn't pass prints what stopped it and exits with status 1. Drilling an app the archive doesn't hold fails like this:
+
+```bash
+homebutler backup drill gitea
+```
+
+```text
+🔍 Backup Drill — gitea
+
+  📦 Backup: /home/you/backups/backup_2026-10-25_111645.532.tar.gz
+  📏 Size: 28.2 KB
+  🔐 Integrity: ✅ tar valid (6 files)
+
+  🚀 Boot: ❌ container failed to start
+  ⏱️  Total: 0s
+
+  ❌ DRILL FAILED
+  💡 Run: homebutler backup --service gitea
+error: gitea did not come back from the backup
+```
+
+The `Boot` line is the same for every failure before the container runs. The cause is in the `error` field of the JSON output; here it is `service "gitea" not found in backup`. A damaged archive fails earlier, at the `Integrity` line:
+
+```text
+  🔐 Integrity: ❌ tar invalid
+```
+
+## Read the result in a script
+
+The exit code carries the verdict, so a script or a cron job doesn't need to parse the text.
+
+| Exit code | Meaning |
+| --- | --- |
+| `0` | The drill passed. With `--all`, every app passed. |
+| `1` | The drill failed, or the command could not run: no archive found, an unknown app, `--all` with no drillable app, or a bad flag. |
+
+`--json` prints the full result to standard output and still sets the exit code:
+
+```bash
+homebutler backup drill uptime-kuma --json
+```
+
+```json
+{
+  "app": "uptime-kuma",
+  "archive": "/home/you/backups/backup_2026-10-25_111645.532.tar.gz",
+  "size": "28.2 KB",
+  "file_count": 6,
+  "integrity": true,
+  "booted": true,
+  "boot_seconds": 8,
+  "health_status": 200,
+  "health_port": "46437",
+  "passed": true,
+  "total_seconds": 25,
+  "drilled_at": "2026-10-25T18:18:22Z"
+}
+```
+
+`error` and `logs` appear only on a failure. `logs` holds the last 20 lines of the drill container's output.
+
+### Drill every app
+
+`--all` runs one drill per app. Any failing app makes the whole command exit with status 1:
+
+```bash
+homebutler backup drill --all
+```
+
+```text
+🔍 Backup Drill — all apps
+
+  gitea     ❌ FAILED  (boot failed: docker run failed: exit ...)
+  homepage  ✅ PASSED  (3s)
+
+  📊 Result: 1/2 passed
+  ❌ Failed: gitea — "boot failed: docker run failed: exit status 125"
+  💡 Run: homebutler backup --service gitea
+error: 1 of 2 apps did not come back from the backup
+```
+
+With `--json`, the output holds `results`, one entry per app in the shape above, and the counts `total`, `passed` and `failed`.
+
+## What a drill proves
+
+A passing drill proves three things: the archive can be read, the app's image starts with the archived data mounted, and the app answers its health path with an accepted status code.
+
+It doesn't prove that your data is in the archive. An app that starts on an empty database answers its health check too. The drill also starts the image with the archived mounts and nothing else. Environment variables, extra ports and other settings from your compose file aren't applied, so an app that needs them to start fails the drill even when the archive is good.
+
+## The record that doctor reads
+
+Each single-app drill writes a record to `.drills/` inside the backup folder, as a file named from the drill time and the app, such as `2026-10-25T181749Z-uptime-kuma.json`:
+
+```json
+{
+  "app": "uptime-kuma",
+  "archive": "/home/you/backups/backup_2026-10-25_111645.532.tar.gz",
+  "passed": true,
+  "at": "2026-10-25T18:17:49Z"
+}
+```
+
+homebutler keeps the 50 newest records. A failed drill is recorded as well. `backup drill --all` doesn't write records, so only single-app drills change what `doctor` reports.
+
+[`homebutler doctor`](/changes/doctor) compares the newest record with the newest archive and warns in three cases:
+
+| Finding | When |
+| --- | --- |
+| `No backup has ever been drilled` | Archives exist and there are no records. |
+| `The newest backup has never been drilled` | The newest record is older than the newest archive. |
+| `The last drill did not come back` | The newest record is a failure and is newer than the newest archive. |
+
+The check looks at the newest record of any app, so a drill of one app counts for every app in the archive. To run drills on a schedule, see [Scheduled backups](/backups/scheduled).

@@ -1,0 +1,254 @@
+---
+title: Backup and restore
+description: Back up the volumes, bind mounts, compose files and .env files of your running Docker Compose services into one archive, list the archives, and restore them.
+---
+
+# Backup and restore
+
+`homebutler backup` writes the data of your running Docker Compose services into one `.tar.gz` archive, and `homebutler restore` writes it back. You need the `docker` CLI with the Compose plugin, and at least one running Compose project.
+
+## Back up
+
+`homebutler backup` looks at every running Compose project (the ones `docker compose ls` shows) and records each container's mounts. A container started with a plain `docker run` is not part of a Compose project and is not backed up.
+
+To back up one service, pass its Compose service name. This example uses a service named `notes` with one named volume and one bind mount:
+
+```bash
+homebutler backup --service notes --to /home/you/backups
+```
+
+```text
+Backup complete: /home/you/backups/backup_2026-10-25_110937.917.tar.gz
+  Services: notes
+  Volumes:  2
+  Size:     2.1 KB
+```
+
+`Volumes` counts the named volumes, bind mounts and other mounts of the backed-up services, except bind mounts left out with `--exclude`. The archive name holds the local date and time down to the millisecond. If a file with that name already exists, `backup` stops instead of replacing it.
+
+| Flag | Value | What it does |
+| --- | --- | --- |
+| `--service` | A Compose service name | Backs up only services with that name. The name is matched in every running project, so two projects that both have a service called `web` are both backed up. |
+| `--to` | A folder | Writes the archive there instead of the backup folder. The folder is created if it doesn't exist. |
+| `--exclude` | A host path | Leaves out bind mounts at or under that path. Repeat the flag for more paths. |
+| `--json` | None | Prints the result as JSON. |
+
+Without `--service`, `backup` covers every service in every running project.
+
+With `--json`, `backup` prints one object with `archive` (the archive path), `services` (the services backed up), `volumes` (the same count as `Volumes`) and `size` (as text, such as `2.1 KB`). It adds `pruned` when [retention](#retention) is set, and `skipped` and `unmatched_excludes` when you pass `--exclude`. [`backup_create`](/mcp/backup#backup_create) returns the same object and describes every field.
+
+### What goes into the archive
+
+For each service, homebutler runs `docker inspect` and archives every mount it finds:
+
+- **Named volumes:** archived by a short-lived container from the `alpine` image, which mounts the volume read-only. Docker pulls `alpine` the first time if the host doesn't have it.
+- **Bind mounts:** archived with `tar` straight from the host path. A bind mount whose host path doesn't exist stops the backup with an error.
+- **Other mount types:** such as `tmpfs`, are skipped.
+
+The archive also holds each project's compose files and its `.env` file, and a `manifest.json` that lists services and mounts:
+
+```text
+backup_2026-10-25_110937.917/
+├── manifest.json
+├── compose/
+│   ├── docker-compose.yml
+│   └── .env
+└── volumes/
+    ├── data.tar.gz
+    └── home_you_notes-app_notes.tar.gz
+```
+
+Each mount is one file under `volumes/`. A named volume keeps its name. A bind mount is named after its host path, with `/` replaced by `_`.
+
+The manifest for the run above:
+
+```json
+{
+  "version": "1",
+  "created_at": "2026-10-25T11:09:40-07:00",
+  "services": [
+    {
+      "name": "notes",
+      "container": "e466f0b8ff9c43656febc0e99ef2bde94af6b42e94a8130d4b6ee5f88f53c6ae",
+      "image": "node:lts-alpine",
+      "mounts": [
+        {
+          "type": "bind",
+          "name": "/home/you/notes-app/notes",
+          "source": "/home/you/notes-app/notes",
+          "destination": "/notes"
+        },
+        {
+          "type": "volume",
+          "name": "data",
+          "source": "/var/lib/docker/volumes/data/_data",
+          "destination": "/data"
+        }
+      ]
+    }
+  ]
+}
+```
+
+<Warning title="Compose files from other projects">
+`compose/` holds the compose files and `.env` file of every running Compose project, including projects that `--service` leaves out of `volumes/`. Files are stored by file name, so two projects whose files are both called `docker-compose.yml` or `.env` leave one copy in the archive, from the project copied last. Treat the archive as holding the secrets of every running project.
+</Warning>
+
+### Leave out a large bind mount
+
+A media library can be terabytes and doesn't belong in a service backup. `--exclude` skips every bind mount whose host path equals the given path or sits below it:
+
+```bash
+homebutler backup --service notes --to /home/you/backups --exclude /home/you/notes-app/notes --exclude /tmp/nothing-here
+```
+
+```text
+Backup complete: /home/you/backups/backup_2026-10-25_111321.342.tar.gz
+  Services: notes
+  Volumes:  1
+  Size:     1.9 KB
+
+  Excluded 1 bind mount(s), recorded in the archive:
+    notes:/home/you/notes-app/notes
+
+⚠️  1 --exclude path(s) matched no bind mount, so nothing was left out for them:
+    /tmp/nothing-here
+```
+
+The match works on whole path segments: `/mnt/media` covers `/mnt/media/movies` and doesn't cover `/mnt/media-backup`. Named volumes can't be excluded, because they have no host path to match.
+
+The manifest records the exclusion. The mount stays in the service's entry with `"excluded": true`, and the paths you passed are listed under a top-level `excluded` key, so a later restore shows what the archive doesn't hold. In `--json` output the skipped mounts appear under `skipped` and paths that matched nothing under `unmatched_excludes`.
+
+## List backups
+
+`homebutler backup list` shows the archives in the backup folder, with the file's modification time as the creation time:
+
+```bash
+homebutler backup list
+```
+
+```text
+NAME                                     SIZE       CREATED
+backup_2026-10-25_111336.897.tar.gz      2.1 KB     2026-10-25T11:13:40-07:00
+backup_2026-10-25_111340.991.tar.gz      2.1 KB     2026-10-25T11:13:43-07:00
+```
+
+`backup list`, [`backup drill`](/backups/drill) and `homebutler doctor` read the configured backup folder. An archive written with `--to` to another folder doesn't appear in them. `restore` takes the path to an archive and doesn't search the backup folder, so pass the full path to it, or to `backup drill --archive`.
+
+## Restore
+
+`homebutler restore <archive>` unpacks the archive and writes each mount back. Pass `--service` to restore one service.
+
+To see it work, the data in both mounts of the example service was deleted and a stray file was created. Then the named volume was restored:
+
+```bash
+homebutler restore /home/you/backups/backup_2026-10-25_110937.917.tar.gz --service notes
+```
+
+```text
+Restore complete from: /home/you/backups/backup_2026-10-25_110937.917.tar.gz
+  Services: notes
+  Volumes:  1
+
+⚠️  Refused 1 mount(s) the archive asked for:
+  /home/you/notes-app/notes (bind, service notes)
+    → bind target /home/you/notes-app/notes was not permitted; pass --allow-bind /home/you/notes-app/notes to restore it
+```
+
+The named volume came back and the bind mount was refused. The command still exited with status 0, so a script has to read the `Refused` list, or the `refused` array in `--json` output.
+
+### Restore bind mounts
+
+A bind mount is restored only to a path you name with `--allow-bind`. The paths in `manifest.json` are written by whoever built the archive, so for an archive someone sent you, they are requests and not instructions. Named volumes need no permission, but their names must look like Docker volume names.
+
+```bash
+homebutler restore /home/you/backups/backup_2026-10-25_110937.917.tar.gz --service notes --allow-bind /home/you/notes-app/notes
+```
+
+```text
+Restore complete from: /home/you/backups/backup_2026-10-25_110937.917.tar.gz
+  Services: notes
+  Volumes:  2
+```
+
+Both mounts now hold the files from the backup again. `--allow-bind` takes a folder and can be repeated. A mount is restored when its path is that folder or sits under it, after symlinks are resolved. A path that resolves outside every allowed folder is refused.
+
+homebutler checks each bind mount again just before it writes that mount. An archive can declare two bind mounts: the first restores inside an allowed folder and plants a symlink there, and the second names that symlink as its path. Checked at that moment, the second path resolves to where the symlink points and is refused.
+
+An archive member with an absolute path, a `..` that climbs out of its folder, or a path through a symlink that an earlier member created stops the restore with an error.
+
+### What restore changes
+
+- **Files are overwritten, not synced.** Restore extracts over the mount's current contents. Files created after the backup stay in place. In the run above, the stray file was still there after both mounts were restored.
+- **Containers keep running.** Restore doesn't stop or restart the service. Stop it first if the application keeps its data in memory or holds files open.
+- **Compose files stay in the archive.** Restore writes volumes and bind mounts only. Extract `compose/` from the archive with `tar` if you need the files.
+- **A missing volume is created.** Docker creates a named volume that doesn't exist when the restore container mounts it.
+- **MCP agents can't restore bind mounts.** The `backup_restore` tool never restores them, because there is no way to name an allowed path over MCP.
+
+## Choose where backups go
+
+By default, archives go to `~/.homebutler/backups/`. To use another folder, set `backup.dir` in your config. See [Configuration](/reference/configuration) for the config file.
+
+```yaml
+backup:
+  dir: /home/you/backups
+```
+
+The older top-level `backup_dir:` key still works. When a file has both, `backup.dir` wins. `homebutler config validate` prints the folder it resolved.
+
+### Retention
+
+Retention is off until you set a limit. Add `retention` under `backup` to delete older archives after each successful backup:
+
+```yaml
+backup:
+  dir: /home/you/backups
+  retention:
+    max_archives: 2
+```
+
+`max_archives` keeps that many of the newest archives. `max_bytes` keeps the newest archives while their combined size stays within the limit. It takes a number with a unit, such as `20GB`. You can set both, and the stricter one applies. With `max_archives: 2`, the third backup removes the oldest:
+
+```text
+Backup complete: /home/you/backups/backup_2026-10-25_111340.991.tar.gz
+  Services: notes
+  Volumes:  2
+  Size:     2.1 KB
+
+  Retention removed 1 older backup(s), freeing 2.1 KB:
+    backup_2026-10-25_111334.007.tar.gz
+  2 kept, 4.2 KB total.
+```
+
+Three rules apply to pruning:
+
+- It runs after the new archive is written and never after a failed backup.
+- The newest archive is always kept, even when it alone is larger than `max_bytes`.
+- It counts every `.tar.gz` file in the folder, ordered by modification time, including files homebutler didn't create. Keep other `.tar.gz` files out of the backup folder.
+
+While no limit is set, [`homebutler doctor`](/changes/doctor) warns when the folder holds 20 GB or more.
+
+## Limits of a backup
+
+<Warning title="Databases can be inconsistent">
+`backup` copies files while containers keep running. It doesn't pause or stop anything, so a database that is writing during the copy can produce a snapshot that doesn't start cleanly. For PostgreSQL, MySQL, MongoDB and similar services, pause the container for the copy or take a native dump:
+
+```bash
+docker pause postgres
+homebutler backup --service postgres
+docker unpause postgres
+```
+
+For a native dump, run the database's own dump tool in the container, then back up. Replace `<user>` and `<database>` with your PostgreSQL user and database:
+
+```bash
+docker exec postgres pg_dump -U <user> <database> > dump.sql
+homebutler backup
+```
+
+`dump.sql` is written on the host, in the current folder. It goes into the archive only when that folder is a bind mount the backup covers.
+</Warning>
+
+- **Not in the archive:** Docker images, container logs, Docker networks, and system files outside Docker. Compose recreates networks and pulls images again.
+- **Not encrypted:** the archive holds volume contents and `.env` files, which can include passwords and API keys. Its file mode follows your `umask`; the example archives were `-rw-rw-r--`. Store archives where only you can read them, and encrypt them before they leave the machine, for example with `gpg --symmetric`.
+- **Not proven by writing it:** an archive that was never restored may not come back. [Backup drill](/backups/drill) boots an app from the archive to check, and [Scheduled backups](/backups/scheduled) runs both on a timer.

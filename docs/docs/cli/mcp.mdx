@@ -1,0 +1,45 @@
+---
+title: mcp
+description: "Starts the MCP server on standard input and output, so an AI agent can call homebutler tools."
+---
+
+# homebutler mcp
+
+Starts the MCP server on standard input and output, so an AI agent can call homebutler tools.
+
+```bash
+homebutler mcp [flags]
+```
+
+The server speaks JSON-RPC over stdio. Run it from your agent's MCP configuration, not in an interactive shell.
+
+To connect an agent, see [MCP server](/agents/mcp-server). For limiting what an agent can change, see [Read-only mode](/agents/read-only-mode).
+
+## Flags
+
+| Flag | Type | Default | Description |
+| --- | --- | --- | --- |
+| `--demo` | boolean | `false` | Answer with realistic demo data. |
+| `--max-risk` | string | `destructive` | Highest tool risk to offer: `read`, `write`, or `destructive`. With `read`, the agent can look and the server changes nothing; `report` runs without saving a snapshot. |
+
+## Examples
+
+Send the initialize request over standard input. The reply is one JSON line.
+
+```bash
+printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"test","version":"1"}}}' | homebutler mcp
+```
+
+```text
+{"jsonrpc":"2.0","id":1,"result":{"protocolVersion":"2024-11-05","capabilities":{"tools":{}},"serverInfo":{"name":"homebutler","version":"1.7.0"}}}
+```
+
+A risk level that is not one of the three is an error.
+
+```bash
+homebutler mcp --max-risk bogus
+```
+
+```text
+error: --max-risk must be read, write or destructive, not "bogus"
+```

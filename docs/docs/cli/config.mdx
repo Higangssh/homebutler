@@ -1,0 +1,108 @@
+---
+title: config
+description: "Inspects the configuration homebutler reads."
+---
+
+# homebutler config
+
+Inspects the configuration homebutler reads.
+
+For the config keys, see [Configuration](/reference/configuration).
+
+| Command | What it does |
+| --- | --- |
+| [`validate`](#config-validate) | Checks the config file without starting a server, a watcher, an install, or a remote connection. |
+
+## `config validate`
+
+Checks the config file without starting a server, a watcher, an install, or a remote connection.
+
+```bash
+homebutler config validate [flags]
+```
+
+The report names the file used and the rule that selected it, what was read from each section, and the findings. Findings include keys that are not part of the schema, which `homebutler` otherwise drops without a message, and a `--config` path that does not exist.
+
+The command exits `1` when it finds an error.
+
+| Flag | Type | Default | Description |
+| --- | --- | --- | --- |
+| `--strict` | boolean | `false` | Also exit with code 1 when there are warnings. |
+
+```bash
+homebutler config validate
+```
+
+```text
+🗂  Config validation
+   File    /home/you/.config/homebutler/config.yaml
+   Source  ~/.config/homebutler/config.yaml (XDG)
+
+Sections
+   ✓ servers     2 servers (main, remote1)
+   ✓ proxmox     1 endpoint (pve)
+   ✓ wake        1 target
+   ✓ alerts      cpu 90% · memory 85% · disk 90%
+   ✓ notify      webhook
+   · watch       enabled=false · notify_on=flapping · cooldown=5m (defaults)
+   · backup      /home/you/backups
+   ✓ backup_dir  /home/you/backups
+   · web         no token · dashboard is read-only
+
+Findings
+   ⚠️ servers[1].key: Key file /home/you/nokey does not exist.
+      → Connections to this server will fail when they are attempted.
+
+⚠️  Config is valid — 1 warning
+```
+
+A `--config` path that does not exist is an error.
+
+```bash
+homebutler config validate --config /home/you/missing.yaml
+```
+
+```text
+🗂  Config validation
+   File    /home/you/missing.yaml
+   Source  --config flag
+
+Findings
+   ❌ Config file /home/you/missing.yaml does not exist.
+      → It was selected by --config flag. Commands fall back to built-in defaults rather than failing, so this is easy to miss.
+
+❌ Config is invalid — 1 error, 0 warnings
+error: config has 1 error(s)
+```
+
+With `--strict`, a warning fails the command.
+
+```bash
+homebutler config validate --strict
+```
+
+The exit code is `1`.
+
+```text
+🗂  Config validation
+   File    /home/you/.config/homebutler/config.yaml
+   Source  ~/.config/homebutler/config.yaml (XDG)
+
+Sections
+   ✓ servers     2 servers (main, remote1)
+   ✓ proxmox     1 endpoint (pve)
+   ✓ wake        1 target
+   ✓ alerts      cpu 90% · memory 85% · disk 90%
+   ✓ notify      webhook
+   · watch       enabled=false · notify_on=flapping · cooldown=5m (defaults)
+   · backup      /home/you/backups
+   ✓ backup_dir  /home/you/backups
+   · web         no token · dashboard is read-only
+
+Findings
+   ⚠️ servers[1].key: Key file /home/you/nokey does not exist.
+      → Connections to this server will fail when they are attempted.
+
+⚠️  Config is valid — 1 warning
+error: config has 1 warning(s)
+```

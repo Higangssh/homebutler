@@ -1,0 +1,82 @@
+---
+title: TUI dashboard
+description: Watch CPU, memory, disks, containers and processes for every configured server in a live terminal view, and switch between servers with the keyboard.
+---
+
+# TUI dashboard
+
+The TUI dashboard is a live terminal view of every server in your config. Start it with:
+
+```bash
+homebutler watch tui
+```
+
+It needs a terminal that supports the alternate screen, and it takes no flags. It reads the same `servers:` list as the other commands, so add machines as described in [Multi-server](/running/multi-server). With no servers configured, it shows the local machine.
+
+## What the screen shows
+
+The top row has one tab per server, numbered in config order. The active server fills the screen below it. This capture shows two servers; the second tab is active:
+
+```text
+   [1] edge      [2] edge-two     (2 available · Tab to switch)
+╭──────────────────────────────────────────╮╭────────────────────────────────────────────────────────────────╮
+│                                          ││                                                                │
+│  ⚡ edge-two                             ││  Docker Containers                                             │
+│                                          ││                                                                │
+│    CPU  ███████████████░░░░░░░░░  65.4%  ││    Docker not installed                                        │
+│    Mem  █████████░░░░░░░░░░░░░░░  41.0%  ││                                                                │
+│    /    ██████░░░░░░░░░░░░░░░░░░  27.0%  ││                                                                │
+│                                          ││  Top Processes (CPU)                                           │
+│    ── History (2min) ──────────────────  ││                                                                │
+│    CPU ▆▅                                ││    No process data                                             │
+│    Mem ▃▃                                ││                                                                │
+│                                          │╰────────────────────────────────────────────────────────────────╯
+│    Uptime:  15h 1m                       │
+│    OS:      linux/amd64                  │
+│    Cores:   4                            │
+│    Memory:  3.2 / 7.8 GB                 │
+│                                          │
+╰──────────────────────────────────────────╯
+╭────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+│                                                                                                            │
+│    Alerts: CPU: 90%  Mem: 41%  Disk /: 27%                                                                 │
+│    Tab/Shift+Tab switch server  │  q quit  │  ⟳ 2s                                                         │
+│                                                                                                            │
+╰────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+```
+
+| Area | Shows |
+| --- | --- |
+| Left panel | Bars for CPU, memory and each disk, then the CPU and memory history, then uptime, operating system and architecture, core count and memory in GB. |
+| **Docker Containers** | Up to eight containers with name, state, image and status, and `... and N more` for the rest. Shows `Docker not installed` or `Docker unavailable (daemon not running?)` when it can't list them. |
+| **Top Processes (CPU)** | The top five processes by CPU, with PID, CPU and memory share. Only the local machine fills this list; remote servers show `No process data`. |
+| Footer | The `alerts` level for CPU, memory and each disk, colored by status, then the key hints. |
+
+The history rows are sparklines of the last 60 readings, which at one reading every two seconds covers two minutes. A new tab starts with an empty history and fills as it runs.
+
+## Keys
+
+| Key | Action |
+| --- | --- |
+| `Tab` | Next server |
+| `Shift+Tab` | Previous server |
+| `q` or `Ctrl+C` | Quit |
+
+Tab switching works only with two or more servers. The screen refreshes every two seconds, and every server refreshes in the background, not only the one you are looking at.
+
+## How servers are read
+
+A `local: true` server is read on the machine itself. For every other server the TUI runs `status --json`, `docker list --json` and `alerts --json` over SSH, once per refresh, so the [homebutler binary has to be installed](/running/multi-server#put-homebutler-on-each-server) there. A server that doesn't answer within 10 seconds shows an `Error: fetch timeout (10s)` panel in its tab, and the other tabs keep updating. A remote server shows `Waiting for data...` until the first answer arrives, which takes a few seconds because of the SSH round trips.
+
+Host keys follow the usual rules: a key-based server records its host key on first use, and a password server needs [`homebutler trust`](/running/multi-server#trust-host-keys) first.
+
+## Related pages
+
+<CardGroup cols={2}>
+  <Card title="Web dashboard" icon="terminal" href="/running/web-dashboard">
+    The same servers in a browser, with reports, incidents and actions.
+  </Card>
+  <Card title="Watch" icon="bolt" href="/monitoring/watch">
+    Capture crashes and restart loops for containers and services.
+  </Card>
+</CardGroup>

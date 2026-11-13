@@ -1,0 +1,99 @@
+---
+title: Installation
+description: Install homebutler with Homebrew, the install script, Go, npm, a Windows zip, or a container image, or build it from source.
+---
+
+# Installation
+
+homebutler is one binary for Linux, macOS and Windows on `amd64` and `arm64`. Install it on the machine you run commands from. To reach other machines, homebutler also needs to be on each of them: see [Multi-server](/running/multi-server).
+
+## Homebrew
+
+```bash
+brew install Higangssh/homebutler/homebutler
+```
+
+Homebrew works on macOS and Linux and puts `homebutler` on your `PATH`.
+
+## Install script
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Higangssh/homebutler/main/install.sh | sh
+```
+
+The script runs on Linux and macOS. It detects your OS and architecture, downloads the latest release from GitHub, and installs the binary to the first location it can write to:
+
+1. `/usr/local/bin`
+2. `/usr/local/bin` with `sudo`
+3. `/opt/homebrew/bin`
+4. `~/.local/bin`
+
+If it falls back to `~/.local/bin`, it adds that folder to `PATH` in each of `~/.profile`, `~/.bashrc` and `~/.zshrc` that exists.
+
+## Go
+
+```bash
+go install github.com/Higangssh/homebutler@latest
+```
+
+This needs Go 1.26 or later. A binary built this way has no web dashboard: `homebutler serve` shows a page that says the binary was built without it. Every other command works.
+
+## npm (MCP server only)
+
+```bash
+npm install -g homebutler
+```
+
+The npm package downloads the Go binary and publishes one command, `homebutler-mcp`, which starts the [MCP server](/agents/mcp-server). It doesn't install the `homebutler` CLI. `npx -y homebutler@latest` also starts the MCP server. On Windows, the package needs Windows 10 version 1803 or later, because it extracts the release zip with the `tar.exe` that comes with Windows.
+
+## Windows
+
+Download `homebutler_<version>_windows_amd64.zip`, or `homebutler_<version>_windows_arm64.zip` on Windows on Arm, from the [latest release](https://github.com/Higangssh/homebutler/releases/latest). Extract `homebutler.exe` and put it in a folder on your `PATH`.
+
+On Windows, `status` and the commands built on it read the machine, and `ports` and `processes` aren't supported. Servers in your config are reached over SSH, with keys read from `C:\Users\<you>\.ssh`. Homebrew, the install script and the container image are for Linux and macOS only.
+
+## Container
+
+```bash
+docker run -d --name homebutler -p 8080:8080 \
+  -v ~/.config/homebutler:/config \
+  -v homebutler-state:/root/.homebutler \
+  -v ~/.ssh:/root/.ssh:ro \
+  ghcr.io/higangssh/homebutler:latest \
+  serve --host 0.0.0.0 --port 8080 --token "$(openssl rand -hex 16)"
+```
+
+The image runs the web dashboard and reaches your machines over SSH. A container can't see the machine it runs on, so the image is for watching other machines. See [Run in a container](/running/container).
+
+## Build from source
+
+```bash
+git clone https://github.com/Higangssh/homebutler.git
+cd homebutler
+make build-all
+```
+
+`make build-all` compiles the web dashboard into the binary and needs Node.js. `make build` builds the CLI without the dashboard.
+
+## Check the install
+
+```bash
+homebutler version
+```
+
+```text
+homebutler 1.7.0 (built 2026-11-10T14:29:53Z, go1.26.10)
+```
+
+## Uninstall
+
+```bash
+rm "$(which homebutler)"
+rm -rf ~/.config/homebutler ~/.homebutler
+```
+
+The second command deletes your config, report snapshots, watch incidents and backups. Skip it to keep them.
+
+<Warning title="Backups live under ~/.homebutler">
+  Unless `backup_dir` points elsewhere, `~/.homebutler/backups/` holds your backup archives. Move them before you delete the folder.
+</Warning>

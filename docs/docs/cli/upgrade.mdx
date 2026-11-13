@@ -1,0 +1,95 @@
+---
+title: upgrade
+description: "Upgrades homebutler on this machine and on every configured remote server to the latest release."
+---
+
+# homebutler upgrade
+
+Upgrades homebutler on this machine and on every configured remote server to the latest release.
+
+```bash
+homebutler upgrade [flags]
+```
+
+The command asks the GitHub releases API for the latest version, then replaces the running binary and the binary on each remote server when they are older. Progress and the summary go to standard error. With `--json` the report is also printed on standard output.
+
+Every target is tried, and the command exits `1` if any failed. `--server` is refused; `--all` works. For when to upgrade and how to roll back, see [Upgrading](/running/upgrading).
+
+## Flags
+
+| Flag | Type | Default | Description |
+| --- | --- | --- | --- |
+| `--local` | boolean | `false` | Upgrade only the local binary and skip the remote servers. |
+
+## Examples
+
+Run on a copy of the binary that is already the latest release.
+
+```bash
+homebutler upgrade --local
+```
+
+```text
+checking latest version... v1.7.0
+
+upgrading local... ─ already v1.7.0
+
+1 already up-to-date
+```
+
+With a remote server that refuses the SSH key, that server fails and the local result stays.
+
+```bash
+homebutler upgrade
+```
+
+```text
+checking latest version... v1.7.0
+
+upgrading local... ─ already v1.7.0
+upgrading remote1... ✗ ssh connect: [remote1] SSH connection failed (127.0.0.1:22): ssh: handshake failed: ssh: unable to authenticate, attempted methods [none publickey], no supported methods remain
+  → Check: server online? correct host/port? firewall rules?
+  → Config: /home/you/.config/homebutler/config.yaml
+
+1 already up-to-date, 1 failed
+error: upgrade failed on 1 of 2 targets: remote1
+```
+
+Run from a `dev` build, such as one made with `go install`, the local binary is skipped and the remote servers are still upgraded. The command exits `0`.
+
+```bash
+homebutler upgrade
+```
+
+```text
+checking latest version... v1.7.0
+
+upgrading local... ─ dev build, left as it is: upgrade does not replace the binary it runs from when that is a dev build. Update it with `go install github.com/Higangssh/homebutler@latest`, or rebuild it from your checkout
+upgrading edge... ─ already v1.7.0
+
+1 already up-to-date, 1 skipped
+```
+
+```bash
+homebutler upgrade --local --json
+```
+
+```text
+checking latest version... v1.7.0
+
+upgrading local... ─ already v1.7.0
+
+1 already up-to-date
+{
+  "latest_version": "1.7.0",
+  "results": [
+    {
+      "target": "local",
+      "prev_version": "1.7.0",
+      "new_version": "1.7.0",
+      "status": "up-to-date",
+      "message": "already v1.7.0"
+    }
+  ]
+}
+```

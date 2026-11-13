@@ -1,0 +1,646 @@
+---
+title: Report, doctor and inventory
+description: "Reference for the MCP tools report, doctor, inventory_scan, inventory_export and config_validate, which compare snapshots, diagnose problems, collect an inventory and check the config file."
+sidebar_position: 3
+---
+
+# Report, doctor and inventory
+
+`report`, `doctor`, `inventory_scan`, `inventory_export` and `config_validate` answer what changed and what is wrong. `report` is classed `write` because it saves a snapshot.
+
+<Tool>
+
+### report
+
+<Badge tone="warning">write</Badge>
+
+Compares the machine with the last saved snapshot and returns what changed, what needs attention, and what to do next. By default it also saves a new snapshot, which moves the point every later comparison starts from, so a loop that calls `report` leaves nothing to compare against. In [read-only mode](/agents/read-only-mode) the tool is offered and always runs with `no_save`.
+
+#### Arguments
+
+| Argument | Type | Description |
+| --- | --- | --- |
+| `keep` | integer | Number of snapshots to keep on disk. Older ones are deleted when a new one is saved. Default: `30`. |
+| `no_save` | boolean | `true` compares without writing a snapshot. With no earlier snapshot it returns a `skipped` change and creates no baseline. A server started with `--max-risk read` sets this to `true` whatever you send. Default: `false`. |
+| `server` | string | Server from your config to run on. See [Run a tool on another server](/mcp#run-a-tool-on-another-server). |
+
+#### Response
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `schema_version` | integer | Version of the document shape. Always `1`. |
+| `timestamp` | string | When the report ran, in RFC 3339 format (UTC). |
+| `server_name` | string | Name of the server in your config, or the host name when the config has none. |
+| `is_baseline` | boolean | `true` when there was no earlier snapshot to compare with. A baseline has no real changes. |
+| `snapshot_saved` | boolean | `true` when this run wrote a new snapshot. `false` with `no_save`, and always `false` when the server runs with [`--max-risk read`](/agents/read-only-mode). |
+| `system` | object or null, optional | The same fields as [`system_status`](/mcp/system#system_status), without `schema_version`. Left out when the system could not be read. |
+| `running_count` | integer or null | Number of running containers. `null` when Docker did not answer. |
+| `stopped_count` | integer or null | Number of stopped containers. `null` when Docker did not answer. |
+| `public_port_count` | integer or null | Number of ports listening on every interface. `null` when the port collector did not answer. |
+| `status` | array of strings | The same facts as `system`, `running_count` and `public_port_count`, written as sentences for a person. |
+| `needs_attention` | array of objects | Things that are wrong now or became wrong since the last snapshot. |
+| `needs_attention.kind` | string | What the item is about: `memory`, `disk`, `container` or `port`. |
+| `needs_attention.text` | string | The sentence a person reads. |
+| `needs_attention.target` | string, optional | The mount, container or port the item is about. Left out when the item is about several. |
+| `notable_changes` | array of objects | What moved since the last snapshot, one entry per change. |
+| `notable_changes.kind` | string | One of `gone`, `new`, `replaced`, `image`, `state`, `port`, `disk` or `skipped`. See [Report](/changes/report). |
+| `notable_changes.target` | string | What the change happened to: a container, a port such as `:8101/tcp`, a process or a mount. For `skipped`, empty when there is no snapshot to compare with and `containers` when Docker did not answer. |
+| `notable_changes.detail` | string, optional | What happened, such as `recreated, a823d9a5eec8 → 75c7b65b7c79`. Left out when the kind says it all. |
+| `notable_changes.text` | string | The line the CLI prints. |
+| `compared_to` | string, optional | Timestamp of the snapshot this run was compared with. Left out for a baseline. |
+| `suggested_actions` | array of objects | What to do about the findings. |
+| `suggested_actions.text` | string | The suggestion as a sentence. |
+| `suggested_actions.command` | string, optional | The command that carries it out. Left out when the suggestion has none. |
+| `suggested_actions.runner` | string, optional | Who can run `command`: `mcp` (call `tool`), `cli` (the operator runs it in a terminal) or `shell` (not a homebutler command). Left out when there is no `command`. |
+| `suggested_actions.tool` | string, optional | The MCP tool that does what `command` does. Present only when `runner` is `mcp`. |
+| `failed_collectors` | array of strings, optional | Collectors that did not answer: `docker`, `ports` or `processes`. A count is trustworthy only when its collector is not listed here. Left out when all answered. |
+| `warnings` | array of strings, optional | Messages about collectors that had trouble. Left out when there are none. |
+
+<Accordion title="Examples">
+
+Run `report` after something changed. A container was stopped and a port closed since the previous snapshot. The response, shortened to the entries about the example containers:
+
+```json
+{
+  "schema_version": 1,
+  "timestamp": "2026-10-25T18:16:25Z",
+  "server_name": "homelab",
+  "is_baseline": false,
+  "snapshot_saved": true,
+  "system": {
+    "hostname": "homelab",
+    "os": "linux",
+    "arch": "amd64",
+    "uptime": "14h 58m",
+    "cpu": {
+      "usage_percent": 10.52,
+      "cores": 4
+    },
+    "memory": {
+      "total_gb": 7.75,
+      "used_gb": 3.2,
+      "usage_percent": 41.27
+    },
+    "disks": [
+      {
+        "mount": "/",
+        "total_gb": 19,
+        "used_gb": 1.9,
+        "usage_percent": 11
+      }
+    ],
+    "time": "2026-10-25T11:16:24-07:00"
+  },
+  "running_count": 21,
+  "stopped_count": 19,
+  "public_port_count": 25,
+  "status": [
+    "Host: homelab (linux/amd64), uptime 14h 58m",
+    "CPU: 10.5% (4 cores), Memory: 3.2/7.8 GB (41%)",
+    "Disk /: 1.9/19.0 GB (11%)",
+    "Containers: 21 running, 19 stopped",
+    "Public ports: 25"
+  ],
+  "needs_attention": [
+    {
+      "kind": "container",
+      "text": "19 container(s) stopped"
+    },
+    {
+      "kind": "container",
+      "target": "extra",
+      "text": "extra stopped since the last report"
+    }
+  ],
+  "notable_changes": [
+    {
+      "kind": "gone",
+      "target": ":8103/tcp",
+      "detail": "was extra (node:lts-alpine)",
+      "text": "gone: :8103/tcp — was extra (node:lts-alpine)"
+    },
+    {
+      "kind": "state",
+      "target": "extra",
+      "detail": "running → exited",
+      "text": "state: extra — running → exited"
+    }
+  ],
+  "compared_to": "2026-10-25T18:15:37Z",
+  "suggested_actions": [
+    {
+      "text": "Check why extra is not running: homebutler docker logs extra",
+      "command": "homebutler docker logs extra",
+      "runner": "mcp",
+      "tool": "docker_logs"
+    }
+  ]
+}
+```
+
+With `no_save` and no snapshot to compare with, `notable_changes` carries one `skipped` line and nothing is written. The response, with the disk entries of two internal mounts removed:
+
+Arguments:
+
+```json
+{
+  "no_save": true
+}
+```
+
+Response:
+
+```json
+{
+  "schema_version": 1,
+  "timestamp": "2026-10-25T18:32:00Z",
+  "server_name": "homelab",
+  "is_baseline": true,
+  "snapshot_saved": false,
+  "system": {
+    "hostname": "homelab",
+    "os": "linux",
+    "arch": "amd64",
+    "uptime": "15h 13m",
+    "cpu": {
+      "usage_percent": 0,
+      "cores": 4
+    },
+    "memory": {
+      "total_gb": 7.75,
+      "used_gb": 3.14,
+      "usage_percent": 40.59
+    },
+    "disks": [
+      {
+        "mount": "/",
+        "total_gb": 19,
+        "used_gb": 1.3,
+        "usage_percent": 7
+      }
+    ],
+    "time": "2026-10-25T11:31:59-07:00"
+  },
+  "running_count": 25,
+  "stopped_count": 30,
+  "public_port_count": 31,
+  "status": [
+    "Host: homelab (linux/amd64), uptime 15h 13m",
+    "CPU: 0.0% (4 cores), Memory: 3.1/7.8 GB (41%)",
+    "Disk /: 1.3/19.0 GB (7%)",
+    "Containers: 25 running, 30 stopped",
+    "Public ports: 31"
+  ],
+  "needs_attention": [
+    {
+      "kind": "container",
+      "text": "30 container(s) stopped"
+    }
+  ],
+  "notable_changes": [
+    {
+      "kind": "skipped",
+      "target": "",
+      "text": "First inspection — no previous snapshot found. --no-save skipped baseline creation."
+    }
+  ],
+  "suggested_actions": [
+    {
+      "text": "Run report again later to see changes over time."
+    }
+  ]
+}
+```
+
+A recreated container shows as `replaced`: `{"kind": "replaced", "target": "web", "detail": "recreated, a823d9a5eec8 → 75c7b65b7c79"}`.
+
+</Accordion>
+
+</Tool>
+
+<Tool>
+
+### doctor
+
+<Badge tone="success">read</Badge>
+
+Runs a read-only diagnosis of resource pressure, stopped containers, ports open on every interface, backup age and drills, notification readiness, watch setup, config file permissions, and configured Proxmox endpoints. Each finding names the command that addresses it, and `runner` says whether a tool, the CLI or a shell runs it.
+
+#### Arguments
+
+| Argument | Type | Description |
+| --- | --- | --- |
+| `backup_max_age_hours` | integer | A backup older than this many hours produces a warning. Default: `168`. |
+| `server` | string | Server from your config to run on. See [Run a tool on another server](/mcp#run-a-tool-on-another-server). |
+
+#### Response
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `schema_version` | integer | Version of the document shape. Always `1`. |
+| `timestamp` | string | When doctor ran, in RFC 3339 format (UTC). |
+| `server_name` | string | Name of the server in your config, or the host name. |
+| `status` | string | The worst severity among the findings: `pass`, `warn` or `fail`. |
+| `summary` | object | Findings counted by severity. |
+| `summary.pass` | integer | Number of `pass` findings. |
+| `summary.warn` | integer | Number of `warn` findings. |
+| `summary.fail` | integer | Number of `fail` findings. |
+| `findings` | array of objects | One entry per finding. A run with no problems returns one `pass` finding in the `overall` category. |
+| `findings.severity` | string | `pass`, `warn` or `fail`. |
+| `findings.category` | string | One of `backup`, `config`, `docker`, `exposure`, `incomplete`, `notifications`, `overall`, `proxmox`, `report`, `system` or `watch`. |
+| `findings.title` | string | Short name of the finding. |
+| `findings.detail` | string, optional | What doctor found. Left out when the title says it. |
+| `findings.action` | string, optional | What to do about it. Left out when nothing is needed. |
+| `findings.command` | string, optional | The command that carries the action out. Left out when there is none. |
+| `findings.runner` | string, optional | Who can run `command`: `mcp`, `cli` or `shell`. Present whenever `command` is. |
+| `findings.tool` | string, optional | The MCP tool that does what `command` does. Present only when `runner` is `mcp`. |
+
+<Accordion title="Examples">
+
+The response, shortened to three of the seven findings (the others name containers that are not part of this example). `summary` counts all seven:
+
+```json
+{
+  "schema_version": 1,
+  "timestamp": "2026-10-25T18:35:43Z",
+  "server_name": "homelab",
+  "status": "fail",
+  "summary": {
+    "pass": 0,
+    "warn": 6,
+    "fail": 1
+  },
+  "findings": [
+    {
+      "severity": "warn",
+      "category": "backup",
+      "title": "The newest backup has never been drilled",
+      "detail": "The last drill was 4m0s before the newest archive was taken, so what passed is not what you would restore from.",
+      "action": "Drill again so the verdict is about the archive you actually have.",
+      "command": "homebutler backup drill --all",
+      "runner": "mcp",
+      "tool": "backup_drill"
+    },
+    {
+      "severity": "warn",
+      "category": "watch",
+      "title": "1 target(s) on the watch list and no service installed to check them",
+      "detail": "Nothing is polling them, so a restart records no incident and sends no notification. This checks whether a service is installed, not whether it is running.",
+      "action": "Install the watch service so monitoring survives logout and reboot.",
+      "command": "homebutler watch install",
+      "runner": "cli"
+    },
+    {
+      "severity": "warn",
+      "category": "notifications",
+      "title": "No notification channel configured",
+      "detail": "If something crashes, homebutler can only report it locally.",
+      "action": "Configure Telegram, Slack, Discord, or webhook notifications if you want alerts away from the terminal.",
+      "command": "homebutler notify test",
+      "runner": "mcp",
+      "tool": "notify_test"
+    }
+  ]
+}
+```
+
+The `watch` finding has `runner` set to `cli` and no `tool`: the operator runs `homebutler watch install` in a terminal.
+
+</Accordion>
+
+</Tool>
+
+<Tool>
+
+### inventory_scan
+
+<Badge tone="success">read</Badge>
+
+Collects the server's system status, every container, and every listening port into one document. Ports that a container publishes carry the container's name and image.
+
+#### Arguments
+
+| Argument | Type | Description |
+| --- | --- | --- |
+| `server` | string | Server from your config to run on. See [Run a tool on another server](/mcp#run-a-tool-on-another-server). |
+
+#### Response
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `server_name` | string | Name of the server in your config, or the host name. |
+| `host` | string | Address of the server from your config, or the host name of the machine when the config has no server entry for it. |
+| `system` | object or null | The same fields as [`system_status`](/mcp/system#system_status), without `schema_version`. `null` when the system could not be read. |
+| `containers` | array of objects | Every container, running or not. |
+| `containers.id` | string | Short container ID. |
+| `containers.name` | string | Container name. |
+| `containers.image` | string | Image the container runs. |
+| `containers.status` | string | Status text from Docker, such as `Running · 41s`. |
+| `containers.state` | string | Docker state, such as `running` or `exited`. |
+| `containers.ports` | string | Published ports as Docker prints them. Empty when none are published. |
+| `ports` | array of objects | Every listening port. Same shape as [`open_ports`](/mcp/system#open_ports). |
+| `ports.protocol` | string | Transport protocol. `tcp`. |
+| `ports.address` | string | Address the socket is bound to. |
+| `ports.port` | string | Port number, as a string. |
+| `ports.container` | string, optional | Container that publishes the port, as `name (image)`. Left out when no container does. |
+| `ports.pid` | string, optional | Process ID. Left out when the process is not readable. |
+| `ports.process` | string, optional | Process name. Left out when the process is not readable. |
+| `failed_collectors` | array of strings, optional | Collectors that did not answer: `docker` or `ports`. Left out when all answered. |
+| `warnings` | array of strings, optional | Messages about collectors that had trouble. Left out when there are none. |
+
+<Accordion title="Examples">
+
+The response, shortened to the example containers and ports:
+
+```json
+{
+  "server_name": "homelab",
+  "host": "127.0.0.1",
+  "system": {
+    "hostname": "homelab",
+    "os": "linux",
+    "arch": "amd64",
+    "uptime": "15h 12m",
+    "cpu": {
+      "usage_percent": 26.05,
+      "cores": 4
+    },
+    "memory": {
+      "total_gb": 7.75,
+      "used_gb": 3.16,
+      "usage_percent": 40.81
+    },
+    "disks": [
+      {
+        "mount": "/",
+        "total_gb": 19,
+        "used_gb": 1.3,
+        "usage_percent": 7
+      }
+    ],
+    "time": "2026-10-25T11:30:42-07:00"
+  },
+  "containers": [
+    {
+      "id": "c7ddb62af7ed",
+      "name": "hook",
+      "image": "node:lts-alpine",
+      "status": "Running · Aboutam",
+      "state": "running",
+      "ports": "0.0.0.0:8105->18105/tcp, [::]:8105->18105/tcp"
+    },
+    {
+      "id": "b3b7786bc54a",
+      "name": "bind",
+      "image": "app:2",
+      "status": "Running · 2m",
+      "state": "running",
+      "ports": "3001/tcp"
+    },
+    {
+      "id": "4fbc5bbd2114",
+      "name": "vaultwarden",
+      "image": "app:2",
+      "status": "Running · 8m",
+      "state": "running",
+      "ports": "3001/tcp, 0.0.0.0:8101->80/tcp, [::]:8101->80/tcp"
+    },
+    {
+      "id": "005f87f08aa4",
+      "name": "extra",
+      "image": "node:lts-alpine",
+      "status": "Stopped · 14m ago",
+      "state": "exited",
+      "ports": ""
+    },
+    {
+      "id": "75c7b65b7c79",
+      "name": "web",
+      "image": "node:lts-alpine",
+      "status": "Running · 12m",
+      "state": "running",
+      "ports": "0.0.0.0:8102->18102/tcp, [::]:8102->18102/tcp"
+    }
+  ],
+  "ports": [
+    {
+      "protocol": "tcp",
+      "address": "0.0.0.0",
+      "port": "8105",
+      "container": "hook (node:lts-alpine)"
+    },
+    {
+      "protocol": "tcp",
+      "address": "0.0.0.0",
+      "port": "8102",
+      "container": "web (node:lts-alpine)"
+    },
+    {
+      "protocol": "tcp",
+      "address": "0.0.0.0",
+      "port": "8101",
+      "container": "vaultwarden (app:2)"
+    },
+    {
+      "protocol": "tcp",
+      "address": "0.0.0.0",
+      "port": "22"
+    },
+    {
+      "protocol": "tcp",
+      "address": "[::]",
+      "port": "8105",
+      "container": "hook (node:lts-alpine)"
+    },
+    {
+      "protocol": "tcp",
+      "address": "[::]",
+      "port": "8102",
+      "container": "web (node:lts-alpine)"
+    },
+    {
+      "protocol": "tcp",
+      "address": "[::]",
+      "port": "8101",
+      "container": "vaultwarden (app:2)"
+    },
+    {
+      "protocol": "tcp",
+      "address": "[::]",
+      "port": "22"
+    }
+  ]
+}
+```
+
+</Accordion>
+
+</Tool>
+
+<Tool>
+
+### inventory_export
+
+<Badge tone="success">read</Badge>
+
+Exports the inventory as a Mermaid diagram or as JSON. `mermaid` works only on the local machine. With `server` set, only `json` is supported, and `mermaid` returns an error. With `format` set to `json` the response is the same document as [`inventory_scan`](#inventory_scan).
+
+#### Arguments
+
+| Argument | Type | Description |
+| --- | --- | --- |
+| `format` | string | Export format: `mermaid` or `json`. Any other value returns `unsupported format: "<value>" (supported: mermaid, json)`. Default: `mermaid`. |
+| `server` | string | Server from your config to run on. See [Run a tool on another server](/mcp#run-a-tool-on-another-server). |
+
+#### Response
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `format` | string | The format that was produced, `mermaid`. |
+| `content` | string | The Mermaid source for a diagram: the home network, the server, its containers, and the ports that containers publish. |
+
+<Accordion title="Examples">
+
+The two fields apply to `format` set to `mermaid`.
+
+The response, shortened to the example containers by removing whole lines from `content`:
+
+Arguments:
+
+```json
+{
+  "format": "mermaid"
+}
+```
+
+Response:
+
+```json
+{
+  "format": "mermaid",
+  "content": "graph TD\n  home[\"🏠 Home Network\"] --> homelab[\"🖥 homelab<br/>127.0.0.1\"]\n  homelab --> c0[\"📦 web<br/>running\"]\n  homelab --> c2[\"📦 uptime-kuma<br/>running\"]\n  homelab --> p8[\"🌍 :8102/tcp<br/>web\"]\n  c0 -. exposes .-> p8\n  homelab --> p9[\"🌍 :8101/tcp<br/>uptime-kuma\"]\n  c2 -. exposes .-> p9\n"
+}
+```
+
+</Accordion>
+
+</Tool>
+
+<Tool>
+
+### config_validate
+
+<Badge tone="success">read</Badge>
+
+Checks the config file that this MCP server runs on and reports which file was read, which rule selected it, what was read from each section, and anything wrong or silently ignored, such as a misspelled key. The tool takes no `server` argument: it answers about this machine's file.
+
+#### Arguments
+
+| Argument | Type | Description |
+| --- | --- | --- |
+| `strict` | boolean | `true` counts warnings as failures in `passed`. Default: `false`. |
+
+#### Response
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `passed` | boolean | `true` when the file has no errors. With `strict`, warnings count as failures too. |
+| `errors` | integer | Number of findings with severity `error`. |
+| `warnings` | integer | Number of findings with severity `warning`. |
+| `result` | object or null | What was checked. |
+| `result.path` | string | The config path that was checked. |
+| `result.source` | string | Which rule selected the path: `flag` (`--config`), `env` (`$HOMEBUTLER_CONFIG`), `xdg` (`~/.config/homebutler/config.yaml`), `cwd` (`./homebutler.yaml`) or `none` (no file, built-in defaults). |
+| `result.exists` | boolean | `true` when the file exists. |
+| `result.sections` | array of objects, optional | What was read from each section of the config. Left out when no file exists. |
+| `result.sections.name` | string | Section name, such as `servers`, `alerts` or `notify`. |
+| `result.sections.present` | boolean | `true` when the section is in the file. |
+| `result.sections.summary` | string | What homebutler read from the section, or `not set`. |
+| `result.findings` | array of objects, optional | Problems and silently ignored keys. Left out when there are none. |
+| `result.findings.severity` | string | `error` (something will not work) or `warning` (the file parses but probably does not do what you meant). |
+| `result.findings.field` | string, optional | The config field, such as `servers[1].host`. Left out when the finding is about the whole file. |
+| `result.findings.message` | string | What is wrong. |
+| `result.findings.hint` | string, optional | How to fix it. Left out when there is no hint. |
+| `result.valid` | boolean | `true` when there are no errors. |
+
+<Accordion title="Examples">
+
+For a config with a misspelled `notifiy:` key and a remote server with no `host`, the response has `passed` set to `false`. The call itself succeeds:
+
+```json
+{
+  "passed": false,
+  "errors": 1,
+  "warnings": 1,
+  "result": {
+    "path": "/home/you/config-bad.yaml",
+    "source": "flag",
+    "exists": true,
+    "sections": [
+      {
+        "name": "servers",
+        "present": true,
+        "summary": "2 servers (homelab, rpi)"
+      },
+      {
+        "name": "proxmox",
+        "present": false,
+        "summary": "not set"
+      },
+      {
+        "name": "wake",
+        "present": false,
+        "summary": "not set"
+      },
+      {
+        "name": "alerts",
+        "present": true,
+        "summary": "cpu 1% · memory 1% · disk 90%"
+      },
+      {
+        "name": "notify",
+        "present": false,
+        "summary": "not set"
+      },
+      {
+        "name": "watch",
+        "present": false,
+        "summary": "enabled=false · notify_on=flapping · cooldown=5m (defaults)"
+      },
+      {
+        "name": "backup",
+        "present": false,
+        "summary": "/home/you/.homebutler/backups (default)"
+      },
+      {
+        "name": "backup_dir",
+        "present": false,
+        "summary": "/home/you/.homebutler/backups (default)"
+      },
+      {
+        "name": "web",
+        "present": false,
+        "summary": "no token · dashboard is read-only"
+      }
+    ],
+    "findings": [
+      {
+        "severity": "warning",
+        "field": "notifiy",
+        "message": "Line 10: field notifiy not found in the homebutler config",
+        "hint": "Did you mean \"notify\"? Unrecognised keys are ignored silently, so this line currently has no effect."
+      },
+      {
+        "severity": "error",
+        "field": "servers[1].host",
+        "message": "Host is required for remote servers.",
+        "hint": "Set host, or set local: true if this entry is the machine homebutler runs on."
+      }
+    ],
+    "valid": false
+  }
+}
+```
+
+</Accordion>
+
+</Tool>

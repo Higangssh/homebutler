@@ -1,0 +1,154 @@
+---
+title: Notify and wake
+description: "Reference for the MCP tools notify_test, which sends a test message through every notification channel, and wake, which sends a Wake-on-LAN packet."
+sidebar_position: 9
+---
+
+# Notify and wake
+
+`notify_test` and `wake` send something out of the machine. `notify_test` accepts the [`server` argument](/mcp#run-a-tool-on-another-server) and `wake` does not. See [Notifications](/monitoring/notifications) and [Wake-on-LAN](/apps/wake-on-lan) for the commands.
+
+<Tool>
+
+### notify_test
+
+<Badge tone="warning">write</Badge>
+
+Sends one test message through every configured notification channel and reports each channel on its own, so a failure names the channel that failed. With `server` set, a call in which any channel fails returns an error whose text holds the array of channel results. A real message arrives in each channel, and anyone who reads those channels sees it. The channels are `telegram`, `slack`, `discord`, `webhook`, `ntfy` and `gotify`.
+
+#### Arguments
+
+| Argument | Type | Description |
+| --- | --- | --- |
+| `server` | string | Server from your config to run on. See [Run a tool on another server](/mcp#run-a-tool-on-another-server). |
+
+#### Response
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `channel` | string | Channel name. |
+| `sent` | boolean | `true` when the channel accepted the message. |
+| `error` | string, optional | Why the message was not sent. Left out when `sent` is `true`. |
+
+<Accordion title="Examples">
+
+A `webhook` channel receives this JSON body as a `POST`:
+
+```json
+{"source":"alerts","name":"test-notification","status":"triggered","details":"This is a test notification from homebutler","action_taken":"notify","action_result":"success","timestamp":"2026-10-25 11:45:02"}
+```
+
+The response is an array with one entry per channel. Here the webhook accepted the message and the ntfy server refused the connection:
+
+```json
+[
+  {
+    "channel": "webhook",
+    "sent": true
+  },
+  {
+    "channel": "ntfy",
+    "sent": false,
+    "error": "request to http://127.0.0.1:8106 failed: dial tcp 127.0.0.1:8106: connect: connection refused"
+  }
+]
+```
+
+With no channel configured, the call returns an error:
+
+```text
+no notification channel is configured
+```
+
+</Accordion>
+
+</Tool>
+
+<Tool>
+
+### wake
+
+<Badge tone="warning">write</Badge>
+
+Sends a Wake-on-LAN magic packet. The packet is fire and forget: a `sent` status means the packet left the machine, not that anything woke up. The tool takes no `server` argument and sends from the machine that runs the MCP server.
+
+#### Arguments
+
+| Argument | Type | Description |
+| --- | --- | --- |
+| `target` <Badge>required</Badge> | string | A MAC address in the form `AA:BB:CC:DD:EE:FF` or `AA-BB-CC-DD-EE-FF`, or the name of a device in the `wake:` list of your config. A configured name uses the device's MAC address and its `ip` as the broadcast address. A value that is neither returns `invalid MAC address: <value> (expected format: AA:BB:CC:DD:EE:FF)`. |
+| `broadcast` | string | Broadcast address to send the packet to. It overrides the `ip` of a configured device. Default: `255.255.255.255`. |
+
+#### Response
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `action` | string | Always `wake`. |
+| `mac` | string | The MAC address the packet was built for. |
+| `broadcast` | string | The broadcast address it was sent to. |
+| `status` | string | Always `sent`. |
+
+<Accordion title="Examples">
+
+Wake a device by the name it has in the config:
+
+Arguments:
+
+```json
+{
+  "target": "desktop"
+}
+```
+
+Response:
+
+```json
+{
+  "action": "wake",
+  "mac": "AA:BB:CC:DD:EE:FF",
+  "broadcast": "255.255.255.255",
+  "status": "sent"
+}
+```
+
+Wake a MAC address on a chosen broadcast address:
+
+Arguments:
+
+```json
+{
+  "target": "aa:bb:cc:dd:ee:ff",
+  "broadcast": "192.168.5.255"
+}
+```
+
+Response:
+
+```json
+{
+  "action": "wake",
+  "mac": "aa:bb:cc:dd:ee:ff",
+  "broadcast": "192.168.5.255",
+  "status": "sent"
+}
+```
+
+A value that is neither a configured name nor a MAC address returns an error:
+
+Arguments:
+
+```json
+{
+  "target": "nothex"
+}
+```
+
+Response:
+
+```text
+invalid MAC address: nothex (expected format: AA:BB:CC:DD:EE:FF)
+```
+
+</Accordion>
+
+</Tool>

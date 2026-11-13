@@ -1,0 +1,95 @@
+---
+title: Changelog
+description: What changed in each homebutler release from 1.0.0 on, in summary, with links to the full release notes.
+---
+
+# Changelog
+
+What changed in each release, newest first. The [full changelog](https://github.com/Higangssh/homebutler/blob/main/CHANGELOG.md) in the repository covers every release since 0.1 in detail. To update, see [Upgrading](/running/upgrading).
+
+## 1.7.0
+
+November 10, 2026 · <Badge tone="brand">Latest</Badge> · <Badge tone="warning">Check when upgrading</Badge>
+
+- **Windows builds.** Each release has a [Windows zip](/installation#windows) for x64 and Arm with `homebutler.exe` inside, and a [Claude Desktop extension](/agents/mcp-server#install-the-claude-desktop-extension) for each. `npm install -g homebutler` now works on Windows 10 version 1803 or later.
+- **`--all` exits `1`** when any server couldn't be asked or its command failed there. Every server is still printed, and the [error names the failed servers](/running/multi-server#run-a-command-on-every-server). A server without Docker fails `docker list --all` on every run.
+- **`upgrade` from a `dev` build exits `0` again.** The local binary is [skipped](/running/upgrading#how-the-local-binary-is-upgraded), with the `--json` status `skipped` instead of `error`, and remote servers are still upgraded.
+- `backup drill --all --server <name>` failed on the server with `accepts 1 arg(s), received 0`. The drill's own `--all` is now sent to the server.
+
+## 1.6.0
+
+November 9, 2026 · <Badge tone="warning">Check when upgrading</Badge>
+
+- **`--server` and `--all` no longer act on the wrong machine.** Commands that can't reach another server, such as `install` and `inventory`, ran locally when given either flag. They now [refuse it](/running/multi-server) and exit `1`.
+- **`--all` refuses commands it can't summarize.** `docker restart`, `docker stop`, `backup`, `restore`, `wake`, `docker logs`, `docker top`, `docker inspect` and `alerts --watch` fail before any server is asked.
+- **`deploy` and `upgrade` exit `1`** when any server failed. A binary that `deploy` uploaded and that then failed to run is reported as a failure.
+- `--all` without `--json` printed `(parse error)` for every SSH server. Each command now has its own [summary line](/running/multi-server#run-a-command-on-every-server), and a missing reading shows `-`.
+- `processes`, `report`, `docker stats`, `backup list` and `network scan` answer for a `local: true` server under `--all`, so `report --all` also saves a snapshot there.
+- `doctor --strict --all` exits non-zero when any server didn't pass.
+- `GET /api/ports` returns `500` with the reason when ports can't be read.
+- `status` built for Windows reads real CPU, memory, disk and uptime. No Windows archive is published yet.
+
+## 1.5.0
+
+November 9, 2026 · <Badge tone="warning">Check when upgrading</Badge>
+
+- **Claude Desktop extension.** Each release has a `.mcpb` bundle for macOS and Linux that [installs the MCP server](/agents/mcp-server#install-the-claude-desktop-extension) without Node.js or a separate homebutler. It starts in read-only mode.
+- **`HOMEBUTLER_TOKEN`.** [Start the dashboard container](/running/container#use-a-token) with its token in the environment and no config file on the host.
+- Inside a container, `homebutler mcp` refuses local calls to tools that read the machine it runs on. These returned the container's own numbers.
+- The image sets `HOMEBUTLER_CONTAINER=1`, so runtimes that write no container marker file get the same checks as Docker and Podman.
+- `GET /api/report?server=<name>` saves no snapshot on that server, and returns the same `summary` as a local report. Polling had moved that server's baseline, and Homepage cards showed `-`.
+- The dashboard's sign-in screen names `HOMEBUTLER_TOKEN`.
+- SSH errors name the `key` config key and the config file that was loaded.
+
+## 1.4.0
+
+October 29, 2026 · <Badge tone="warning">Check when upgrading</Badge>
+
+- **`docker_top` and `docker top --json`** return the kernel's process name in `command`, so a token in a container's command line no longer reaches an agent. The terminal table still shows the full line.
+- **`report` is more accurate about processes.** Young processes are kept in the baseline, a daemon that restarted just before a report is the same daemon, daemons systemd starts on demand get no `new` or `gone` line, and a process that keeps restarting gets a `state` line.
+- **filebrowser keeps its accounts and settings** across `uninstall` and reinstall. See the [filebrowser note](/apps/install-apps#app-specific-notes). Its upstream project is archived.
+- Every MCP tool carries [`readOnlyHint` and `destructiveHint`](/agents/mcp-server#tool-annotations).
+- `install_purge` names volumes left behind in `kept_volumes` and `unchecked_volumes`.
+- `config validate` no longer quotes a webhook token from a URL with no scheme.
+- Stopping `watch start` waits for its monitors and leaves no `docker events` process behind.
+- Commands no longer wait five seconds on a terminal that doesn't answer a colour query.
+
+## 1.3.0
+
+October 17, 2026
+
+- **Read-only agents.** `homebutler mcp --max-risk read` offers an agent only the tools that change nothing. Tools above the limit are left out of `tools/list` and refused when called by name, and `report` runs without saving a snapshot. `--max-risk` also takes `write` and `destructive` (the default, every tool). See [Read-only mode](/agents/read-only-mode).
+- Read mode covers this MCP server only. The CLI and `homebutler serve` on the same machine are unaffected, and read tools still show container logs and details.
+
+## 1.2.0
+
+October 12, 2026 · <Badge tone="warning">Behavior change</Badge>
+
+- **Fixed:** every container and threshold alert from `watch start` reached its notification channel dated `0001-01-01 00:00:00`.
+- **New:** `alerts.ignore` lists containers that are stopped and started on purpose, such as one a cron job stops every night. `watch start` and `alerts --watch` don't report them going down or recovering. See [Alert thresholds](/monitoring/alerts).
+- **Behavior change:** `install purge` also removes the anonymous volumes of an app whose container was recreated, for example after an image update. Named, external and in-use volumes are still kept and listed.
+- **Fixed:** `config validate` reported a working `alerts.rules` block as an unknown key. It now checks each rule and reports a misspelled key at its line.
+
+## 1.1.1
+
+October 11, 2026
+
+- **Fixed:** an idle Linux machine read `CPU 0.0%`. CPU usage is now measured over one second instead of 200 ms, so `status`, the dashboard and the alerts watcher each take 0.8 seconds longer to answer.
+
+## 1.1.0
+
+October 11, 2026 · <Badge tone="warning">Behavior change</Badge>
+
+- **Behavior change:** `report` no longer compares the processes that belong to a container. A recreated container is reported once, as `replaced`, instead of again through each of its processes. The first report after upgrading may list a recreated container's old processes as `gone` one time.
+- **Behavior change:** `install purge` removes the Docker volumes the app's containers used and names each one. It says `Completely removed` only when Docker confirms every volume is gone. `uninstall` is unchanged and keeps them.
+
+## 1.0.0
+
+October 11, 2026
+
+- **The 1.0 compatibility promise.** MCP tool names, input schemas and risk classes, JSON field names and types, the change and finding vocabularies, `doctor` exit codes, documented config keys, and HTTP routes with their protection don't change before 2.0. See [JSON output and stability](/reference/json-output).
+- Apart from the release workflow, 1.0.0 is the same code as 0.41.3.
+
+## Before 1.0
+
+The 0.x releases built up the commands documented on this site. The last four (0.41.0 to 0.41.3) fixed what an 11-day test run on a Raspberry Pi found, including OOM detection that now requires Docker's `oom` event, incident start times in RFC 3339 UTC, and lists that are `[]` instead of `null`. See the [full changelog](https://github.com/Higangssh/homebutler/blob/main/CHANGELOG.md).

@@ -1,0 +1,441 @@
+---
+title: Docker
+description: "Reference for the MCP tools that list, inspect, read logs from, restart and stop Docker containers: docker_list, docker_stats, docker_logs, docker_top, docker_inspect, docker_restart and docker_stop."
+sidebar_position: 4
+---
+
+# Docker
+
+The Docker tools work on containers. They need the `docker` command on the machine they run on.
+
+<Tool>
+
+### docker_list
+
+<Badge tone="success">read</Badge>
+
+Lists Docker containers, including stopped ones, so a name in the list is not a name that is running. Read `state`.
+
+#### Arguments
+
+| Argument | Type | Description |
+| --- | --- | --- |
+| `server` | string | Server from your config to run on. See [Run a tool on another server](/mcp#run-a-tool-on-another-server). |
+
+#### Response
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `id` | string | Short container ID (12 characters). |
+| `name` | string | Container name. |
+| `image` | string | Image the container was created from. |
+| `status` | string | Status for a person: `Running · 14m` for a running container and `Stopped · 20m ago` for an exited one. A container with a health check appends its result, such as `Running · 14m(healthy)`. Spaces in Docker's duration text are removed and its unit words are shortened, so `About a minute` appears as `Aboutam`. Other states keep the text Docker prints. |
+| `state` | string | Docker state, such as `running`, `exited` or `created`. |
+| `ports` | string | Published and exposed ports as Docker prints them. An empty string when there are none. |
+
+<Accordion title="Examples">
+
+The response is an array with one entry per container, shortened here to two of the example containers:
+
+```json
+[
+  {
+    "id": "4fbc5bbd2114",
+    "name": "vaultwarden",
+    "image": "app:2",
+    "status": "Running · 14m",
+    "state": "running",
+    "ports": "3001/tcp, 0.0.0.0:8101->80/tcp, [::]:8101->80/tcp"
+  },
+  {
+    "id": "005f87f08aa4",
+    "name": "extra",
+    "image": "node:lts-alpine",
+    "status": "Stopped · 20m ago",
+    "state": "exited",
+    "ports": ""
+  }
+]
+```
+
+</Accordion>
+
+</Tool>
+
+<Tool>
+
+### docker_stats
+
+<Badge tone="success">read</Badge>
+
+Returns one resource reading for each running container: CPU, memory, network, block I/O and process count. Values are strings in the units Docker prints.
+
+#### Arguments
+
+| Argument | Type | Description |
+| --- | --- | --- |
+| `server` | string | Server from your config to run on. See [Run a tool on another server](/mcp#run-a-tool-on-another-server). |
+
+#### Response
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `id` | string | Short container ID. |
+| `name` | string | Container name. |
+| `cpu_percent` | string | CPU use, such as `0.00%`. |
+| `mem_usage` | string | Memory in use and the limit, such as `11.6MiB / 7.755GiB`. |
+| `mem_percent` | string | Memory use against the limit, such as `0.15%`. |
+| `net_io` | string | Network bytes received and sent, such as `2.23kB / 606B`. |
+| `block_io` | string | Block device bytes read and written, such as `0B / 0B`. |
+| `pids` | string | Number of processes in the container, as a string. |
+
+<Accordion title="Examples">
+
+The response is an array with one entry per running container, shortened here to one:
+
+```json
+[
+  {
+    "id": "4fbc5bbd2114",
+    "name": "vaultwarden",
+    "cpu_percent": "0.00%",
+    "mem_usage": "11.6MiB / 7.755GiB",
+    "mem_percent": "0.15%",
+    "net_io": "2.23kB / 606B",
+    "block_io": "0B / 0B",
+    "pids": "7"
+  }
+]
+```
+
+</Accordion>
+
+</Tool>
+
+<Tool>
+
+### docker_logs
+
+<Badge tone="success">read</Badge>
+
+Returns the last lines of a container's log, standard output and standard error combined. It returns the lines that exist and does not follow the stream. Logs can contain credentials that the container printed.
+
+#### Arguments
+
+| Argument | Type | Description |
+| --- | --- | --- |
+| `name` <Badge>required</Badge> | string | The container name. It may contain letters, digits, `-`, `_` and `.`, must not start with `-`, and can be up to 128 characters. Any other name returns `invalid container name: <name>`. |
+| `lines` | integer | Number of lines from the end of the log. Digits only: a negative number or text returns `invalid line count: <value> (must be a positive integer)`. `0` returns an empty log. Default: `50`. |
+| `server` | string | Server from your config to run on. See [Run a tool on another server](/mcp#run-a-tool-on-another-server). |
+
+#### Response
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `container` | string | The container name you passed. |
+| `lines` | string | The line count that was applied, as a string. |
+| `logs` | string | The log text, with lines separated by `\n`. |
+
+<Accordion title="Examples">
+
+Read the last three lines of a container that logged its startup three times:
+
+Arguments:
+
+```json
+{
+  "name": "web",
+  "lines": 3
+}
+```
+
+Response:
+
+```json
+{
+  "container": "web",
+  "lines": "3",
+  "logs": "listening on 18102\nlistening on 18102\nlistening on 18102"
+}
+```
+
+A name that fails the rule returns an error without calling Docker:
+
+Arguments:
+
+```json
+{
+  "name": "-rf"
+}
+```
+
+Response:
+
+```text
+invalid container name: -rf
+```
+
+</Accordion>
+
+</Tool>
+
+<Tool>
+
+### docker_top
+
+<Badge tone="success">read</Badge>
+
+Lists the processes running inside a container, read from the host. It runs no command in the container and opens no terminal.
+
+#### Arguments
+
+| Argument | Type | Description |
+| --- | --- | --- |
+| `name` <Badge>required</Badge> | string | The container name. It may contain letters, digits, `-`, `_` and `.`, must not start with `-`, and can be up to 128 characters. Any other name returns `invalid container name: <name>`. |
+| `server` | string | Server from your config to run on. See [Run a tool on another server](/mcp#run-a-tool-on-another-server). |
+
+#### Response
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `container` | string | The container name you passed. |
+| `processes` | array of objects | One entry per process. |
+| `processes.pid` | string | Process ID on the host, as a string. |
+| `processes.user` | string | User that owns the process. |
+| `processes.command` | string | The kernel's process name (`ps` `comm`), at most 15 characters, so a Node.js process shows `MainThread`. It is the same name the [`processes`](/mcp/system#processes) tool reports. Nothing from the command line. A server older than 1.4.0 reached with `server` is reduced to the first word of each line. |
+| `skipped` | integer, optional | Number of output rows that could not be parsed. Left out when all rows were read. |
+
+<Accordion title="Examples">
+
+Arguments:
+
+```json
+{
+  "name": "web"
+}
+```
+
+Response:
+
+```json
+{
+  "container": "web",
+  "processes": [
+    {
+      "pid": "42301",
+      "user": "root",
+      "command": "sleep"
+    }
+  ]
+}
+```
+
+</Accordion>
+
+</Tool>
+
+<Tool>
+
+### docker_inspect
+
+<Badge tone="success">read</Badge>
+
+Summarizes a container's image, state, restart policy, ports, mounts, networks and health. The output has no field for environment variables, so their values never appear.
+
+#### Arguments
+
+| Argument | Type | Description |
+| --- | --- | --- |
+| `name` <Badge>required</Badge> | string | The container name. It may contain letters, digits, `-`, `_` and `.`, must not start with `-`, and can be up to 128 characters. Any other name returns `invalid container name: <name>`. |
+| `server` | string | Server from your config to run on. See [Run a tool on another server](/mcp#run-a-tool-on-another-server). |
+
+#### Response
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `name` | string | Container name. |
+| `image` | string | Image the container runs. |
+| `status` | string | Docker state, such as `running` or `exited`. |
+| `uptime` | string, optional | Time since the container started, such as `up 14m`. Left out when the container is not running. |
+| `restart_policy` | string | Docker restart policy. `no` when none is set. |
+| `restart_count` | integer | Number of times Docker has restarted the container. |
+| `ports` | array of objects | Published and exposed ports. |
+| `ports.container` | string | Container port and protocol, such as `80/tcp`. |
+| `ports.host` | string, optional | Host address and port, such as `0.0.0.0:8101`. Left out when the port is exposed but not published. |
+| `mounts` | array of objects | Volumes and bind mounts. |
+| `mounts.source` | string | Path on the host. |
+| `mounts.destination` | string | Path in the container. |
+| `mounts.mode` | string | Docker's mode for the mount, such as `rw`, `ro` or `z`. When Docker reports none, `rw` or `ro` from the mount's access. |
+| `networks` | array of objects | Networks the container is attached to. |
+| `networks.name` | string | Network name. |
+| `networks.ip` | string, optional | The container's address in the network. Left out when none is assigned. |
+| `health` | string, optional | Docker health check status, such as `healthy`. Left out when the container has no health check. |
+
+<Accordion title="Examples">
+
+Arguments:
+
+```json
+{
+  "name": "vaultwarden"
+}
+```
+
+Response:
+
+```json
+{
+  "name": "vaultwarden",
+  "image": "app:2",
+  "status": "running",
+  "uptime": "up 14m",
+  "restart_policy": "no",
+  "restart_count": 0,
+  "ports": [
+    {
+      "container": "3001/tcp"
+    },
+    {
+      "host": "0.0.0.0:8101",
+      "container": "80/tcp"
+    },
+    {
+      "host": "[::]:8101",
+      "container": "80/tcp"
+    }
+  ],
+  "mounts": [
+    {
+      "source": "/var/lib/docker/volumes/data/_data",
+      "destination": "/data",
+      "mode": "rw"
+    }
+  ],
+  "networks": [
+    {
+      "name": "homelab_default",
+      "ip": "172.27.0.2"
+    }
+  ]
+}
+```
+
+</Accordion>
+
+</Tool>
+
+<Tool>
+
+### docker_restart
+
+<Badge tone="warning">write</Badge>
+
+Restarts a container by name. The container goes down and comes back. The result says the restart command succeeded, not that the app inside is serving again. Read the logs first if you don't know why it needs a restart.
+
+#### Arguments
+
+| Argument | Type | Description |
+| --- | --- | --- |
+| `name` <Badge>required</Badge> | string | The container name. It may contain letters, digits, `-`, `_` and `.`, must not start with `-`, and can be up to 128 characters. Any other name returns `invalid container name: <name>`. |
+| `server` | string | Server from your config to run on. See [Run a tool on another server](/mcp#run-a-tool-on-another-server). |
+
+#### Response
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `action` | string | Always `restart`. |
+| `container` | string | The container name you passed. |
+| `status` | string | `ok` when Docker restarted the container. |
+
+<Accordion title="Examples">
+
+Arguments:
+
+```json
+{
+  "name": "web"
+}
+```
+
+Response:
+
+```json
+{
+  "action": "restart",
+  "container": "web",
+  "status": "ok"
+}
+```
+
+Without `name`, the call returns an error:
+
+```text
+missing required parameter: name
+```
+
+</Accordion>
+
+</Tool>
+
+<Tool>
+
+### docker_stop
+
+<Badge tone="danger">destructive</Badge>
+
+Stops a container by name. homebutler has no tool that starts a container again, so the operator brings it back.
+
+#### Arguments
+
+| Argument | Type | Description |
+| --- | --- | --- |
+| `name` <Badge>required</Badge> | string | The container name. It may contain letters, digits, `-`, `_` and `.`, must not start with `-`, and can be up to 128 characters. Any other name returns `invalid container name: <name>`. |
+| `server` | string | Server from your config to run on. See [Run a tool on another server](/mcp#run-a-tool-on-another-server). |
+
+#### Response
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `action` | string | Always `stop`. |
+| `container` | string | The container name you passed. |
+| `status` | string | `ok` when Docker stopped the container. |
+
+<Accordion title="Examples">
+
+Arguments:
+
+```json
+{
+  "name": "extra"
+}
+```
+
+Response:
+
+```json
+{
+  "action": "stop",
+  "container": "extra",
+  "status": "ok"
+}
+```
+
+A name that no container has returns Docker's message:
+
+Arguments:
+
+```json
+{
+  "name": "missing"
+}
+```
+
+Response:
+
+```text
+failed to stop missing: Error response from daemon: No such container: missing
+```
+
+</Accordion>
+
+</Tool>

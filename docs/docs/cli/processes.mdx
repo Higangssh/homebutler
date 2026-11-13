@@ -1,0 +1,42 @@
+---
+title: processes
+description: "Shows the top processes by CPU or memory, and lists zombie processes."
+---
+
+# homebutler processes
+
+Shows the top processes by CPU or memory, and lists zombie processes.
+
+```bash
+homebutler processes [flags]
+```
+
+Alias: `ps`.
+
+## Flags
+
+| Flag | Type | Default | Description |
+| --- | --- | --- | --- |
+| `--limit` | integer | `10` | Number of processes to show. `0` shows all of them. |
+| `--sort` | string | `cpu` | Sort by `cpu` or `mem`. Any other value sorts by CPU without an error. |
+
+## Examples
+
+Show the three processes that use the most memory.
+
+```bash
+homebutler processes --sort mem --limit 3
+```
+
+The output, shortened: the zombie process lines are removed.
+
+```text
+
+📊 Top processes (by Memory)
+
+       PID   CPU%   MEM%       RSS  PROCESS
+    282567    3.3   26.3      2.0G  python3
+      1888    4.3    1.2    103.2M  dockerd
+
+Total: 130 processes | 🧟 6 zombies ⚠️
+```

@@ -1,0 +1,408 @@
+---
+title: System and processes
+description: "Reference for the MCP tools that report CPU, memory, disks, processes, listening ports, network devices and alert thresholds: system_status, processes, open_ports, network_scan, alerts and alerts_history."
+sidebar_position: 2
+---
+
+# System and processes
+
+The system tools read the state of a machine. Every tool except `network_scan` accepts the [`server` argument](/mcp#run-a-tool-on-another-server).
+
+<Tool>
+
+### system_status
+
+<Badge tone="success">read</Badge>
+
+Returns CPU, memory, disk and uptime for the machine that runs the MCP server, or for a remote server. Inside a container the call is refused. See [Run in a container](/running/container#what-the-container-cant-do).
+
+#### Arguments
+
+| Argument | Type | Description |
+| --- | --- | --- |
+| `server` | string | Server from your config to run on. See [Run a tool on another server](/mcp#run-a-tool-on-another-server). |
+
+#### Response
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `schema_version` | integer | Version of the document shape. Always `1`. |
+| `hostname` | string | Host name of the machine. |
+| `os` | string | Operating system, such as `linux`. |
+| `arch` | string | CPU architecture, such as `amd64`. |
+| `uptime` | string | Time since boot, as text such as `14h 53m`. |
+| `cpu` | object | CPU load. |
+| `cpu.usage_percent` | number | CPU use, in percent. |
+| `cpu.cores` | integer | Number of CPU cores. |
+| `memory` | object | Memory use. |
+| `memory.total_gb` | number | Total memory, in GB. |
+| `memory.used_gb` | number | Memory in use, in GB. |
+| `memory.usage_percent` | number | Memory use, in percent. |
+| `disks` | array of objects | One entry for `/` and one for each file system mounted at a path that starts with `/home`, `/mnt` or `/Volumes`. |
+| `disks.mount` | string | Mount point. |
+| `disks.total_gb` | number | Size of the file system, in GB. |
+| `disks.used_gb` | number | Space in use, in GB. |
+| `disks.usage_percent` | number | Space in use, in percent. |
+| `time` | string | Local time on the machine when the values were read, in RFC 3339 format. |
+
+<Accordion title="Examples">
+
+Call it with no arguments to read the local machine. The response, with the disk entries of two internal mounts removed:
+
+```json
+{
+  "schema_version": 1,
+  "hostname": "homelab",
+  "os": "linux",
+  "arch": "amd64",
+  "uptime": "15h 18m",
+  "cpu": {
+    "usage_percent": 0,
+    "cores": 4
+  },
+  "memory": {
+    "total_gb": 7.75,
+    "used_gb": 3.08,
+    "usage_percent": 39.8
+  },
+  "disks": [
+    {
+      "mount": "/",
+      "total_gb": 19,
+      "used_gb": 1.3,
+      "usage_percent": 7
+    }
+  ],
+  "time": "2026-10-25T11:36:57-07:00"
+}
+```
+
+</Accordion>
+
+</Tool>
+
+<Tool>
+
+### processes
+
+<Badge tone="success">read</Badge>
+
+Lists the top processes by CPU or memory, with the total process count and every zombie process. The output carries process names only, never command lines.
+
+#### Arguments
+
+| Argument | Type | Description |
+| --- | --- | --- |
+| `limit` | integer | Number of processes to return. `0` returns all of them. Default: `10`. |
+| `sort_by` | string | Sort key: `cpu` or `mem`. Any other value sorts by `cpu`. Default: `cpu`. |
+| `server` | string | Server from your config to run on. See [Run a tool on another server](/mcp#run-a-tool-on-another-server). |
+
+#### Response
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `processes` | array of objects | The top `limit` processes, highest first. |
+| `processes.pid` | integer | Process ID. |
+| `processes.name` | string | The kernel's process name (`ps` `comm`), at most 15 characters. A Node.js process shows `MainThread`. |
+| `processes.cpu` | number | CPU use as `ps` reports it (`pcpu`), in percent. |
+| `processes.mem` | number | Share of physical memory in use, in percent. |
+| `processes.rss` | integer | Resident memory, in kilobytes. |
+| `processes.state` | string, optional | Process state letter from `ps`, such as `S` for sleeping or `R` for running. |
+| `processes.zombie` | boolean, optional | `true` for a zombie process. Left out otherwise. |
+| `total` | integer | Number of processes found, before `limit` is applied. |
+| `zombies` | array of objects, optional | Every zombie process on the machine, whatever `limit` is. Left out when there are none. |
+| `zombies.pid` | integer | Process ID. |
+| `zombies.name` | string | The kernel's process name (`ps` `comm`). |
+| `zombies.cpu` | number | CPU use, in percent. |
+| `zombies.mem` | number | Memory share, in percent. |
+| `zombies.rss` | integer | Resident memory, in kilobytes. |
+| `zombies.state` | string, optional | Process state letter. `Z` for a zombie. |
+| `zombies.zombie` | boolean, optional | Always `true`. |
+
+<Accordion title="Examples">
+
+Ask for the two processes that use the most memory. The response, shortened to the first of six zombie entries:
+
+Arguments:
+
+```json
+{
+  "limit": 2,
+  "sort_by": "mem"
+}
+```
+
+Response:
+
+```json
+{
+  "processes": [
+    {
+      "pid": 282567,
+      "name": "python3",
+      "cpu": 3.4,
+      "mem": 26.3,
+      "rss": 2142168,
+      "state": "S"
+    },
+    {
+      "pid": 1888,
+      "name": "dockerd",
+      "cpu": 4.2,
+      "mem": 1.2,
+      "rss": 101252,
+      "state": "S"
+    }
+  ],
+  "total": 123,
+  "zombies": [
+    {
+      "pid": 282919,
+      "name": "python3",
+      "cpu": 0,
+      "mem": 0,
+      "rss": 0,
+      "state": "Z",
+      "zombie": true
+    }
+  ]
+}
+```
+
+</Accordion>
+
+</Tool>
+
+<Tool>
+
+### open_ports
+
+<Badge tone="success">read</Badge>
+
+Lists TCP ports that are listening, with the process behind each one. Without root privileges the process is not readable for many ports, and the result sets `missing_process` to say so.
+
+#### Arguments
+
+| Argument | Type | Description |
+| --- | --- | --- |
+| `server` | string | Server from your config to run on. See [Run a tool on another server](/mcp#run-a-tool-on-another-server). |
+
+#### Response
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `ports` | array of objects | One entry per listening socket. A port bound on IPv4 and IPv6 appears twice. |
+| `ports.protocol` | string | Transport protocol. `tcp`. |
+| `ports.address` | string | Address the socket is bound to, such as `0.0.0.0`, `127.0.0.1` or `[::]`. A socket bound to `0.0.0.0` or `[::]` is reachable from other machines, and a socket bound to a loopback address such as `127.0.0.1` is not. |
+| `ports.port` | string | Port number, as a string. |
+| `ports.pid` | string, optional | Process ID holding the socket. Left out when the process is not readable. |
+| `ports.process` | string, optional | Name of the process holding the socket. Left out when the process is not readable. On Linux a published container port shows `docker-proxy`. |
+| `ports.container` | string, optional | Container that publishes the port, as `name (image)`. [`inventory_scan`](/mcp/report-doctor-inventory#inventory_scan) fills it in. This tool leaves it out. |
+| `missing_process` | boolean, optional | `true` when at least one port has no process name. Left out otherwise. |
+
+<Accordion title="Examples">
+
+Run as root, the process behind each port is readable. The response, shortened to three ports:
+
+```json
+{
+  "ports": [
+    {
+      "protocol": "tcp",
+      "address": "0.0.0.0",
+      "port": "8102",
+      "pid": "383608",
+      "process": "docker-proxy"
+    },
+    {
+      "protocol": "tcp",
+      "address": "0.0.0.0",
+      "port": "8101",
+      "pid": "396972",
+      "process": "docker-proxy"
+    },
+    {
+      "protocol": "tcp",
+      "address": "0.0.0.0",
+      "port": "22",
+      "pid": "519",
+      "process": "sshd"
+    },
+    {
+      "protocol": "tcp",
+      "address": "[::]",
+      "port": "8102",
+      "pid": "383614",
+      "process": "docker-proxy"
+    },
+    {
+      "protocol": "tcp",
+      "address": "[::]",
+      "port": "8101",
+      "pid": "396983",
+      "process": "docker-proxy"
+    },
+    {
+      "protocol": "tcp",
+      "address": "[::]",
+      "port": "22",
+      "pid": "519",
+      "process": "sshd"
+    }
+  ]
+}
+```
+
+Run as an ordinary user, the same call returns ports without `pid` and `process` and sets `missing_process`. The response, shortened to one port:
+
+```json
+{
+  "ports": [
+    {
+      "protocol": "tcp",
+      "address": "0.0.0.0",
+      "port": "22"
+    }
+  ],
+  "missing_process": true
+}
+```
+
+</Accordion>
+
+</Tool>
+
+<Tool>
+
+### network_scan
+
+<Badge tone="success">read</Badge>
+
+Discovers devices on the local network. It pings every address on the subnet, reads the ARP table, and resolves host names. The scan runs for up to 30 seconds, so call it when someone asks about the network. The tool takes no `server` argument.
+
+#### Arguments
+
+This tool takes no arguments.
+
+#### Response
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `hostname` | string, optional | Name from a reverse DNS lookup. Left out when none resolves. |
+| `ip` | string | IPv4 address of the device. |
+| `mac` | string | MAC address from the ARP table. |
+| `status` | string | Always `up`. |
+
+<Accordion title="Examples">
+
+The scan needs the `arp` command on the machine. On a Linux host without it, the call returns an error:
+
+```text
+failed to read ARP table: exec: "arp": executable file not found in $PATH
+```
+
+The output is an array with one entry per device, each with the fields above. The array is empty when no device answered.
+
+</Accordion>
+
+</Tool>
+
+<Tool>
+
+### alerts
+
+<Badge tone="success">read</Badge>
+
+Compares CPU, memory and each disk with the thresholds in the `alerts:` section of your config and returns a status for each. Nothing is sent and nothing is recorded: a running [watcher](/monitoring/watch) does that.
+
+#### Arguments
+
+| Argument | Type | Description |
+| --- | --- | --- |
+| `server` | string | Server from your config to run on. See [Run a tool on another server](/mcp#run-a-tool-on-another-server). |
+
+#### Response
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `cpu` | object | CPU result. |
+| `cpu.status` | string | `ok`, `warning` or `critical`. `critical` means the current value is at or over the threshold. `warning` means it is at or over 90% of the threshold. |
+| `cpu.current` | number | Current CPU use, in percent. |
+| `cpu.threshold` | number | Threshold from the config, in percent. |
+| `memory` | object | Memory result. |
+| `memory.status` | string | `ok`, `warning` or `critical`, with the same rule as `cpu.status`. |
+| `memory.current` | number | Current memory use, in percent. |
+| `memory.threshold` | number | Threshold from the config, in percent. |
+| `disks` | array of objects | One entry for `/` and one for each file system mounted at a path that starts with `/home`, `/mnt` or `/Volumes`. |
+| `disks.mount` | string | Mount point. |
+| `disks.status` | string | `ok`, `warning` or `critical`, with the same rule as `cpu.status`. |
+| `disks.current` | number | Current space in use, in percent. |
+| `disks.threshold` | number | Threshold from the config, in percent. |
+
+<Accordion title="Examples">
+
+With `cpu: 1` and `memory: 1` in the config's `alerts:` section, memory is over its threshold. The response, with the disk entries of two internal mounts removed:
+
+```json
+{
+  "cpu": {
+    "status": "ok",
+    "current": 0.25,
+    "threshold": 1
+  },
+  "memory": {
+    "status": "critical",
+    "current": 40.72,
+    "threshold": 1
+  },
+  "disks": [
+    {
+      "mount": "/",
+      "status": "ok",
+      "current": 7,
+      "threshold": 90
+    }
+  ]
+}
+```
+
+</Accordion>
+
+</Tool>
+
+<Tool>
+
+### alerts_history
+
+<Badge tone="success">read</Badge>
+
+Returns the alert and remediation events that a running watcher recorded. Only a watcher writes entries, so an empty array means nothing was recording, not that nothing went wrong.
+
+#### Arguments
+
+| Argument | Type | Description |
+| --- | --- | --- |
+| `server` | string | Server from your config to run on. See [Run a tool on another server](/mcp#run-a-tool-on-another-server). |
+
+#### Response
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `action_result` | string | How that action ended. |
+| `action_taken` | string | What homebutler did about it. |
+| `details` | string | Description of the event. |
+| `metric` | string | The measurement the rule watches. |
+| `rule` | string | Name of the alert rule that fired. |
+| `timestamp` | string | When the event was recorded, in RFC 3339 format. |
+
+<Accordion title="Examples">
+
+Without a running watcher, the response is an empty array:
+
+```json
+[]
+```
+
+</Accordion>
+
+</Tool>

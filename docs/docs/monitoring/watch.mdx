@@ -1,0 +1,268 @@
+---
+title: Watch
+description: Track Docker, systemd and PM2 targets with homebutler watch, record each crash with its logs and a classified cause, detect restart loops, and restart targets with alert rules.
+---
+
+# Watch
+
+`homebutler watch` keeps a list of containers and services, notices when one stops or restarts, and writes an incident with the logs from before and after, the exit code, and a classified cause. The same process also checks CPU, memory and disk thresholds and runs your [alert rules](#restart-targets-with-alert-rules). Incidents are files under `~/.homebutler/watch/`.
+
+```bash
+homebutler watch add --kind docker app
+homebutler watch start
+```
+
+## Choose what to watch
+
+A target has a name and a kind. The kind decides how homebutler detects a restart.
+
+| Kind | Target is | Detected by | Logs captured |
+| --- | --- | --- | --- |
+| `docker` | A container name | The `docker events` stream: a `die` event for the container, and an `oom` event just before it. | The last 100 lines at the moment it died, and the last 50 lines 5 seconds later. |
+| `systemd` | A unit name, such as `cron.service` | Polling `systemctl show` on the `--interval`: the unit enters `failed`, or its start time changes. | `journalctl -u <unit> -n 100`. |
+| `pm2` | A PM2 app name | Polling `pm2 jlist`: the restart count changes. | The last 100 lines of the app's PM2 error log. |
+
+Add, list and remove targets with these commands:
+
+```bash
+homebutler watch add --kind systemd cron.service
+homebutler watch list
+homebutler watch remove cron.service
+```
+
+`watch add` without `--kind` asks you to pick a kind, and fails when standard input isn't a terminal, so scripts pass `--kind docker`, `--kind systemd` or `--kind pm2`. Run `watch add` with no name to list the running containers. A name uses letters, digits, `-`, `_` and `.`, up to 128 characters. These are real replies:
+
+```text
+Added docker "app" to watch list.
+docker "app" is already being watched.
+error: invalid kind "foo": must be docker, systemd, or pm2
+error: container "nothere" is not in the watch list
+```
+
+`watch list` shows each target, its kind, when it was added, its restart count, and when it was last checked. Add `--json` for the same data as JSON.
+
+```text
+NAME                      KIND       ADDED                  RESTARTS   LAST CHECKED
+app               docker     2026-10-25 11:25:16    0          2026-10-25 11:25:59
+cron.service              systemd    2026-10-25 11:25:16    -          -
+```
+
+## Check once
+
+`watch check` inspects every Docker target one time and records an incident for any container whose start time or restart count differs from the last check. A Docker container that exists when you run `watch add` is compared with the state recorded at that moment, so its first check can already record an incident. The first check of any other target stores a baseline. Run it from cron if you don't want a long-running process:
+
+```bash
+homebutler watch check
+```
+
+```text
+Checked 1 docker target(s).
+1 restart(s) detected:
+  app: app-20261025-112559.129-9e85d6 (restart detected)
+
+⚠️  Skipped 2 target(s) that check cannot inspect:
+  cron.service (systemd)
+  api (pm2)
+  → These are only monitored while running: homebutler watch start
+```
+
+`check` sees that a restart happened but not why. Its incidents hold the logs from the moment of the check, no exit code, and no crash analysis, and systemd and PM2 targets are skipped. Use `watch start` for the full record.
+
+## Monitor continuously
+
+`watch start` runs in the foreground until you press Ctrl+C. It starts a monitor for each kind on the list, then checks thresholds and rules on every interval. On Ctrl+C or `SIGTERM` it exits once its monitors have stopped. A monitor that hasn't stopped after 10 seconds is left behind with a warning, and a second signal exits straight away.
+
+```bash
+homebutler watch start --interval 30s
+```
+
+`--interval` sets the polling interval for systemd, PM2, thresholds and rules. It defaults to `30s` and can't be shorter than `5s`. Docker targets don't wait for the interval, because `docker events` delivers each death as it happens, and homebutler reconnects if the stream drops.
+
+```text
+Starting monitors (polling interval=5s). Press Ctrl+C to stop.
+  Docker targets: 9, Systemd targets: 1, PM2 targets: 0
+  Rules: 1 loaded, remediation active
+[11:26:41] INCIDENT: exit1 (incident exit1-20261025-112636.510-9a5699)
+  Crash: Fatal error detected in logs (fatal_error, confidence: medium)
+```
+
+With an empty watch list, `watch start` prints `Nothing on the watch list; monitoring thresholds only.` and keeps running, so a service installed before you add targets doesn't exit in a loop.
+
+### Run watch as a service
+
+homebutler runs no daemon of its own. `watch install` hands the monitoring loop to the host's supervisor: a systemd user unit on Linux, a launchd agent on macOS. It writes the unit under your home folder, enables it and starts it. `watch installed` reports whether the unit exists, and `watch uninstall` stops and removes it.
+
+```bash
+homebutler watch install
+homebutler watch installed
+homebutler watch uninstall
+```
+
+The unit is named `dev.homebutler.watch.service` and runs `homebutler watch start` with the binary that installed it. `--force` overwrites an existing unit. On Linux, a user unit stops at logout unless lingering is on, and `watch install` prints the `loginctl enable-linger` command when it isn't. Because the unit reads the watch list at startup, `watch add` and `watch remove` print the `systemctl --user restart dev.homebutler.watch.service` command to run after you change the list.
+
+When the user's systemd manager can't find the unit, `watch install` writes the file and then fails to enable it. This happened in the test run, where the unit was written under a custom home folder:
+
+```text
+error: wrote ~/.config/systemd/user/dev.homebutler.watch.service but could not start it: systemctl --user enable --now dev.homebutler.watch.service: exit status 1
+Failed to enable unit: Unit file dev.homebutler.watch.service does not exist.
+```
+
+With the unit enabled and running, `watch list` adds a line, and `doctor` stops warning about an unsupervised watch list:
+
+```text
+watch service: live since 2026-10-25 11:33:01. It sees restarts as they happen; LAST CHECKED is the last 'watch check'.
+```
+
+`uninstall` prints `✅ removed <path>`, and fails with `error: no unit installed at <path>` when nothing is installed.
+
+## Read an incident
+
+Every incident has an ID made from the target name, a timestamp and a random suffix. `watch history` lists them, newest first, and `watch show` prints one.
+
+```bash
+homebutler watch history --limit 5
+homebutler watch show oom-20261025-112653.817-4836a5
+```
+
+| Flag | What it does |
+| --- | --- |
+| `--limit <n>` | Shows only the newest `n` incidents. `0` shows all. |
+| `--container <name>` | Shows only incidents for that target. |
+| `--logs` | Includes the captured logs in `--json` output. The table never prints logs. |
+
+`history` has the alias `incidents`. The `INFO` column holds `[FLAPPING]` and the crash category:
+
+```text
+CONTAINER             INCIDENT ID                           DETECTED              INFO
+oom           oom-20261025-112653.817-4836a5  2026-10-25 11:26:53   oom
+exit1         exit1-20261025-112648.269-da8316  2026-10-25 11:26:48   fatal_error
+loop          loop-20261025-113019.113-2ff24a  2026-10-25 11:30:19   [FLAPPING] fatal_error
+```
+
+`watch show` prints the start times, the crash analysis, any flapping record, and the logs. This is an incident for a container that ran past its 20 MB memory limit:
+
+```text
+Incident:  oom-20261025-112653.817-4836a5
+Container: oom
+Detected:  2026-10-25 11:26:53
+Previous Start: 
+Current Start:  2026-10-25T18:26:43.312856573Z
+
+=== Crash Analysis ===
+Category:   oom
+Reason:     Process killed by OOM killer
+Confidence: high
+
+=== Post-Restart Logs ===
+```
+
+`show --json` returns the whole incident, including `exit_code`, `crash_analysis`, `pre_logs` and `post_logs`. The `oom_killed` key is present only when Docker reported an OOM kill, and `flapping` only when the incident is flapping. The text view prints at most 5000 characters of each log. An ID that doesn't exist fails with `error: incident "nope" not found`.
+
+## How the cause is classified
+
+For each Docker, systemd or PM2 incident, `watch start` classifies the cause into one `category` with a `confidence`. A script can branch on both: the lists are fixed.
+
+The classifier takes the first rule that matches:
+
+1. Docker reported the container as OOM-killed, or an `oom` event arrived up to 10 seconds before the `die` event: `oom`, high.
+2. Exit code `137`: `unknown`, low, with the reason `SIGKILL, not reported as OOM-killed`. The OOM killer, `docker kill` and a `docker stop` that timed out all end in `137`, so the code alone can't say which.
+3. Exit code `139`: `segfault`, high. Exit code `143`: `sigterm`, medium.
+4. The pre-death logs match a pattern. When several match, the category earliest in the table below wins.
+5. Exit code `1`: `error`, medium. Exit code `0`: `clean_restart`, low. Any other code: `unknown`, low.
+
+| Category | Log patterns (case-insensitive unless noted) | Confidence from logs |
+| --- | --- | --- |
+| `oom` | `out of memory`, `cannot allocate`, `oom` | high |
+| `segfault` | `segmentation fault`, `sigsegv` | high |
+| `panic` | `panic:` (case-sensitive), `goroutine <n>` | high |
+| `dependency` | `connection refused`, `no such host`, `connection reset` | medium |
+| `fatal_error` | `fatal`, `critical` | medium |
+| `timeout` | `timeout`, `deadline exceeded` | medium |
+
+`error`, `sigterm`, `clean_restart` and `unknown` come from exit codes only. `confidence` is `high`, `medium` or `low`. The test run produced each of these from a container built to exit that way:
+
+| Container behavior | Category | Confidence |
+| --- | --- | --- |
+| Allocated past a 20 MB limit | `oom` | high |
+| Printed `panic: runtime error` and `goroutine 1 [running]:`, exit 2 | `panic` | high |
+| Exited `139` | `segfault` | high |
+| Printed `fatal: config file missing`, exit 1 | `fatal_error` | medium |
+| Printed `connection refused`, exit 1 | `dependency` | medium |
+| Trapped `SIGTERM` and exited `143` | `sigterm` | medium |
+| Exited `0` | `clean_restart` | low |
+| `docker kill`, `docker stop` on a process that ignores `SIGTERM` | `unknown` | low |
+
+## Detect restart loops
+
+A target that keeps dying is flapping. On every new incident, `watch start` counts the target's incidents in each window, including the new one, and marks the new one when the count reaches a threshold. A flapping incident carries a `flapping` record with `level`, `count` and `window`.
+
+| Level | Window | Default threshold |
+| --- | --- | --- |
+| `acute` | `short`: 10 minutes | 3 incidents |
+| `chronic` | `long`: 24 hours | 5 incidents |
+
+A target that crosses both is `acute`, and the level and `since` depend on the host time zone (see below). Set the thresholds under `watch.flapping`; the windows take Go durations.
+
+```yaml
+watch:
+  flapping:
+    short_window: 10m
+    short_threshold: 3
+    long_window: 24h
+    long_threshold: 5
+```
+
+The count includes the new incident, so the incident that reaches the threshold is the first one marked: with the default `acute` threshold of 3, the third incident within 10 minutes. `watch start` prints a `⚠ FLAPPING` line under a flapping incident, and `history` marks it with `[FLAPPING]`.
+
+homebutler reads each incident's time from its file name, which holds the host's local time, and treats that time as UTC. On a host in UTC the windows work as listed: a restart loop is `acute` from its third incident, and `since` is the UTC time of the oldest incident in the window. On a host west of UTC, such as UTC-8, saved incidents look hours old, so the 10-minute window stays empty and the same loop is `chronic` from its fifth incident. `since` then holds the local clock time of the oldest incident with a `Z` suffix. To get the UTC behavior on such a host, start the watcher with `TZ=UTC` in its environment.
+
+Alert rules with `action: restart` skip a target that is flapping, because restarting a loop feeds it. See [Restart targets with alert rules](#restart-targets-with-alert-rules).
+
+## Incident retention and log limits
+
+`watch.retention.max_incidents` caps how many incidents are kept. When a new incident is saved, the oldest ones beyond the cap are deleted. The default is `200`. A negative number keeps everything.
+
+```yaml
+watch:
+  retention:
+    max_incidents: 200
+```
+
+Each captured log is capped at 64 KB. A longer log keeps its end, which holds the last thing the process said, and starts with `… truncated <n> bytes …`. Docker incidents capture the last 100 lines at the death and the last 50 lines 5 seconds after it. [Doctor](/changes/doctor) warns when the incident count reaches 80% of the cap.
+
+## Send incidents to a channel
+
+Watch writes incidents to disk and prints them. To also send them, set `watch.notify.enabled` to `true` and configure a channel under `notify`. The settings, `notify_on` and `cooldown`, are covered in [Notifications](/monitoring/notifications).
+
+## Restart targets with alert rules
+
+An alert rule under `alerts.rules` can restart a target when it stops. A rule with `metric: container` fires when a named target isn't running, and `action: restart` restarts it. `kind` says what the names are: `docker` (the default), `systemd` or `pm2`. The trigger looks each name up among Docker containers whatever the `kind`, and a name that isn't a running container counts as down. The `kind` decides only which command restarts it.
+
+```yaml
+alerts:
+  rules:
+    - name: svc-down
+      metric: container
+      watch:
+        - app
+      action: restart
+      cooldown: 1m
+```
+
+`watch start` loads the rules and prints `Rules: 1 loaded, remediation active`. When `app` stopped, the rule restarted it and recorded the result in [alert history](/monitoring/alerts#alert-history):
+
+```text
+  ⏱️  11:28:03  🔴  svc-down triggered (app is exited)
+                 → Executing: docker restart app
+                 → ✅ restarted: [app]
+```
+
+A systemd restart runs `systemctl restart <unit>` and a PM2 restart runs `pm2 restart <app>`. Restarting a systemd unit needs root or a polkit rule, and `watch start` warns about it when homebutler isn't running as root. Without that permission, the restart is reported as failed:
+
+```text
+⚠️  1 rule will restart systemd units but homebutler is not running as root: unit-down
+   systemctl will refuse, and the restart will be reported as failed.
+   Run as root, or grant a polkit rule for the units involved.
+```
+
+The full list of rule keys and metrics is in [Alert thresholds](/monitoring/alerts#alert-rules).

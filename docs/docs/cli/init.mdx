@@ -1,0 +1,57 @@
+---
+title: init
+description: "Asks questions and writes the config file, with the local machine and any remote servers."
+---
+
+# homebutler init
+
+Asks questions and writes the config file, with the local machine and any remote servers.
+
+```bash
+homebutler init [flags]
+```
+
+The wizard detects the local machine, offers to add remote servers over SSH and tests each connection, shows a summary, and saves `~/.config/homebutler/config.yaml` with mode `0600`. With an existing config it asks whether to add servers, start fresh, or cancel.
+
+For the config file, see [Configuration](/reference/configuration). To start from scratch, see [Quickstart](/quickstart).
+
+## Examples
+
+Accept every default and add no remote server. The answers come from standard input.
+
+```bash
+printf '\nn\ny\n' | homebutler init
+```
+
+```text
+
+  🏠 HomeButler Setup
+  ───────────────────
+  💡 Press Enter to accept [default] values
+
+  📍 Step 1: Local Machine
+
+  Detected: homelab (192.168.5.1)
+  Name for this machine [homelab]:   ✅ Added local: homelab
+
+  🌐 Step 2: Remote Servers
+
+  Add a remote server? [Y/n]: 
+  📋 Summary
+  ──────────
+  • homelab (local)
+  • Alerts: CPU 90% / Memory 85% / Disk 90%
+
+  Save config? [Y/n]: 
+  ✨ Config saved to /home/you3/.config/homebutler/config.yaml
+  🔐 Config permissions set to 600 (owner-only)
+  💡 Prefer SSH keys over password auth when possible
+
+  Try it out:
+    homebutler status
+    homebutler watch tui
+
+  Then keep it watching, so it can tell you what changed:
+    homebutler watch add <container>
+    homebutler watch install
+```

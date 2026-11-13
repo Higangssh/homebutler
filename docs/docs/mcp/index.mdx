@@ -1,0 +1,77 @@
+---
+title: MCP tools
+description: "How homebutler's 44 MCP tools are called, how they are classed read, write or destructive, what every response has in common, and where each tool is documented."
+sidebar_position: 1
+---
+
+# MCP tools
+
+homebutler's MCP server offers 44 tools. This tab documents each one: what it does, its risk class, every argument, the fields of its response, and a real response. To connect a client first, see [MCP server](/agents/mcp-server).
+
+## Call a tool
+
+An MCP client sends `tools/call` with the tool's `name` and its `arguments`. The server answers with one `text` content item that holds the tool's output as a JSON string:
+
+```json
+{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"docker_logs","arguments":{"name":"web","lines":2}}}
+```
+
+```json
+{"jsonrpc":"2.0","id":2,"result":{"resultType":"complete","content":[{"type":"text","text":"{\"container\":\"web\",\"lines\":\"2\",\"logs\":\"listening on 18102\\nlistening on 18102\"}"}],"_meta":{"io.modelcontextprotocol/serverInfo":{"name":"homebutler","version":"1.7.0"}}}}
+```
+
+The pages in this tab show the parsed JSON inside `text`, not the envelope. When a tool fails, the content item holds the error message as plain text and the result has `"isError": true`. A failed call is a normal response, not a JSON-RPC error:
+
+```json
+{"jsonrpc":"2.0","id":2,"result":{"resultType":"complete","content":[{"type":"text","text":"failed to stop missing: Error response from daemon: No such container: missing"}],"isError":true,"_meta":{"io.modelcontextprotocol/serverInfo":{"name":"homebutler","version":"1.7.0"}}}}
+```
+
+Arguments are checked by the tool, not by the transport. A missing required argument returns `missing required parameter: <name>`, except `watch_add` and `watch_remove`, which return `container is required`. A tool name that doesn't exist returns `unknown tool: <name>`. A number can be sent as a string, and a boolean as `"true"`; the tool converts it.
+
+## Risk classes
+
+Every tool is classed `read`, `write` or `destructive`. The classes are frozen since 1.0: a tool isn't reclassified without a major release. A client or a skill uses the class to decide what an agent may do unattended.
+
+| Class | Tools | Meaning |
+| --- | --- | --- |
+| `read` (27) | `alerts`, `alerts_history`, `backup_list`, `config_validate`, `docker_inspect`, `docker_list`, `docker_logs`, `docker_stats`, `docker_top`, `doctor`, `install_list`, `install_status`, `inventory_export`, `inventory_scan`, `network_scan`, `open_ports`, `processes`, `proxmox_guests`, `proxmox_node`, `proxmox_script_command`, `proxmox_script_list`, `proxmox_status`, `proxmox_task_status`, `proxmox_tasks`, `system_status`, `watch_history`, `watch_list` | Changes nothing on the machine. A read can still return sensitive text, such as log lines, container configuration and open ports. |
+| `write` (13) | `backup_create`, `backup_drill`, `docker_restart`, `install_app`, `install_uninstall`, `notify_test`, `proxmox_guest_reboot`, `proxmox_guest_start`, `report`, `wake`, `watch_add`, `watch_check`, `watch_remove` | Changes something, or sends something out of the machine, such as a snapshot, a restart, a message or a packet. |
+| `destructive` (4) | `backup_restore`, `docker_stop`, `install_purge`, `proxmox_guest_shutdown` | Overwrites data, deletes data, or stops a service. |
+
+`report` is `write` because it saves a snapshot. A server started with [`--max-risk read`](/agents/read-only-mode) offers `report` anyway and runs it without saving.
+
+Inside a container, tools that read the machine they run on refuse a call that leaves out `server` or names a `local: true` server. See [Run in a container](/running/container#what-the-container-cant-do).
+
+## Tools by task
+
+| Page | Tools |
+| --- | --- |
+| [System and processes](/mcp/system) | `system_status`, `processes`, `open_ports`, `network_scan`, `alerts`, `alerts_history` |
+| [Report, doctor and inventory](/mcp/report-doctor-inventory) | `report`, `doctor`, `inventory_scan`, `inventory_export`, `config_validate` |
+| [Docker](/mcp/docker) | `docker_list`, `docker_stats`, `docker_logs`, `docker_top`, `docker_inspect`, `docker_restart`, `docker_stop` |
+| [Watch](/mcp/watch) | `watch_list`, `watch_add`, `watch_remove`, `watch_check`, `watch_history` |
+| [Backup](/mcp/backup) | `backup_list`, `backup_create`, `backup_drill`, `backup_restore` |
+| [Install](/mcp/install) | `install_list`, `install_status`, `install_app`, `install_uninstall`, `install_purge` |
+| [Proxmox](/mcp/proxmox) | `proxmox_status`, `proxmox_guests`, `proxmox_node`, `proxmox_tasks`, `proxmox_task_status`, `proxmox_guest_start`, `proxmox_guest_reboot`, `proxmox_guest_shutdown`, `proxmox_script_list`, `proxmox_script_command` |
+| [Notify and wake](/mcp/notify-wake) | `notify_test`, `wake` |
+
+## Run a tool on another server
+
+Most tools take an optional `server` argument. It names a server from the `servers:` list of your [config](/reference/configuration). With `server` set, homebutler connects over SSH, runs the same operation with the `homebutler` binary installed on that server, and returns the JSON that server produced. A server entry with `local: true` runs on the local machine. See [Multi-server](/running/multi-server) for the setup.
+
+These tools take no `server` argument: `config_validate`, `install_list`, `install_status`, `install_app`, `install_uninstall`, `install_purge`, `network_scan`, `wake` and every `proxmox_*` tool. The Proxmox tools that query a Proxmox server take `endpoint` instead, and a call that gets `server` returns `tool "<name>" cannot be pointed at a server; use endpoint`. `proxmox_script_list` and `proxmox_script_command` take no `endpoint`, and a call that gets `server` returns `tool "<name>" cannot be pointed at a server`.
+
+Some arguments don't travel to the remote server. `inventory_export` supports only `format` set to `json` there, `backup_create` doesn't send `exclude`, and `watch_add` doesn't send `unit`. A name that isn't in the config returns `server "<name>" not found in config`.
+
+## What every response has in common
+
+- **Keys are snake_case.** A field is optional when its table says so. An optional field is left out when it has no value, so test for the key.
+- **Lists are never `null`.** A list or map without a value is `[]` or `{}`, and an answer that is itself a list is `[]` when empty. `null` is used for what is genuinely absent, such as `running_count` when Docker did not answer.
+- **`schema_version`** is `1` in `report`, `doctor` and `system_status`. It changes only with a major release.
+- **`failed_collectors`** names the parts of a document that could not be collected: `docker`, `ports` and `processes` in `report`, `docker` and `ports` in `inventory_scan`, and `version`, `cluster` and `resources` in `proxmox_status`. A count is trustworthy only when its collector isn't listed.
+- **Fields of objects in a list** are written `list.field` in the tables, such as `disks.mount`.
+- **`kind`, `runner` and `severity` are vocabularies.** Branch on the word, not on the sentence next to it. See [JSON output and stability](/reference/json-output).
+
+## Check the list
+
+`tools/list` returns the tools sorted by name, each with a `description` and an `inputSchema`. The result also carries `ttlMs` (300000) and `cacheScope`, which is `public` for the full list and `private` for a list reduced by `--max-risk`. The names, arguments, required arguments and risk classes match `internal/contract/testdata/surface.golden` in the source repository.
