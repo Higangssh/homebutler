@@ -221,7 +221,7 @@ paths:
         - Overview and servers
       operationId: listProcesses
       summary: List top processes
-      description: Returns the ten processes using the most CPU, busiest first. Without `server`, the route returns the list itself, without the `total` and `zombies` fields the MCP tool adds. With `server`, it returns the document that `homebutler processes --json` prints on that server, an object with a `processes` array and `total`.
+      description: Returns the ten processes using the most CPU, busiest first. Without `server`, the route returns the list itself, without the `total` and `zombies` fields the MCP tool adds. With `server`, the route returns the same list for that server, or `502` with the reason when the server cannot be reached or its answer cannot be read.
       x-protection: none
       parameters:
         - $ref: '#/components/parameters/Server'
@@ -277,7 +277,7 @@ paths:
         - Overview and servers
       operationId: listPorts
       summary: List open ports
-      description: Lists the TCP ports listening on the machine, with the process or Docker container that owns each one. With `server`, the route returns the array that `homebutler ports --json` prints on that server, without the `ports` wrapper. When the ports cannot be listed, the route returns `500` with the reason.
+      description: Lists the TCP ports listening on the machine, with the process or Docker container that owns each one. With `server`, the route returns the same document for that server, or `502` with the reason when the server cannot be reached or its answer cannot be read. When the ports on this machine cannot be listed, the route returns `500` with the reason.
       x-protection: none
       parameters:
         - $ref: '#/components/parameters/Server'
