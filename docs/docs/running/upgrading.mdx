@@ -16,9 +16,9 @@ homebutler upgrade
 `upgrade` asks GitHub for the latest release, then handles the local binary and each remote server in turn. It updates only what is out of date. Progress goes to standard error:
 
 ```text
-checking latest version... v1.7.0
+checking latest version... v1.8.0
 
-upgrading local... ─ already v1.7.0
+upgrading local... ─ already v1.8.0
 
 1 already up-to-date
 ```
@@ -27,14 +27,14 @@ Pass `--local` to skip the remote servers and upgrade only the binary you are ru
 
 ```json
 {
-  "latest_version": "1.7.0",
+  "latest_version": "1.8.0",
   "results": [
     {
       "target": "local",
-      "prev_version": "1.7.0",
-      "new_version": "1.7.0",
+      "prev_version": "1.8.0",
+      "new_version": "1.8.0",
       "status": "up-to-date",
-      "message": "already v1.7.0"
+      "message": "already v1.8.0"
     }
   ]
 }
@@ -56,7 +56,7 @@ A server that has no homebutler yet reports `not installed — run 'homebutler d
 The output for a server that was upgraded and a server that was unreachable, shortened to those lines:
 
 ```text
-upgrading edge... ✓ v1.6.0 → v1.7.0 (linux/amd64)
+upgrading edge... ✓ v1.7.0 → v1.8.0 (linux/amd64)
 upgrading dead... ✗ ssh connect: [dead] SSH connection failed (192.168.1.30:22): dial tcp 192.168.1.30:22: connect: connection refused
   → Check: server online? correct host/port? firewall rules?
   → Config: /home/you/.config/homebutler/config.yaml
@@ -89,8 +89,12 @@ A container keeps your config and snapshots in the mounted folder and volume, so
 
 The binary on each remote server is separate from the one on the hub. After you upgrade the hub, run `homebutler upgrade` from a machine with SSH access to bring the servers level, or the [commands the hub runs on them](/running/multi-server#keep-versions-level) fail with `does not have` errors.
 
-## Check these when upgrading to 1.4, 1.5, 1.6 or 1.7
+## Check these when upgrading to 1.4, 1.5, 1.6, 1.7 or 1.8
 
+- **Container and `local: true`:** from 1.8.0, inside a container, the dashboard routes that read the machine answer `501` for a `local: true` server or no `server`, and `--all` and `--server` exit `1` for that server. A Homepage widget pointed at `/api/report` on the container image, or a cron job running `status --all`, gets an error where it got the container's numbers. Point it at `?server=<name>` for a server reached over SSH. See [Run in a container](/running/container#what-the-container-cant-do).
+- **Response shapes for a server:** from 1.8.0, `/api/processes?server=<name>` answers the bare list and `/api/ports?server=<name>` answers `{"ports": […]}`, as they do for this machine, and so does the MCP tool `open_ports` given a `server`. `watch add`, `watch remove` and an empty `watch check` print JSON under `--json` where they printed a sentence.
+- **`watch_add` with `unit`:** from 1.8.0 it fails against a server running 1.7.0 or older. Upgrade the server, or leave `unit` out.
+- **`--server` output on failure:** from 1.8.0, a command that printed its result and then failed, such as `doctor --strict`, prints that result on stdout before it exits `1`, and the server's stderr goes to stderr instead of stdout.
 - **`--all` exit codes:** from 1.7.0, a command run with `--all` exits `1` when any server couldn't be asked or its command failed there. A cron job or script over servers that are often off, or over a server without Docker for `docker list --all`, now sees a failure. See [Multi-server](/running/multi-server#run-a-command-on-every-server).
 - **`upgrade` from a `dev` build:** from 1.7.0 it exits `0` again, and in `--json` the local result's `status` is `skipped`, where 1.6.0 reported `error`. A script that matched on `error` should accept `skipped`.
 - **`--server` and `--all` on commands that can't use them:** from 1.6.0, `install`, `inventory scan`, `config validate`, `watch`, `serve` and the other local commands exit `1` where they used to run on this machine. Drop the flag. `upgrade --server` is refused too. See [Multi-server](/running/multi-server).

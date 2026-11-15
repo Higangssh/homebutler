@@ -7,9 +7,23 @@ description: What changed in each homebutler release from 1.0.0 on, in summary, 
 
 What changed in each release, newest first. The [full changelog](https://github.com/Higangssh/homebutler/blob/main/CHANGELOG.md) in the repository covers every release since 0.1 in detail. To update, see [Upgrading](/running/upgrading).
 
+## 1.8.0
+
+November 11, 2026 · <Badge tone="brand">Latest</Badge> · <Badge tone="warning">Check when upgrading</Badge>
+
+- **`trust --reset` keeps the old key until you answer `y`.** Answering `n` [left the server with no saved key](/cli/trust), so the next connection trusted whatever answered.
+- **Inside a container, a `local: true` server is refused** wherever its readings would have been the container's: the [dashboard routes](/running/container#what-the-container-cant-do) answer `501`, and `--all` and `--server` exit `1` for `status`, `alerts`, `ports`, `processes`, `report`, `doctor` and `network scan`. The dashboard opens on a server it can read.
+- **The Report tab follows the [server picker](/running/web-dashboard#what-the-dashboard-shows)**, including **Save a snapshot**.
+- **`/api/processes?server=<name>` and `/api/ports?server=<name>`** answer in the same shape as for this machine, and so does the MCP tool `open_ports` given a `server`.
+- **`watch add --unit`** lists a systemd unit or PM2 app under another name. `watch add`, `watch remove` and an empty `watch check` print JSON under `--json`. A name or unit starting with `-` is refused.
+- The MCP tools [`watch_add`, `watch_remove`](/mcp/watch) and `watch_check` work with `server`. `watch_add` sends `unit` and [`backup_create`](/mcp/backup#backup_create) sends `exclude` to the server; `watch_add` with `unit` fails against a server on 1.7.0 or older.
+- With `server`, the MCP tools `backup_drill` and `notify_test` answer with the failed result, as they do for this machine, instead of an error.
+- Under `--server`, a command that printed its result and then failed, such as `doctor --strict`, prints that result before it exits `1`. The server's stderr goes to stderr.
+- The dashboard's **Top Processes** card was empty for an SSH server, and its **Network Ports** card for this machine. Both show their lists now.
+
 ## 1.7.0
 
-November 10, 2026 · <Badge tone="brand">Latest</Badge> · <Badge tone="warning">Check when upgrading</Badge>
+November 10, 2026 · <Badge tone="warning">Check when upgrading</Badge>
 
 - **Windows builds.** Each release has a [Windows zip](/installation#windows) for x64 and Arm with `homebutler.exe` inside, and a [Claude Desktop extension](/agents/mcp-server#install-the-claude-desktop-extension) for each. `npm install -g homebutler` now works on Windows 10 version 1803 or later.
 - **`--all` exits `1`** when any server couldn't be asked or its command failed there. Every server is still printed, and the [error names the failed servers](/running/multi-server#run-a-command-on-every-server). A server without Docker fails `docker list --all` on every run.

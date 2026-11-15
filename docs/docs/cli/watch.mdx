@@ -42,6 +42,7 @@ homebutler watch add [name] [flags]
 | Flag | Type | Default | Description |
 | --- | --- | --- | --- |
 | `--kind` | string | `docker` | What the name refers to: `docker`, `systemd`, or `pm2`. Without `--kind`, a name makes the command ask you to pick the type, which fails when input is not a terminal. |
+| `--unit` | string | - | The real container, systemd unit or PM2 app name, when you list the target under another name. |
 
 <Note title="Names are not checked when you add them">
 
@@ -57,6 +58,36 @@ homebutler watch add --kind docker web
 
 ```text
 Added docker "web" to watch list.
+```
+
+List a systemd unit under a name of your choice. `watch start` watches `nginx.service`, and the list shows `web`.
+
+```bash
+homebutler watch add --kind systemd web --unit nginx.service
+```
+
+```text
+Added systemd "web" to watch list.
+```
+
+With `--json`, the command prints the target and whether it was added. Adding a target that is already on the list prints `"added": false` and exits `0`.
+
+```json
+{
+  "container": "web",
+  "kind": "systemd",
+  "added": false
+}
+```
+
+A name or unit that starts with `-` is refused, and so is a name with a space or a slash.
+
+```bash
+homebutler watch add --kind systemd web --unit -x
+```
+
+```text
+error: invalid unit: -x
 ```
 
 Without `--kind` and without a terminal, the command stops.
@@ -102,6 +133,8 @@ No restarts detected.
   api (pm2)
   → These are only monitored while running: homebutler watch start
 ```
+
+With nothing on the watch list, the command prints `No targets being watched.`, or `{"checked": 0}` with `--json`.
 
 ## `watch history`
 
@@ -244,6 +277,8 @@ homebutler watch remove api
 ```text
 Removed "api" from watch list.
 ```
+
+With `--json`, the command prints `{"container": "api", "removed": true}`.
 
 A name that is not in the list is an error.
 

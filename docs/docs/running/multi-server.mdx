@@ -95,7 +95,7 @@ error: [edge] ⚠️  SSH HOST KEY CHANGED (192.168.1.20:22)
   → If unexpected: do NOT connect and investigate
 ```
 
-`trust <name> --reset` removes the old entries for that address first, then asks again.
+`trust <name> --reset` shows the new fingerprint and asks again. The old entries for that address are replaced only when you answer `y`. Answer `n` and `known_hosts` stays as it was.
 
 ## Put homebutler on each server
 
@@ -262,7 +262,7 @@ A server that runs an older binary fails on commands it doesn't have. The error 
 
 ```text
 error: [edge] the homebutler on edge is 0.17.0, and does not have `report`
-  → This one is 1.7.0. Bring them level: homebutler upgrade
+  → This one is 1.8.0. Bring them level: homebutler upgrade
 ```
 
 [`homebutler upgrade`](/running/upgrading) updates the local binary and every remote server.

@@ -17,13 +17,13 @@ An MCP client sends `tools/call` with the tool's `name` and its `arguments`. The
 ```
 
 ```json
-{"jsonrpc":"2.0","id":2,"result":{"resultType":"complete","content":[{"type":"text","text":"{\"container\":\"web\",\"lines\":\"2\",\"logs\":\"listening on 18102\\nlistening on 18102\"}"}],"_meta":{"io.modelcontextprotocol/serverInfo":{"name":"homebutler","version":"1.7.0"}}}}
+{"jsonrpc":"2.0","id":2,"result":{"resultType":"complete","content":[{"type":"text","text":"{\"container\":\"web\",\"lines\":\"2\",\"logs\":\"listening on 18102\\nlistening on 18102\"}"}],"_meta":{"io.modelcontextprotocol/serverInfo":{"name":"homebutler","version":"1.8.0"}}}}
 ```
 
 The pages in this tab show the parsed JSON inside `text`, not the envelope. When a tool fails, the content item holds the error message as plain text and the result has `"isError": true`. A failed call is a normal response, not a JSON-RPC error:
 
 ```json
-{"jsonrpc":"2.0","id":2,"result":{"resultType":"complete","content":[{"type":"text","text":"failed to stop missing: Error response from daemon: No such container: missing"}],"isError":true,"_meta":{"io.modelcontextprotocol/serverInfo":{"name":"homebutler","version":"1.7.0"}}}}
+{"jsonrpc":"2.0","id":2,"result":{"resultType":"complete","content":[{"type":"text","text":"failed to stop missing: Error response from daemon: No such container: missing"}],"isError":true,"_meta":{"io.modelcontextprotocol/serverInfo":{"name":"homebutler","version":"1.8.0"}}}}
 ```
 
 Arguments are checked by the tool, not by the transport. A missing required argument returns `missing required parameter: <name>`, except `watch_add` and `watch_remove`, which return `container is required`. A tool name that doesn't exist returns `unknown tool: <name>`. A number can be sent as a string, and a boolean as `"true"`; the tool converts it.
@@ -61,7 +61,7 @@ Most tools take an optional `server` argument. It names a server from the `serve
 
 These tools take no `server` argument: `config_validate`, `install_list`, `install_status`, `install_app`, `install_uninstall`, `install_purge`, `network_scan`, `wake` and every `proxmox_*` tool. The Proxmox tools that query a Proxmox server take `endpoint` instead, and a call that gets `server` returns `tool "<name>" cannot be pointed at a server; use endpoint`. `proxmox_script_list` and `proxmox_script_command` take no `endpoint`, and a call that gets `server` returns `tool "<name>" cannot be pointed at a server`.
 
-Some arguments don't travel to the remote server. `inventory_export` supports only `format` set to `json` there, `backup_create` doesn't send `exclude`, and `watch_add` doesn't send `unit`. A name that isn't in the config returns `server "<name>" not found in config`.
+`inventory_export` supports only `format` set to `json` on a remote server. Every other argument is sent. A name that isn't in the config returns `server "<name>" not found in config`.
 
 ## What every response has in common
 

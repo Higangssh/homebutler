@@ -30,7 +30,7 @@ homebutler watch list
 homebutler watch remove cron.service
 ```
 
-`watch add` without `--kind` asks you to pick a kind, and fails when standard input isn't a terminal, so scripts pass `--kind docker`, `--kind systemd` or `--kind pm2`. Run `watch add` with no name to list the running containers. A name uses letters, digits, `-`, `_` and `.`, up to 128 characters. These are real replies:
+`watch add` without `--kind` asks you to pick a kind, and fails when standard input isn't a terminal, so scripts pass `--kind docker`, `--kind systemd` or `--kind pm2`. Run `watch add` with no name to list the running containers. A name uses letters, digits, `-`, `_` and `.`, up to 128 characters, and can't start with `-`. `--unit` sets the real container, unit or app name when the list should show another one. These are real replies:
 
 ```text
 Added docker "app" to watch list.

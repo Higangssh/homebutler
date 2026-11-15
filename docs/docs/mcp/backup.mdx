@@ -68,7 +68,7 @@ Backs up the volumes and bind mounts of Docker Compose services into one `.tar.g
 
 | Argument | Type | Description |
 | --- | --- | --- |
-| `exclude` | array of strings | Host paths to leave out. A bind mount at or under one of the paths is not archived. The paths are recorded in the archive manifest, so a later restore can tell a mount that was left out from one that never existed. A single string is accepted as a list of one. With `server` set, `exclude` isn't sent to the remote server. |
+| `exclude` | array of strings | Host paths to leave out. A bind mount at or under one of the paths is not archived. The paths are recorded in the archive manifest, so a later restore can tell a mount that was left out from one that never existed. A single string is accepted as a list of one. A path with a comma in it is sent as one path. |
 | `service` | string | Name of one Compose service to back up. Without it, every service of every Compose project on the machine is included. A name that no project has returns `service "<name>" not found in any compose project`. |
 | `to` | string | Directory to write the archive to. Defaults to `backup_dir` from the config, or `~/.homebutler/backups`. |
 | `server` | string | Server from your config to run on. See [Run a tool on another server](/mcp#run-a-tool-on-another-server). |

@@ -21,7 +21,7 @@ For connecting to remote servers, see [Multi-server](/running/multi-server).
 
 | Flag | Type | Default | Description |
 | --- | --- | --- | --- |
-| `--reset` | boolean | `false` | Remove the existing host keys for the server before trusting the new one. Use it after the server was reinstalled. |
+| `--reset` | boolean | `false` | Replace the host keys saved for the server with the one it presents now. Use it after the server was reinstalled. The old keys stay in `known_hosts` until you answer `y`. |
 
 ## Examples
 
@@ -36,6 +36,20 @@ connecting to remote1 (127.0.0.1:22)...
 host key fingerprint: SHA256:ol2LV3e4JwAJxHhPyoKHRQPRxxNCGVMiPT2gwqasYYo
 trust this host? (y/n): host key for remote1 added to known_hosts
 ```
+
+After the server's keys changed, `--reset` shows the new fingerprint and asks before it replaces anything.
+
+```bash
+homebutler trust edge --reset
+```
+
+```text
+connecting to edge (127.0.0.1:2298)...
+host key fingerprint: SHA256:uYtqq9YAjdL1Yki1Q597sNdsUjgP9p8xRw1llqE4w3g
+replace the host keys known_hosts has for this host with this one? (y/n): host key for edge replaced in known_hosts
+```
+
+Answering `n`, or giving no answer, exits `1` with `error: trust cancelled by user; known_hosts was left as it was`. A server that can't be reached leaves the file unchanged too: `error: could not retrieve host key from edge (127.0.0.1:2298); known_hosts was left as it was`. `trust` has no option to skip the prompt.
 
 A name that is not in the config is an error.
 

@@ -30,9 +30,9 @@ homebutler upgrade --local
 ```
 
 ```text
-checking latest version... v1.7.0
+checking latest version... v1.8.0
 
-upgrading local... ─ already v1.7.0
+upgrading local... ─ already v1.8.0
 
 1 already up-to-date
 ```
@@ -44,9 +44,9 @@ homebutler upgrade
 ```
 
 ```text
-checking latest version... v1.7.0
+checking latest version... v1.8.0
 
-upgrading local... ─ already v1.7.0
+upgrading local... ─ already v1.8.0
 upgrading remote1... ✗ ssh connect: [remote1] SSH connection failed (127.0.0.1:22): ssh: handshake failed: ssh: unable to authenticate, attempted methods [none publickey], no supported methods remain
   → Check: server online? correct host/port? firewall rules?
   → Config: /home/you/.config/homebutler/config.yaml
@@ -62,10 +62,10 @@ homebutler upgrade
 ```
 
 ```text
-checking latest version... v1.7.0
+checking latest version... v1.8.0
 
 upgrading local... ─ dev build, left as it is: upgrade does not replace the binary it runs from when that is a dev build. Update it with `go install github.com/Higangssh/homebutler@latest`, or rebuild it from your checkout
-upgrading edge... ─ already v1.7.0
+upgrading edge... ─ already v1.8.0
 
 1 already up-to-date, 1 skipped
 ```
@@ -75,20 +75,20 @@ homebutler upgrade --local --json
 ```
 
 ```text
-checking latest version... v1.7.0
+checking latest version... v1.8.0
 
-upgrading local... ─ already v1.7.0
+upgrading local... ─ already v1.8.0
 
 1 already up-to-date
 {
-  "latest_version": "1.7.0",
+  "latest_version": "1.8.0",
   "results": [
     {
       "target": "local",
-      "prev_version": "1.7.0",
-      "new_version": "1.7.0",
+      "prev_version": "1.8.0",
+      "new_version": "1.8.0",
       "status": "up-to-date",
-      "message": "already v1.7.0"
+      "message": "already v1.8.0"
     }
   ]
 }

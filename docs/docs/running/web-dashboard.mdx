@@ -59,7 +59,7 @@ Then open `http://localhost:8080` on your own computer. If you bind a public add
 
 ## What the dashboard shows
 
-The header has five tabs and, on the Dashboard tab, a server picker listing every entry in `servers:`.
+The header has five tabs and, on the Dashboard and Report tabs, a server picker listing every entry in `servers:`. The dashboard opens on the `local: true` server when it can read it, and otherwise on the first server it can, such as when homebutler runs [in a container](/running/container#what-the-container-cant-do). On the Report tab, the report, the **Doctor** findings and **Save a snapshot** are for the server the picker names, so saving with an SSH server picked saves the snapshot on that server.
 
 | Tab | What it answers | Contents |
 | --- | --- | --- |
@@ -102,7 +102,7 @@ curl -H "Authorization: Bearer <long-random-token>" http://127.0.0.1:8080/api/ve
 ```
 
 ```text
-{"version":"1.7.0"}
+{"version":"1.8.0"}
 ```
 
 A missing or wrong token gets `401` with `{"error":"unauthorized"}`.
