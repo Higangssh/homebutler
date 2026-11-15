@@ -72,7 +72,7 @@ Adds a Docker container, systemd unit or PM2 app to the watch list. The tool wri
 | --- | --- | --- |
 | `container` <Badge>required</Badge> | string | Name of the container, systemd unit or PM2 app. For a systemd unit or PM2 app whose name differs, pass the real name in `unit`. A name with a space or a slash, or one that starts with `-`, returns `invalid name: <name>`. |
 | `kind` | string | What the target is. One of `docker`, `systemd`, `pm2`. Default: `docker`. |
-| `unit` | string | The actual unit or app name when it differs from `container`. A unit that starts with `-` returns `invalid unit: <unit>`. A server running homebutler 1.7.0 or older can't take `unit`, so the call fails and that server's list doesn't change. The error names the version, such as ``[edge] the homebutler on edge is 1.7.0, and its `watch` does not have --unit``. Upgrade that server, or leave `unit` out. |
+| `unit` | string | The actual unit or app name when it differs from `container`. A unit that starts with `-` returns `invalid unit: <unit>`. A server running homebutler 1.7.0 or older can't take `unit`, so the call fails and that server's list doesn't change. The error names the version, such as ``[edge] the homebutler on edge is 1.7.0, and its `watch` does not have --unit``, followed by a line asking you to bring the two versions level. Upgrade that server, or leave `unit` out. |
 | `server` | string | Server from your config to run on. See [Run a tool on another server](/mcp#run-a-tool-on-another-server). |
 
 #### Response

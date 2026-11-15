@@ -2714,6 +2714,7 @@ components:
         - name
         - host
         - local
+        - visible
       properties:
         name:
           type: string

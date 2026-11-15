@@ -19,7 +19,7 @@ November 11, 2026 · <Badge tone="brand">Latest</Badge> · <Badge tone="warning"
 - The MCP tools [`watch_add`, `watch_remove`](/mcp/watch) and `watch_check` work with `server`. `watch_add` sends `unit` and [`backup_create`](/mcp/backup#backup_create) sends `exclude` to the server; `watch_add` with `unit` fails against a server on 1.7.0 or older.
 - With `server`, the MCP tools `backup_drill` and `notify_test` answer with the failed result, as they do for this machine, instead of an error.
 - Under `--server`, a command that printed its result and then failed, such as `doctor --strict`, prints that result before it exits `1`. The server's stderr goes to stderr.
-- The dashboard's **Top Processes** card was empty for an SSH server, and its **Network Ports** card for this machine.
+- The dashboard's **Top Processes** card was empty for an SSH server, and its **Network Ports** card for this machine. Both show their lists now.
 
 ## 1.7.0
 
