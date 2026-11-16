@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### 🐛 Fixes
+
+- `watch --help`, `watch list`, `watch remove` and `watch check` described a Docker-only tracker; the help now names systemd units and PM2 apps where the command handles them, and `check --help` says it checks Docker targets only (#410)
+
 ## [1.8.0](https://github.com/Higangssh/homebutler/compare/v1.7.0...v1.8.0) - 2026-11-11
 
 **An answer about a server could describe the wrong machine, come back in another shape, or not come back at all, and answering `n` to `trust --reset` left a server with no host key, so the next connection trusted whatever answered; an answer now describes the machine it names or says why it cannot, comes in the shape it has for this machine, and `--reset` keeps the old key until the new one is accepted.**

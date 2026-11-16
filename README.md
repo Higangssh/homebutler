@@ -435,7 +435,7 @@ Both spellings are read, so either layout works. If a file contains both, the
 
 ```bash
 homebutler watch remove nginx           # Stop watching
-homebutler watch check                  # One-shot check (no continuous monitoring)
+homebutler watch check                  # One-shot check of Docker targets (no continuous monitoring)
 ```
 
 ### Alert Thresholds (Advanced)
@@ -884,7 +884,7 @@ Commands:
   watch add <name>    Watch a container, unit, or PM2 app (--kind, --unit)
   watch list          Show watched targets
   watch remove <name> Remove a target from the watch list
-  watch check         One-shot restart check
+  watch check         One-shot restart check (Docker targets only)
   watch start         Continuous monitoring: restarts, thresholds, rules
   watch install       Register watch with systemd or launchd
   watch installed     Report whether it is registered
