@@ -12,7 +12,7 @@
 
 <p align="center">
   <a href="https://homebutler.dev">Website</a> ·
-  <a href="https://github.com/Higangssh/homebutler#readme">Docs</a> ·
+  <a href="https://docs.homebutler.dev">Docs</a> ·
   <a href="https://github.com/Higangssh/homebutler/releases">Releases</a>
 </p>
 
@@ -144,8 +144,9 @@ docker exec homebutler printenv HOMEBUTLER_TOKEN   # the token, to sign in to th
 homebutler init
 ```
 
-Or as a container, reaching your machines over SSH — [docs/docker.md](docs/docker.md):
-`docker run -p 8080:8080 -e HOMEBUTLER_TOKEN=… -v ~/.config/homebutler:/config -v ~/.ssh:/root/.ssh:ro ghcr.io/higangssh/homebutler`
+The install script and Homebrew cover macOS and Linux; on Windows, download the
+zip as described under [Windows](#windows). The container setup, its volumes and
+token are covered in [docs/docker.md](docs/docker.md).
 
 Use it right away:
 
@@ -853,7 +854,7 @@ Commands:
   install <app>       Install a self-hosted app (docker compose)
   alerts              Show current alert status
   watch tui           TUI dashboard (monitors all configured servers)
-  watch add/list/remove  Manage watched containers
+  watch add/list/remove  Manage watched containers, systemd units, PM2 apps
   watch check/start   One-shot or continuous restart detection
   watch history/show  Browse restart history
   proxmox status      Proxmox VE cluster, nodes, guests, and storage
@@ -880,9 +881,9 @@ Commands:
   status              System status (CPU, memory, disk, uptime)
   doctor              Diagnose health, exposure, backups, and readiness
   watch tui           TUI dashboard (monitors all configured servers)
-  watch add <name>    Add container to restart watch list
-  watch list          Show watched containers
-  watch remove <name> Remove container from watch list
+  watch add <name>    Watch a container (--kind systemd|pm2, --unit <real name>)
+  watch list          Show watched targets
+  watch remove <name> Remove a target from the watch list
   watch check         One-shot restart check
   watch start         Continuous monitoring: restarts, thresholds, rules
   watch install       Register watch with systemd or launchd
@@ -918,6 +919,7 @@ Commands:
   alerts              Show current alert status
   alerts --watch      Thresholds only (watch start covers these too)
   trust <server>      Register SSH host key (TOFU)
+  trust --reset <s>   Replace a changed host key once you accept the new one
   backup              Backup Docker volumes, compose files, and env
   backup list         List existing backups
   backup drill <app>  Verify backup restores correctly (isolated)
@@ -1021,7 +1023,7 @@ Works with Claude Desktop, ChatGPT, Cursor, Windsurf, and any MCP client.
 
 To let an agent look without being able to change anything, add `"--max-risk", "read"` to `args`. Tools that change something are not offered and are refused if called by name, and `report` runs without saving a snapshot. Read mode stops changes, not reading: logs, container details and everything else a read returns are still visible. [What read mode covers →](docs/mcp-server.md#read-only-mode)
 
-📖 **[MCP server setup →](docs/mcp-server.md)** — supported clients, available tools, agent skills.
+📖 **[MCP server setup →](docs/mcp-server.md)** — supported clients, available tools, agent skills. Every guide is also published at [docs.homebutler.dev](https://docs.homebutler.dev).
 
 ## Architecture
 
