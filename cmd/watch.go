@@ -26,16 +26,17 @@ import (
 func newWatchCmd() *cobra.Command {
 	watchCmd := &cobra.Command{
 		Use:   "watch",
-		Short: "Docker restart tracker and TUI dashboard",
-		Long: `Track Docker container restarts, capture post-restart logs, and browse history.
+		Short: "Restart tracker for Docker, systemd, and PM2, plus TUI dashboard",
+		Long: `Track restarts of Docker containers, systemd units, and PM2 apps, capture the
+logs around each one, and browse history.
 Records are stored under ~/.homebutler/watch/.
 
 Subcommands:
   tui        Launch the TUI dashboard
-  add        Add a container to the watch list
-  list       Show watched containers
-  remove     Remove a container from the watch list
-  check      Run a one-shot restart check
+  add        Add a container, unit, or PM2 app to the watch list
+  list       Show watched targets
+  remove     Remove a target from the watch list
+  check      Run a one-shot restart check (Docker targets only)
   start      Start continuous monitoring
   history    List restart history (alias: incidents)
   show       Show details for a specific restart event`,
@@ -188,7 +189,7 @@ func newWatchListCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:     "list",
 		Args:    cobra.NoArgs,
-		Short:   "Show watched containers",
+		Short:   "Show watched containers, units, and PM2 apps",
 		Aliases: []string{"ls"},
 		RunE: func(cmd *cobra.Command, args []string) error {
 			dir, err := watch.WatchDir()
@@ -236,8 +237,8 @@ func newWatchListCmd() *cobra.Command {
 
 func newWatchRemoveCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:   "remove <container>",
-		Short: "Remove a container from the watch list",
+		Use:   "remove <name>",
+		Short: "Remove a container, unit, or PM2 app from the watch list",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			name := args[0]
@@ -268,7 +269,10 @@ func newWatchCheckCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "check",
 		Args:  cobra.NoArgs,
-		Short: "Run a one-shot restart check on all watched containers",
+		Short: "Run a one-shot restart check on watched Docker containers",
+		Long: `Run a one-shot restart check on watched Docker containers.
+systemd units and PM2 apps are listed as skipped; they are only monitored
+while 'homebutler watch start' is running.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			// Loaded so config.yaml's watch settings reach this command too;
 			// without it check and start would disagree about retention.
