@@ -881,7 +881,7 @@ Commands:
   status              System status (CPU, memory, disk, uptime)
   doctor              Diagnose health, exposure, backups, and readiness
   watch tui           TUI dashboard (monitors all configured servers)
-  watch add <name>    Watch a container (--kind systemd|pm2, --unit <real name>)
+  watch add <name>    Watch a container, unit, or PM2 app (--kind, --unit)
   watch list          Show watched targets
   watch remove <name> Remove a target from the watch list
   watch check         One-shot restart check
@@ -919,7 +919,7 @@ Commands:
   alerts              Show current alert status
   alerts --watch      Thresholds only (watch start covers these too)
   trust <server>      Register SSH host key (TOFU)
-  trust --reset <s>   Replace a changed host key once you accept the new one
+  trust <s> --reset   Replace a changed host key once you accept the new one
   backup              Backup Docker volumes, compose files, and env
   backup list         List existing backups
   backup drill <app>  Verify backup restores correctly (isolated)
@@ -1023,7 +1023,7 @@ Works with Claude Desktop, ChatGPT, Cursor, Windsurf, and any MCP client.
 
 To let an agent look without being able to change anything, add `"--max-risk", "read"` to `args`. Tools that change something are not offered and are refused if called by name, and `report` runs without saving a snapshot. Read mode stops changes, not reading: logs, container details and everything else a read returns are still visible. [What read mode covers →](docs/mcp-server.md#read-only-mode)
 
-📖 **[MCP server setup →](docs/mcp-server.md)** — supported clients, available tools, agent skills. Every guide is also published at [docs.homebutler.dev](https://docs.homebutler.dev).
+📖 **[MCP server setup →](docs/mcp-server.md)** — supported clients, available tools, agent skills. The same guide is at [docs.homebutler.dev/agents/mcp-server](https://docs.homebutler.dev/agents/mcp-server).
 
 ## Architecture
 
