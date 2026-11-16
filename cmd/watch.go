@@ -29,17 +29,7 @@ func newWatchCmd() *cobra.Command {
 		Short: "Restart tracker for Docker, systemd, and PM2, plus TUI dashboard",
 		Long: `Track restarts of Docker containers, systemd units, and PM2 apps, capture the
 logs around each one, and browse history.
-Records are stored under ~/.homebutler/watch/.
-
-Subcommands:
-  tui        Launch the TUI dashboard
-  add        Add a container, unit, or PM2 app to the watch list
-  list       Show watched targets
-  remove     Remove a target from the watch list
-  check      Run a one-shot restart check (Docker targets only)
-  start      Start continuous monitoring
-  history    List restart history (alias: incidents)
-  show       Show details for a specific restart event`,
+Records are stored under ~/.homebutler/watch/.`,
 	}
 
 	watchCmd.AddCommand(
@@ -79,7 +69,7 @@ func newWatchAddCmd() *cobra.Command {
 
 	cmd := &cobra.Command{
 		Use:   "add [name]",
-		Short: "Add a container/service to the watch list",
+		Short: "Add a container, unit, or PM2 app to the watch list",
 		Long: `Add a Docker container, systemd unit, or PM2 app to the watch list.
 If no name is given and kind is docker, lists running containers for reference.
 When a name is given without --kind, an interactive prompt lets you choose the type.
