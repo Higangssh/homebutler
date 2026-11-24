@@ -5,7 +5,7 @@ description: "Connect Claude Code, Claude Desktop, Cursor, or another MCP client
 
 # MCP server
 
-This page connects an MCP client to homebutler so an agent can call its [44 typed tools](/mcp) instead of running shell commands. You need Node.js 16 or later for the `npx` route, or homebutler [installed](/installation) for the binary route.
+This page connects an MCP client to homebutler so an agent can call its [45 typed tools](/mcp) instead of running shell commands. You need Node.js 16 or later for the `npx` route, or homebutler [installed](/installation) for the binary route.
 
 `homebutler mcp` speaks JSON-RPC over stdin and stdout. It opens no network port, so only the client that started it can talk to it. It reads your [config file](/reference/configuration) at startup and runs each tool on the machine where it was started, or on a remote server when the call names one.
 
@@ -155,7 +155,7 @@ The client shows this as a server that failed to start. Run `chmod 600` on the f
 }
 ```
 
-Demo mode lists all 44 tools. Write and destructive tools answer with sample results and change nothing. Some demo values differ from a real run: `docker_restart` returns `"status": "restarted"` where a real call returns `"ok"`.
+Demo mode lists all 45 tools. Write and destructive tools answer with sample results and change nothing. Some demo values differ from a real run: `docker_restart` returns `"status": "restarted"` where a real call returns `"ok"`.
 
 ## Check the connection
 

@@ -85,15 +85,22 @@ func History(dir string, opts HistoryOptions) ([]Incident, error) {
 		// today, but a caller should not have to know that to be safe from
 		// having the logs removed underneath it.
 		stripped := make([]Incident, len(incidents))
-		copy(stripped, incidents)
-		for i := range stripped {
-			stripped[i].PreLogs = ""
-			if stripped[i].Source != "proxmox" {
-				stripped[i].PostLogs = ""
-			}
+		for i, inc := range incidents {
+			stripped[i] = inc.WithoutLogs()
 		}
 		incidents = stripped
 	}
 
 	return incidents, nil
+}
+
+// WithoutLogs is the incident as History returns it when logs were not asked
+// for. A proxmox incident keeps PostLogs, because that is where its one line
+// of explanation lives rather than captured output.
+func (inc Incident) WithoutLogs() Incident {
+	inc.PreLogs = ""
+	if inc.Source != "proxmox" {
+		inc.PostLogs = ""
+	}
+	return inc
 }

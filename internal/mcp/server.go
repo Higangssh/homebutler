@@ -743,6 +743,12 @@ func (s *Server) executeTool(name string, args map[string]any) (any, error) {
 			Container: stringArg(args, "container"),
 			Logs:      boolArg(args, "include_logs"),
 		})
+	case "incident_context":
+		dir, err := watch.WatchDir()
+		if err != nil {
+			return nil, err
+		}
+		return report.ContextFor(s.cfg, dir, stringArg(args, "id"), stringArg(args, "container"), boolArg(args, "include_logs"))
 	case "watch_list":
 		dir, err := watch.WatchDir()
 		if err != nil {
@@ -1045,6 +1051,26 @@ func (s *Server) executeRemote(srv *config.ServerConfig, tool string, args map[s
 		}
 		if boolArg(args, "include_logs") {
 			remoteArgs = append(remoteArgs, "--logs")
+		}
+	case "incident_context":
+		// The same command a person runs there, so the snapshots compared are
+		// the server's and so is the current state, when one is read.
+		// The ID goes after --, so one starting with '-' is read there as an
+		// ID and refused as one rather than taken for a flag.
+		// The query is checked here so a call the server would refuse costs
+		// no SSH round trip.
+		if err := watch.CheckIncidentQuery(stringArg(args, "id"), stringArg(args, "container")); err != nil {
+			return nil, err
+		}
+		remoteArgs = []string{"watch", "show", "--context", "--json"}
+		if c := stringArg(args, "container"); c != "" {
+			remoteArgs = append(remoteArgs, "--container", c)
+		}
+		if boolArg(args, "include_logs") {
+			remoteArgs = append(remoteArgs, "--logs")
+		}
+		if id := stringArg(args, "id"); id != "" {
+			remoteArgs = append(remoteArgs, "--", id)
 		}
 	case "watch_list":
 		remoteArgs = []string{"watch", "list", "--json"}

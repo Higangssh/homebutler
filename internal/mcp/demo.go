@@ -197,6 +197,9 @@ func (s *Server) executeDemoTool(name string, args map[string]any) (any, error) 
 	case "watch_history":
 		return demoWatchHistory(args), nil
 
+	case "incident_context":
+		return demoIncidentContext(args)
+
 	case "watch_add":
 		// Demo mode writes nothing, so it answers as the state after the call:
 		// the target is on the list. Reporting added=false would be the shape
@@ -674,6 +677,60 @@ func demoWatchHistory(args map[string]any) []watch.Incident {
 	// the real tool sends them empty rather than leaving them out. Going
 	// through the type keeps the demo saying the same thing.
 	return demoAs[[]watch.Incident](incidents)
+}
+
+// demoIncidentContext answers for the demo incidents watch_history lists, so
+// an ID taken from one is found by the other. The newest nextcloud incident
+// follows an image change to nextcloud itself, which is the case the tool is
+// for; the others show the answer with nothing before them to compare.
+func demoIncidentContext(args map[string]any) (report.IncidentContext, error) {
+	id, target := stringArg(args, "id"), stringArg(args, "container")
+	if err := watch.CheckIncidentQuery(id, target); err != nil {
+		return report.IncidentContext{}, err
+	}
+	incidents := demoWatchHistory(map[string]any{"limit": 0, "include_logs": boolArg(args, "include_logs")})
+	var found *watch.Incident
+	for i, inc := range incidents {
+		// Newest first, so the first match for a target is its latest.
+		if inc.ID == id || (id == "" && inc.Container == target) {
+			found = &incidents[i]
+			break
+		}
+	}
+	if found == nil {
+		if id != "" {
+			return report.IncidentContext{}, fmt.Errorf("incident %q not found", id)
+		}
+		return report.IncidentContext{}, fmt.Errorf("no incident recorded for %q", target)
+	}
+	found.Kind = watch.KindDocker
+	if found.ID != "demo-nextcloud-20260430T120000Z" {
+		return report.IncidentContext{
+			Incident:     *found,
+			AnchoredAt:   found.CurrStarted,
+			AnchoredOn:   "curr_started_at",
+			AboutTarget:  []report.ChangeLine{},
+			OtherChanges: []report.ChangeLine{},
+			Note:         "No snapshot kept here is older than this incident: the oldest is from 2026-04-29T06:00:00Z. Either report had not run before it, or the snapshots from before it were pruned; report keeps the newest --keep of them, 30 by default.",
+		}, nil
+	}
+	return report.IncidentContext{
+		Incident:       *found,
+		AnchoredAt:     found.CurrStarted,
+		AnchoredOn:     "curr_started_at",
+		Compared:       true,
+		Before:         "2026-04-30T06:00:00Z",
+		After:          "2026-04-30T12:00:00Z",
+		AfterIsCurrent: false,
+		AboutTarget: []report.ChangeLine{
+			{Kind: "image", Target: "nextcloud", Detail: "nextcloud:28 → nextcloud:29", Text: "image: nextcloud — nextcloud:28 → nextcloud:29"},
+		},
+		OtherChanges: []report.ChangeLine{
+			{Kind: "new", Target: "redis-cache", Detail: "now running", Text: "new: redis-cache — now running"},
+			{Kind: "disk", Target: "/", Detail: "+3.2 GB since last report", Text: "disk: / — +3.2 GB since last report"},
+		},
+		Note: "These are the changes between the report at 2026-04-30T06:00:00Z and the next one at 2026-04-30T12:00:00Z, around the incident at 2026-04-30T11:58:41Z (curr_started_at). Any of them may have happened after the incident rather than before it.",
+	}, nil
 }
 
 // demoProcesses honours limit and sort_by, and always carries a zombie. The

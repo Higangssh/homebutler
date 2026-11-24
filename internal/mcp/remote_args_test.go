@@ -25,6 +25,8 @@ var remoteArgsBaseline = map[string]map[string]any{
 	"inventory_export": {"format": "json"},
 	// app is required unless all is set, which the schema cannot say.
 	"backup_drill": {"app": "web"},
+	// An ID or a target, which the schema cannot say either.
+	"incident_context": {"id": "web-1"},
 }
 
 // probeValues are the values tried for one property: each is one the

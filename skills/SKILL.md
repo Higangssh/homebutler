@@ -37,7 +37,7 @@ homebutler mcp
 
 ### The tools
 
-**Read (27)** — nothing changes; see what a read still exposes, below.
+**Read (28)** — nothing changes; see what a read still exposes, below.
 
 - `system_status`, `processes`, `open_ports`, `alerts`, `alerts_history`
 - `doctor` — health, exposure, backup age and readiness, as findings
@@ -45,6 +45,9 @@ homebutler mcp
 - `docker_list`, `docker_logs`, `docker_stats`, `docker_top`, `docker_inspect`
 - `backup_list`, `install_list`, `install_status`
 - `watch_list`, `watch_history`
+- `incident_context` — one incident with the changes between the last report
+  before it and the first after, split into changes to that container and
+  everything else; any of them may have come after the incident
 - `proxmox_status`, `proxmox_guests`, `proxmox_node`, `proxmox_tasks`,
   `proxmox_task_status`, `proxmox_script_list`, `proxmox_script_command`
 

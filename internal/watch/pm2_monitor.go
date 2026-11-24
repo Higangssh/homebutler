@@ -128,6 +128,7 @@ func (pm *PM2Monitor) Watch(ctx context.Context, targets []Target, incidents cha
 					now := time.Now()
 					inc := Incident{
 						ID:           GenerateIncidentID(t.Container, now),
+						Kind:         KindPM2,
 						Container:    t.Container,
 						DetectedAt:   now,
 						RestartCount: p.PM2Env.RestartTime,

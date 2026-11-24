@@ -347,6 +347,7 @@ func (dm *DockerMonitor) watchOnce(ctx context.Context, targets []Target, incide
 
 			inc := Incident{
 				ID:          GenerateIncidentID(name, now),
+				Kind:        KindDocker,
 				Container:   name,
 				DetectedAt:  now,
 				PrevStarted: prevStarted,

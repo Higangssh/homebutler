@@ -308,6 +308,7 @@ When a crash is detected, you'll see:
 ```bash
 homebutler watch history                # List all incidents
 homebutler watch show <incident-id>     # Full details
+homebutler watch show --container <name> --context   # Latest incident, with the changes between the last report before it and the first after
 ```
 
 `watch show` output includes:
@@ -892,7 +893,7 @@ Commands:
   watch installed     Report whether it is registered
   watch uninstall     Remove the service unit
   watch history       List restart history (alias: incidents)
-  watch show <id>     Show restart details with logs
+  watch show <id>     Show restart details with logs (--context: what changed around it)
   serve               Web dashboard (browser-based, go:embed)
   docker list         List running containers
   docker restart <n>  Restart a container

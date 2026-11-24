@@ -5,7 +5,7 @@ description: "Start the homebutler MCP server with --max-risk read so an agent c
 
 # Read-only mode
 
-This page shows how to start the MCP server so an agent can look at your servers but can't change anything through homebutler. Read-only mode offers 28 of the 44 [tools](/mcp): the 27 classed `read`, plus `report`, which runs without saving a snapshot.
+This page shows how to start the MCP server so an agent can look at your servers but can't change anything through homebutler. Read-only mode offers 29 of the 45 [tools](/mcp): the 28 classed `read`, plus `report`, which runs without saving a snapshot.
 
 ## Start the server in read-only mode
 
@@ -48,7 +48,7 @@ Add `--max-risk read` to the arguments in your [client config](/agents/mcp-serve
 error: --max-risk must be read, write or destructive, not "bogus"
 ```
 
-With `write`, the server offers 40 tools and leaves out the four `destructive` ones: `backup_restore`, `docker_stop`, `install_purge` and `proxmox_guest_shutdown`.
+With `write`, the server offers 41 tools and leaves out the four `destructive` ones: `backup_restore`, `docker_stop`, `install_purge` and `proxmox_guest_shutdown`.
 
 ## What the server offers and refuses
 

@@ -60,7 +60,10 @@ var remoteRecordings = map[string][]remoteRecording{
 		{out: `{"checked":1,"skipped":[{"name":"api","kind":"pm2"}]}`},
 	},
 	"watch_history": {{release: "1.5.0", out: `[]`}},
-	"watch_list":    {{release: "1.5.0", out: `[]`}},
+	"incident_context": {
+		{args: map[string]any{"container": "web"}, out: `{"incident":{"id":"web-20261124-031200.000-a1b2c3","container":"web","detected_at":"2026-11-24T03:12:00Z","restart_count":0,"prev_started_at":"","curr_started_at":"","pre_logs":"","post_logs":""},"compared":false,"after_is_current":false,"about_target":[],"other_changes":[],"note":"No snapshot was taken before this incident, so there is nothing to compare it with. Run report on a schedule so the next incident has one."}`},
+	},
+	"watch_list": {{release: "1.5.0", out: `[]`}},
 	// Sentences, under --json, through 1.7.0.
 	"watch_add": {
 		{release: "1.7.0", args: map[string]any{"container": "web"}, out: "Added docker \"web\" to watch list.\n  The running service reads the watch list at startup:\n    systemctl --user restart homebutler-watch\n"},

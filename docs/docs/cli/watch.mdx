@@ -296,11 +296,18 @@ Prints one incident: the restart times, the crash analysis, and the logs capture
 
 ```bash
 homebutler watch show <incident-id> [flags]
+homebutler watch show --container <name> [flags]
 ```
 
 | Argument | Description |
 | --- | --- |
-| `incident-id` | The incident ID from the first column of `watch history`. |
+| `incident-id` | The incident ID from the first column of `watch history`. Give this or `--container`. |
+
+| Flag | Description |
+| --- | --- |
+| `--container <name>` | Show the latest incident for this target instead of one by ID. The name is the one `watch list` shows, or the unit a docker target is watched under, matched exactly; a name that differs only in case is used when it is the only one and no target has the exact name, with a warning saying so. When a docker and a systemd target share the name, the newest incident of either is shown, so give the incident ID to pick one. An incident file that cannot be read is named in a warning, since it may be the newer incident. |
+| `--context` | Add what `report` saw change around the incident: the last snapshot before it compared with the first one after it, or with the current state when no report has run since, split into the changes to the incident's own container and everything else. Any of those changes may have come after the incident. The window is placed at the new run's start when the incident has one earlier than its detection. Times are printed in UTC. With `--json`, prints the answer of the MCP tool [`incident_context`](/mcp/watch#incident_context). |
+| `--logs` | With `--context`, include the captured logs: printed after the changes, or in `pre_logs` and `post_logs` with `--json`. `--context` leaves them out otherwise. Without `--context` it is an error, since `watch show` prints the logs already. |
 
 ```bash
 homebutler watch show web-20261025-111946.106-1e2bb7
@@ -330,6 +337,28 @@ homebutler watch show nope
 
 ```text
 error: incident "nope" not found
+```
+
+With `--context`, the incident is followed by the changes `report` recorded around it. This container was recreated after a report, crashed and restarted, and a second report was saved before `watch check` recorded the restart, so the window is placed at the restart rather than at the check:
+
+```bash
+homebutler watch show --container hb414-check --context
+```
+
+```text
+Incident:  hb414-check-20261124-233637.192-b82ae3
+Container: hb414-check
+Detected:  2026-11-24T14:36:37Z
+Anchored:  2026-11-24T14:36:27.356600376Z (curr_started_at)
+Compared:  2026-11-24T14:36:08Z → 2026-11-24T14:36:35Z
+
+=== About hb414-check ===
+replaced: hb414-check — recreated, 1b5b78bc2071 → 2c8e528cc50b
+
+=== Other changes ===
+No changes.
+
+These are the changes between the report at 2026-11-24T14:36:08Z and the next one at 2026-11-24T14:36:35Z, around the incident at 2026-11-24T14:36:27.356600376Z (curr_started_at). Any of them may have happened after the incident rather than before it.
 ```
 
 ## `watch start`
