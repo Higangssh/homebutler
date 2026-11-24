@@ -754,6 +754,27 @@ var Registry = []Capability{
 		},
 	},
 	{
+		// A read: it compares snapshots already saved and saves none. When no
+		// snapshot follows the incident it reads the current state, as
+		// report with no_save does.
+		Risk:    RiskRead,
+		Targets: []TargetKind{TargetLocal, TargetServer},
+		HTTP:    HTTP{Absent: AbsentNoViewYet},
+		Tool: Definition{
+			Name:        "incident_context",
+			Description: "One restart incident with what changed around it: the newest report snapshot before the incident compared with the first one after it, or with the current state when no report has run since, split into the changes to the incident's own container and its ports and everything else. Says so when no snapshot precedes the incident",
+			InputSchema: Schema{
+				Type: "object",
+				Properties: map[string]Property{
+					"id":           {Type: "string", Description: "Incident ID, as watch_history returns it (give this or container)"},
+					"container":    {Type: "string", Description: "Target name; its latest incident is used (give this or id)"},
+					"include_logs": {Type: "boolean", Description: "Include the logs captured before and after the restart (default: false)"},
+					"server":       {Type: "string", Description: "Remote server name from config (optional, runs locally if omitted)"},
+				},
+			},
+		},
+	},
+	{
 		Risk:    RiskRead,
 		Targets: []TargetKind{TargetLocal, TargetServer},
 		HTTP:    HTTP{Method: "GET", Path: "/api/watch"},

@@ -18,6 +18,7 @@ docker_stats risk=read args=[server:string]
 docker_stop risk=destructive args=[name:string server:string] required=[name]
 docker_top risk=read args=[name:string server:string] required=[name]
 doctor risk=read args=[backup_max_age_hours:integer server:string]
+incident_context risk=read args=[container:string id:string include_logs:boolean server:string]
 install_app risk=write args=[app:string port:integer] required=[app]
 install_list risk=read args=[]
 install_purge risk=destructive args=[app:string] required=[app]
@@ -64,6 +65,7 @@ docker_stats {"readOnlyHint":true,"destructiveHint":false}
 docker_stop {"readOnlyHint":false,"destructiveHint":true}
 docker_top {"readOnlyHint":true,"destructiveHint":false}
 doctor {"readOnlyHint":true,"destructiveHint":false}
+incident_context {"readOnlyHint":true,"destructiveHint":false}
 install_app {"readOnlyHint":false,"destructiveHint":true}
 install_list {"readOnlyHint":true,"destructiveHint":false}
 install_purge {"readOnlyHint":false,"destructiveHint":true}
@@ -159,6 +161,7 @@ docker_stats: []ContainerStats
 docker_stop: ActionResult
 docker_top: TopResult
 doctor: Result
+incident_context: IncidentContext
 install_app: InstallResult
 install_list: []App
 install_purge: InstallResult
@@ -195,6 +198,7 @@ config_validate: no-view-yet
 docker_inspect: no-view-yet
 docker_logs: no-view-yet
 docker_top: no-view-yet
+incident_context: no-view-yet
 inventory_export: no-view-yet
 inventory_scan: no-view-yet
 network_scan: no-view-yet
@@ -623,6 +627,49 @@ proxmox.TaskStatus.status:string
 proxmox.TaskStatus.type:string
 proxmox.TaskStatus.upid:string
 proxmox.TaskStatus.user?:string
+report.IncidentContext.about_target.detail?:string
+report.IncidentContext.about_target.kind:string
+report.IncidentContext.about_target.target:string
+report.IncidentContext.about_target.text:string
+report.IncidentContext.about_target:[]ChangeLine
+report.IncidentContext.after?:string
+report.IncidentContext.after_is_current:bool
+report.IncidentContext.before?:string
+report.IncidentContext.compared:bool
+report.IncidentContext.incident.container:string
+report.IncidentContext.incident.crash_analysis?.category:string
+report.IncidentContext.incident.crash_analysis?.confidence:string
+report.IncidentContext.incident.crash_analysis?.exit_code:int
+report.IncidentContext.incident.crash_analysis?.patterns?:[]string
+report.IncidentContext.incident.crash_analysis?.reason:string
+report.IncidentContext.incident.crash_analysis?.signal?:string
+report.IncidentContext.incident.crash_analysis?:?CrashSummary
+report.IncidentContext.incident.curr_started_at:string
+report.IncidentContext.incident.detected_at:Time
+report.IncidentContext.incident.exit_code?:?int
+report.IncidentContext.incident.flapping?.count:int
+report.IncidentContext.incident.flapping?.is_flapping:bool
+report.IncidentContext.incident.flapping?.level:string
+report.IncidentContext.incident.flapping?.since:Time
+report.IncidentContext.incident.flapping?.window:string
+report.IncidentContext.incident.flapping?:?FlappingResult
+report.IncidentContext.incident.id:string
+report.IncidentContext.incident.oom_killed?:bool
+report.IncidentContext.incident.post_logs:string
+report.IncidentContext.incident.pre_logs:string
+report.IncidentContext.incident.prev_started_at:string
+report.IncidentContext.incident.proxmox_class?:string
+report.IncidentContext.incident.proxmox_state?:string
+report.IncidentContext.incident.recovered?:bool
+report.IncidentContext.incident.restart_count:int
+report.IncidentContext.incident.source?:string
+report.IncidentContext.incident:Incident
+report.IncidentContext.note?:string
+report.IncidentContext.other_changes.detail?:string
+report.IncidentContext.other_changes.kind:string
+report.IncidentContext.other_changes.target:string
+report.IncidentContext.other_changes.text:string
+report.IncidentContext.other_changes:[]ChangeLine
 system.ProcessResult.processes.cpu:float64
 system.ProcessResult.processes.mem:float64
 system.ProcessResult.processes.name:string

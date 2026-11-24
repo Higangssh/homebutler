@@ -6,7 +6,9 @@ import (
 	"io"
 	"os"
 	"testing"
+	"time"
 
+	"github.com/Higangssh/homebutler/internal/report"
 	"github.com/Higangssh/homebutler/internal/watch"
 	"github.com/spf13/cobra"
 )
@@ -128,5 +130,29 @@ func TestWatchAddRefusesAUnitTheNameRuleRefuses(t *testing.T) {
 	dir, _ := watch.WatchDir()
 	if targets, _ := watch.LoadTargets(dir); len(targets) != 0 {
 		t.Fatalf("a refused target was stored: %+v", targets)
+	}
+}
+
+// incident_context pointed at a server hands back what `watch show --context
+// --json` prints there, so it prints the tool's answer, logs left out unless
+// --logs asks for them.
+func TestWatchShowContextPrintsTheToolAnswer(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("HOMEBUTLER_CONFIG", "")
+	dir, _ := watch.WatchDir()
+	inc := watch.Incident{ID: "web-1", Container: "web", DetectedAt: time.Date(2026, 11, 24, 3, 12, 0, 0, time.UTC), PreLogs: "panic"}
+	if err := watch.SaveIncident(dir, &inc, 0); err != nil {
+		t.Fatal(err)
+	}
+
+	var got report.IncidentContext
+	strictInto(t, runWatchJSON(t, newWatchShowCmd(), "--context", "--container", "web"), &got)
+	if got.Incident.ID != "web-1" || got.Compared || got.Note == "" || got.Incident.PreLogs != "" {
+		t.Errorf("watch show --context = %+v", got)
+	}
+
+	strictInto(t, runWatchJSON(t, newWatchShowCmd(), "--context", "--logs", "--", "web-1"), &got)
+	if got.Incident.PreLogs != "panic" {
+		t.Errorf("--logs left the logs out: %+v", got.Incident)
 	}
 }

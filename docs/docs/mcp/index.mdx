@@ -1,12 +1,12 @@
 ---
 title: MCP tools
-description: "How homebutler's 44 MCP tools are called, how they are classed read, write or destructive, what every response has in common, and where each tool is documented."
+description: "How homebutler's 45 MCP tools are called, how they are classed read, write or destructive, what every response has in common, and where each tool is documented."
 sidebar_position: 1
 ---
 
 # MCP tools
 
-homebutler's MCP server offers 44 tools. This tab documents each one: what it does, its risk class, every argument, the fields of its response, and a real response. To connect a client first, see [MCP server](/agents/mcp-server).
+homebutler's MCP server offers 45 tools. This tab documents each one: what it does, its risk class, every argument, the fields of its response, and a real response. To connect a client first, see [MCP server](/agents/mcp-server).
 
 ## Call a tool
 
@@ -34,7 +34,7 @@ Every tool is classed `read`, `write` or `destructive`. The classes are frozen s
 
 | Class | Tools | Meaning |
 | --- | --- | --- |
-| `read` (27) | `alerts`, `alerts_history`, `backup_list`, `config_validate`, `docker_inspect`, `docker_list`, `docker_logs`, `docker_stats`, `docker_top`, `doctor`, `install_list`, `install_status`, `inventory_export`, `inventory_scan`, `network_scan`, `open_ports`, `processes`, `proxmox_guests`, `proxmox_node`, `proxmox_script_command`, `proxmox_script_list`, `proxmox_status`, `proxmox_task_status`, `proxmox_tasks`, `system_status`, `watch_history`, `watch_list` | Changes nothing on the machine. A read can still return sensitive text, such as log lines, container configuration and open ports. |
+| `read` (28) | `alerts`, `alerts_history`, `backup_list`, `config_validate`, `docker_inspect`, `docker_list`, `docker_logs`, `docker_stats`, `docker_top`, `doctor`, `incident_context`, `install_list`, `install_status`, `inventory_export`, `inventory_scan`, `network_scan`, `open_ports`, `processes`, `proxmox_guests`, `proxmox_node`, `proxmox_script_command`, `proxmox_script_list`, `proxmox_status`, `proxmox_task_status`, `proxmox_tasks`, `system_status`, `watch_history`, `watch_list` | Changes nothing on the machine. A read can still return sensitive text, such as log lines, container configuration and open ports. |
 | `write` (13) | `backup_create`, `backup_drill`, `docker_restart`, `install_app`, `install_uninstall`, `notify_test`, `proxmox_guest_reboot`, `proxmox_guest_start`, `report`, `wake`, `watch_add`, `watch_check`, `watch_remove` | Changes something, or sends something out of the machine, such as a snapshot, a restart, a message or a packet. |
 | `destructive` (4) | `backup_restore`, `docker_stop`, `install_purge`, `proxmox_guest_shutdown` | Overwrites data, deletes data, or stops a service. |
 
@@ -49,7 +49,7 @@ Inside a container, tools that read the machine they run on refuse a call that l
 | [System and processes](/mcp/system) | `system_status`, `processes`, `open_ports`, `network_scan`, `alerts`, `alerts_history` |
 | [Report, doctor and inventory](/mcp/report-doctor-inventory) | `report`, `doctor`, `inventory_scan`, `inventory_export`, `config_validate` |
 | [Docker](/mcp/docker) | `docker_list`, `docker_stats`, `docker_logs`, `docker_top`, `docker_inspect`, `docker_restart`, `docker_stop` |
-| [Watch](/mcp/watch) | `watch_list`, `watch_add`, `watch_remove`, `watch_check`, `watch_history` |
+| [Watch](/mcp/watch) | `watch_list`, `watch_add`, `watch_remove`, `watch_check`, `watch_history`, `incident_context` |
 | [Backup](/mcp/backup) | `backup_list`, `backup_create`, `backup_drill`, `backup_restore` |
 | [Install](/mcp/install) | `install_list`, `install_status`, `install_app`, `install_uninstall`, `install_purge` |
 | [Proxmox](/mcp/proxmox) | `proxmox_status`, `proxmox_guests`, `proxmox_node`, `proxmox_tasks`, `proxmox_task_status`, `proxmox_guest_start`, `proxmox_guest_reboot`, `proxmox_guest_shutdown`, `proxmox_script_list`, `proxmox_script_command` |

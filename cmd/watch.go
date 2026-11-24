@@ -15,6 +15,7 @@ import (
 
 	"github.com/Higangssh/homebutler/internal/alerts"
 	"github.com/Higangssh/homebutler/internal/docker"
+	"github.com/Higangssh/homebutler/internal/report"
 	"github.com/Higangssh/homebutler/internal/service"
 	"github.com/Higangssh/homebutler/internal/tui"
 	"github.com/Higangssh/homebutler/internal/util"
@@ -745,16 +746,54 @@ func newWatchHistoryCmd() *cobra.Command {
 }
 
 func newWatchShowCmd() *cobra.Command {
-	return &cobra.Command{
-		Use:   "show <incident-id>",
+	var (
+		withContext bool
+		container   string
+		logs        bool
+	)
+	cmd := &cobra.Command{
+		Use:   "show [incident-id]",
 		Short: "Show incident details",
-		Args:  cobra.ExactArgs(1),
+		Long: `Show one recorded incident: by ID, or the latest one for a target with
+--container.
+
+--context adds what report saw change around it: the newest snapshot before
+the incident compared with the first one after it, or with the current state
+when no report has run since, split into the changes to the incident's own
+container and everything else.`,
+		Args: func(cmd *cobra.Command, args []string) error {
+			if len(args) > 1 {
+				return fmt.Errorf("accepts at most one incident ID, received %d", len(args))
+			}
+			if (len(args) == 1) == (container != "") {
+				return fmt.Errorf("give an incident ID or --container, not both and not neither")
+			}
+			return nil
+		},
 		RunE: func(cmd *cobra.Command, args []string) error {
 			dir, err := watch.WatchDir()
 			if err != nil {
 				return err
 			}
-			inc, err := watch.LoadIncident(dir, args[0])
+			id := ""
+			if len(args) == 1 {
+				id = args[0]
+			}
+			if withContext {
+				if err := loadConfig(); err != nil {
+					return err
+				}
+				ctx, err := report.ContextFor(cfg, dir, id, container, logs)
+				if err != nil {
+					return err
+				}
+				if jsonOutput {
+					return output(ctx, true)
+				}
+				printIncidentContext(ctx)
+				return nil
+			}
+			inc, err := watch.FindIncident(dir, id, container)
 			if err != nil {
 				return err
 			}
@@ -816,6 +855,49 @@ func newWatchShowCmd() *cobra.Command {
 			fmt.Println(logLines)
 			return nil
 		},
+	}
+	cmd.Flags().BoolVar(&withContext, "context", false, "Add what report saw change around the incident")
+	cmd.Flags().StringVar(&container, "container", "", "Show the latest incident for this target instead of one by ID")
+	// Only affects --context --json, which leaves logs out as watch history
+	// --json does. The plain incident has always carried them.
+	cmd.Flags().BoolVar(&logs, "logs", false, "Include captured logs in --context --json output")
+	return cmd
+}
+
+// printIncidentContext is --context for a person: the incident in a line,
+// then the two lists, then the note.
+func printIncidentContext(c *report.IncidentContext) {
+	inc := c.Incident
+	fmt.Printf("Incident:  %s\n", inc.ID)
+	fmt.Printf("Container: %s\n", inc.Container)
+	fmt.Printf("Detected:  %s\n", inc.DetectedAt.Format("2006-01-02 15:04:05"))
+	if inc.CrashAnalysis != nil {
+		fmt.Printf("Analysis:  %s — %s\n", inc.CrashAnalysis.Category, inc.CrashAnalysis.Reason)
+	}
+	if c.Compared {
+		after := c.After
+		if c.AfterIsCurrent {
+			after += " (current state)"
+		}
+		fmt.Printf("Compared:  %s → %s\n", c.Before, after)
+		printChangeLines("About "+inc.Container, c.AboutTarget)
+		printChangeLines("Other changes", c.OtherChanges)
+	}
+	if c.Note != "" {
+		fmt.Println()
+		fmt.Println(c.Note)
+	}
+}
+
+func printChangeLines(title string, lines []report.ChangeLine) {
+	fmt.Println()
+	fmt.Printf("=== %s ===\n", title)
+	if len(lines) == 0 {
+		fmt.Println("No changes.")
+		return
+	}
+	for _, l := range lines {
+		fmt.Println(l.Text)
 	}
 }
 

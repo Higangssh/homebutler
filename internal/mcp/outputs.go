@@ -56,11 +56,12 @@ var ToolOutputs = map[string]any{
 	"report": report.Report{},
 	"doctor": doctor.Result{},
 
-	"watch_check":   watch.RunResult{},
-	"watch_history": []watch.Incident{},
-	"watch_list":    []watch.WatchedTarget{},
-	"watch_add":     watch.WatchAddResult{},
-	"watch_remove":  watch.WatchRemoveResult{},
+	"watch_check":      watch.RunResult{},
+	"watch_history":    []watch.Incident{},
+	"incident_context": report.IncidentContext{},
+	"watch_list":       []watch.WatchedTarget{},
+	"watch_add":        watch.WatchAddResult{},
+	"watch_remove":     watch.WatchRemoveResult{},
 
 	"backup_create":  backup.BackupResult{},
 	"backup_list":    []backup.ListEntry{},

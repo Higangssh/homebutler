@@ -1,6 +1,6 @@
 ---
 title: Watch
-description: "Reference for the MCP tools that manage and check the restart watch list: watch_list, watch_add, watch_remove, watch_check and watch_history."
+description: "Reference for the MCP tools that manage and check the restart watch list: watch_list, watch_add, watch_remove, watch_check, watch_history and incident_context."
 sidebar_position: 5
 ---
 
@@ -388,6 +388,112 @@ Response:
     "post_logs": "listening on 18102\nlistening on 18102\nlistening on 18102\nlistening on 18102"
   }
 ]
+```
+
+</Accordion>
+
+</Tool>
+
+<Tool>
+
+### incident_context
+
+<Badge tone="success">read</Badge>
+
+Returns one incident with what [`report`](/mcp/report-doctor-inventory) saw change around it, so an agent asked why a container stopped does not have to join `watch_history` and `report` itself. The newest snapshot taken before the incident is compared with the first one taken after it, which gives the changes the next report printed. When no report has run since the incident, it is compared with the current state instead, read for this call and not saved, and `after_is_current` says so.
+
+The changes are split by whose they are. `about_target` holds changes to the incident's own container and to the ports it published, decided from what each snapshot recorded about the container behind a port rather than from the text of the line. Everything else is in `other_changes`, including a container whose name only contains the target's. Only a Docker container can have changes tied to it: for a systemd unit, a PM2 app or a Proxmox incident, every change is in `other_changes`.
+
+When no snapshot was taken before the incident, the incident comes back alone with `compared: false` and a `note` saying so. Inside a container, an incident with no snapshot after it is answered the same way, because the current state there would be the container's.
+
+#### Arguments
+
+| Argument | Type | Description |
+| --- | --- | --- |
+| `id` | string | Incident ID, as `watch_history` returns it. Give this or `container`. |
+| `container` | string | Name of a watched target. Its latest incident is used. Give this or `id`. |
+| `include_logs` | boolean | `true` fills the incident's `pre_logs` and `post_logs`. Otherwise both are empty strings. Default: `false`. |
+| `server` | string | Server from your config to run on. The snapshots compared, and the current state when one is read, are that server's. The server needs a homebutler with `watch show --context`. See [Run a tool on another server](/mcp#run-a-tool-on-another-server). |
+
+#### Response
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `incident` | object | The incident, with the fields listed for [`watch_history`](#watch_history). |
+| `compared` | boolean | `false` when nothing was compared: no snapshot before the incident, one that could not be read, or no snapshot after it and no current state to read. The two lists are then empty, and `note` says why. |
+| `before` | string, optional | Timestamp of the snapshot taken before the incident, in RFC 3339 format (UTC). |
+| `after` | string, optional | Timestamp of the snapshot taken after the incident, or of the current state when `after_is_current` is `true`. |
+| `after_is_current` | boolean | `true` when no snapshot was taken after the incident and the current state was compared instead. A change listed then may have come after the incident, including whatever fixed it. |
+| `about_target` | array of objects | Changes to the incident's container and its ports, in the shape [`report`](/mcp/report-doctor-inventory) returns in `notable_changes`: `kind`, `target`, `detail` and `text`. A `skipped` line for containers or ports is here as well as in `other_changes`, because it qualifies both. |
+| `other_changes` | array of objects | Every other change, in the same shape. |
+| `note` | string, optional | One sentence when nothing was compared, or when the comparison ran to the current state. |
+
+<Accordion title="Examples">
+
+On a Raspberry Pi, a report was saved, the container was recreated with a command that exits with status 3, and `watch start` recorded two incidents. A second report was saved after them. Asked by ID about the first incident, the tool compares the two snapshots:
+
+Arguments:
+
+```json
+{
+  "id": "hb414-crash-20261124-230243.929-7e4713"
+}
+```
+
+Response:
+
+```json
+{
+  "incident": {
+    "id": "hb414-crash-20261124-230243.929-7e4713",
+    "container": "hb414-crash",
+    "detected_at": "2026-11-24T23:02:43.929906133+09:00",
+    "restart_count": 0,
+    "prev_started_at": "",
+    "curr_started_at": "2026-11-24T14:02:43.637018476Z",
+    "pre_logs": "",
+    "post_logs": "",
+    "exit_code": 3,
+    "crash_analysis": {
+      "category": "fatal_error",
+      "reason": "Fatal error detected in logs",
+      "exit_code": 3,
+      "patterns": ["fatal"],
+      "confidence": "medium"
+    }
+  },
+  "compared": true,
+  "before": "2026-11-24T14:02:11Z",
+  "after": "2026-11-24T14:03:27Z",
+  "after_is_current": false,
+  "about_target": [
+    {
+      "kind": "gone",
+      "target": ":18414/tcp",
+      "detail": "was hb414-crash (alpine:latest)",
+      "text": "gone: :18414/tcp — was hb414-crash (alpine:latest)"
+    },
+    {
+      "kind": "replaced",
+      "target": "hb414-crash",
+      "detail": "recreated, 87a6a970f4d4 → 09538d59e672, running → exited",
+      "text": "replaced: hb414-crash — recreated, 87a6a970f4d4 → 09538d59e672, running → exited"
+    }
+  ],
+  "other_changes": []
+}
+```
+
+Before the second report, the same call with `"container": "hb414-crash"` used the latest incident and compared the current state, and said so. The `incident`, `about_target` and `other_changes` fields are left out of this excerpt:
+
+```json
+{
+  "compared": true,
+  "before": "2026-11-24T14:02:11Z",
+  "after": "2026-11-24T14:03:20Z",
+  "after_is_current": true,
+  "note": "No snapshot was taken after this incident, so these changes run from the snapshot before it to the current state, read now — not to the moment it was detected. A change listed here may have come after the incident, including whatever fixed it."
+}
 ```
 
 </Accordion>

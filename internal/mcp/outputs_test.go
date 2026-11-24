@@ -49,6 +49,7 @@ var demoArgs = map[string]map[string]any{
 	"docker_top":             {"name": "nginx"},
 	"docker_inspect":         {"name": "nginx"},
 	"wake":                   {"target": "desk"},
+	"incident_context":       {"container": "nextcloud"},
 	"watch_add":              {"container": "nginx"},
 	"watch_remove":           {"container": "nginx"},
 	"backup_restore":         {"archive": "demo.tar.gz"},
