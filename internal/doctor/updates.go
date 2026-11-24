@@ -28,9 +28,12 @@ const staleCacheAge = 7 * 24 * time.Hour
 // UpdateState is what the package manager already knows about pending
 // updates and a pending reboot, read without root and without the network.
 type UpdateState struct {
-	// NotRun names why nothing was checked, such as "macOS". Empty means the
-	// check ran.
+	// NotRun names the system the check does not apply to, such as "macOS"
+	// or "Alpine Linux v3.20". Empty means the check ran.
 	NotRun string
+	// InContainer is set with NotRun when the system is a container image,
+	// whose packages are not the host's.
+	InContainer bool
 
 	// Manager is "apt" or "dnf".
 	Manager string
@@ -127,13 +130,32 @@ func (p updateProbe) read() UpdateState {
 		// The package database in here is the image's, not the host's, and
 		// answering for the host with it would be answering for the wrong
 		// machine.
-		return UpdateState{NotRun: "a container, which cannot see the host's packages"}
+		return UpdateState{NotRun: "the container image", InContainer: true}
 	case p.has("apt-get"):
 		return p.readApt()
 	case p.has("dnf"):
 		return p.readDNF()
 	}
-	return UpdateState{NotRun: "a Linux distribution with neither apt nor dnf"}
+	return UpdateState{NotRun: p.distribution()}
+}
+
+// distribution names a Linux system by its os-release PRETTY_NAME, such as
+// "Alpine Linux v3.20" or "Arch Linux", falling back to "this Linux system".
+func (p updateProbe) distribution() string {
+	for _, abs := range []string{"/etc/os-release", "/usr/lib/os-release"} {
+		data, err := os.ReadFile(p.path(abs))
+		if err != nil {
+			continue
+		}
+		for _, line := range strings.Split(string(data), "\n") {
+			if value, ok := strings.CutPrefix(line, "PRETTY_NAME="); ok {
+				if name := strings.Trim(strings.TrimSpace(value), `"'`); name != "" {
+					return name
+				}
+			}
+		}
+	}
+	return "this Linux system"
 }
 
 // readApt reads Debian and Ubuntu. reboot-required is written by the package

@@ -101,7 +101,8 @@ Every finding carries one of eleven `category` values. A script can filter on th
 | `No pending package updates` | `pass` | The package list has nothing newer. |
 | `The package list is <age> old` | `warn` | The list was last refreshed more than 7 days ago, so the count above is from then. |
 | `Could not count pending updates` | `warn` | The package manager could not read its cache. |
-| `Pending updates and reboot were not checked` | `warn` | The machine is macOS, Windows, a container, or Linux with neither apt nor dnf. |
+| `Pending updates are not read on <system>` | `pass` | The machine is macOS, Windows, or Linux with neither apt nor dnf, such as Alpine or Arch. The finding names the system and changes nothing about `--strict`, because nothing on that machine could clear a warning. |
+| `Pending updates are not read in the container image` | `pass` | `doctor` runs inside a container, whose packages are the image's. Check the host with `--server`. |
 
 Under `--server` the check runs on that server, against its own packages.
 

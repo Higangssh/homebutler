@@ -688,12 +688,22 @@ func certDays(d time.Duration) string {
 // apt update, and it says when the list it counted from is old. `status`
 // reports seven weeks of uptime as good news; this is the other half.
 func checkUpdates(r *Result, s UpdateState) {
+	// A pass, not a warn: nothing on such a machine could clear a warning, so
+	// `doctor --strict` in a Mac cron job or the container image would exit 1
+	// forever. The finding still says plainly that nothing was read.
 	if s.NotRun != "" {
-		r.add(SeverityWarn, "system",
-			"Pending updates and reboot were not checked",
-			"This is "+s.NotRun+". doctor reads reboot-required and the apt or dnf package cache, and there is neither to read here.",
-			"Check for updates the way this system does; doctor cannot say whether any are waiting.",
-			"")
+		reads := "doctor reads /var/run/reboot-required, needs-restarting and the apt or dnf package cache"
+		if s.InContainer {
+			r.add(SeverityPass, "system",
+				"Pending updates are not read in the container image",
+				reads+", and the ones in here belong to the image, not to the host. Check the host with --server.",
+				"", "")
+			return
+		}
+		r.add(SeverityPass, "system",
+			"Pending updates are not read on "+s.NotRun,
+			reads+", and "+s.NotRun+" has none of them.",
+			"", "")
 		return
 	}
 

@@ -8,6 +8,10 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/Higangssh/homebutler/internal/backup"
+	"github.com/Higangssh/homebutler/internal/config"
+	"github.com/Higangssh/homebutler/internal/notify"
 )
 
 // Lines as apt-get --simulate dist-upgrade prints them on Ubuntu 24.04 and
@@ -219,19 +223,31 @@ func TestFedoraWithoutNeedsRestartingSaysTheRebootWasNotChecked(t *testing.T) {
 	}
 }
 
-func TestUpdatesNotRunWhereThereIsNothingToRead(t *testing.T) {
-	cases := map[string]updateProbe{
-		"macOS":     {goos: "darwin"},
-		"Windows":   {goos: "windows"},
-		"container": {goos: "linux", inContainer: true},
-		"neither apt nor dnf": {goos: "linux", lookPath: func(string) (string, error) {
-			return "", errors.New("not found")
-		}},
+// Where there is nothing to read, the finding says so by name and is a pass:
+// nothing on that machine could clear a warning, and `doctor --strict` in a
+// Mac cron job or the container image would exit 1 forever.
+func TestUpdatesNotReadWhereThereIsNothingToRead(t *testing.T) {
+	noTools := func(string) (string, error) { return "", errors.New("not found") }
+	alpine := t.TempDir()
+	writeAt(t, filepath.Join(alpine, "/etc/os-release"), "NAME=\"Alpine Linux\"\nPRETTY_NAME=\"Alpine Linux v3.20\"\n", fixedNow)
+
+	cases := []struct {
+		name   string
+		probe  updateProbe
+		title  string
+		detail string
+	}{
+		{"macOS", updateProbe{goos: "darwin"}, "Pending updates are not read on macOS", "macOS has none of them"},
+		{"Windows", updateProbe{goos: "windows"}, "Pending updates are not read on Windows", "Windows has none of them"},
+		{"container", updateProbe{goos: "linux", inContainer: true}, "Pending updates are not read in the container image", "Check the host with --server"},
+		{"Alpine", updateProbe{goos: "linux", root: alpine, lookPath: noTools}, "Pending updates are not read on Alpine Linux v3.20", "Alpine Linux v3.20 has none of them"},
+		{"no os-release", updateProbe{goos: "linux", root: t.TempDir(), lookPath: noTools}, "Pending updates are not read on this Linux system", "this Linux system has none of them"},
 	}
-	for name, p := range cases {
-		t.Run(name, func(t *testing.T) {
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			p := tc.probe
 			p.run = func(context.Context, string, ...string) ([]byte, int, error) {
-				t.Fatal("ran a command on a system the check does not support")
+				t.Fatal("ran a command on a system the check does not apply to")
 				return nil, 0, nil
 			}
 			r := &Result{}
@@ -240,13 +256,39 @@ func TestUpdatesNotRunWhereThereIsNothingToRead(t *testing.T) {
 				t.Fatalf("findings = %+v", r.Findings)
 			}
 			f := r.Findings[0]
-			if f.Severity != SeverityWarn || f.Category != "system" || f.Title != "Pending updates and reboot were not checked" {
-				t.Fatalf("finding = %+v", f)
+			if f.Severity != SeverityPass || f.Category != "system" || f.Title != tc.title {
+				t.Fatalf("finding = %+v, want pass %q", f, tc.title)
 			}
-			if !strings.Contains(f.Detail, name) {
-				t.Errorf("detail %q does not name %s", f.Detail, name)
+			if !strings.Contains(f.Detail, tc.detail) || !strings.Contains(f.Detail, "apt or dnf package cache") {
+				t.Errorf("detail %q does not say what is read and that %q", f.Detail, tc.detail)
+			}
+			if f.Command != "" || f.Action != "" {
+				t.Errorf("a check that does not apply offers a fix: %+v", f)
 			}
 		})
+	}
+}
+
+// The reason it is a pass: on an otherwise clean Mac, doctor's status stays
+// pass, which is what `--strict` exits on.
+func TestStrictStaysGreenWhereUpdatesAreNotRead(t *testing.T) {
+	fns := doctorFuncs(healthyStatus(), nil, nil, nil,
+		[]backup.ListEntry{{Name: "backup.tar.gz", CreatedAt: fixedNow.Add(-time.Hour).Format(time.RFC3339)}})
+	fns.SnapshotDir = t.TempDir()
+	writeSnapshotMarker(t, fns.SnapshotDir)
+	fns.UpdatesFn = func() UpdateState { return UpdateState{NotRun: "macOS"} }
+
+	cfg := &config.Config{}
+	cfg.Notify.Webhook = &notify.WebhookConfig{URL: "https://example.test/webhook"}
+	drilled := backup.DrillRecord{App: "app", Archive: "backup.tar.gz", Passed: true,
+		At: fixedNow.Add(-30 * time.Minute).UTC().Format(time.RFC3339)}
+
+	r, err := Run(cfg, fns, Options{Now: fixedNow, DrillRecordsFn: staticDrills(drilled)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r.Status != SeverityPass {
+		t.Fatalf("status = %s on a clean Mac, so --strict would exit 1: %+v", r.Status, r.Findings)
 	}
 }
 
