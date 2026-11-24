@@ -8,6 +8,7 @@ import (
 	"github.com/Higangssh/homebutler/internal/capability"
 
 	"github.com/Higangssh/homebutler/internal/config"
+	"github.com/Higangssh/homebutler/internal/report"
 )
 
 func TestExecuteDemoTool_Basic(t *testing.T) {
@@ -190,5 +191,37 @@ func TestDemoConfigValidateStrictChangesTheVerdictNotTheFindings(t *testing.T) {
 	}
 	if strictResult.Result == nil {
 		t.Error("the findings must travel with a failing verdict, or a caller cannot see why it failed")
+	}
+}
+
+// An ID taken from the demo's watch_history finds that incident, not the
+// latest for its container, and a target finds its latest, as the real tool
+// does.
+func TestDemoIncidentContextHonoursItsArguments(t *testing.T) {
+	s := NewServer(&config.Config{}, "dev", true)
+	call := func(args map[string]any) report.IncidentContext {
+		t.Helper()
+		got, err := s.executeDemoTool("incident_context", args)
+		if err != nil {
+			t.Fatalf("incident_context%v: %v", args, err)
+		}
+		return got.(report.IncidentContext)
+	}
+
+	older := call(map[string]any{"id": "demo-nextcloud-20260429T031500Z"})
+	if older.Incident.ID != "demo-nextcloud-20260429T031500Z" || older.Compared {
+		t.Errorf("by ID: %s, compared = %v; want the older incident, uncompared", older.Incident.ID, older.Compared)
+	}
+	latest := call(map[string]any{"container": "nextcloud"})
+	if latest.Incident.ID != "demo-nextcloud-20260430T120000Z" || !latest.Compared || len(latest.AboutTarget) == 0 {
+		t.Errorf("by target: %s, compared = %v", latest.Incident.ID, latest.Compared)
+	}
+	if latest.Incident.PreLogs != "" || call(map[string]any{"container": "nextcloud", "include_logs": true}).Incident.PreLogs == "" {
+		t.Error("include_logs must decide whether the logs come back")
+	}
+	for _, args := range []map[string]any{{}, {"id": "x", "container": "y"}, {"id": "nope"}, {"container": "Nextcloud"}} {
+		if _, err := s.executeDemoTool("incident_context", args); err == nil {
+			t.Errorf("%v was not refused", args)
+		}
 	}
 }

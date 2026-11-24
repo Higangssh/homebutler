@@ -1057,6 +1057,11 @@ func (s *Server) executeRemote(srv *config.ServerConfig, tool string, args map[s
 		// the server's and so is the current state, when one is read.
 		// The ID goes after --, so one starting with '-' is read there as an
 		// ID and refused as one rather than taken for a flag.
+		// The query is checked here so a call the server would refuse costs
+		// no SSH round trip.
+		if err := watch.CheckIncidentQuery(stringArg(args, "id"), stringArg(args, "container")); err != nil {
+			return nil, err
+		}
 		remoteArgs = []string{"watch", "show", "--context", "--json"}
 		if c := stringArg(args, "container"); c != "" {
 			remoteArgs = append(remoteArgs, "--container", c)

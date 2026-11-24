@@ -634,6 +634,8 @@ report.IncidentContext.about_target.text:string
 report.IncidentContext.about_target:[]ChangeLine
 report.IncidentContext.after?:string
 report.IncidentContext.after_is_current:bool
+report.IncidentContext.anchored_at:string
+report.IncidentContext.anchored_on:string
 report.IncidentContext.before?:string
 report.IncidentContext.compared:bool
 report.IncidentContext.incident.container:string
@@ -654,6 +656,7 @@ report.IncidentContext.incident.flapping?.since:Time
 report.IncidentContext.incident.flapping?.window:string
 report.IncidentContext.incident.flapping?:?FlappingResult
 report.IncidentContext.incident.id:string
+report.IncidentContext.incident.kind?:string
 report.IncidentContext.incident.oom_killed?:bool
 report.IncidentContext.incident.post_logs:string
 report.IncidentContext.incident.pre_logs:string
@@ -670,6 +673,7 @@ report.IncidentContext.other_changes.kind:string
 report.IncidentContext.other_changes.target:string
 report.IncidentContext.other_changes.text:string
 report.IncidentContext.other_changes:[]ChangeLine
+report.IncidentContext.unattributed?:string
 system.ProcessResult.processes.cpu:float64
 system.ProcessResult.processes.mem:float64
 system.ProcessResult.processes.name:string
@@ -727,6 +731,7 @@ watch.Incident.flapping?.since:Time
 watch.Incident.flapping?.window:string
 watch.Incident.flapping?:?FlappingResult
 watch.Incident.id:string
+watch.Incident.kind?:string
 watch.Incident.oom_killed?:bool
 watch.Incident.post_logs:string
 watch.Incident.pre_logs:string
@@ -755,6 +760,7 @@ watch.RunResult.incidents?.flapping?.since:Time
 watch.RunResult.incidents?.flapping?.window:string
 watch.RunResult.incidents?.flapping?:?FlappingResult
 watch.RunResult.incidents?.id:string
+watch.RunResult.incidents?.kind?:string
 watch.RunResult.incidents?.oom_killed?:bool
 watch.RunResult.incidents?.post_logs:string
 watch.RunResult.incidents?.pre_logs:string

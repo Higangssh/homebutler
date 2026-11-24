@@ -308,7 +308,7 @@ When a crash is detected, you'll see:
 ```bash
 homebutler watch history                # List all incidents
 homebutler watch show <incident-id>     # Full details
-homebutler watch show --container <name> --context   # Latest incident, with what report saw change before it
+homebutler watch show --container <name> --context   # Latest incident, with the changes between the last report before it and the first after
 ```
 
 `watch show` output includes:

@@ -305,9 +305,9 @@ homebutler watch show --container <name> [flags]
 
 | Flag | Description |
 | --- | --- |
-| `--container <name>` | Show the latest incident for this target instead of one by ID. |
-| `--context` | Add what `report` saw change around the incident: the newest snapshot before it compared with the first one after it, or with the current state when no report has run since, split into the changes to the incident's own container and everything else. With `--json`, prints the answer of the MCP tool [`incident_context`](/mcp/watch#incident_context). |
-| `--logs` | With `--context --json`, include the captured logs. They are left out otherwise, as `watch history --json` leaves them out. |
+| `--container <name>` | Show the latest incident for this target instead of one by ID. The name is the one `watch list` shows, matched exactly; a name that differs only in case is used when it is the only one. |
+| `--context` | Add what `report` saw change around the incident: the last snapshot before it compared with the first one after it, or with the current state when no report has run since, split into the changes to the incident's own container and everything else. Any of those changes may have come after the incident. The window is placed at the new run's start when the incident has one earlier than its detection. Times are printed in UTC. With `--json`, prints the answer of the MCP tool [`incident_context`](/mcp/watch#incident_context). |
+| `--logs` | With `--context`, include the captured logs: printed after the changes, or in `pre_logs` and `post_logs` with `--json`. `--context` leaves them out otherwise. Without `--context` it is an error, since `watch show` prints the logs already. |
 
 ```bash
 homebutler watch show web-20261025-111946.106-1e2bb7
@@ -339,25 +339,26 @@ homebutler watch show nope
 error: incident "nope" not found
 ```
 
-With `--context`, the incident is followed by the changes `report` recorded around it. This container was recreated between a report and its crash:
+With `--context`, the incident is followed by the changes `report` recorded around it. This container was recreated after a report, crashed and restarted, and a second report was saved before `watch check` recorded the restart, so the window is placed at the restart rather than at the check:
 
 ```bash
-homebutler watch show --container hb414-crash --context
+homebutler watch show --container hb414-check --context
 ```
 
 ```text
-Incident:  hb414-crash-20261124-230304.215-454fd9
-Container: hb414-crash
-Detected:  2026-11-24 23:03:04
-Analysis:  fatal_error — Fatal error detected in logs
-Compared:  2026-11-24T14:02:11Z → 2026-11-24T14:03:27Z
+Incident:  hb414-check-20261124-233637.192-b82ae3
+Container: hb414-check
+Detected:  2026-11-24T14:36:37Z
+Anchored:  2026-11-24T14:36:27.356600376Z (curr_started_at)
+Compared:  2026-11-24T14:36:08Z → 2026-11-24T14:36:35Z
 
-=== About hb414-crash ===
-gone: :18414/tcp — was hb414-crash (alpine:latest)
-replaced: hb414-crash — recreated, 87a6a970f4d4 → 09538d59e672, running → exited
+=== About hb414-check ===
+replaced: hb414-check — recreated, 1b5b78bc2071 → 2c8e528cc50b
 
 === Other changes ===
 No changes.
+
+These are the changes between the report at 2026-11-24T14:36:08Z and the next one at 2026-11-24T14:36:35Z, around the incident at 2026-11-24T14:36:27.356600376Z (curr_started_at). Any of them may have happened after the incident rather than before it.
 ```
 
 ## `watch start`

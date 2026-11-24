@@ -120,6 +120,7 @@ func CheckTargets(dir string, keep int) (RunResult, error) {
 			postLogs := captureLogsFunc(t.Container, "100")
 			inc := Incident{
 				ID:           GenerateIncidentID(t.Container, now),
+				Kind:         KindDocker,
 				Container:    t.Container,
 				DetectedAt:   now,
 				RestartCount: ev.RestartCount,

@@ -1,9 +1,6 @@
 package watch
 
-import (
-	"fmt"
-	"strings"
-)
+import "strings"
 
 // WatchedTarget is a target joined with whatever the last poll recorded about
 // it. `watch list` printed that join as a table and had no --json, so an agent
@@ -106,42 +103,4 @@ func (inc Incident) WithoutLogs() Incident {
 		inc.PostLogs = ""
 	}
 	return inc
-}
-
-// FindIncident returns the incident with this ID or, given a target instead,
-// the latest incident recorded for it. Exactly one of the two is expected.
-func FindIncident(dir, id, target string) (*Incident, error) {
-	switch {
-	case id != "" && target != "":
-		return nil, fmt.Errorf("give an incident ID or a target, not both")
-	case id != "":
-		return LoadIncident(dir, id)
-	case target == "":
-		return nil, fmt.Errorf("an incident ID or a target is required")
-	}
-	latest, err := History(dir, HistoryOptions{Container: target, Limit: 1, Logs: true})
-	if err != nil {
-		return nil, err
-	}
-	if len(latest) == 0 {
-		return nil, fmt.Errorf("no incident recorded for %q", target)
-	}
-	return &latest[0], nil
-}
-
-// IsContainerIncident reports whether the incident is about a Docker
-// container, which is the only kind of target a report change can be tied to.
-// A target removed from the list since is taken to have been a container,
-// docker being the kind a target has when none is given.
-func IsContainerIncident(dir string, inc Incident) bool {
-	if inc.Source != "" {
-		return false
-	}
-	targets, _ := LoadTargets(dir)
-	for _, t := range targets {
-		if t.Container == inc.Container || t.EffectiveUnit() == inc.Container {
-			return t.EffectiveKind() == KindDocker
-		}
-	}
-	return true
 }

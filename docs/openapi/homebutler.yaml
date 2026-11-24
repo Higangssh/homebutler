@@ -3483,6 +3483,13 @@ components:
         proxmox_state:
           type: string
           description: The guest state, for a Proxmox guest.
+        kind:
+          type: string
+          enum:
+            - docker
+            - systemd
+            - pm2
+          description: The kind of monitor that recorded the incident. Left out for a Proxmox incident and for one recorded before this field was added.
         crash_analysis:
           $ref: '#/components/schemas/CrashSummary'
         flapping:

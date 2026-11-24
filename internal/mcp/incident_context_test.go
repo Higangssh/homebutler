@@ -24,7 +24,7 @@ func seedIncidentHome(t *testing.T, withAfter bool) {
 	t.Setenv("HOME", home)
 
 	watchDir := filepath.Join(home, ".homebutler", "watch")
-	inc := watch.Incident{ID: "web-20261124-031200.000-abcdef", Container: "web", DetectedAt: time.Date(2026, 11, 24, 3, 12, 0, 0, time.UTC), PreLogs: "panic: boom"}
+	inc := watch.Incident{ID: "web-20261124-031200.000-abcdef", Container: "web", Kind: watch.KindDocker, DetectedAt: time.Date(2026, 11, 24, 3, 12, 0, 0, time.UTC), PreLogs: "panic: boom"}
 	if err := watch.SaveIncident(watchDir, &inc, 0); err != nil {
 		t.Fatal(err)
 	}
@@ -101,29 +101,47 @@ func TestIncidentContextInAContainerDoesNotReadTheContainerAsTheHost(t *testing.
 		t.Fatal(err)
 	}
 	got := answer.(*report.IncidentContext)
-	if got.Compared || got.Before != "2026-11-24T03:00:00Z" || !strings.Contains(got.Note, "cannot be read from here") {
+	if got.Compared || got.Before != "2026-11-24T03:00:00Z" || !strings.Contains(got.Note, "inside a container the current state would be the container's") {
 		t.Errorf("in a container: compared = %v, before = %q, note = %q", got.Compared, got.Before, got.Note)
 	}
 }
 
-// The ID goes after --, so an ID that looks like a flag reaches the server
-// as an ID, and the server refuses it as one.
+// The ID goes after --, so whatever it is reaches the server as an ID. An ID
+// or target the server would refuse, or both or neither, is refused here,
+// before the round trip.
 func TestIncidentContextSendsTheIDAfterTheFlags(t *testing.T) {
 	s, _ := newTestServer()
 	s.cfg.Servers = []config.ServerConfig{{Name: "pi", Host: "192.0.2.1"}}
 	var sent []string
+	calls := 0
 	saved := runRemote
 	t.Cleanup(func() { runRemote = saved })
 	runRemote = func(_ *config.ServerConfig, argv ...string) ([]byte, error) {
+		calls++
 		sent = argv
 		return []byte(`{"incident":{},"compared":false,"after_is_current":false,"about_target":[],"other_changes":[]}`), nil
 	}
 
-	if _, err := s.executeTool("incident_context", map[string]any{"server": "pi", "id": "--help", "include_logs": true}); err != nil {
+	if _, err := s.executeTool("incident_context", map[string]any{"server": "pi", "id": "web-1", "include_logs": true}); err != nil {
 		t.Fatal(err)
 	}
-	want := []string{"watch", "show", "--context", "--json", "--logs", "--", "--help"}
+	want := []string{"watch", "show", "--context", "--json", "--logs", "--", "web-1"}
 	if !slices.Equal(sent, want) {
 		t.Errorf("sent %q, want %q", sent, want)
+	}
+
+	calls = 0
+	for _, args := range []map[string]any{
+		{"server": "pi"},
+		{"server": "pi", "id": "web-1", "container": "web"},
+		{"server": "pi", "id": "--help"},
+		{"server": "pi", "container": "-v"},
+	} {
+		if _, err := s.executeTool("incident_context", args); err == nil {
+			t.Errorf("%v was not refused", args)
+		}
+	}
+	if calls != 0 {
+		t.Errorf("%d refused calls reached the server", calls)
 	}
 }

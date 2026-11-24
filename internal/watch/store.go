@@ -106,6 +106,12 @@ type Incident struct {
 	ProxmoxClass string `json:"proxmox_class,omitempty"`
 	// Recovered marks a transition back to healthy rather than into failure.
 	Recovered bool `json:"recovered,omitempty"`
+	// Kind is the kind of monitor that recorded the incident: docker,
+	// systemd or pm2. Empty for a Proxmox incident, which Source names, and
+	// for one recorded before this field existed. The watch list cannot say
+	// after the fact, because it keys on name and kind together and a
+	// target can be removed.
+	Kind string `json:"kind,omitempty"`
 }
 
 func WatchDir() (string, error) {

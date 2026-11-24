@@ -760,13 +760,19 @@ func newWatchShowCmd() *cobra.Command {
 --context adds what report saw change around it: the newest snapshot before
 the incident compared with the first one after it, or with the current state
 when no report has run since, split into the changes to the incident's own
-container and everything else.`,
+container and everything else. The window is placed at the new run's start
+when the incident has one earlier than its detection, since watch check
+records the time it ran. --logs adds the captured logs, which --context
+otherwise leaves out.`,
 		Args: func(cmd *cobra.Command, args []string) error {
 			if len(args) > 1 {
 				return fmt.Errorf("accepts at most one incident ID, received %d", len(args))
 			}
 			if (len(args) == 1) == (container != "") {
 				return fmt.Errorf("give an incident ID or --container, not both and not neither")
+			}
+			if logs && !withContext {
+				return fmt.Errorf("--logs only applies with --context; watch show already prints the logs")
 			}
 			return nil
 		},
@@ -790,7 +796,7 @@ container and everything else.`,
 				if jsonOutput {
 					return output(ctx, true)
 				}
-				printIncidentContext(ctx)
+				printIncidentContext(ctx, logs)
 				return nil
 			}
 			inc, err := watch.FindIncident(dir, id, container)
@@ -836,41 +842,48 @@ container and everything else.`,
 					inc.Flapping.Since.Format("15:04:05"))
 			}
 			fmt.Println()
-			if inc.PreLogs != "" {
-				fmt.Println("=== Pre-Death Logs ===")
-				preLines := inc.PreLogs
-				preRunes := []rune(preLines)
-				if len(preRunes) > 5000 {
-					preLines = string(preRunes[:5000]) + "\n... (truncated)"
-				}
-				fmt.Println(preLines)
-				fmt.Println()
-			}
-			fmt.Println("=== Post-Restart Logs ===")
-			logLines := inc.PostLogs
-			runes := []rune(logLines)
-			if len(runes) > 5000 {
-				logLines = string(runes[:5000]) + "\n... (truncated)"
-			}
-			fmt.Println(logLines)
+			printIncidentLogs(*inc)
 			return nil
 		},
 	}
 	cmd.Flags().BoolVar(&withContext, "context", false, "Add what report saw change around the incident")
 	cmd.Flags().StringVar(&container, "container", "", "Show the latest incident for this target instead of one by ID")
-	// Only affects --context --json, which leaves logs out as watch history
-	// --json does. The plain incident has always carried them.
-	cmd.Flags().BoolVar(&logs, "logs", false, "Include captured logs in --context --json output")
+	// --context leaves the logs out, as watch history --json does, so the
+	// changes are what the screen shows. Plain watch show has always printed
+	// them, so the flag means nothing there and is refused.
+	cmd.Flags().BoolVar(&logs, "logs", false, "With --context, include the captured logs")
 	return cmd
 }
 
-// printIncidentContext is --context for a person: the incident in a line,
-// then the two lists, then the note.
-func printIncidentContext(c *report.IncidentContext) {
+// printIncidentLogs prints the captured logs, each cut to 5000 characters.
+func printIncidentLogs(inc watch.Incident) {
+	if inc.PreLogs != "" {
+		fmt.Println("=== Pre-Death Logs ===")
+		fmt.Println(truncateLog(inc.PreLogs))
+		fmt.Println()
+	}
+	fmt.Println("=== Post-Restart Logs ===")
+	fmt.Println(truncateLog(inc.PostLogs))
+}
+
+func truncateLog(s string) string {
+	if runes := []rune(s); len(runes) > 5000 {
+		return string(runes[:5000]) + "\n... (truncated)"
+	}
+	return s
+}
+
+// printIncidentContext is --context for a person: the incident in a few
+// lines, then the two lists, then the note. Every time is UTC, written as
+// RFC 3339, so the incident and the snapshots compared read in one clock.
+func printIncidentContext(c *report.IncidentContext, logs bool) {
 	inc := c.Incident
 	fmt.Printf("Incident:  %s\n", inc.ID)
 	fmt.Printf("Container: %s\n", inc.Container)
-	fmt.Printf("Detected:  %s\n", inc.DetectedAt.Format("2006-01-02 15:04:05"))
+	fmt.Printf("Detected:  %s\n", inc.DetectedAt.UTC().Format(time.RFC3339))
+	if c.AnchoredOn != "detected_at" {
+		fmt.Printf("Anchored:  %s (%s)\n", c.AnchoredAt, c.AnchoredOn)
+	}
 	if inc.CrashAnalysis != nil {
 		fmt.Printf("Analysis:  %s — %s\n", inc.CrashAnalysis.Category, inc.CrashAnalysis.Reason)
 	}
@@ -880,12 +893,22 @@ func printIncidentContext(c *report.IncidentContext) {
 			after += " (current state)"
 		}
 		fmt.Printf("Compared:  %s → %s\n", c.Before, after)
-		printChangeLines("About "+inc.Container, c.AboutTarget)
+		if c.Unattributed == "" {
+			printChangeLines("About "+inc.Container, c.AboutTarget)
+		}
 		printChangeLines("Other changes", c.OtherChanges)
+	}
+	if c.Unattributed != "" {
+		fmt.Println()
+		fmt.Println("No change is tied to " + inc.Container + ": " + c.Unattributed + ".")
 	}
 	if c.Note != "" {
 		fmt.Println()
 		fmt.Println(c.Note)
+	}
+	if logs {
+		fmt.Println()
+		printIncidentLogs(inc)
 	}
 }
 

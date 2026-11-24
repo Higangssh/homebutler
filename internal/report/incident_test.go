@@ -81,7 +81,7 @@ func TestIncidentContextSplitsChangesByTheTargetsIdentity(t *testing.T) {
 	)
 
 	inc := watch.Incident{ID: "paperless-1", Container: "paperless", DetectedAt: incidentAt}
-	got, err := Context(inc, ContextOptions{SnapshotDir: dir, Current: noCurrent, Container: true})
+	got, err := Context(inc, ContextOptions{SnapshotDir: dir, Current: noCurrent, Container: "paperless"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -133,7 +133,7 @@ func TestIncidentContextWithNoSnapshotBeforeSaysSo(t *testing.T) {
 	saveAll(t, dir, contextSnapshot("2026-11-24T04:00:00Z", nil, nil, 10))
 
 	inc := watch.Incident{ID: "paperless-1", Container: "paperless", DetectedAt: incidentAt}
-	got, err := Context(inc, ContextOptions{SnapshotDir: dir, Current: noCurrent, Container: true})
+	got, err := Context(inc, ContextOptions{SnapshotDir: dir, Current: noCurrent, Container: "paperless"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -143,7 +143,7 @@ func TestIncidentContextWithNoSnapshotBeforeSaysSo(t *testing.T) {
 	if got.Incident.ID != "paperless-1" {
 		t.Error("the incident has to come back on its own")
 	}
-	if !strings.Contains(got.Note, "No snapshot was taken before this incident") {
+	if !strings.Contains(got.Note, "No snapshot kept here is older than this incident") {
 		t.Errorf("note = %q, want it to say no snapshot precedes the incident", got.Note)
 	}
 	if len(got.AboutTarget)+len(got.OtherChanges) != 0 {
@@ -151,7 +151,7 @@ func TestIncidentContextWithNoSnapshotBeforeSaysSo(t *testing.T) {
 	}
 
 	// No snapshot directory at all is the same answer, not an error.
-	got, err = Context(inc, ContextOptions{SnapshotDir: dir + "/missing", Current: noCurrent, Container: true})
+	got, err = Context(inc, ContextOptions{SnapshotDir: dir + "/missing", Current: noCurrent, Container: "paperless"})
 	if err != nil || got.Compared {
 		t.Errorf("missing snapshot directory: compared = %v, err = %v", got != nil && got.Compared, err)
 	}
@@ -173,7 +173,7 @@ func TestIncidentContextWithNoSnapshotAfterComparesTheCurrentState(t *testing.T)
 	}
 
 	inc := watch.Incident{ID: "paperless-1", Container: "paperless", DetectedAt: incidentAt}
-	got, err := Context(inc, ContextOptions{SnapshotDir: dir, Current: current, Container: true})
+	got, err := Context(inc, ContextOptions{SnapshotDir: dir, Current: current, Container: "paperless"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -190,7 +190,7 @@ func TestIncidentContextWithNoSnapshotAfterComparesTheCurrentState(t *testing.T)
 
 	// Where the current state cannot be read, nothing is compared, and the
 	// snapshot that was found is still named.
-	got, err = Context(inc, ContextOptions{SnapshotDir: dir, Container: true})
+	got, err = Context(inc, ContextOptions{SnapshotDir: dir, Container: "paperless"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -208,12 +208,15 @@ func TestIncidentContextForANonContainerTargetTiesNothingToIt(t *testing.T) {
 		contextSnapshot("2026-11-24T04:00:00Z", nil, nil, 10),
 	)
 	inc := watch.Incident{ID: "caddy-1", Container: "caddy", DetectedAt: incidentAt}
-	got, err := Context(inc, ContextOptions{SnapshotDir: dir, Current: noCurrent, Container: false})
+	got, err := Context(inc, ContextOptions{SnapshotDir: dir, Current: noCurrent, Unattributed: "this incident is for a systemd target, not a container"})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(got.AboutTarget) != 0 {
 		t.Errorf("about_target = %q for a target that is not a container", texts(got.AboutTarget))
+	}
+	if !strings.Contains(got.Unattributed, "systemd") {
+		t.Errorf("unattributed = %q, want the reason nothing is tied to the target", got.Unattributed)
 	}
 	assertSameLines(t, "other_changes", texts(got.OtherChanges), []string{"gone: caddy — was running"})
 }
@@ -231,7 +234,7 @@ func TestIncidentContextPutsASkippedComparisonInBothLists(t *testing.T) {
 	saveAll(t, dir, before, after)
 
 	inc := watch.Incident{ID: "paperless-1", Container: "paperless", DetectedAt: incidentAt}
-	got, err := Context(inc, ContextOptions{SnapshotDir: dir, Current: noCurrent, Container: true})
+	got, err := Context(inc, ContextOptions{SnapshotDir: dir, Current: noCurrent, Container: "paperless"})
 	if err != nil {
 		t.Fatal(err)
 	}

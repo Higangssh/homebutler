@@ -135,6 +135,7 @@ func (sm *SystemdMonitor) Watch(ctx context.Context, targets []Target, incidents
 					now := time.Now()
 					inc := Incident{
 						ID:          GenerateIncidentID(t.Container, now),
+						Kind:        KindSystemd,
 						Container:   t.Container,
 						DetectedAt:  now,
 						PrevStarted: StartTime(old.Started),
