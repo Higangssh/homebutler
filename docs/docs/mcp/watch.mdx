@@ -309,7 +309,7 @@ Lists the recorded restart incidents, newest first. The captured logs are left o
 | `detected_at` | string | When homebutler detected the restart, in RFC 3339 format with the local offset. |
 | `restart_count` | integer | Restart count recorded with the incident. A one-shot check records Docker's count for the container. An incident from a running watcher records `0`. |
 | `prev_started_at` | string | When the previous run started, in RFC 3339 format (UTC). An empty string when the monitor doesn't know. |
-| `curr_started_at` | string | When the new run started, in RFC 3339 format (UTC). An empty string when the monitor doesn't know. |
+| `curr_started_at` | string | When the new run started, in RFC 3339 format (UTC). An empty string when the monitor doesn't know, or when nothing started again, such as a systemd unit that failed and stayed failed. |
 | `pre_logs` | string | Log lines from before the restart. A one-shot check can't read them and writes a placeholder sentence. The incident written by a running watcher holds the captured lines. Empty unless `include_logs` is `true`. |
 | `post_logs` | string | Log lines from after the restart. Empty unless `include_logs` is `true`. |
 | `crash_analysis` | object or null, optional | A classification of why the process ended. Set by a running watcher. |
@@ -403,9 +403,9 @@ Response:
 
 Returns one incident with what [`report`](/mcp/report-doctor-inventory) saw change around it, so an agent asked why a container stopped does not have to join `watch_history` and `report` itself. The newest snapshot taken before the incident is compared with the first one taken after it, which gives the changes the next report printed. When no report has run since the incident, it is compared with the current state instead, read for this call and not saved, and `after_is_current` says so.
 
-The window is placed at `curr_started_at`, the start of the run after the crash, when the incident has one earlier than `detected_at`, and at `detected_at` otherwise. `watch check` records `detected_at` when it runs, which can be after a report that already saw the restarted container; `anchored_on` says which time was used. A snapshot stamped in the same second as that time counts as after it. The two snapshots bracket the incident but do not order the changes between them: any change listed may have happened after the incident, and `note` says so on every comparison.
+The window is placed at `curr_started_at`, the start of a run after the crash, when the incident has one that is earlier than `detected_at` and differs from `prev_started_at`, and at `detected_at` otherwise. `curr_started_at` is empty when nothing started again, such as a systemd unit that failed and stayed failed; an incident recorded before this release may carry the old run's start there instead, which is why one equal to `prev_started_at` is not used. `watch check` records `detected_at` when it runs, which can be after a report that already saw the restarted container; `anchored_on` says which time was used. A snapshot stamped in the same second as that time counts as after it. The two snapshots bracket the incident but do not order the changes between them: any change listed may have happened after the incident, and `note` says so on every comparison.
 
-The changes are split by whose they are. `about_target` holds changes to the incident's own container and to the ports it published, decided from what each snapshot recorded about the container behind a port rather than from the text of the line. Everything else is in `other_changes`, including a container whose name only contains the target's. A change is tied to the incident only when it is known to be about a Docker container: the incident records the kind of monitor that wrote it, and for one recorded before that, a single watched target of that name has to say so. Otherwise every change is in `other_changes`, and `unattributed` says why.
+The changes are split by whose they are. `about_target` holds changes to the incident's own container and to the ports it published, decided from what each snapshot recorded about the container behind a port rather than from the text of the line. Everything else is in `other_changes`, including a container whose name only contains the target's. A change is tied to the incident only when it is known to be about a Docker container: the incident records the kind of monitor that wrote it, and for one recorded before that, a single watched target of that name has to say so, and `note` then says the kind was taken from the watch list as it is now. Otherwise every change is in `other_changes`, and `unattributed` says why.
 
 When no snapshot was taken before the incident, the incident comes back alone with `compared: false` and a `note` saying whether there are no snapshots at all or only newer ones, which means the older ones were pruned or report had not run yet. Inside a container, an incident with no snapshot after it is answered the same way, because the current state there would be the container's.
 
@@ -414,9 +414,9 @@ When no snapshot was taken before the incident, the incident comes back alone wi
 | Argument | Type | Description |
 | --- | --- | --- |
 | `id` | string | Incident ID, as `watch_history` returns it. Give this or `container`. |
-| `container` | string | Name of a watched target, as `watch_list` shows it. Its latest incident is used. The match is exact, because Docker names are case-sensitive; a name that differs only in case is used when exactly one such name has incidents. Give this or `id`. |
+| `container` | string | Name of a watched target, as `watch_list` shows it, or the unit a docker target is watched under. Its latest incident is used. The match is exact, because Docker names are case-sensitive; a name that differs only in case is used when exactly one such name exists. A docker and a systemd target can share a name, and then the newest incident of either is used: give its `id` to pick one. Give this or `id`. |
 | `include_logs` | boolean | `true` fills the incident's `pre_logs` and `post_logs`. Otherwise both are empty strings. Default: `false`. |
-| `server` | string | Server from your config to run on. The snapshots compared, and the current state when one is read, are that server's. The server needs a homebutler with `watch show --context`. A missing, doubled or malformed `id` or `container` is refused before connecting. See [Run a tool on another server](/mcp#run-a-tool-on-another-server). |
+| `server` | string | Server from your config to run on. The snapshots compared, and the current state when one is read, are that server's. The server needs a homebutler with `watch show --context`. Giving both `id` and `container`, or neither, or either starting with `-`, is refused before connecting; anything else, such as an ID the server does not have, is refused by the server. See [Run a tool on another server](/mcp#run-a-tool-on-another-server). |
 
 #### Response
 
@@ -432,7 +432,8 @@ When no snapshot was taken before the incident, the incident comes back alone wi
 | `about_target` | array of objects | Changes to the incident's container and its ports, in the shape [`report`](/mcp/report-doctor-inventory) returns in `notable_changes`: `kind`, `target`, `detail` and `text`. A `skipped` line for containers or ports is here as well as in `other_changes`, because it qualifies both. |
 | `other_changes` | array of objects | Every other change, in the same shape. |
 | `unattributed` | string, optional | Why nothing could be tied to the incident's target, such as a systemd target, or an older incident whose kind no watched target settles. `about_target` is then empty by construction. |
-| `note` | string, optional | What the comparison covers and why it may include changes after the incident, or why nothing was compared. Never contains a file path. |
+| `note` | string, optional | What the comparison covers and why it may include changes after the incident, or why nothing was compared, and whether the incident's kind was taken from the watch list. Never contains a file path. |
+| `warnings` | array of strings, optional | Incident files that could not be read while looking for a target's latest incident, by file name. One of them may be a newer incident than this one. |
 
 <Accordion title="Examples">
 

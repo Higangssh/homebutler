@@ -69,6 +69,9 @@ type IncidentContext struct {
 	// change between the two snapshots is listed whether it came before the
 	// crash or after.
 	Note string `json:"note,omitempty"`
+	// Warnings are incident files that could not be read while looking for
+	// a target's latest incident, one of which may be newer than this one.
+	Warnings []string `json:"warnings,omitempty"`
 }
 
 // ContextOptions says where the snapshots are, how to read the current state
@@ -86,6 +89,10 @@ type ContextOptions struct {
 	// is not known for certain, with Unattributed saying why.
 	Container    string
 	Unattributed string
+	// Inferred is a sentence saying the kind behind Container was read from
+	// the watch list as it is now, for an incident that does not record it.
+	// It is added to the note.
+	Inferred string
 }
 
 // CurrentState returns a Current that collects inventory the way Run does,
@@ -117,31 +124,41 @@ func CurrentState(cfg *config.Config, fns CollectFuncs) func() (*Snapshot, error
 // watch_history leaves them out. Inside a container the current state is the
 // container's, so it is not read there.
 func ContextFor(cfg *config.Config, watchDir, id, target string, logs bool) (*IncidentContext, error) {
-	inc, err := watch.FindIncident(watchDir, id, target)
+	inc, warnings, err := watch.FindIncident(watchDir, id, target)
 	if err != nil {
 		return nil, err
 	}
 	if !logs {
 		*inc = inc.WithoutLogs()
 	}
-	opts := ContextOptions{InContainer: system.InContainer()}
-	opts.Container, opts.Unattributed = watch.IncidentContainer(watchDir, *inc)
+	who := watch.IncidentContainer(watchDir, *inc)
+	opts := ContextOptions{InContainer: system.InContainer(), Container: who.Container, Unattributed: who.Why, Inferred: who.Inferred}
 	if !opts.InContainer {
 		opts.Current = CurrentState(cfg, DefaultCollectFuncs())
 	}
-	return Context(*inc, opts)
+	out, err := Context(*inc, opts)
+	if out != nil {
+		out.Warnings = warnings
+	}
+	return out, err
 }
 
 // incidentAnchor is the moment an incident is placed at, and the field it
 // came from. prev_started_at is not a candidate: it is when the run that
 // died started, so the crash came after it, and a window placed there would
-// end before the crash.
+// end before the crash. curr_started_at equal to it is that same start, not
+// a new run: the systemd monitor wrote it that way for a unit that failed
+// without starting again, and incident files from then still carry it.
 func incidentAnchor(inc watch.Incident) (time.Time, string) {
 	at, on := inc.DetectedAt, "detected_at"
-	if t, err := time.Parse(time.RFC3339Nano, inc.CurrStarted); err == nil && t.Year() > 1 && t.Before(at) {
-		at, on = t, "curr_started_at"
+	t, err := time.Parse(time.RFC3339Nano, inc.CurrStarted)
+	if err != nil || t.Year() <= 1 || !t.Before(at) {
+		return at, on
 	}
-	return at, on
+	if prev, err := time.Parse(time.RFC3339Nano, inc.PrevStarted); err == nil && prev.Equal(t) {
+		return at, on
+	}
+	return t, "curr_started_at"
 }
 
 // Context places an incident between the snapshots around it.
@@ -151,6 +168,14 @@ func incidentAnchor(inc watch.Incident) (time.Time, string) {
 // printed, and not everything that has happened since. Only when no report
 // has run since the incident is the current state read instead.
 func Context(inc watch.Incident, opts ContextOptions) (*IncidentContext, error) {
+	out, err := placeIncident(inc, opts)
+	if out != nil && opts.Inferred != "" {
+		out.Note = strings.TrimSpace(out.Note + " " + opts.Inferred)
+	}
+	return out, err
+}
+
+func placeIncident(inc watch.Incident, opts ContextOptions) (*IncidentContext, error) {
 	anchor, anchoredOn := incidentAnchor(inc)
 	out := &IncidentContext{
 		Incident:     inc,

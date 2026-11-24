@@ -215,3 +215,65 @@ func TestIncidentContextReadsTheCurrentStateThroughTheCollectors(t *testing.T) {
 		t.Errorf("reading the current state left %d snapshots, want the one there was", len(files))
 	}
 }
+
+// curr_started_at is not a new run when it is the start of the run that
+// died, which the systemd monitor wrote for a unit that failed without
+// starting again, and not when it is Docker's zero time for a container
+// that never started. Either would place the window at the wrong moment:
+// the first weeks before the failure.
+func TestIncidentContextIgnoresAStartThatIsNotANewRun(t *testing.T) {
+	dir := t.TempDir()
+	saveAll(t, dir,
+		contextSnapshot("2026-11-05T03:00:00Z", nil, nil, 10),
+		contextSnapshot("2026-11-24T03:00:00Z", nil, nil, 10),
+	)
+	for _, tc := range []struct{ prev, curr string }{
+		{"2026-11-05T04:00:00Z", "2026-11-05T04:00:00Z"},
+		{"2026-11-05T04:00:00Z", "0001-01-01T00:00:00Z"},
+	} {
+		inc := watch.Incident{ID: "u-1", Container: "u", Kind: watch.KindSystemd, DetectedAt: incidentAt, PrevStarted: tc.prev, CurrStarted: tc.curr}
+		got, err := Context(inc, ContextOptions{SnapshotDir: dir})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got.AnchoredOn != "detected_at" || got.Before != "2026-11-24T03:00:00Z" {
+			t.Errorf("curr %s, prev %s: anchored on %s, before %s; want detected_at and the snapshot before it", tc.curr, tc.prev, got.AnchoredOn, got.Before)
+		}
+	}
+}
+
+// A snapshot directory that cannot be listed is an error, and the error does
+// not carry the directory, which is the operator's home.
+func TestIncidentContextListingErrorKeepsThePathOut(t *testing.T) {
+	notADir := filepath.Join(t.TempDir(), "snapshots")
+	if err := os.WriteFile(notADir, []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	inc := watch.Incident{ID: "web-1", Container: "web", DetectedAt: incidentAt}
+	_, err := Context(inc, ContextOptions{SnapshotDir: notADir, Container: "web"})
+	if err == nil {
+		t.Fatal("listing a file as a directory did not fail")
+	}
+	if strings.Contains(err.Error(), notADir) {
+		t.Errorf("err = %q carries the path", err)
+	}
+}
+
+// An attribution read from the watch list as it is now is said to be one,
+// on top of whatever the note says about the comparison.
+func TestIncidentContextSaysWhenTheContainerWasInferred(t *testing.T) {
+	dir := t.TempDir()
+	saveAll(t, dir,
+		contextSnapshot("2026-11-24T03:00:00Z", nil, nil, 10),
+		contextSnapshot("2026-11-24T04:00:00Z", nil, nil, 10),
+	)
+	inc := watch.Incident{ID: "web-1", Container: "web", DetectedAt: incidentAt}
+	inferred := "This incident does not record its kind; it is taken to be the container's because the watch list now has a docker target of that name."
+	got, err := Context(inc, ContextOptions{SnapshotDir: dir, Current: noCurrent, Container: "web", Inferred: inferred})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(got.Note, "may have happened after") || !strings.HasSuffix(got.Note, inferred) {
+		t.Errorf("note = %q, want the comparison and then the inference", got.Note)
+	}
+}

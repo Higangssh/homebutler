@@ -132,6 +132,14 @@ func (sm *SystemdMonitor) Watch(ctx context.Context, targets []Target, incidents
 					// Capture journal logs
 					preLogs, _ := run("journalctl", "-u", unit, "-n", "100", "--no-pager")
 
+					// A unit that failed without starting again still reports
+					// the start of the run that died. That is not a new run,
+					// and written as curr_started_at it reads as one.
+					currStarted := ""
+					if !curr.Started.Equal(old.Started) {
+						currStarted = StartTime(curr.Started)
+					}
+
 					now := time.Now()
 					inc := Incident{
 						ID:          GenerateIncidentID(t.Container, now),
@@ -139,7 +147,7 @@ func (sm *SystemdMonitor) Watch(ctx context.Context, targets []Target, incidents
 						Container:   t.Container,
 						DetectedAt:  now,
 						PrevStarted: StartTime(old.Started),
-						CurrStarted: StartTime(curr.Started),
+						CurrStarted: currStarted,
 						PreLogs:     preLogs,
 						PostLogs:    fmt.Sprintf("ActiveState=%s SubState=%s", curr.ActiveState, curr.SubState),
 						ExitCode:    curr.ExitStatus,

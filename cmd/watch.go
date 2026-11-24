@@ -799,7 +799,10 @@ otherwise leaves out.`,
 				printIncidentContext(ctx, logs)
 				return nil
 			}
-			inc, err := watch.FindIncident(dir, id, container)
+			inc, warnings, err := watch.FindIncident(dir, id, container)
+			for _, w := range warnings {
+				fmt.Fprintln(os.Stderr, "warning: "+w)
+			}
 			if err != nil {
 				return err
 			}
@@ -905,6 +908,10 @@ func printIncidentContext(c *report.IncidentContext, logs bool) {
 	if c.Note != "" {
 		fmt.Println()
 		fmt.Println(c.Note)
+	}
+	for _, w := range c.Warnings {
+		fmt.Println()
+		fmt.Println("Warning: " + w)
 	}
 	if logs {
 		fmt.Println()

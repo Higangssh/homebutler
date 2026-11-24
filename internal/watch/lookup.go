@@ -1,14 +1,20 @@
 package watch
 
 import (
+	"encoding/json"
+	"errors"
 	"fmt"
+	"io/fs"
+	"os"
+	"path/filepath"
+	"sort"
 	"strings"
 )
 
 // CheckIncidentQuery is the rule for asking about one incident: an ID or a
-// target, never both and never neither. It is checked wherever the question
-// is asked, so a call naming a server is refused before the round trip
-// rather than by the server.
+// target, never both and never neither, and neither starting with '-'. It is
+// checked wherever the question is asked, so a call naming a server is
+// refused before the round trip rather than by the server.
 func CheckIncidentQuery(id, target string) error {
 	switch {
 	case id != "" && target != "":
@@ -23,98 +29,190 @@ func CheckIncidentQuery(id, target string) error {
 	return nil
 }
 
+// readIncidents returns every incident that could be read, newest first, and
+// a line for each file that could not. The lines name the file and the
+// reason, never the directory: they go into answers that may be relayed
+// anywhere, and the directory is the operator's home.
+func readIncidents(dir string) ([]Incident, []string, error) {
+	idir := incidentsDir(dir)
+	entries, err := os.ReadDir(idir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil, nil
+		}
+		return nil, nil, fmt.Errorf("reading the incident directory: %w", withoutPath(err))
+	}
+
+	var incidents []Incident
+	var unreadable []string
+	for _, e := range entries {
+		if e.IsDir() || !strings.HasSuffix(e.Name(), ".json") {
+			continue
+		}
+		data, err := os.ReadFile(filepath.Join(idir, e.Name()))
+		if err != nil {
+			unreadable = append(unreadable, e.Name()+": "+withoutPath(err).Error())
+			continue
+		}
+		var inc Incident
+		if err := json.Unmarshal(data, &inc); err != nil {
+			unreadable = append(unreadable, e.Name()+": "+err.Error())
+			continue
+		}
+		incidents = append(incidents, inc)
+	}
+
+	sort.Slice(incidents, func(i, j int) bool {
+		return incidents[i].DetectedAt.After(incidents[j].DetectedAt)
+	})
+	return incidents, unreadable, nil
+}
+
+// withoutPath is an error with the path of a failed file operation taken
+// out, keeping what went wrong.
+func withoutPath(err error) error {
+	var pe *fs.PathError
+	if errors.As(err, &pe) {
+		return pe.Err
+	}
+	return err
+}
+
 // FindIncident returns the incident with this ID or, given a target instead,
-// the latest incident recorded for it.
+// the latest incident recorded for it, and a warning for every incident file
+// that could not be read, since under a target one of those may be the
+// newer incident.
 //
 // A target is the name watch list shows. A docker target added with a unit
 // is watched under that unit, and its incidents carry the container's name,
-// so the names a target answers to are its own and its unit's. Docker names
-// are case-sensitive, so the match is exact; a name that differs only in case
-// is used only when it is the one such name, and refused as ambiguous
-// otherwise.
-func FindIncident(dir, id, target string) (*Incident, error) {
+// so a docker target also answers to its unit. Systemd and pm2 incidents are
+// recorded under the target's own name, so theirs is not an alias. Docker
+// names are case-sensitive, so the match is exact; a name that differs only
+// in case is resolved the same way when it is the one such name, and refused
+// as ambiguous otherwise.
+func FindIncident(dir, id, target string) (*Incident, []string, error) {
 	if err := CheckIncidentQuery(id, target); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	if id != "" {
-		return LoadIncident(dir, id)
+		inc, err := LoadIncident(dir, id)
+		return inc, nil, err
 	}
 
-	incidents, err := ListIncidents(dir)
+	incidents, unreadable, err := readIncidents(dir)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	names := map[string]bool{target: true}
+	var warnings []string
+	if len(unreadable) > 0 {
+		warnings = append(warnings, fmt.Sprintf("%d incident file(s) could not be read, so a newer incident for %s may be missing: %s",
+			len(unreadable), target, strings.Join(unreadable, "; ")))
+	}
 	targets, _ := LoadTargets(dir)
-	for _, t := range targets {
-		if t.Container == target {
-			names[t.EffectiveUnit()] = true
-		}
-	}
-	// ListIncidents is newest first, so the first match is the latest.
-	for i := range incidents {
-		if names[incidents[i].Container] {
-			return &incidents[i], nil
-		}
+
+	if inc := latestFor(incidents, targets, target); inc != nil {
+		return inc, warnings, nil
 	}
 
 	var folded []string
 	seen := map[string]bool{}
-	for _, inc := range incidents {
-		if strings.EqualFold(inc.Container, target) && !seen[inc.Container] {
-			seen[inc.Container] = true
-			folded = append(folded, inc.Container)
+	fold := func(name string) {
+		if name != target && strings.EqualFold(name, target) && !seen[name] {
+			seen[name] = true
+			folded = append(folded, name)
 		}
 	}
+	for _, t := range targets {
+		fold(t.Container)
+	}
+	for _, inc := range incidents {
+		fold(inc.Container)
+	}
+	sort.Strings(folded)
 	switch len(folded) {
 	case 0:
-		return nil, fmt.Errorf("no incident recorded for %q", target)
 	case 1:
-		return FindIncident(dir, "", folded[0])
+		if inc := latestFor(incidents, targets, folded[0]); inc != nil {
+			return inc, warnings, nil
+		}
+	default:
+		return nil, warnings, fmt.Errorf("no incident recorded for %q; %s differ from it only in case, so give the exact name", target, strings.Join(folded, ", "))
 	}
-	return nil, fmt.Errorf("no incident recorded for %q; incidents exist for %s, which differ only in case", target, strings.Join(folded, ", "))
+	if len(unreadable) > 0 {
+		return nil, warnings, fmt.Errorf("no readable incident recorded for %q; %s", target, warnings[0])
+	}
+	return nil, nil, fmt.Errorf("no incident recorded for %q", target)
+}
+
+// latestFor is the newest incident recorded under name, or under the unit of
+// a docker target of that name.
+func latestFor(incidents []Incident, targets []Target, name string) *Incident {
+	names := map[string]bool{name: true}
+	for _, t := range targets {
+		if t.Container == name && t.EffectiveKind() == KindDocker {
+			names[t.EffectiveUnit()] = true
+		}
+	}
+	// readIncidents is newest first, so the first match is the latest.
+	for i := range incidents {
+		if names[incidents[i].Container] {
+			return &incidents[i]
+		}
+	}
+	return nil
+}
+
+// Attribution is what is known about whose an incident is.
+type Attribution struct {
+	// Container is the Docker name to look for in a report snapshot, or
+	// empty when the incident is not known to be a container's.
+	Container string
+	// Why says why Container is empty.
+	Why string
+	// Inferred says how the kind was decided when the incident does not
+	// record it, which is only ever from the watch list as it is now.
+	Inferred string
 }
 
 // IncidentContainer says which Docker container an incident is about, when
-// that is known for certain: the name to look for in a report snapshot, or
-// why there is none.
-//
-// An incident records the kind of monitor that wrote it, from the release
-// that added incident_context on. One written before does not, and the watch list is the only other witness:
-// it is used when exactly one target answers to the incident's name. None,
+// that is known: from the incident's own kind, or, for an incident recorded
+// before kinds were, from the one watched target that has its name. None,
 // because the target has been removed since, or two of different kinds,
 // which the list allows because it keys on name and kind, is a guess, and a
-// guess is not made.
-func IncidentContainer(dir string, inc Incident) (name, why string) {
+// guess is not made. A kind read from the list says so in Inferred, since
+// the list may have changed since the incident.
+func IncidentContainer(dir string, inc Incident) Attribution {
 	if inc.Source != "" {
-		return "", "this incident is from " + inc.Source + ", not a container"
+		return Attribution{Why: "this incident is from " + inc.Source + ", not a container"}
 	}
+	if inc.Kind != "" {
+		if inc.Kind != KindDocker {
+			return Attribution{Why: "this incident was recorded by the " + inc.Kind + " monitor, not for a container"}
+		}
+		return Attribution{Container: inc.Container}
+	}
+
 	targets, _ := LoadTargets(dir)
-	kind := inc.Kind
 	var matched []Target
 	for _, t := range targets {
-		if t.Container == inc.Container || t.EffectiveUnit() == inc.Container {
-			if kind == "" || t.EffectiveKind() == kind {
-				matched = append(matched, t)
-			}
+		if t.Container == inc.Container || (t.EffectiveKind() == KindDocker && t.EffectiveUnit() == inc.Container) {
+			matched = append(matched, t)
 		}
 	}
-	if kind == "" {
-		switch {
-		case len(matched) == 0:
-			return "", "this incident does not record its kind and no watched target has its name, so it is not known to be a container"
-		case len(matched) > 1 && !sameKind(matched):
-			return "", "this incident does not record its kind and targets of more than one kind have its name, so it is not known to be a container"
-		}
-		kind = matched[0].EffectiveKind()
+	switch {
+	case len(matched) == 0:
+		return Attribution{Why: "this incident does not record its kind and no watched target has its name, so it is not known to be a container"}
+	case !sameKind(matched):
+		return Attribution{Why: "this incident does not record its kind and targets of more than one kind have its name, so it is not known to be a container"}
 	}
+	kind := matched[0].EffectiveKind()
 	if kind != KindDocker {
-		return "", "this incident is for a " + kind + " target, not a container"
+		return Attribution{Why: "this incident does not record its kind, and the watch list now has a " + kind + " target of that name, so it is taken not to be a container"}
 	}
-	// The incident carries the name Docker was asked about: the unit, for
-	// a target watched under one, since that is the name docker events
-	// reports.
-	return inc.Container, ""
+	return Attribution{
+		Container: inc.Container,
+		Inferred:  "This incident does not record its kind; it is taken to be the container's because the watch list now has a docker target of that name.",
+	}
 }
 
 func sameKind(targets []Target) bool {

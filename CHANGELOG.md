@@ -21,6 +21,8 @@ All notable changes to this project will be documented in this file.
 
 ### 🐛 Fixes
 
+- A systemd unit that failed and stayed failed was recorded with `curr_started_at` set to the start of the run that died, the same as `prev_started_at`, so the incident read as if the unit had started again (#414). `curr_started_at` is now empty when the start did not change. Incidents already recorded keep the old value; `incident_context` ignores a `curr_started_at` equal to `prev_started_at`
+- `watch show <id>` named an incident file by its full path, home directory included, when it could not be read; the error now names the incident and the reason (#414)
 - A report taken between `docker compose pull` and `up -d` saw the container's image as a bare ID, because the pull had moved the tag off it, and the next report called the recreate `… 73aaf090f3d8 → nginx:latest`. With image IDs on both sides it now reads as the same update as above (#411)
 - `watch --help`, `watch list`, `watch remove` and `watch check` described a Docker-only tracker; the help now names systemd units and PM2 apps where the command handles them, and `check --help` says it checks Docker targets only (#410)
 

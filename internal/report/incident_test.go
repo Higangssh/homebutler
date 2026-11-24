@@ -183,7 +183,7 @@ func TestIncidentContextWithNoSnapshotAfterComparesTheCurrentState(t *testing.T)
 	if got.After != "2026-11-24T09:00:00Z" {
 		t.Errorf("after = %q, want when the current state was read", got.After)
 	}
-	if !strings.Contains(got.Note, "current state") || !strings.Contains(got.Note, "not to the moment") {
+	if !strings.Contains(got.Note, "current state") || !strings.Contains(got.Note, "not to the moment") || !strings.Contains(got.Note, "including whatever fixed it") {
 		t.Errorf("note = %q, want it to say this is the current state and not the moment of the crash", got.Note)
 	}
 	assertSameLines(t, "about_target", texts(got.AboutTarget), []string{"replaced: paperless — recreated, aaa → fff"})

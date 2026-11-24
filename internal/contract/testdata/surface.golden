@@ -674,6 +674,7 @@ report.IncidentContext.other_changes.target:string
 report.IncidentContext.other_changes.text:string
 report.IncidentContext.other_changes:[]ChangeLine
 report.IncidentContext.unattributed?:string
+report.IncidentContext.warnings?:[]string
 system.ProcessResult.processes.cpu:float64
 system.ProcessResult.processes.mem:float64
 system.ProcessResult.processes.name:string

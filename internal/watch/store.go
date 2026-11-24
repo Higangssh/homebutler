@@ -385,36 +385,11 @@ func ListIncidentRefs(dir string) ([]IncidentRef, error) {
 	return refs, nil
 }
 
+// ListIncidents returns every readable incident, newest first. A file that
+// cannot be read or parsed is left out; readIncidents says which.
 func ListIncidents(dir string) ([]Incident, error) {
-	idir := incidentsDir(dir)
-	entries, err := os.ReadDir(idir)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return nil, nil
-		}
-		return nil, err
-	}
-
-	var incidents []Incident
-	for _, e := range entries {
-		if e.IsDir() || !strings.HasSuffix(e.Name(), ".json") {
-			continue
-		}
-		data, err := os.ReadFile(filepath.Join(idir, e.Name()))
-		if err != nil {
-			continue
-		}
-		var inc Incident
-		if err := json.Unmarshal(data, &inc); err != nil {
-			continue
-		}
-		incidents = append(incidents, inc)
-	}
-
-	sort.Slice(incidents, func(i, j int) bool {
-		return incidents[i].DetectedAt.After(incidents[j].DetectedAt)
-	})
-	return incidents, nil
+	incidents, _, err := readIncidents(dir)
+	return incidents, err
 }
 
 func LoadIncident(dir string, id string) (*Incident, error) {
@@ -430,11 +405,11 @@ func LoadIncident(dir string, id string) (*Incident, error) {
 		if os.IsNotExist(err) {
 			return nil, fmt.Errorf("incident %q not found", id)
 		}
-		return nil, err
+		return nil, fmt.Errorf("incident %q could not be read: %w", id, withoutPath(err))
 	}
 	var inc Incident
 	if err := json.Unmarshal(data, &inc); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("incident %q could not be read: %w", id, err)
 	}
 	return &inc, nil
 }
