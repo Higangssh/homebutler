@@ -108,10 +108,21 @@ func FindIncident(dir, id, target string) (*Incident, []string, error) {
 		warnings = append(warnings, fmt.Sprintf("%d incident file(s) could not be read, so a newer incident for %s may be missing: %s",
 			len(unreadable), target, strings.Join(unreadable, "; ")))
 	}
-	targets, _ := LoadTargets(dir)
+	targets, terr := LoadTargets(dir)
+	if terr != nil {
+		warnings = append(warnings, targetsWarning(terr))
+	}
 
 	if inc := latestFor(incidents, targets, target); inc != nil {
 		return inc, warnings, nil
+	}
+	// A watched target of exactly this name is the container meant. Another
+	// whose name differs only in case is a different container, so its
+	// incidents are not this one's.
+	for _, t := range targets {
+		if t.Container == target {
+			return nil, warnings, noIncident(target, unreadable, warnings)
+		}
 	}
 
 	var folded []string
@@ -133,30 +144,46 @@ func FindIncident(dir, id, target string) (*Incident, []string, error) {
 	case 0:
 	case 1:
 		if inc := latestFor(incidents, targets, folded[0]); inc != nil {
+			warnings = append(warnings, fmt.Sprintf("no incident is recorded for %q; this is the latest for %q, which differs from it only in case", target, folded[0]))
 			return inc, warnings, nil
 		}
 	default:
 		return nil, warnings, fmt.Errorf("no incident recorded for %q; %s differ from it only in case, so give the exact name", target, strings.Join(folded, ", "))
 	}
+	return nil, warnings, noIncident(target, unreadable, warnings)
+}
+
+func noIncident(target string, unreadable, warnings []string) error {
 	if len(unreadable) > 0 {
-		return nil, warnings, fmt.Errorf("no readable incident recorded for %q; %s", target, warnings[0])
+		return fmt.Errorf("no readable incident recorded for %q; %s", target, warnings[0])
 	}
-	return nil, nil, fmt.Errorf("no incident recorded for %q", target)
+	return fmt.Errorf("no incident recorded for %q", target)
+}
+
+// targetsWarning says the watch list could not be read, without its path.
+func targetsWarning(err error) string {
+	return "the watch list could not be read, so targets watched under a unit or by kind were not considered: " + withoutPath(err).Error()
 }
 
 // latestFor is the newest incident recorded under name, or under the unit of
-// a docker target of that name.
+// a docker target of that name. Under the unit only a docker incident, or
+// one that does not record its kind, counts: a systemd or pm2 target can be
+// named what the unit is.
 func latestFor(incidents []Incident, targets []Target, name string) *Incident {
-	names := map[string]bool{name: true}
+	aliases := map[string]bool{}
 	for _, t := range targets {
-		if t.Container == name && t.EffectiveKind() == KindDocker {
-			names[t.EffectiveUnit()] = true
+		if t.Container == name && t.EffectiveKind() == KindDocker && t.EffectiveUnit() != name {
+			aliases[t.EffectiveUnit()] = true
 		}
 	}
 	// readIncidents is newest first, so the first match is the latest.
 	for i := range incidents {
-		if names[incidents[i].Container] {
-			return &incidents[i]
+		inc := &incidents[i]
+		if inc.Container == name {
+			return inc
+		}
+		if aliases[inc.Container] && (inc.Kind == "" || inc.Kind == KindDocker) {
+			return inc
 		}
 	}
 	return nil
@@ -172,6 +199,8 @@ type Attribution struct {
 	// Inferred says how the kind was decided when the incident does not
 	// record it, which is only ever from the watch list as it is now.
 	Inferred string
+	// Warning says the watch list could not be read.
+	Warning string
 }
 
 // IncidentContainer says which Docker container an incident is about, when
@@ -192,7 +221,13 @@ func IncidentContainer(dir string, inc Incident) Attribution {
 		return Attribution{Container: inc.Container}
 	}
 
-	targets, _ := LoadTargets(dir)
+	targets, err := LoadTargets(dir)
+	if err != nil {
+		return Attribution{
+			Why:     "this incident does not record its kind and the watch list could not be read, so it is not known to be a container",
+			Warning: targetsWarning(err),
+		}
+	}
 	var matched []Target
 	for _, t := range targets {
 		if t.Container == inc.Container || (t.EffectiveKind() == KindDocker && t.EffectiveUnit() == inc.Container) {

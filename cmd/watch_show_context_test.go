@@ -92,5 +92,24 @@ func TestWatchShowContextForAPerson(t *testing.T) {
 		if !strings.Contains(out, "Warning: 1 incident file(s) could not be read") || !strings.Contains(out, "web-2.json") {
 			t.Errorf("no warning about the unreadable incident:\n%s", out)
 		}
+
+		// Plain watch show puts the same warning on stderr, so stdout
+		// stays the incident.
+		r, w, err := os.Pipe()
+		if err != nil {
+			t.Fatal(err)
+		}
+		savedErr := os.Stderr
+		os.Stderr = w
+		_, runErr := runWatchText(t, "--container", "web")
+		os.Stderr = savedErr
+		_ = w.Close()
+		stderr, _ := io.ReadAll(r)
+		if runErr != nil {
+			t.Fatal(runErr)
+		}
+		if !strings.Contains(string(stderr), "warning: 1 incident file(s) could not be read") {
+			t.Errorf("plain watch show --container: stderr = %q, want the warning", stderr)
+		}
 	}
 }

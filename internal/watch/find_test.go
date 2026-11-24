@@ -186,3 +186,100 @@ func TestIncidentContainerOnlyAnswersWhenTheKindIsKnown(t *testing.T) {
 		}
 	}
 }
+
+// A docker target's unit is an alias for docker incidents only. A systemd
+// target can be named what the unit is, and its incidents, recorded under
+// that name, are not the docker target's.
+func TestFindIncidentAliasSkipsIncidentsOfAnotherKind(t *testing.T) {
+	dir := t.TempDir()
+	if err := SaveTargets(dir, []Target{
+		{Container: "web", Kind: KindDocker, Unit: "web-1"},
+		{Container: "web-1", Kind: KindSystemd, Unit: "web-1.service"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	seedIncidents(t, dir,
+		Incident{ID: "web-1-docker", Container: "web-1", Kind: KindDocker, DetectedAt: time.Date(2026, 11, 1, 0, 0, 0, 0, time.UTC)},
+		Incident{ID: "web-1-systemd", Container: "web-1", Kind: KindSystemd, DetectedAt: time.Date(2026, 11, 2, 0, 0, 0, 0, time.UTC)},
+	)
+	if got, err := find(t, dir, "", "web"); err != nil || got.ID != "web-1-docker" {
+		t.Errorf("web = %v, %v; want the docker incident recorded under its unit", got, err)
+	}
+	if got, err := find(t, dir, "", "web-1"); err != nil || got.ID != "web-1-systemd" {
+		t.Errorf("web-1 = %v, %v; want its own latest incident", got, err)
+	}
+}
+
+// Docker names are case-sensitive, so a watched target of exactly the name
+// asked for is the container meant, even with no incident of its own. When
+// a name is folded, the answer says so.
+func TestFindIncidentDoesNotFoldOntoAnotherWatchedName(t *testing.T) {
+	dir := t.TempDir()
+	if err := SaveTargets(dir, []Target{{Container: "Nginx"}, {Container: "nginx"}}); err != nil {
+		t.Fatal(err)
+	}
+	seedIncidents(t, dir, Incident{ID: "nginx-1", Container: "nginx", Kind: KindDocker, DetectedAt: findBase})
+	if got, err := find(t, dir, "", "Nginx"); err == nil {
+		t.Errorf("Nginx = %s; nginx's incident was taken for a different container", got.ID)
+	}
+
+	if got, err := find(t, dir, "", "NGINX"); err == nil {
+		t.Errorf("NGINX with Nginx and nginx watched = %s; want it refused as ambiguous", got.ID)
+	}
+
+	other := t.TempDir()
+	seedIncidents(t, other, Incident{ID: "api-1", Container: "API", DetectedAt: findBase})
+	got, warnings, err := FindIncident(other, "", "api")
+	if err != nil || got.ID != "api-1" {
+		t.Fatalf("api = %v, %v", got, err)
+	}
+	if len(warnings) != 1 || !strings.Contains(warnings[0], "differs from it only in case") {
+		t.Errorf("warnings = %q, want one saying the name was folded", warnings)
+	}
+}
+
+// A watch list that cannot be read is said to be, without its path, rather
+// than read as an empty list that has no target of that name.
+func TestFindIncidentAndIncidentContainerWarnAboutTheWatchList(t *testing.T) {
+	dir := t.TempDir()
+	seedIncidents(t, dir, Incident{ID: "web-1", Container: "web", DetectedAt: findBase})
+	if err := os.WriteFile(targetsPath(dir), []byte("{not json"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	_, warnings, err := FindIncident(dir, "", "web")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(warnings) != 1 || !strings.Contains(warnings[0], "watch list could not be read") || strings.Contains(warnings[0], dir) {
+		t.Errorf("warnings = %q, want the watch list named as unreadable without its path", warnings)
+	}
+	a := IncidentContainer(dir, Incident{Container: "web"})
+	if a.Container != "" || !strings.Contains(a.Why, "watch list could not be read") || a.Warning == "" || strings.Contains(a.Warning, dir) {
+		t.Errorf("IncidentContainer = %+v, want the unreadable list as the reason and a warning without the path", a)
+	}
+}
+
+// The incident directory that cannot be read is an error without its path.
+func TestReadIncidentsKeepsThePathOut(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(incidentsDir(dir), []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	_, _, err := FindIncident(dir, "", "web")
+	if err == nil || strings.Contains(err.Error(), dir) {
+		t.Errorf("err = %v, want an error without the path", err)
+	}
+}
+
+// A systemd target's unit is not a name its incidents are recorded under,
+// so a kind-less incident of that name is not decided by it.
+func TestIncidentContainerUsesOnlyADockerTargetsUnit(t *testing.T) {
+	dir := t.TempDir()
+	if err := SaveTargets(dir, []Target{{Container: "web", Kind: KindSystemd, Unit: "nginx"}}); err != nil {
+		t.Fatal(err)
+	}
+	a := IncidentContainer(dir, Incident{Container: "nginx"})
+	if !strings.Contains(a.Why, "no watched target has its name") {
+		t.Errorf("IncidentContainer(nginx) = %+v; the systemd target's unit was taken for the incident's name", a)
+	}
+}

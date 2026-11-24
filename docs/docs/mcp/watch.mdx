@@ -414,7 +414,7 @@ When no snapshot was taken before the incident, the incident comes back alone wi
 | Argument | Type | Description |
 | --- | --- | --- |
 | `id` | string | Incident ID, as `watch_history` returns it. Give this or `container`. |
-| `container` | string | Name of a watched target, as `watch_list` shows it, or the unit a docker target is watched under. Its latest incident is used. The match is exact, because Docker names are case-sensitive; a name that differs only in case is used when exactly one such name exists. A docker and a systemd target can share a name, and then the newest incident of either is used: give its `id` to pick one. Give this or `id`. |
+| `container` | string | Name of a watched target, as `watch_list` shows it, or the unit a docker target is watched under. Its latest incident is used. The match is exact, because Docker names are case-sensitive; a name that differs only in case is used when exactly one such name exists and no watched target has the exact name, and `warnings` then says so. A docker and a systemd target can share a name, and then the newest incident of either is used: give its `id` to pick one. Give this or `id`. |
 | `include_logs` | boolean | `true` fills the incident's `pre_logs` and `post_logs`. Otherwise both are empty strings. Default: `false`. |
 | `server` | string | Server from your config to run on. The snapshots compared, and the current state when one is read, are that server's. The server needs a homebutler with `watch show --context`. Giving both `id` and `container`, or neither, or either starting with `-`, is refused before connecting; anything else, such as an ID the server does not have, is refused by the server. See [Run a tool on another server](/mcp#run-a-tool-on-another-server). |
 
@@ -433,7 +433,7 @@ When no snapshot was taken before the incident, the incident comes back alone wi
 | `other_changes` | array of objects | Every other change, in the same shape. |
 | `unattributed` | string, optional | Why nothing could be tied to the incident's target, such as a systemd target, or an older incident whose kind no watched target settles. `about_target` is then empty by construction. |
 | `note` | string, optional | What the comparison covers and why it may include changes after the incident, or why nothing was compared, and whether the incident's kind was taken from the watch list. Never contains a file path. |
-| `warnings` | array of strings, optional | Incident files that could not be read while looking for a target's latest incident, by file name. One of them may be a newer incident than this one. |
+| `warnings` | array of strings, optional | Incident files that could not be read while looking for a target's latest incident, by file name, since one of them may be a newer incident than this one; a watch list that could not be read; and a target name that was matched only by ignoring case. |
 
 <Accordion title="Examples">
 

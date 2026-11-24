@@ -136,6 +136,9 @@ func ContextFor(cfg *config.Config, watchDir, id, target string, logs bool) (*In
 	if !opts.InContainer {
 		opts.Current = CurrentState(cfg, DefaultCollectFuncs())
 	}
+	if who.Warning != "" && !contains(warnings, who.Warning) {
+		warnings = append(warnings, who.Warning)
+	}
 	out, err := Context(*inc, opts)
 	if out != nil {
 		out.Warnings = warnings
@@ -170,9 +173,22 @@ func incidentAnchor(inc watch.Incident) (time.Time, string) {
 func Context(inc watch.Incident, opts ContextOptions) (*IncidentContext, error) {
 	out, err := placeIncident(inc, opts)
 	if out != nil && opts.Inferred != "" {
-		out.Note = strings.TrimSpace(out.Note + " " + opts.Inferred)
+		out.Note = joinSentences(out.Note, opts.Inferred)
 	}
 	return out, err
+}
+
+// joinSentences adds b after a, ending a with a full stop first when it
+// ends in something else, such as an error string.
+func joinSentences(a, b string) string {
+	a = strings.TrimSpace(a)
+	if a == "" {
+		return b
+	}
+	if !strings.HasSuffix(a, ".") {
+		a += "."
+	}
+	return a + " " + b
 }
 
 func placeIncident(inc watch.Incident, opts ContextOptions) (*IncidentContext, error) {
@@ -377,4 +393,13 @@ func withoutPath(err error) error {
 		return pe.Err
 	}
 	return err
+}
+
+func contains(list []string, s string) bool {
+	for _, v := range list {
+		if v == s {
+			return true
+		}
+	}
+	return false
 }
