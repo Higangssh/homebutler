@@ -273,6 +273,7 @@ doctor.Result.schema_version:int
 doctor.Result.server_name:string
 doctor.Result.status:string
 doctor.Result.summary.fail:int
+doctor.Result.summary.info:int
 doctor.Result.summary.pass:int
 doctor.Result.summary.warn:int
 doctor.Result.summary:Summary
@@ -286,6 +287,7 @@ doctor.Finding.severity:string
 doctor.Finding.title:string
 doctor.Finding.tool?:string
 doctor.Summary.fail:int
+doctor.Summary.info:int
 doctor.Summary.pass:int
 doctor.Summary.warn:int
 system.StatusInfo.arch:string
@@ -734,7 +736,7 @@ watch.WatchedTarget.restart_count:int
 report.kind: gone new replaced image state port disk skipped
 doctor.runner: mcp cli shell
 doctor.category: backup config docker exposure incomplete notifications overall proxmox report system watch
-doctor.severity: pass warn fail
+doctor.severity: pass warn fail info
 config.severity: error warning
 alerts.status: ok warning critical
 watch.kind: docker systemd pm2

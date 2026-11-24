@@ -44,23 +44,57 @@ func List() ([]Container, error) {
 //
 // One docker inspect for the whole list, not one per container.
 func ImageIDs(containerIDs []string) (map[string]string, error) {
-	if len(containerIDs) == 0 {
-		return map[string]string{}, nil
-	}
-	args := append([]string{"inspect", "--type", "container", "--format", "{{.Id}} {{.Image}}"}, containerIDs...)
-	raw, err := util.DockerCmd(args...)
-	return imageIDsFrom(containerIDs, raw, err)
+	images, err := ContainerImages(containerIDs)
+	return imageIDsOf(images), err
 }
 
-// imageIDsFrom reads docker inspect's answer for the containers asked about.
+// ContainerImage is what a container was created from.
+type ContainerImage struct {
+	// ImageID is the image it runs.
+	ImageID string
+	// Reference is the image reference it was created with, as written:
+	// nginx:1.27, or alpine@sha256:… for one pinned by digest. docker ps
+	// prints an image ID instead when that reference no longer names this
+	// image, and also, under the containerd image store, for a reference
+	// pinned by digest, so ps alone cannot say which of the two it is.
+	Reference string
+}
+
+// ContainerImages is ImageIDs with the reference each container was created
+// from, from the same single docker inspect.
+func ContainerImages(containerIDs []string) (map[string]ContainerImage, error) {
+	if len(containerIDs) == 0 {
+		return map[string]ContainerImage{}, nil
+	}
+	args := append([]string{"inspect", "--type", "container", "--format", "{{.Id}} {{.Image}} {{.Config.Image}}"}, containerIDs...)
+	raw, err := util.DockerCmd(args...)
+	return containerImagesFrom(containerIDs, raw, err)
+}
+
+func imageIDsOf(images map[string]ContainerImage) map[string]string {
+	out := make(map[string]string, len(images))
+	for id, img := range images {
+		out[id] = img.ImageID
+	}
+	return out
+}
+
+// imageIDsFrom is containerImagesFrom reduced to the image IDs.
+func imageIDsFrom(asked []string, raw string, runErr error) (map[string]string, error) {
+	images, err := containerImagesFrom(asked, raw, runErr)
+	return imageIDsOf(images), err
+}
+
+// containerImagesFrom reads docker inspect's answer for the containers asked
+// about.
 //
 // A container removed between List and the inspect makes docker exit
 // non-zero while still answering for the rest, so whatever it did answer is
 // returned. The error is for every container it did not answer for, whatever
 // the exit status: an answer missing a container, or one that parses to
 // nothing, is not a clean read just because docker exited 0.
-func imageIDsFrom(asked []string, raw string, runErr error) (map[string]string, error) {
-	got := parseImageIDs(raw)
+func containerImagesFrom(asked []string, raw string, runErr error) (map[string]ContainerImage, error) {
+	got := parseContainerImages(raw)
 	var missing []string
 	for _, id := range asked {
 		if _, ok := got[shortContainerID(id)]; !ok {
@@ -87,18 +121,27 @@ func shortContainerID(id string) string {
 	return id
 }
 
-// parseImageIDs reads "<container id> <image id>" lines and skips anything
-// else, which is where docker puts its error for a container that is gone.
-func parseImageIDs(raw string) map[string]string {
-	out := map[string]string{}
+// parseContainerImages reads "<container id> <image id> [<reference>]" lines
+// and skips anything else, which is where docker puts its error for a
+// container that is gone.
+func parseContainerImages(raw string) map[string]ContainerImage {
+	out := map[string]ContainerImage{}
 	for _, line := range splitLines(raw) {
-		id, image, ok := strings.Cut(strings.TrimSpace(line), " ")
-		// Docker prefixes the image ID with its algorithm; Podman's
-		// docker-compatible CLI prints the bare hex.
-		if !ok || !isHex(id) || !isHex(strings.TrimPrefix(image, "sha256:")) {
+		fields := strings.Fields(line)
+		if len(fields) < 2 {
 			continue
 		}
-		out[shortContainerID(id)] = image
+		id, image := fields[0], fields[1]
+		// Docker prefixes the image ID with its algorithm; Podman's
+		// docker-compatible CLI prints the bare hex.
+		if !isHex(id) || !isHex(strings.TrimPrefix(image, "sha256:")) {
+			continue
+		}
+		img := ContainerImage{ImageID: image}
+		if len(fields) > 2 {
+			img.Reference = fields[2]
+		}
+		out[shortContainerID(id)] = img
 	}
 	return out
 }
@@ -113,6 +156,129 @@ func isHex(s string) bool {
 		}
 	}
 	return true
+}
+
+// ImageOrigin is where docker says an image came from.
+type ImageOrigin struct {
+	// RepoDigests are the repo@sha256:… entries docker recorded on pull. The
+	// image ID is the digest of the image's config under the classic store
+	// and never equals a registry manifest digest there, so these are what a
+	// registry's answer is compared against.
+	RepoDigests []string
+	// Known is true when docker reports how the image arrived, which it does
+	// from its containerd image store. Without it, an image with no
+	// RepoDigests is the only sign of one built here.
+	Known bool
+	// PulledFrom names the repositories it was pulled from, such as
+	// docker.io/library/alpine. Only meaningful when Known.
+	PulledFrom []string
+	// Built is true when docker recorded building it here.
+	Built bool
+	// MediaType is what the image's top descriptor is, which the containerd
+	// store reports: an index for an image pulled by a multi-platform tag,
+	// a single manifest for one pulled by a platform's digest. Empty from
+	// the classic store.
+	MediaType string
+}
+
+// Image stores ImageStore can name.
+const (
+	StoreClassic    = "classic"
+	StoreContainerd = "containerd"
+)
+
+// ImageStore says which image store the daemon keeps images in, or "" when
+// it cannot tell. The two disagree about RepoDigests: the classic store
+// records one only for an image pulled from a registry, and the containerd
+// store records one for an image built here too, under its own name.
+func ImageStore() (string, error) {
+	raw, err := util.DockerCmd("info", "--format", "{{json .DriverStatus}}")
+	if err != nil {
+		return "", fmt.Errorf("docker info: %w", err)
+	}
+	return imageStoreFrom(raw), nil
+}
+
+// imageStoreFrom reads docker info's DriverStatus. The containerd store says
+// so in a driver-type pair; the classic store's graph drivers report their
+// own status pairs, with no driver-type. Anything else, including no pairs
+// at all, is a daemon this cannot place.
+func imageStoreFrom(raw string) string {
+	var pairs [][]string
+	if json.Unmarshal([]byte(strings.TrimSpace(raw)), &pairs) != nil || len(pairs) == 0 {
+		return ""
+	}
+	for _, p := range pairs {
+		if len(p) == 2 && p[0] == "driver-type" {
+			if strings.HasPrefix(p[1], "io.containerd.snapshotter") {
+				return StoreContainerd
+			}
+			return ""
+		}
+	}
+	return StoreClassic
+}
+
+// ImageOrigins answers where each image came from, from one docker image
+// inspect for the whole list.
+//
+// The containerd image store records RepoDigests for an image built here,
+// under its own name, so RepoDigests alone would send a locally built
+// image's name to Docker Hub to ask about. The Identity docker reports
+// alongside is what tells a pull from a build.
+func ImageOrigins(imageIDs []string) (map[string]ImageOrigin, error) {
+	if len(imageIDs) == 0 {
+		return map[string]ImageOrigin{}, nil
+	}
+	args := append([]string{"image", "inspect", "--format", "{{json .}}"}, imageIDs...)
+	raw, err := util.DockerCmd(args...)
+	got := parseImageOrigins(raw)
+	if err != nil && len(got) == 0 {
+		return nil, fmt.Errorf("docker image inspect: %w", err)
+	}
+	return got, nil
+}
+
+// parseImageOrigins reads one JSON object per line and skips anything else,
+// which is where docker puts its error for an image that is gone.
+func parseImageOrigins(raw string) map[string]ImageOrigin {
+	out := map[string]ImageOrigin{}
+	for _, line := range splitLines(raw) {
+		var img struct {
+			ID          string   `json:"Id"`
+			RepoDigests []string `json:"RepoDigests"`
+			Identity    *struct {
+				Pull []struct {
+					Repository string `json:"Repository"`
+				} `json:"Pull"`
+				Build []json.RawMessage `json:"Build"`
+			} `json:"Identity"`
+			Descriptor *struct {
+				MediaType string `json:"mediaType"`
+			} `json:"Descriptor"`
+		}
+		if json.Unmarshal([]byte(strings.TrimSpace(line)), &img) != nil || !isHex(strings.TrimPrefix(img.ID, "sha256:")) {
+			continue
+		}
+		origin := ImageOrigin{RepoDigests: img.RepoDigests}
+		if img.Descriptor != nil {
+			origin.MediaType = img.Descriptor.MediaType
+		}
+		if origin.RepoDigests == nil {
+			origin.RepoDigests = []string{}
+		}
+		if img.Identity != nil {
+			origin.Known = true
+			origin.Built = len(img.Identity.Build) > 0
+			for _, p := range img.Identity.Pull {
+				if p.Repository != "" {
+					origin.PulledFrom = append(origin.PulledFrom, p.Repository)
+				}
+			}
+		}
+		out[img.ID] = origin
+	}
+	return out
 }
 
 // ActionResult holds the result of a docker action.

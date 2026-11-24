@@ -71,6 +71,7 @@ Read-only mode stops changes. A read tool still returns what it reads, to the ag
 - `docker_top` names each process by the kernel's process name, with nothing from its command line. Unlike `processes`, it includes kernel threads.
 - `docker_top` and the Proxmox task reads name users, such as `root@pam`.
 - `backup_list` and `doctor` name paths on the host.
+- `doctor` still asks each running image's registry, anonymously, whether its tag names a different image. It reads the cache of registry answers and doesn't write it, on this machine and on a server, where it sends `doctor --no-save`. A server whose homebutler predates that flag is asked again without it: it has no image check and writes no cache. Because read mode can't record what it asked, a container that is behind is asked about on every read-only run unless a saving `doctor` has cached the answer. Set `doctor.image_updates.enabled: false` in the config of the machine the check runs on to stop it.
 - `system_status`, `open_ports` and `inventory_scan` return hostnames, addresses and what is listening.
 - `config_validate` returns the config path, server and Proxmox endpoint names, and the backup directory. When it finds a key or token file path, a MAC address, or a notify URL wrong, it quotes that value.
 

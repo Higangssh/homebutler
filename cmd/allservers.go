@@ -114,7 +114,8 @@ var fanOuts = map[string]fanOut{
 		local: func(c *config.Config, cmd *cobra.Command) (any, error) {
 			maxAge, _ := cmd.Flags().GetDuration("backup-max-age")
 			strict, _ := cmd.Flags().GetBool("strict")
-			return doctor.Run(c, doctor.DefaultCollectFuncs(), doctor.Options{BackupMaxAge: maxAge, Strict: strict})
+			noSave, _ := cmd.Flags().GetBool("no-save")
+			return runDoctor(c, doctor.DefaultCollectFuncs(), doctor.Options{BackupMaxAge: maxAge, Strict: strict, NoSave: noSave})
 		},
 		summary: summarizeDoctor,
 		// --strict is a verdict on the whole run. Sent to each server it

@@ -81,7 +81,7 @@ func (r *ValidationResult) add(severity, field, message, hint string) {
 }
 
 // topLevelKeys mirrors the yaml tags on Config, in the order they are reported.
-var topLevelKeys = []string{"servers", "proxmox", "wake", "alerts", "notify", "watch", "backup", "backup_dir", "web", "certificates"}
+var topLevelKeys = []string{"servers", "proxmox", "wake", "alerts", "notify", "watch", "backup", "backup_dir", "web", "certificates", "doctor"}
 
 // Validate resolves the config the same way every other command does, then
 // reports what it found without applying it. It never contacts a remote
@@ -141,6 +141,7 @@ func Validate(explicit string) *ValidationResult {
 
 	r.checkUnknownKeys(data)
 	r.checkWatchKeys(rawTop)
+	r.checkDoctorKeys(rawTop)
 	r.checkAlertRules(rawTop)
 	r.Sections = describeSections(rawTop, cfg)
 	r.checkPermissions(path, cfg)
@@ -152,6 +153,7 @@ func Validate(explicit string) *ValidationResult {
 	r.checkWatch(cfg)
 	r.checkBackupDir(cfg)
 	r.checkCertificates(cfg)
+	r.checkDoctor(cfg)
 
 	r.Valid = r.Errors() == 0
 	return r
@@ -258,6 +260,8 @@ func cleanYAMLError(msg string) string {
 		{"type notify.GotifyConfig", "notify.gotify"},
 		{"type watch.NotifySettings", "watch.notify"},
 		{"type watch.FlappingConfig", "watch.flapping"},
+		{"type config.DoctorConfig", "doctor"},
+		{"type config.ImageUpdatesConfig", "doctor.image_updates"},
 	}
 	for _, rep := range replacements {
 		msg = strings.ReplaceAll(msg, rep.from, rep.to)
@@ -342,6 +346,22 @@ func (r *ValidationResult) checkWatchKeys(rawTop map[string]yaml.Node) {
 		r.add(SeverityWarning, "watch",
 			fmt.Sprintf("Both watch.notify and the flat form (%s) are set.", strings.Join(flat, ", ")),
 			"The watch.notify block wins and the flat keys are ignored. Keep one form.")
+	}
+}
+
+// checkDoctorKeys reports unknown keys under doctor.image_updates.
+// ImageUpdatesConfig decodes itself to refuse `image_updates: false` in a
+// sentence, and a type that decodes itself is decoded without KnownFields,
+// so a misspelt `enabeld:` there would pass unreported.
+func (r *ValidationResult) checkDoctorKeys(rawTop map[string]yaml.Node) {
+	node, ok := rawTop["doctor"]
+	if !ok || node.Kind != yaml.MappingNode {
+		return
+	}
+	for i := 0; i+1 < len(node.Content); i += 2 {
+		if node.Content[i].Value == "image_updates" {
+			r.reportUnknownKeys(node.Content[i+1], "doctor.image_updates", []string{"enabled", "cache_ttl"})
+		}
 	}
 }
 
@@ -468,8 +488,39 @@ func sectionSummary(name string, present bool, cfg *Config) string {
 			return "no token · dashboard is read-only"
 		}
 		return "token set · dashboard can edit the config"
+
+	case "doctor":
+		u := cfg.Doctor.ImageUpdates
+		if !u.On() {
+			return "image update check off"
+		}
+		s := fmt.Sprintf("image update check on · answers reused for %s", u.TTL())
+		if !present {
+			return s + " (defaults)"
+		}
+		return s
 	}
 	return ""
+}
+
+// checkDoctor reports a cache_ttl doctor cannot read. The check falls back to
+// the default rather than refusing, so the value would be silently inert.
+func (r *ValidationResult) checkDoctor(cfg *Config) {
+	ttl := cfg.Doctor.ImageUpdates.CacheTTL
+	if ttl == "" {
+		return
+	}
+	d, err := time.ParseDuration(ttl)
+	switch {
+	case err != nil || d <= 0:
+		r.add(SeverityWarning, "doctor.image_updates.cache_ttl",
+			fmt.Sprintf("cache_ttl %q is not a positive duration, so the default %s is used.", ttl, DefaultImageUpdatesTTL),
+			`Use a Go duration such as "6h" or "30m".`)
+	case d < MinImageUpdatesTTL || d > MaxImageUpdatesTTL:
+		r.add(SeverityWarning, "doctor.image_updates.cache_ttl",
+			fmt.Sprintf("cache_ttl %s is outside 5m to 7 days, so %s is used.", d, cfg.Doctor.ImageUpdates.TTL()),
+			"Shorter spends registry rate limits; longer reports answers too old to trust.")
+	}
 }
 
 func plural(n int, noun string) string {

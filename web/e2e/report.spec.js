@@ -63,7 +63,7 @@ test('loading the tab does not save a snapshot', async ({ page }) => {
 test.describe('doctor', () => {
   test('findings are ordered by severity', async ({ page }) => {
     const severities = await page.locator('.severity').allInnerTexts();
-    const rank = { FAIL: 0, WARN: 1, PASS: 2 };
+    const rank = { FAIL: 0, WARN: 1, INFO: 2, PASS: 3 };
     const ranks = severities.map(s => rank[s.toUpperCase()]);
     expect(ranks).toEqual([...ranks].sort((a, b) => a - b));
   });

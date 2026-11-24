@@ -173,7 +173,7 @@ homebutler report --json
 
 - **Install apps** — deploy Uptime Kuma, Jellyfin, Pi-hole, Gitea, Portainer, and more with one command
 - **Map your server** — see containers, exposed ports, system ports, and service topology
-- **Run a doctor check** — diagnose resource pressure, stopped containers, public ports, backup hygiene, notifications, report baseline readiness, configured Proxmox endpoint reachability, expiring certificates, and pending security updates or reboots
+- **Run a doctor check** — diagnose resource pressure, stopped containers, image tags their registry has moved, public ports, backup hygiene, notifications, report baseline readiness, configured Proxmox endpoint reachability, expiring certificates, and pending security updates or reboots
 - **Catch crashes** — save logs before/after Docker, systemd, or PM2 restarts and detect flapping loops
 - **Verify backups** — boot backups in isolated containers before you trust them
 - **See a Proxmox cluster** — nodes, QEMU and LXC guests, storage, task status, and honest dashboard freshness, with power actions that name their target explicitly
@@ -193,13 +193,15 @@ homebutler doctor --json            # automation / MCP friendly
 
 `doctor` is a read-only preflight for the problems homelab users usually discover too late: high disk or memory usage, stopped containers, public bind ports, stale or missing backups, missing notifications, whether `report` has a baseline for change detection, whether each configured Proxmox endpoint is reachable with the token it has, a TLS certificate that has expired or expires within 14 days, and a reboot or security updates the package manager already knows are pending. Every finding names the next command to run, so `--strict` makes it usable from cron or CI — including a Proxmox host that is unreachable or rebooting. Certificates are read from the `host:port` entries under `certificates:` in the config, plus every Proxmox endpoint; with neither, doctor says nothing about certificates.
 
+It also says when a running container's tag names a different image in its registry than the one it runs: `web: nginx:1.27 now names a different image in the registry`, with both digests. It sends an anonymous `HEAD` for each tag (and, for a container behind a multi-arch tag, may `GET` the tag's index, which Docker Hub counts as a pull), keeps the answers in `~/.homebutler/registry/digests.json` for six hours so `doctor` from cron does not spend the Docker Hub limit, and pulls nothing. A cached answer that disagrees with what runs is asked again once before it is reported. A digest-pinned reference, a locally built image, and a registry that wants credentials, rate limits, or does not answer are each listed under `not checked` with the reason. These findings are `info`, a severity that never sets the status, so they never change `--strict`'s exit code. Set `doctor.image_updates.enabled: false` to turn the check off; under `--server`, the server's config decides ([configuration](docs/configuration.md#doctor)).
+
 Every finding carries a `category`, and `--json` carries the same word, so a
 caller filters on it without reading the title:
 
 | Category | What it is about |
 | --- | --- |
 | `system` | CPU, memory, disk, pending updates, a pending reboot |
-| `docker` | containers that are stopped or unhealthy |
+| `docker` | containers that are stopped or unhealthy, or whose tag names a different image upstream |
 | `exposure` | ports listening on every interface, certificates near or past expiry |
 | `backup` | backups missing, stale, never drilled, or growing without a retention limit |
 | `report` | whether there is a baseline to compare against |

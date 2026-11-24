@@ -26,6 +26,12 @@ const (
 	SeverityPass = "pass"
 	SeverityWarn = "warn"
 	SeverityFail = "fail"
+	// SeverityInfo is something worth knowing that is not a fault and not a
+	// clean bill either: a registry tag that names a different image than
+	// the one running, or a container that check could not look at. It
+	// never sets the overall status, so it never changes what --strict
+	// exits with.
+	SeverityInfo = "info"
 )
 
 // Runner says who can carry a finding's Command out.
@@ -155,6 +161,9 @@ type Summary struct {
 	Pass int `json:"pass"`
 	Warn int `json:"warn"`
 	Fail int `json:"fail"`
+	// Info counts findings that are neither fine nor a fault. They do not
+	// count towards status.
+	Info int `json:"info"`
 }
 
 // Options controls doctor behavior.
@@ -167,6 +176,10 @@ type Options struct {
 
 	Strict bool
 	Now    time.Time
+
+	// NoSave keeps doctor from writing anything. The one thing it writes is
+	// the cache of registry answers the image update check keeps.
+	NoSave bool
 
 	// DrillRecordsFn reads the drill history. Empty takes the real one.
 	DrillRecordsFn func(string) ([]backup.DrillRecord, error)
@@ -203,6 +216,11 @@ type CollectFuncs struct {
 	// UpdatesFn reads pending updates and reboot state. Injected so a test is
 	// not answered by whatever machine runs it.
 	UpdatesFn func() UpdateState
+	// ImageUpdates asks registries whether a running image's tag has moved.
+	// Nil skips the check rather than taking the real one, because the real
+	// one opens connections to the internet: a test that builds CollectFuncs
+	// by hand gets no network unless it asks for one.
+	ImageUpdates *ImageUpdateSource
 }
 
 // InstalledDashboard is what a supervised `serve` says about itself, read out
@@ -227,6 +245,7 @@ func DefaultCollectFuncs() CollectFuncs {
 		ProxmoxOpenFn: openProxmoxEndpoint,
 		CertProbeFn:   probeCertificate,
 		UpdatesFn:     readUpdates,
+		ImageUpdates:  DefaultImageUpdateSource(),
 	}
 }
 
@@ -302,6 +321,7 @@ func Run(cfg *config.Config, fns CollectFuncs, opts Options) (*Result, error) {
 	checkPublicPorts(r, inv.Ports)
 	checkBackups(r, cfg, fns.BackupListFn, opts)
 	checkDockerSocketMounts(r, inv, fns.InspectFn)
+	checkImageUpdates(r, cfg, inv, fns.ImageUpdates, opts)
 	checkProxmoxTrust(r, cfg)
 	checkIncidentRetention(r, cfg, fns.WatchDir)
 	checkWatching(r, fns.WatchDir, fns.WatchServiceFn)
@@ -1151,6 +1171,8 @@ func summarize(findings []Finding) Summary {
 			s.Warn++
 		case SeverityPass:
 			s.Pass++
+		case SeverityInfo:
+			s.Info++
 		}
 	}
 	return s
@@ -1223,6 +1245,8 @@ func severityStyle(severity string) lipgloss.Style {
 		return style.Warn
 	case SeverityFail:
 		return style.Fail
+	case SeverityInfo:
+		return style.Accent
 	default:
 		return style.Label
 	}
@@ -1240,11 +1264,11 @@ func FormatHuman(r *Result) string {
 	fmt.Fprintf(&b, "%s %s  %s\n\n",
 		statusIcon,
 		severityStyle(r.Status).Bold(true).Render("Status: "+strings.ToUpper(r.Status)),
-		style.Dim.Render(fmt.Sprintf("· pass %d / warn %d / fail %d", r.Summary.Pass, r.Summary.Warn, r.Summary.Fail)),
+		style.Dim.Render(fmt.Sprintf("· pass %d / warn %d / fail %d / info %d", r.Summary.Pass, r.Summary.Warn, r.Summary.Fail, r.Summary.Info)),
 	)
 
 	for _, f := range r.Findings {
-		icon := map[string]string{SeverityPass: "✅", SeverityWarn: "⚠️", SeverityFail: "❌"}[f.Severity]
+		icon := map[string]string{SeverityPass: "✅", SeverityWarn: "⚠️", SeverityFail: "❌", SeverityInfo: "ℹ️"}[f.Severity]
 		fmt.Fprintf(&b, "%s %s %s\n",
 			icon,
 			style.Accent.Render("["+f.Category+"]"),

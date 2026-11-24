@@ -11,9 +11,9 @@ Runs a read-only health check on the server and lists findings by severity, each
 homebutler doctor [flags]
 ```
 
-The checks cover resource pressure, stopped containers, ports open on every interface, the installed dashboard, backup age, backup directory size and drill history, notification readiness, the watch service, report baseline, config file permissions, containers that mount the Docker socket, Proxmox endpoints that accept any certificate, incident history size, Proxmox endpoint reachability, TLS certificates that are expired, expire within 14 days or do not name their host, and pending security updates and reboots as apt or dnf already knows them.
+The checks cover resource pressure, stopped containers, running containers whose tag names a different image in their registry, ports open on every interface, the installed dashboard, backup age, backup directory size and drill history, notification readiness, the watch service, report baseline, config file permissions, containers that mount the Docker socket, Proxmox endpoints that accept any certificate, incident history size, Proxmox endpoint reachability, TLS certificates that are expired, expire within 14 days or do not name their host, and pending security updates and reboots as apt or dnf already knows them.
 
-The overall status is the worst severity found: pass, warn, or fail. `doctor` changes nothing on the server.
+The overall status is the worst severity found: pass, warn, or fail. `doctor` changes nothing on the server except `~/.homebutler/registry/digests.json`, where it keeps registry answers for six hours. The image check asks each running image's registry, anonymously; set `doctor.image_updates.enabled: false` to turn it off. Under `--server`, the server's config decides.
 
 For what each category checks and how to fix a finding, see [Doctor](/changes/doctor).
 
@@ -22,6 +22,7 @@ For what each category checks and how to fix a finding, see [Doctor](/changes/do
 | Flag | Type | Default | Description |
 | --- | --- | --- | --- |
 | `--backup-max-age` | duration | `168h0m0s` | Warn when the newest backup is older than this. Takes a Go duration such as `24h` or `90m`. The unit `d` is not accepted, so one week is `168h`. |
+| `--no-save` | boolean | `false` | Read the cache of registry answers without writing it, so `doctor` writes nothing. |
 | `--strict` | boolean | `false` | Exit with code 1 when the status is warn or fail. Without it, `doctor` exits `0` whatever it finds. |
 
 ## Examples

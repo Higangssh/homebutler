@@ -253,6 +253,15 @@ Settings for the [web dashboard](/running/web-dashboard).
 | --- | --- | --- | --- |
 | `token` | string | none | Bearer token for the dashboard API. Setting it enables the dashboard's actions and makes its settings editable. The file must be mode `0600`. |
 
+## doctor
+
+Settings for [doctor](/changes/doctor)'s image update check, which asks each running image's registry which image its tag names. Under `--server` the server's own config governs, because the check runs there.
+
+| Key | Type | Default | Meaning |
+| --- | --- | --- | --- |
+| `image_updates.enabled` | boolean | `true` | Ask each running container's registry, anonymously, which image its tag names now. `false` stops it. `image_updates: false` is an error that says to write this key instead. |
+| `image_updates.cache_ttl` | duration | `6h` | How long a registry's answer is reused, kept in `~/.homebutler/registry/digests.json`. Held to 5 minutes to 7 days. A value outside that range, or not a Go duration, warns. |
+
 ## Example
 
 A file that sets every section. `config validate` accepts it when `~/pve.token` exists, and warns if `~/.ssh/id_ed25519` doesn't:
@@ -320,4 +329,8 @@ certificates:
   - home.example.com:443
 web:
   token: <long-random-token>
+doctor:
+  image_updates:
+    enabled: true
+    cache_ttl: 6h
 ```
