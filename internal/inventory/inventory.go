@@ -19,7 +19,10 @@ type Inventory struct {
 	// Processes is collected so report can compare runs. It is not rendered
 	// by inventory scan, which has its own process command.
 	Processes []system.ProcessInfo `json:"-"`
-	Warnings  []string             `json:"warnings,omitempty"`
+	// ImageIDs is the image each container runs, keyed by container ID, for
+	// the same reason and with the same reader as Processes.
+	ImageIDs map[string]string `json:"-"`
+	Warnings []string          `json:"warnings,omitempty"`
 	// Failed names the collectors that did not answer, so a reader can ask
 	// which part of the snapshot is missing rather than matching on the
 	// prefix of a warning string. Warnings stays the human-readable list;
@@ -57,6 +60,9 @@ type CollectFuncs struct {
 	// scan, the MCP tools, doctor — would otherwise pay for a full ps sweep
 	// whose result it never renders, and inherit a warning about it.
 	ProcessesFn func() ([]system.ProcessInfo, error)
+	// ImageIDsFn is optional for the same reason: only report compares which
+	// image a container runs, and it costs a docker inspect.
+	ImageIDsFn func(containerIDs []string) (map[string]string, error)
 }
 
 // DefaultCollectFuncs returns the real system/docker/ports functions.
@@ -93,6 +99,7 @@ func Collect(cfg *config.Config, fns CollectFuncs) (*Inventory, error) {
 		inv.Failed = append(inv.Failed, CollectorDocker)
 	} else {
 		inv.Containers = containers
+		inv.ImageIDs = collectImageIDs(inv, fns.ImageIDsFn)
 	}
 
 	// Ports: best-effort.
@@ -119,6 +126,32 @@ func Collect(cfg *config.Config, fns CollectFuncs) (*Inventory, error) {
 	}
 
 	return inv, nil
+}
+
+// collectImageIDs asks which image each listed container runs. It is not a
+// collector of its own and never lands in Failed: without it the containers
+// are still compared, by the reference docker ps prints, as they were before
+// image IDs were recorded. An error can come with a partial answer, which is
+// kept: the containers it covers are compared by ID, and the warning names
+// the ones that are not.
+func collectImageIDs(inv *Inventory, fn func([]string) (map[string]string, error)) map[string]string {
+	if fn == nil || len(inv.Containers) == 0 {
+		return nil
+	}
+	ids := make([]string, 0, len(inv.Containers))
+	for _, c := range inv.Containers {
+		if c.ID != "" {
+			ids = append(ids, c.ID)
+		}
+	}
+	got, err := fn(ids)
+	if err != nil {
+		inv.Warnings = append(inv.Warnings, CollectorDocker+": image IDs not read for every container, so those are compared by tag only: "+err.Error())
+	}
+	if len(got) == 0 {
+		return nil
+	}
+	return got
 }
 
 // resolveServer picks the local server name/host from config,

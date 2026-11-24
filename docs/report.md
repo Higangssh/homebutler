@@ -40,8 +40,8 @@ after is not "no change" when one of them is a different container.
 | --- | --- |
 | `gone` | a container or listener that was there and is not |
 | `new` | one that is there and was not |
-| `replaced` | the same name, a different container underneath |
-| `image` | the same container, a different image |
+| `replaced` | the same name, a different container underneath; when it came back on a new image under the same tag, the detail gives both image IDs |
+| `image` | the same container, a different image — in practice a pull that moved the tag off a running container, so Docker names its image by ID |
 | `state` | the same container, running where it was stopped or the reverse; or a process restarting, started again since a report at which it had just restarted |
 | `port` | the same port, a different process answering on it |
 | `disk` | a mount whose usage moved by more than half a gigabyte |
