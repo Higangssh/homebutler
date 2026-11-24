@@ -81,7 +81,7 @@ func (r *ValidationResult) add(severity, field, message, hint string) {
 }
 
 // topLevelKeys mirrors the yaml tags on Config, in the order they are reported.
-var topLevelKeys = []string{"servers", "proxmox", "wake", "alerts", "notify", "watch", "backup", "backup_dir", "web"}
+var topLevelKeys = []string{"servers", "proxmox", "wake", "alerts", "notify", "watch", "backup", "backup_dir", "web", "certificates"}
 
 // Validate resolves the config the same way every other command does, then
 // reports what it found without applying it. It never contacts a remote
@@ -151,6 +151,7 @@ func Validate(explicit string) *ValidationResult {
 	r.checkNotify(cfg)
 	r.checkWatch(cfg)
 	r.checkBackupDir(cfg)
+	r.checkCertificates(cfg)
 
 	r.Valid = r.Errors() == 0
 	return r
@@ -452,6 +453,12 @@ func sectionSummary(name string, present bool, cfg *Config) string {
 			return cfg.ResolveBackupDir() + " (default)"
 		}
 		return cfg.ResolveBackupDir()
+
+	case "certificates":
+		if len(cfg.Certificates) == 0 {
+			return "not set"
+		}
+		return plural(len(cfg.Certificates), "endpoint")
 
 	case "web":
 		// Whether a token is set, never which one: config validate prints to a
@@ -867,6 +874,17 @@ func (r *ValidationResult) checkBackupDir(cfg *Config) {
 			r.add(SeverityWarning, "backup_dir",
 				fmt.Sprintf("Neither %s nor its parent exists.", configured),
 				"Backups will fail until the parent directory is created.")
+		}
+	}
+}
+
+// checkCertificates refuses an entry doctor could not connect to, here rather
+// than as a doctor finding that reads like the endpoint is down.
+func (r *ValidationResult) checkCertificates(cfg *Config) {
+	for i, entry := range cfg.Certificates {
+		if _, _, err := CertificateEndpoint(entry); err != nil {
+			r.add(SeverityError, fmt.Sprintf("certificates[%d]", i), err.Error()+".",
+				"Write host:port, such as home.example.com:443. A bare host means port 443.")
 		}
 	}
 }

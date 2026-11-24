@@ -33,6 +33,11 @@ proxmox:
   #   fingerprint: "AB:CD:EF:..."
   #   timeout: 10s
 
+# TLS endpoints whose certificate doctor checks for expiry and name.
+# Proxmox endpoints above are checked without being listed.
+# certificates:
+#   - home.example.com:443
+
 # Wake-on-LAN targets
 wake:
   # - name: desktop

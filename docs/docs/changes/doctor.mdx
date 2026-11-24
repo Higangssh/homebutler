@@ -63,9 +63,9 @@ Every finding carries one of eleven `category` values. A script can filter on th
 
 | Category | What it covers |
 | --- | --- |
-| `system` | CPU, memory and disk against the `alerts` thresholds. |
+| `system` | CPU, memory and disk against the `alerts` thresholds, pending package updates, and a pending reboot. |
 | `docker` | Stopped containers, and running containers that mount the Docker socket. |
-| `exposure` | Ports listening on all interfaces, and the installed web dashboard. |
+| `exposure` | Ports listening on all interfaces, the installed web dashboard, and TLS certificates near or past expiry. |
 | `backup` | Whether backups exist, how old they are, whether they were drilled, and directory size. |
 | `report` | Whether a [report](/changes/report) baseline exists. |
 | `notifications` | Whether a notification channel exists and whether `watch` will use it. |
@@ -73,7 +73,7 @@ Every finding carries one of eleven `category` values. A script can filter on th
 | `config` | Config file permissions. |
 | `proxmox` | Proxmox VE endpoints: certificate trust and reachability. |
 | `incomplete` | A collector failed, so `doctor` could not check everything. |
-| `overall` | The single `pass` finding printed when no other finding exists: `No obvious issues found`. |
+| `overall` | Reserved. Older releases printed `No obvious issues found` here when nothing else was found; `doctor` no longer does, because the update check always reports. |
 
 ## What each check looks at
 
@@ -87,6 +87,49 @@ Every finding carries one of eleven `category` values. A script can filter on th
 | `Memory is almost full` | `fail` | Memory is at or above `alerts.memory` (default 85). |
 | `Disk is almost full` | `fail` | A mount is at or above `alerts.disk` (default 90). One finding per mount. |
 | `Could not read system health` | `warn` | The system reading failed. |
+
+### Updates and reboot
+
+`doctor` reads what the package manager already knows. It needs no root, fetches nothing, and never runs `apt update`, so the count is only as fresh as the package list, and the count's detail says how old that is. On Debian and Ubuntu it checks `/var/run/reboot-required` and counts the upgrades in `apt-get --simulate dist-upgrade`; an upgrade from a suite ending in `-security` counts as a security update, and packages held or deferred by phasing are named in the detail rather than counted. The list's age is `update-success-stamp`, which only a successful `apt update` touches, or the lists directory where that stamp does not exist.
+
+On Fedora and RHEL it asks `needs-restarting -r` when that is installed, and counts `dnf -C check-update` and `dnf -C updateinfo list --security`. dnf is not quite read-only: dnf4 writes its logs to `/var/tmp/dnf-<user>-*`, and dnf5 run as root rebuilds its `.solv` index files in `/var/cache/libdnf5`. As a user that is not root, dnf5 would copy its whole cache, about 100 MB on Fedora 41, into `~/.cache/libdnf5` before it answered, so `doctor` doesn't count there and says so. dnf5's own `dnf needs-restarting` is not used, because it loads the repositories from the network.
+
+| Finding | Severity | Fires when |
+| --- | --- | --- |
+| `A reboot is pending` | `warn` | `/var/run/reboot-required` exists, or `needs-restarting -r` says so. The detail says since when and which packages asked for it. |
+| `N security update(s) pending` | `warn` | Upgradable packages come from a security repository. |
+| `N package update(s) available` | `pass` | dnf has updates and could not say which are security fixes. |
+| `N package update(s) available, none from a security repository` | `pass` | Only ordinary updates are waiting. |
+| `No pending package updates` | `pass` | The package list has nothing newer. |
+| `Pending updates were not counted` | `pass` | The dnf cache is empty, as on a fresh install, or dnf5 runs as a user that is not root. The detail says which. |
+| `Could not count pending updates` | `warn` | `apt-get` or `dnf` failed with an exit code that is not an answer. |
+| `Pending updates are not read on <system>` | `pass` | The machine is macOS, Windows, or Linux with neither apt nor dnf, such as Alpine or Arch. The finding names the system and changes nothing about `--strict`, because nothing on that machine could clear a warning. |
+| `Pending updates are not read in the container image` | `pass` | `doctor` runs inside a container, whose packages are the image's. Check the host with `--server`. |
+
+Under `--server` the check runs on that server, against its own packages.
+
+### Certificates
+
+`doctor` connects to every endpoint in [`certificates`](/reference/configuration#certificates) and to every configured Proxmox endpoint, reads the chain it presents, and checks that every certificate in it is inside its validity window and that the leaf names the host it was reached by. It doesn't check who issued it, so a self-signed certificate that is in date passes. A Proxmox endpoint pinned with `fingerprint`, or set to `insecure: true` with no `ca_file`, is one homebutler's own client does not verify: its name is not checked, and an expired certificate there is a `warn` about other clients rather than a `fail`. With `ca_file` the client verifies fully, `insecure` or not, and so does this check. A Proxmox endpoint the Proxmox check already reports as unreachable gets no second finding here. Each connection gives up after 5 seconds, one failed connection is retried inside that time, and up to 8 run at once.
+
+With no `certificates` list and no Proxmox endpoint there is nothing to check, and `doctor` prints no certificate finding at all.
+
+```text
+❌ [exposure] Certificate for expired.badssl.com:443 expired 4243 days ago
+   It expired on 2015-04-12, issued by COMODO RSA Domain Validation Secure Server CA. Every client that checks certificates refuses this endpoint.
+   → Renew it, then find out why automatic renewal stopped: a DNS token, port 80, or a renewal container that is not running.
+   $ openssl s_client -connect expired.badssl.com:443 -servername expired.badssl.com </dev/null 2>/dev/null | openssl x509 -noout -subject -issuer -dates
+```
+
+| Finding | Severity | Fires when |
+| --- | --- | --- |
+| `Certificate for <endpoint> expired N days ago` | `fail` | The end date of the leaf or an intermediate has passed. `warn` for a pinned Proxmox endpoint. |
+| `Certificate for <endpoint> is not valid until <date>` | `fail` | A certificate in the chain starts in the future, which usually means a wrong clock. `warn` for a pinned Proxmox endpoint. |
+| `Certificate for <endpoint> does not name <host>` | `fail` | The certificate does not cover the host doctor connected to. The detail lists the names it does cover, or says it has only a common name, which modern clients ignore. |
+| `Certificate for <endpoint> expires in N days` | `warn` | Fewer than 14 days are left. |
+| `N certificate(s) valid for at least 14 days` | `pass` | The detail lists each endpoint with its days left. |
+| `Could not read the certificate for <endpoint>` | `warn` | The connection or the TLS handshake failed. |
+| `Certificate endpoint "<entry>" cannot be checked` | `warn` | A `certificates` entry is not `host:port`. |
 
 ### Docker and exposure
 

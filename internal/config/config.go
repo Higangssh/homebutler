@@ -2,9 +2,11 @@ package config
 
 import (
 	"fmt"
+	"net"
 	"os"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"time"
 
@@ -26,6 +28,41 @@ type Config struct {
 	Backup    BackupConfig          `yaml:"backup,omitempty"`
 	BackupDir string                `yaml:"backup_dir,omitempty"`
 	Web       WebConfig             `yaml:"web,omitempty"`
+
+	// Certificates lists host:port TLS endpoints whose certificate doctor
+	// reads for expiry and name. Proxmox endpoints are checked without being
+	// listed here.
+	Certificates []string `yaml:"certificates,omitempty"`
+}
+
+// CertificateEndpoint splits one entry of the certificates list into the name
+// to connect to and the port. A bare host means 443, because that is what
+// someone writing "home.example.com" means; anything else that is not
+// host:port is refused rather than guessed at.
+func CertificateEndpoint(entry string) (host, port string, err error) {
+	entry = strings.TrimSpace(entry)
+	if entry == "" {
+		return "", "", fmt.Errorf("empty certificate endpoint")
+	}
+	if strings.Contains(entry, "://") || strings.Contains(entry, "/") {
+		return "", "", fmt.Errorf("%q is a URL, not host:port", entry)
+	}
+	host, port, err = net.SplitHostPort(entry)
+	if err != nil {
+		bracketed := strings.HasPrefix(entry, "[") && strings.HasSuffix(entry, "]")
+		if strings.Contains(entry, ":") && !bracketed {
+			return "", "", fmt.Errorf("%q is not host:port", entry)
+		}
+		host, port = strings.Trim(entry, "[]"), "443"
+	}
+	if host == "" {
+		return "", "", fmt.Errorf("%q has no host", entry)
+	}
+	n, perr := strconv.Atoi(port)
+	if perr != nil || n < 1 || n > 65535 {
+		return "", "", fmt.Errorf("%q has port %q, which is not 1-65535", entry, port)
+	}
+	return host, port, nil
 }
 
 // WebConfig holds what the dashboard needs that cannot be passed on a command

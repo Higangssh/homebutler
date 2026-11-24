@@ -245,7 +245,7 @@ Runs a read-only diagnosis of resource pressure, stopped containers, ports open 
 | `summary.pass` | integer | Number of `pass` findings. |
 | `summary.warn` | integer | Number of `warn` findings. |
 | `summary.fail` | integer | Number of `fail` findings. |
-| `findings` | array of objects | One entry per finding. A run with no problems returns one `pass` finding in the `overall` category. |
+| `findings` | array of objects | One entry per finding. Never empty: the update check always adds one, a `pass` when nothing is pending. |
 | `findings.severity` | string | `pass`, `warn` or `fail`. |
 | `findings.category` | string | One of `backup`, `config`, `docker`, `exposure`, `incomplete`, `notifications`, `overall`, `proxmox`, `report`, `system` or `watch`. |
 | `findings.title` | string | Short name of the finding. |

@@ -11,7 +11,7 @@ Runs a read-only health check on the server and lists findings by severity, each
 homebutler doctor [flags]
 ```
 
-The checks cover resource pressure, stopped containers, ports open on every interface, the installed dashboard, backup age, backup directory size and drill history, notification readiness, the watch service, report baseline, config file permissions, containers that mount the Docker socket, Proxmox endpoints that accept any certificate, incident history size, and Proxmox endpoint reachability.
+The checks cover resource pressure, stopped containers, ports open on every interface, the installed dashboard, backup age, backup directory size and drill history, notification readiness, the watch service, report baseline, config file permissions, containers that mount the Docker socket, Proxmox endpoints that accept any certificate, incident history size, Proxmox endpoint reachability, TLS certificates that are expired, expire within 14 days or do not name their host, and pending security updates and reboots as apt or dnf already knows them.
 
 The overall status is the worst severity found: pass, warn, or fail. `doctor` changes nothing on the server.
 

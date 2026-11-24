@@ -671,7 +671,7 @@ var Registry = []Capability{
 		HTTP:    HTTP{Method: "GET", Path: "/api/doctor"},
 		Tool: Definition{
 			Name:        "doctor",
-			Description: "Run a read-only diagnosis for resource pressure, stopped containers, public ports, backup hygiene, notifications, and report baseline readiness",
+			Description: "Run a read-only diagnosis for resource pressure, stopped containers, public ports, backup hygiene, notifications, report baseline readiness, expiring TLS certificates, and pending security updates or reboots",
 			InputSchema: Schema{
 				Type: "object",
 				Properties: map[string]Property{

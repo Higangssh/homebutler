@@ -173,7 +173,7 @@ homebutler report --json
 
 - **Install apps** — deploy Uptime Kuma, Jellyfin, Pi-hole, Gitea, Portainer, and more with one command
 - **Map your server** — see containers, exposed ports, system ports, and service topology
-- **Run a doctor check** — diagnose resource pressure, stopped containers, public ports, backup hygiene, notifications, report baseline readiness, and configured Proxmox endpoint reachability
+- **Run a doctor check** — diagnose resource pressure, stopped containers, public ports, backup hygiene, notifications, report baseline readiness, configured Proxmox endpoint reachability, expiring certificates, and pending security updates or reboots
 - **Catch crashes** — save logs before/after Docker, systemd, or PM2 restarts and detect flapping loops
 - **Verify backups** — boot backups in isolated containers before you trust them
 - **See a Proxmox cluster** — nodes, QEMU and LXC guests, storage, task status, and honest dashboard freshness, with power actions that name their target explicitly
@@ -191,16 +191,16 @@ homebutler doctor --json            # automation / MCP friendly
   <img src="assets/doctor-card.svg" alt="homebutler doctor reporting a full disk, a stopped container, and a missing report baseline, each with the command to run next" width="700">
 </p>
 
-`doctor` is a read-only preflight for the problems homelab users usually discover too late: high disk or memory usage, stopped containers, public bind ports, stale or missing backups, missing notifications, whether `report` has a baseline for change detection, and whether each configured Proxmox endpoint is reachable with the token it has. Every finding names the next command to run, so `--strict` makes it usable from cron or CI — including a Proxmox host that is unreachable or rebooting.
+`doctor` is a read-only preflight for the problems homelab users usually discover too late: high disk or memory usage, stopped containers, public bind ports, stale or missing backups, missing notifications, whether `report` has a baseline for change detection, whether each configured Proxmox endpoint is reachable with the token it has, a TLS certificate that has expired or expires within 14 days, and a reboot or security updates the package manager already knows are pending. Every finding names the next command to run, so `--strict` makes it usable from cron or CI — including a Proxmox host that is unreachable or rebooting. Certificates are read from the `host:port` entries under `certificates:` in the config, plus every Proxmox endpoint; with neither, doctor says nothing about certificates.
 
 Every finding carries a `category`, and `--json` carries the same word, so a
 caller filters on it without reading the title:
 
 | Category | What it is about |
 | --- | --- |
-| `system` | CPU, memory, disk |
+| `system` | CPU, memory, disk, pending updates, a pending reboot |
 | `docker` | containers that are stopped or unhealthy |
-| `exposure` | ports listening on every interface |
+| `exposure` | ports listening on every interface, certificates near or past expiry |
 | `backup` | backups missing, stale, never drilled, or growing without a retention limit |
 | `report` | whether there is a baseline to compare against |
 | `watch` | targets listed with nothing polling them |
@@ -208,7 +208,7 @@ caller filters on it without reading the title:
 | `proxmox` | an endpoint that cannot be reached with the token it has |
 | `config` | the config file itself — permissions, keys homebutler does not know |
 | `incomplete` | a collector did not answer, so this diagnosis is partial |
-| `overall` | nothing specific: the all-clear |
+| `overall` | reserved: older releases sent it as the all-clear, `No obvious issues found`; doctor no longer does |
 
 `incomplete` is the one worth handling. It means the answer you are reading is
 missing a section, which is different from that section being fine.
