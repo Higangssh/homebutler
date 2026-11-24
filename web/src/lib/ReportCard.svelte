@@ -89,10 +89,10 @@
     return `${Math.round(seconds / 86400)} days ago`;
   }
 
-  const severityOrder = { fail: 0, warn: 1, pass: 2 };
+  const severityOrder = { fail: 0, warn: 1, info: 2, pass: 3 };
   const findings = $derived(
     [...(doctor?.findings ?? [])].sort(
-      (a, b) => (severityOrder[a.severity] ?? 3) - (severityOrder[b.severity] ?? 3)
+      (a, b) => (severityOrder[a.severity] ?? 4) - (severityOrder[b.severity] ?? 4)
     )
   );
 </script>
@@ -179,7 +179,7 @@
         <h2>Doctor</h2>
         {#if doctor}
           <span class="badge" class:bad={doctor.status === 'fail'}>{doctor.status}</span>
-          <span class="window">{doctor.summary.fail} failing · {doctor.summary.warn} to look at · {doctor.summary.pass} fine</span>
+          <span class="window">{doctor.summary.fail} failing · {doctor.summary.warn} to look at{#if doctor.summary.info} · {doctor.summary.info} to know about{/if} · {doctor.summary.pass} fine</span>
         {/if}
       </div>
 
@@ -410,6 +410,11 @@
   .severity-warn {
     color: var(--yellow, #d4a72c);
     border-color: color-mix(in srgb, var(--yellow, #d4a72c) 45%, transparent);
+  }
+
+  .severity-info {
+    color: var(--blue, #539bf5);
+    border-color: color-mix(in srgb, var(--blue, #539bf5) 45%, transparent);
   }
 
   .severity-pass {

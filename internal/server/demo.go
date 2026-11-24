@@ -686,7 +686,7 @@ func (s *Server) demoDoctor(w http.ResponseWriter, r *http.Request) {
 		// a failing finding is a state the product cannot produce — and this
 		// is the screen the site's screenshot is taken from.
 		"status":  "fail",
-		"summary": map[string]int{"pass": 1, "warn": 2, "fail": 1},
+		"summary": map[string]int{"pass": 1, "warn": 2, "fail": 1, "info": 0},
 		"findings": []map[string]any{
 			{"severity": "fail", "category": "backup", "title": "No backup in the last 7 days",
 				"detail": "The most recent archive is 11 days old.", "action": "Take one now",

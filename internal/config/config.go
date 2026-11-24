@@ -32,7 +32,8 @@ type Config struct {
 	// Certificates lists host:port TLS endpoints whose certificate doctor
 	// reads for expiry and name. Proxmox endpoints are checked without being
 	// listed here.
-	Certificates []string `yaml:"certificates,omitempty"`
+	Certificates []string     `yaml:"certificates,omitempty"`
+	Doctor       DoctorConfig `yaml:"doctor,omitempty"`
 }
 
 // CertificateEndpoint splits one entry of the certificates list into the name
@@ -63,6 +64,72 @@ func CertificateEndpoint(entry string) (host, port string, err error) {
 		return "", "", fmt.Errorf("%q has port %q, which is not 1-65535", entry, port)
 	}
 	return host, port, nil
+}
+
+// DoctorConfig holds settings for checks doctor runs.
+type DoctorConfig struct {
+	ImageUpdates ImageUpdatesConfig `yaml:"image_updates,omitempty"`
+}
+
+// ImageUpdatesConfig controls the doctor check that asks registries, from the
+// machine it runs on, which digest each running image's tag names now.
+type ImageUpdatesConfig struct {
+	// Enabled is a pointer so that leaving it out keeps the check on, and
+	// `enabled: false` is the way to keep doctor off the network.
+	Enabled *bool `yaml:"enabled,omitempty"`
+	// CacheTTL is how long a registry's answer is reused, as a Go duration.
+	CacheTTL string `yaml:"cache_ttl,omitempty"`
+}
+
+// DefaultImageUpdatesTTL is how long a registry's answer is reused when
+// cache_ttl is not set. Docker Hub counts anonymous requests over six hours.
+const DefaultImageUpdatesTTL = 6 * time.Hour
+
+// The range cache_ttl is held to. Under five minutes, a dashboard polling
+// doctor asks Docker Hub about every tag often enough to meet its limit;
+// past a week, an answer is old enough that saying it is misleading.
+const (
+	MinImageUpdatesTTL = 5 * time.Minute
+	MaxImageUpdatesTTL = 7 * 24 * time.Hour
+)
+
+// UnmarshalYAML refuses `image_updates: false` with a sentence that says
+// what to write instead. yaml's own message names a Go type, and the
+// spelling is the one a person reaches for first.
+func (c *ImageUpdatesConfig) UnmarshalYAML(node *yaml.Node) error {
+	if node.Kind != yaml.MappingNode {
+		what := "a list"
+		if node.Kind == yaml.ScalarNode {
+			what = fmt.Sprintf("%q", node.Value)
+		}
+		return fmt.Errorf("line %d: doctor.image_updates is a section, not %s; to turn the check off write\n  image_updates:\n    enabled: false", node.Line, what)
+	}
+	type plain ImageUpdatesConfig
+	var p plain
+	if err := node.Decode(&p); err != nil {
+		return err
+	}
+	*c = ImageUpdatesConfig(p)
+	return nil
+}
+
+// On reports whether doctor asks registries about running images.
+func (c ImageUpdatesConfig) On() bool {
+	return c.Enabled == nil || *c.Enabled
+}
+
+// TTL returns cache_ttl held to MinImageUpdatesTTL..MaxImageUpdatesTTL, or
+// the default when it is unset or unreadable. Validation reports a malformed
+// or out-of-range value; the check still runs on what this returns.
+func (c ImageUpdatesConfig) TTL() time.Duration {
+	if c.CacheTTL == "" {
+		return DefaultImageUpdatesTTL
+	}
+	d, err := time.ParseDuration(c.CacheTTL)
+	if err != nil || d <= 0 {
+		return DefaultImageUpdatesTTL
+	}
+	return min(max(d, MinImageUpdatesTTL), MaxImageUpdatesTTL)
 }
 
 // WebConfig holds what the dashboard needs that cannot be passed on a command

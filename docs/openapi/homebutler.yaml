@@ -596,6 +596,7 @@ paths:
                   pass: 0
                   warn: 5
                   fail: 2
+                  info: 0
                 findings:
                   - severity: warn
                     category: exposure
@@ -3035,7 +3036,8 @@ components:
             - pass
             - warn
             - fail
-          description: How serious the finding is.
+            - info
+          description: How serious the finding is. `info` is neither fine nor a fault, such as a registry tag that names a different image than the one running, and never sets `status`.
         category:
           type: string
           enum:
@@ -3105,6 +3107,7 @@ components:
             - pass
             - warn
             - fail
+            - info
           description: The number of findings at each severity.
           properties:
             pass:
@@ -3116,6 +3119,9 @@ components:
             fail:
               type: integer
               description: Findings with severity `fail`.
+            info:
+              type: integer
+              description: Findings with severity `info`. They do not count towards `status`.
         findings:
           type: array
           items:

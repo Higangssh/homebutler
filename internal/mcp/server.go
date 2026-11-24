@@ -195,6 +195,10 @@ type Server struct {
 	maxRisk capability.Risk
 	in      io.Reader
 	out     io.Writer
+	// doctorFns is where doctor reads from. Nil takes the real sources; a
+	// test sets it so doctor neither reads this machine's docker nor asks a
+	// registry on the internet.
+	doctorFns func() doctor.CollectFuncs
 }
 
 // riskRank orders the classes so a ceiling can be compared against them. It is
@@ -693,8 +697,16 @@ func (s *Server) executeTool(name string, args map[string]any) (any, error) {
 			NoSave: boolArg(args, "no_save"),
 		})
 	case "doctor":
-		return doctor.Run(s.cfg, doctor.DefaultCollectFuncs(), doctor.Options{
+		fns := doctor.DefaultCollectFuncs
+		if s.doctorFns != nil {
+			fns = s.doctorFns
+		}
+		return doctor.Run(s.cfg, fns(), doctor.Options{
 			BackupMaxAge: time.Duration(intArg(args, "backup_max_age_hours", 168)) * time.Hour,
+			// Read mode changes nothing on disk, and the registry answer
+			// cache is the one thing doctor writes. It is still read, so a
+			// doctor run from cron keeps it warm for a read-only agent.
+			NoSave: s.maxRisk == capability.RiskRead,
 		})
 	case "watch_check":
 		dir, err := watch.WatchDir()
@@ -1008,6 +1020,12 @@ func (s *Server) executeRemote(srv *config.ServerConfig, tool string, args map[s
 		}
 	case "doctor":
 		remoteArgs = []string{"doctor", "--json", "--backup-max-age", fmt.Sprintf("%dh", intArg(args, "backup_max_age_hours", 168))}
+		// Read mode changes nothing on disk on the server either. A server
+		// whose doctor predates --no-save refuses the flag before running,
+		// and is asked again without it below.
+		if s.maxRisk == capability.RiskRead {
+			remoteArgs = append(remoteArgs, "--no-save")
+		}
 	case "watch_check":
 		remoteArgs = []string{"watch", "check", "--json"}
 	case "processes":
@@ -1107,6 +1125,12 @@ func (s *Server) executeRemote(srv *config.ServerConfig, tool string, args map[s
 	}
 
 	out, err := runRemote(srv, remoteArgs...)
+	if err != nil && tool == "doctor" && slices.Contains(remoteArgs, "--no-save") && refusedNoSave(err) {
+		// A server whose doctor predates --no-save also predates the image
+		// check and its cache, so it writes nothing without the flag: the
+		// run is as read-only as the one asked for.
+		out, err = runRemote(srv, slices.DeleteFunc(slices.Clone(remoteArgs), func(a string) bool { return a == "--no-save" })...)
+	}
 	if err != nil {
 		answer, ok := remote.Answered(err)
 		if !ok {
@@ -1119,6 +1143,14 @@ func (s *Server) executeRemote(srv *config.ServerConfig, tool string, args map[s
 		out = answer
 	}
 	return remoteAnswer(tool, args, out)
+}
+
+// refusedNoSave reports whether a server refused --no-save as a flag it does
+// not have, in either of the two ways remote reports that: with the server's
+// version named, or with cobra's own line in the output.
+func refusedNoSave(err error) bool {
+	msg := err.Error()
+	return strings.Contains(msg, "does not have --no-save") || strings.Contains(msg, "unknown flag: --no-save")
 }
 
 // sliceFlagValue writes one value of a string-slice flag so the remote reads

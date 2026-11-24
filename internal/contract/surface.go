@@ -83,9 +83,9 @@ func Surface() string {
 	b.WriteString("doctor.category: " + strings.Join(doctor.Categories(), " ") + "\n")
 
 	// The words a result field can hold. The golden's json section says these
-	// fields are strings; this says which strings. doctor.severity is also
-	// what doctor's own status field holds.
-	b.WriteString("doctor.severity: " + strings.Join([]string{doctor.SeverityPass, doctor.SeverityWarn, doctor.SeverityFail}, " ") + "\n")
+	// fields are strings; this says which strings. doctor's own status field
+	// holds the first three of doctor.severity: info never sets it.
+	b.WriteString("doctor.severity: " + strings.Join([]string{doctor.SeverityPass, doctor.SeverityWarn, doctor.SeverityFail, doctor.SeverityInfo}, " ") + "\n")
 	b.WriteString("config.severity: " + strings.Join([]string{config.SeverityError, config.SeverityWarning}, " ") + "\n")
 	b.WriteString("alerts.status: " + words(alerts.Levels()) + "\n")
 	b.WriteString("watch.kind: " + strings.Join([]string{watch.KindDocker, watch.KindSystemd, watch.KindPM2}, " ") + "\n")

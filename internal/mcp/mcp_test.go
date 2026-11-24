@@ -9,6 +9,7 @@ import (
 	"github.com/Higangssh/homebutler/internal/capability"
 
 	"github.com/Higangssh/homebutler/internal/config"
+	"github.com/Higangssh/homebutler/internal/doctor"
 )
 
 func newTestServer() (*Server, *bytes.Buffer) {
@@ -21,6 +22,14 @@ func newTestServer() (*Server, *bytes.Buffer) {
 	out := &bytes.Buffer{}
 	s := NewServer(cfg, "test")
 	s.out = out
+	// The real doctor, without the one check that leaves the machine: a
+	// developer with containers running would otherwise have the suite ask
+	// Docker Hub about them.
+	s.doctorFns = func() doctor.CollectFuncs {
+		fns := doctor.DefaultCollectFuncs()
+		fns.ImageUpdates = nil
+		return fns
+	}
 	return s, out
 }
 

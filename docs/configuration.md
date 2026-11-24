@@ -218,6 +218,55 @@ fails a certificate that has expired or does not name the host, and warns
 inside 14 days. Proxmox endpoints are checked without being listed. With no
 list and no Proxmox endpoint, doctor reports nothing about certificates.
 
+## Doctor
+
+```yaml
+doctor:
+  image_updates:
+    enabled: true     # default; false stops doctor asking registries
+    cache_ttl: 6h     # how long a registry's answer is reused, 5m to 7 days
+```
+
+`doctor` asks the registry of each running container which digest its tag
+names now, and reports a container whose tag names a different image as
+`<name>: <tag> now names a different image in the registry`. That is one
+anonymous `HEAD` request per tag for the manifest, plus the anonymous token
+request Docker Hub and ghcr.io ask for first. When a running image is behind a
+multi-arch tag, it may also send one anonymous `GET` of that tag's index, to
+see whether the image is one of the platforms in it; it skips that when Docker
+says the image was pulled as an index, which only its containerd store says.
+Docker Hub counts that `GET` as a pull, and it is cached like the `HEAD`. No
+credential is read or sent, nothing is pulled into Docker, and nothing
+restarts.
+
+Answers are kept in `~/.homebutler/registry/digests.json` for `cache_ttl`, so a
+`doctor` or dashboard polling every few minutes asks each registry about a tag
+about once in six hours. A cached answer that disagrees with what runs is asked
+again before it is reported, once: after a fresh answer has disagreed with the
+image a container runs, later runs report it from the cache until it expires,
+and ask again only if the container is running a different image by then.
+`doctor --no-save` and read-only MCP cannot record that, so with no cache left
+by a saving run they ask about a behind container on every run. A `429` and a registry that wants credentials are
+kept for the TTL, so a rate limit is waited out rather than spent. A registry
+that did not answer is asked again on the next run. The whole check gives up
+after ten seconds.
+
+These findings are `info`: a tag that moved is not a fault, and an offline
+machine should not turn `doctor --strict` red. `info` never sets the status.
+A reference pinned by digest, an image built on this machine, and a registry
+that wants credentials, rate limits or does not answer are listed under `N
+running container(s) not checked against their registry` with the reason for each.
+
+**Under `--server` the server's own config governs.** The check runs on the
+server, so `enabled: false` here does not stop it there; set it in that
+server's config. `doctor --no-save` reads the cache without writing it, and
+read-only MCP sends it to a server for you; a server older than the flag is
+asked again without it, since it has no image check and writes no cache.
+
+Both keys are optional. A `cache_ttl` that is not a Go duration, or is outside
+5 minutes to 7 days, is reported by `config validate`; the default is used for
+the first, and the nearest end of the range for the second.
+
 ## Output Format
 
 Default output is human-readable:
@@ -248,4 +297,4 @@ homebutler alerts --json
 - **Read-only by default** — Status commands don't modify anything. What they print is still about your machines — hostnames, addresses, open ports, usernames, host paths, and log lines from `docker logs` — so mind where the output is pasted
 - **Explicit actions only** — Destructive commands require exact container/service names
 - **SSH for remote** — Multi-server uses standard SSH (key-based auth recommended)
-- **No telemetry** — Zero data collection, zero phone-home
+- **No telemetry** — Zero data collection, zero phone-home. `doctor` makes requests nobody named: it reads the certificate of each configured endpoint, and asks each running image's registry, anonymously, which image its tag names; see [Doctor](#doctor) to turn the second off

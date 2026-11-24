@@ -155,7 +155,7 @@ func (s *Server) executeDemoTool(name string, args map[string]any) (any, error) 
 			"server_name":    serverOrDefault(server),
 			"timestamp":      time.Now().UTC().Format(time.RFC3339),
 			"status":         "warn",
-			"summary":        map[string]any{"pass": 0, "warn": 2, "fail": 0},
+			"summary":        map[string]any{"pass": 0, "warn": 2, "fail": 0, "info": 0},
 			"findings": []map[string]any{
 				{"severity": "warn", "category": "exposure", "title": "4 port(s) are listening on all interfaces", "action": "Make sure each one is intentional and protected.", "command": "homebutler inventory scan"},
 				{"severity": "warn", "category": "backup", "title": "Latest backup is older than expected", "action": "Run a fresh backup. If this app matters, follow up with a backup drill.", "command": "homebutler backup"},

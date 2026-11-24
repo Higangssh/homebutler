@@ -1,11 +1,11 @@
 ---
 title: Doctor
-description: Run homebutler doctor for a read-only health check of resources, containers, ports, backups, watch and notifications, with a severity, a category and the next command on every finding.
+description: Run homebutler doctor for a read-only health check of resources, containers, image updates, ports, backups, watch and notifications, with a severity, a category and the next command on every finding.
 ---
 
 # Doctor
 
-`homebutler doctor` checks the machine for the problems that usually hurt a self-hosted server and prints one finding per problem. Each finding has a severity, a category, an explanation, and the command to run next. The check is read-only: it changes nothing on the machine.
+`homebutler doctor` checks the machine for the problems that usually hurt a self-hosted server and prints one finding per problem. Each finding has a severity, a category, an explanation, and the command to run next. The check is read-only: it changes nothing on the machine except the cache of registry answers described under [Image updates](#image-updates).
 
 ```bash
 homebutler doctor
@@ -31,17 +31,19 @@ Each finding has up to four lines: the severity icon, `[category]` and title; th
 | --- | --- | --- |
 | `--strict` | off | Exits with code `1` when the status is `warn` or `fail`. |
 | `--backup-max-age <duration>` | `168h` | Warns when the newest backup is older than this. Takes a Go duration such as `72h`. |
+| `--no-save` | off | Reads the cache of registry answers without writing it, so `doctor` writes nothing. |
 | `--json` | off | Prints the result as JSON. |
 
 ## Severities and exit codes
 
-A finding is `pass`, `warn` or `fail`. The overall `status` is `fail` if any finding fails, otherwise `warn` if any finding warns, otherwise `pass`.
+A finding is `pass`, `warn`, `fail` or `info`. The overall `status` is `fail` if any finding fails, otherwise `warn` if any finding warns, otherwise `pass`. An `info` finding never sets the status, so it never changes what `--strict` exits with.
 
 | Severity | Icon | Means |
 | --- | --- | --- |
 | `pass` | ✅ | The check ran and found nothing to fix. |
 | `warn` | ⚠️ | Worth a look. The server may be working. |
 | `fail` | ❌ | Something is broken or about to be. |
+| `info` | ℹ️ | Worth knowing, neither fine nor a fault: a registry tag that names a different image than the one running, or a container that check could not look at. |
 
 Without `--strict`, `doctor` exits `0` whatever the status, because the diagnosis succeeded. The run above printed `Status: FAIL` and exited `0`. With `--strict`, a `warn` or `fail` status prints the findings and then exits `1` with this message on stderr:
 
@@ -64,7 +66,7 @@ Every finding carries one of eleven `category` values. A script can filter on th
 | Category | What it covers |
 | --- | --- |
 | `system` | CPU, memory and disk against the `alerts` thresholds, pending package updates, and a pending reboot. |
-| `docker` | Stopped containers, and running containers that mount the Docker socket. |
+| `docker` | Stopped containers, running containers that mount the Docker socket, and running containers whose tag names a different image in their registry. |
 | `exposure` | Ports listening on all interfaces, the installed web dashboard, and TLS certificates near or past expiry. |
 | `backup` | Whether backups exist, how old they are, whether they were drilled, and directory size. |
 | `report` | Whether a [report](/changes/report) baseline exists. |
@@ -141,6 +143,36 @@ With no `certificates` list and no Proxmox endpoint there is nothing to check, a
 | `Dashboard installed on <address>` | `pass` | A `serve install` unit exists. The detail says whether it is reachable only from this machine or from the network with `web.token` set. |
 | `An installed dashboard does not say what it binds` | `warn` | The unit names no `--host` and `--port`. |
 | `The installed dashboard answers the network with no token` | `fail` | The unit binds a non-loopback address and `web.token` is not set. |
+
+### Image updates
+
+For each running container, `doctor` asks the image's registry which digest the tag it was created from names now, and compares that with the digests Docker recorded when the image was pulled. A multi-arch tag is compared by the digest of its index on both sides, so every platform gets the same answer. An image pulled by one platform's digest and then tagged is matched against the manifests the index lists. It sends an anonymous `HEAD` request per tag, plus the token request Docker Hub and ghcr.io ask for first. When a running image is behind a multi-arch tag it may also `GET` that index to look among its platforms, unless Docker's containerd store says the image was pulled as an index; Docker Hub counts that `GET` as a pull, and it is cached like the `HEAD`. Nothing is pulled or restarted.
+
+A tag that moved is `info`, not a fault, and so is a container the check could not look at. Neither changes the status or what `--strict` exits with. A container that matches is `pass`. The finding says the tag names a *different* image, not a newer one: a tag moved back to an older image looks the same from here.
+
+| Finding | Severity | Fires when |
+| --- | --- | --- |
+| `<name>: <tag> now names a different image in the registry` | `info` | The registry's digest for the tag, asked for this run, is not one Docker recorded for this container's image. The detail names both digests and how old the registry's answer is. One finding per container. |
+| `N running container(s) match what their registry serves` | `pass` | The registry's digest is the one the container runs. |
+| `N running container(s) not checked against their registry` | `info` | A container was skipped. The detail gives the reason for each: pinned by digest, built on this machine, pulled under another name, a Docker too old to say whether an image was pulled or built under the containerd image store, a registry that wants credentials, rate limits (`429`) or does not answer. |
+| `Registry answers could not be saved` | `info` | `~/.homebutler/registry/digests.json` could not be written, so every run asks the registries again. |
+
+This came from a Raspberry Pi running `alpine:3.20` pulled as `3.20.0`, and `ghcr.io/containerd/busybox:1.36`:
+
+```text
+ℹ️ [docker] hb412-old: alpine:3.20 now names a different image in the registry
+   On docker.io, alpine:3.20 names sha256:d9e853e87e55; this container runs the image pulled as sha256:77726ef6b57d. Asked the registry just now.
+   → Pull and recreate it when you choose to. doctor does not pull or restart anything.
+
+✅ [docker] 1 running container(s) match what their registry serves
+   hb412-ghcr. Asked the registry just now.
+```
+
+Answers are kept in `~/.homebutler/registry/digests.json` for `doctor.image_updates.cache_ttl`, six hours by default, so `doctor` from cron or the dashboard's Report tab doesn't spend the Docker Hub anonymous limit. A cached answer that disagrees with what runs is asked again before anything is said, because the usual reason is that you pulled the update since. Once a fresh answer has disagreed with the image a container runs, later runs say so from the cache until it expires, unless the container runs a different image by then. A `429` and a registry that wants credentials are kept as long; a registry that didn't answer is asked again next run. The check gives up after ten seconds in all.
+
+Docker before 29.2, or a client pinned below API 1.53, doesn't say whether an image was pulled or built here. Under the classic image store that is still clear, because only a pulled image has registry digests. Under the containerd image store a local build has them too, so `doctor` asks no registry about any image and says why, rather than send a local image's name to Docker Hub.
+
+`doctor --no-save` reads the cache without writing it. Over MCP with `--max-risk read`, `doctor` does the same, on this machine and, by sending `--no-save`, on a server. A server whose homebutler predates `--no-save` is asked again without it: it has no image check and writes no cache. Without a cache a saving run left, a read-only `doctor` asks about a behind container every run. Under `--server`, the server's own config decides whether the check runs and for how long answers are kept, because the check runs there. Set `doctor.image_updates.enabled: false` to turn it off. See [Configuration](/reference/configuration#doctor).
 
 ### Backups
 

@@ -44,6 +44,8 @@ Proxmox VE is the exception: homebutler reads a Proxmox endpoint through its API
 
 homebutler sends no telemetry and collects no usage data. It makes a network call when a command asks for one, such as `upgrade` fetching a release from GitHub or an alert going to your notification channel.
 
+`doctor` also calls out without being asked to by name. It reads the TLS certificate of each endpoint under `certificates:` and each Proxmox endpoint. To say whether a running container's tag names a different image in its registry, it sends an anonymous `HEAD` request for each tag's manifest to that image's registry, and the token request Docker Hub and ghcr.io ask for first. For a container behind a multi-arch tag it may also `GET` the tag's index, which Docker Hub counts as a pull. That tells the registry this address asked about that image. Set `doctor.image_updates.enabled: false` to stop it. See [Configuration](/reference/configuration#doctor).
+
 Its output is about your machines, even in read mode. It includes hostnames, addresses, open ports, user names, host paths, and log lines from `docker logs`, so check where you paste it.
 
 ## Where files live
@@ -56,3 +58,4 @@ Its output is about your machines, even in read mode. It includes hostnames, add
 | `~/.homebutler/backups/` | Backup archives, unless `backup_dir` is set |
 | `~/.homebutler/apps/` | One folder per installed app, with its `docker-compose.yml` and data |
 | `~/.homebutler/alerts-history.json` | Alert history |
+| `~/.homebutler/registry/digests.json` | The registry answers `doctor`'s image update check reuses |
