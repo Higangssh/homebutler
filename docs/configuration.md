@@ -205,6 +205,19 @@ Default: `~/.homebutler/backups/`
 Run `homebutler config validate` after changing this — a mistyped key here is
 dropped silently, and backups keep going to the default location.
 
+## Certificates
+
+```yaml
+certificates:
+  - home.example.com:443
+  - nas.lan:5001
+```
+
+`homebutler doctor` connects to each `host:port` (a bare host means 443),
+fails a certificate that has expired or does not name the host, and warns
+inside 14 days. Proxmox endpoints are checked without being listed. With no
+list and no Proxmox endpoint, doctor reports nothing about certificates.
+
 ## Output Format
 
 Default output is human-readable:

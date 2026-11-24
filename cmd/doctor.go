@@ -22,7 +22,12 @@ resource pressure, stopped containers, public bind ports, backup hygiene,
 notification readiness including whether watch will actually send anything, report baseline status, whether anything is installed
 to watch what you asked it to watch, config file permissions, containers that
 mount the Docker socket, Proxmox endpoints that accept any certificate, incident
-history nearing its limit, and configured Proxmox endpoint reachability.`,
+history nearing its limit, configured Proxmox endpoint reachability, TLS
+certificates that have expired, expire within 14 days, or do not name their
+host (every entry under certificates: in the config, plus each Proxmox
+endpoint), and pending security updates and a pending reboot as apt or dnf
+already knows them — read without root or the network, and said to be stale
+when the package list is more than a week old.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if err := loadConfig(); err != nil {
 				// doctor is the command that explains what is wrong, so a

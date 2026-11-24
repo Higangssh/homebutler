@@ -1,6 +1,7 @@
 package doctor
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -40,6 +41,15 @@ func doctorFuncs(status *system.StatusInfo, containers []docker.Container, pp []
 			return backups, nil
 		},
 		SnapshotDir: "definitely-missing-snapshots",
+		// The machine running the tests is not the one being diagnosed, so
+		// neither its packages nor its network may answer.
+		UpdatesFn: func() UpdateState {
+			return UpdateState{Manager: "apt", RebootKnown: true, CacheAge: time.Hour}
+		},
+		CertProbeFn: func(_ context.Context, target CertTarget) CertProbe {
+			return CertProbe{Target: target, Err: errors.New("no network in tests")}
+		},
+		ServeServiceFn: func() InstalledDashboard { return InstalledDashboard{} },
 	}
 }
 

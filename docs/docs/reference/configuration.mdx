@@ -235,6 +235,16 @@ Where backups go and how many to keep. See [Backup and restore](/backups/backup-
 | `retention.max_archives` | integer | `0` | Archives to keep. `0` keeps all. A negative number warns. |
 | `retention.max_bytes` | string | none | Size cap for the folder, such as `500MB` or `20GB`. Units `B`, `K`, `M`, `G`, `T` with an optional `B` or `iB`. An unparseable size is an error. |
 
+## certificates
+
+TLS endpoints whose certificate [`doctor`](/changes/doctor#certificates) checks for expiry and name. Each entry is `host:port`; a bare host means port `443`. A URL is an error. Proxmox endpoints are checked without being listed here.
+
+```yaml
+certificates:
+  - home.example.com:443
+  - nas.lan:5001
+```
+
 ## web
 
 Settings for the [web dashboard](/running/web-dashboard).
@@ -306,6 +316,8 @@ backup:
   retention:
     max_archives: 5
     max_bytes: 20GB
+certificates:
+  - home.example.com:443
 web:
   token: <long-random-token>
 ```

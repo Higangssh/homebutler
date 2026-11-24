@@ -52,6 +52,7 @@ var commandTools = map[string]string{
 	"homebutler backup":                    "backup_create",
 	"homebutler backup drill":              "backup_drill",
 	"homebutler backup list":               "backup_list",
+	"homebutler config validate":           "config_validate",
 	"homebutler doctor":                    "doctor",
 	"homebutler docker inspect":            "docker_inspect",
 	"homebutler docker logs":               "docker_logs",
@@ -196,6 +197,12 @@ type CollectFuncs struct {
 	WatchServiceFn func() (bool, string)
 	// ServeServiceFn reports the installed dashboard, for the same reason.
 	ServeServiceFn func() InstalledDashboard
+	// CertProbeFn reads one endpoint's certificate. Injected so expiry and
+	// name findings are testable without the network.
+	CertProbeFn func(context.Context, CertTarget) CertProbe
+	// UpdatesFn reads pending updates and reboot state. Injected so a test is
+	// not answered by whatever machine runs it.
+	UpdatesFn func() UpdateState
 }
 
 // InstalledDashboard is what a supervised `serve` says about itself, read out
@@ -218,6 +225,8 @@ func DefaultCollectFuncs() CollectFuncs {
 		BackupListFn:  backup.List,
 		SnapshotDir:   defaultSnapshotDir(),
 		ProxmoxOpenFn: openProxmoxEndpoint,
+		CertProbeFn:   probeCertificate,
+		UpdatesFn:     readUpdates,
 	}
 }
 
@@ -268,6 +277,12 @@ func Run(cfg *config.Config, fns CollectFuncs, opts Options) (*Result, error) {
 	if fns.ProxmoxOpenFn == nil {
 		fns.ProxmoxOpenFn = openProxmoxEndpoint
 	}
+	if fns.CertProbeFn == nil {
+		fns.CertProbeFn = probeCertificate
+	}
+	if fns.UpdatesFn == nil {
+		fns.UpdatesFn = readUpdates
+	}
 
 	inv, err := inventory.Collect(cfg, fns.InventoryFns)
 	if err != nil {
@@ -282,8 +297,10 @@ func Run(cfg *config.Config, fns CollectFuncs, opts Options) (*Result, error) {
 
 	checkCollectionWarnings(r, inv)
 	checkSystem(r, cfg, inv)
+	checkUpdates(r, fns.UpdatesFn())
 	checkContainers(r, inv)
 	checkPublicPorts(r, inv.Ports)
+	checkCertificates(r, probeCertificates(certTargets(cfg), fns.CertProbeFn), opts.Now)
 	checkBackups(r, cfg, fns.BackupListFn, opts)
 	checkDockerSocketMounts(r, inv, fns.InspectFn)
 	checkProxmoxTrust(r, cfg)
@@ -575,6 +592,166 @@ func checkProxmoxTrust(r *Result, cfg *config.Config) {
 				"can read the API token and answer for the endpoint.",
 			"Pin the certificate with fingerprint, or trust its issuer with ca_file, and remove insecure.",
 			"homebutler proxmox status --endpoint "+p.Name)
+	}
+}
+
+// checkCertificates reports a certificate that has stopped, or is about to
+// stop, being one a client accepts.
+//
+// An expired certificate takes everything behind the proxy down at once, and
+// renewal fails without a sound: a rotated DNS token, port 80 closed, a
+// container that stopped. Nothing is reported when nothing is listed and no
+// Proxmox endpoint is configured — a list nobody wrote is not a pass.
+func checkCertificates(r *Result, probes []CertProbe, now time.Time) {
+	var fine []string
+	for _, p := range probes {
+		label := p.Target.Label
+		if p.Target.Invalid != nil {
+			r.add(SeverityWarn, "exposure",
+				fmt.Sprintf("Certificate endpoint %q cannot be checked", label),
+				p.Target.Invalid.Error()+".",
+				"Write it as host:port in certificates.", "homebutler config validate")
+			continue
+		}
+		command := opensslCommand(p.Target)
+		if p.Err != nil {
+			r.add(SeverityWarn, "exposure",
+				"Could not read the certificate for "+label,
+				p.Err.Error(),
+				"Check that it is up and answers TLS on this port. When it expires cannot be told until it does.",
+				command)
+			continue
+		}
+
+		left := p.NotAfter.Sub(now)
+		on := p.NotAfter.UTC().Format("2006-01-02")
+		if p.Issuer != "" {
+			on += ", issued by " + p.Issuer
+		}
+		problem := false
+		switch {
+		case left <= 0:
+			problem = true
+			r.add(SeverityFail, "exposure",
+				fmt.Sprintf("Certificate for %s expired %s ago", label, certDays(-left)),
+				"It expired on "+on+". Every client that checks certificates refuses this endpoint.",
+				"Renew it, then find out why automatic renewal stopped: a DNS token, port 80, or a renewal container that is not running.",
+				command)
+		case left < certExpiryWarning:
+			problem = true
+			r.add(SeverityWarn, "exposure",
+				fmt.Sprintf("Certificate for %s expires in %s", label, certDays(left)),
+				"It expires on "+on+". ACME clients renew at around 30 days left, so one this close has usually missed a renewal already.",
+				"Check the renewal log now, while the certificate still works.",
+				command)
+		}
+		if p.NameErr != nil {
+			problem = true
+			names := "no names at all"
+			if len(p.Names) > 0 {
+				names = strings.Join(p.Names, ", ")
+			}
+			r.add(SeverityFail, "exposure",
+				fmt.Sprintf("Certificate for %s does not name %s", label, p.Target.Host),
+				fmt.Sprintf("It covers %s, so a client connecting to %s refuses it.", names, p.Target.Host),
+				"Serve a certificate that includes this name, or check that the proxy is answering with the one meant for it.",
+				command)
+		}
+		if !problem {
+			fine = append(fine, fmt.Sprintf("%s (%s left)", label, certDays(left)))
+		}
+	}
+	if len(fine) > 0 {
+		r.add(SeverityPass, "exposure",
+			fmt.Sprintf("%d certificate(s) valid for at least %s", len(fine), certDays(certExpiryWarning)),
+			strings.Join(fine, ", "), "", "")
+	}
+}
+
+// certDays rounds down to whole days, because "expires in 13d 23h" reads as
+// a precision nobody acts on.
+func certDays(d time.Duration) string {
+	days := int(d.Hours() / 24)
+	switch {
+	case days < 1:
+		return "less than a day"
+	case days == 1:
+		return "1 day"
+	}
+	return fmt.Sprintf("%d days", days)
+}
+
+// checkUpdates reports what the package manager already knows: a reboot the
+// last update asked for, and updates waiting to be installed.
+//
+// It reads only what needs neither root nor the network, so it never runs
+// apt update, and it says when the list it counted from is old. `status`
+// reports seven weeks of uptime as good news; this is the other half.
+func checkUpdates(r *Result, s UpdateState) {
+	if s.NotRun != "" {
+		r.add(SeverityWarn, "system",
+			"Pending updates and reboot were not checked",
+			"This is "+s.NotRun+". doctor reads reboot-required and the apt or dnf package cache, and there is neither to read here.",
+			"Check for updates the way this system does; doctor cannot say whether any are waiting.",
+			"")
+		return
+	}
+
+	if s.RebootRequired {
+		detail := "The last update installed something that only takes effect after a reboot, so what is running is not what was patched."
+		if !s.RebootSince.IsZero() {
+			detail = "Pending since " + s.RebootSince.UTC().Format("2006-01-02") + ". " + detail
+		}
+		if len(s.RebootPackages) > 0 {
+			detail += " Asked for by " + strings.Join(s.RebootPackages, ", ") + "."
+		}
+		r.add(SeverityWarn, "system", "A reboot is pending", detail,
+			"Reboot when it suits you. Until then the updates that asked for it are installed and not running.",
+			s.RebootCommand)
+	}
+
+	asOf := "When the package list was last refreshed is unknown."
+	if s.CacheAge > 0 {
+		asOf = "Counted from the package list as it was refreshed " + listAge(s.CacheAge) + " ago."
+	}
+	if !s.RebootKnown {
+		asOf += " needs-restarting is not installed, so whether a reboot is pending was not checked."
+	}
+
+	switch {
+	case s.UpgradableErr != nil:
+		r.add(SeverityWarn, "system", "Could not count pending updates",
+			s.UpgradableErr.Error()+". "+asOf,
+			"Run the package manager's own listing to see why.", s.UpgradableCommand)
+	case s.Security > 0:
+		r.add(SeverityWarn, "system",
+			fmt.Sprintf("%d security update(s) pending", s.Security),
+			fmt.Sprintf("%d of %d upgradable package(s) come from a security repository. %s", s.Security, s.Upgradable, asOf),
+			"Install them, or check that unattended upgrades is running if it is meant to be.",
+			s.UpgradableCommand)
+	case s.Upgradable > 0 && s.Security < 0:
+		r.add(SeverityWarn, "system",
+			fmt.Sprintf("%d package update(s) pending", s.Upgradable),
+			s.Manager+" could not say which of them are security fixes. "+asOf,
+			"List them and look for security fixes.", s.UpgradableCommand)
+	case s.Upgradable > 0:
+		r.add(SeverityPass, "system",
+			fmt.Sprintf("%d package update(s) available, none from a security repository", s.Upgradable),
+			asOf, "", "")
+	default:
+		r.add(SeverityPass, "system", "No pending package updates", asOf, "", "")
+	}
+
+	if s.CacheAge > staleCacheAge {
+		refresh := "sudo apt update"
+		if s.Manager == "dnf" {
+			refresh = "sudo dnf makecache"
+		}
+		r.add(SeverityWarn, "system",
+			"The package list is "+listAge(s.CacheAge)+" old",
+			"The update count is what "+s.Manager+" knew then, and may be missing everything released since. doctor does not refresh it, because that needs root and the network.",
+			"Refresh it, and check that whatever was meant to refresh it on a schedule is still running.",
+			refresh)
 	}
 }
 
