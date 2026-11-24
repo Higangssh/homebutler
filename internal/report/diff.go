@@ -108,7 +108,14 @@ func (c Change) String() string {
 // Matching on name is what makes a swap visible: a list of six before and six
 // after is unchanged by count, and a different container behind the same name
 // is exactly the event the report exists to surface.
-func diffContainers(prev, curr []docker.Container) []Change {
+//
+// prevImages and currImages are the image IDs each snapshot recorded, keyed by
+// container ID. A pull and a recreate leave docker ps printing nginx:latest on
+// both sides; the image ID is what says the container came back on different
+// code. That is still a replaced — a recreate is what the word means — and
+// the image IDs go in its detail. Without an ID on both sides the detail says
+// what it said before they were recorded.
+func diffContainers(prev, curr []docker.Container, prevImages, currImages map[string]string) []Change {
 	prevByName := indexContainers(prev)
 	currByName := indexContainers(curr)
 
@@ -119,13 +126,17 @@ func diffContainers(prev, curr []docker.Container) []Change {
 			changes = append(changes, Change{Kind: kindGone, Subject: name, Detail: "was " + p.State, noun: nounContainers})
 			continue
 		}
+		pImage, cImage := prevImages[p.ID], currImages[c.ID]
 		switch {
 		case p.ID != c.ID:
 			// The detail column is prose a person reads; the ID pair is the
 			// evidence, not the sentence. "recreated" is what docker compose
 			// up -d does to a container, which is how most people meet this.
 			detail := "recreated, " + shortID(p.ID) + " → " + shortID(c.ID)
-			if p.Image != c.Image {
+			switch {
+			case sameReference(p.Image, pImage, c.Image) && pImage != "" && cImage != "" && pImage != cImage:
+				detail += ", image " + shortImageID(pImage) + " → " + shortImageID(cImage) + " under " + c.Image
+			case p.Image != c.Image:
 				detail += ", " + p.Image + " → " + c.Image
 			}
 			changes = append(changes, Change{Kind: kindReplaced, Subject: name, Detail: detail + stateSuffix(p, c), noun: nounContainers})
@@ -372,6 +383,25 @@ func describeOwner(prefix string, p ports.PortInfo) string {
 		return ""
 	}
 	return prefix + owner(p)
+}
+
+// sameReference reports whether a container's earlier reference is its later
+// one. It is also when the earlier one is the bare ID of the image it ran:
+// docker ps prints that once a pull has moved the tag to another image, so a
+// report taken between the pull and the recreate saw 73aaf090f3d8 where the
+// compose file still says nginx:latest.
+func sameReference(prevRef, prevImage, currRef string) bool {
+	if prevRef == currRef {
+		return true
+	}
+	bare := strings.TrimPrefix(prevImage, "sha256:")
+	return len(prevRef) >= 12 && bare != "" && strings.HasPrefix(bare, strings.TrimPrefix(prevRef, "sha256:"))
+}
+
+// shortImageID is an image ID as docker images prints it: the digest without
+// its algorithm, cut to twelve.
+func shortImageID(id string) string {
+	return shortID(strings.TrimPrefix(id, "sha256:"))
 }
 
 // shortID trims a container ID to the prefix docker itself displays.

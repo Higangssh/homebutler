@@ -4,9 +4,18 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### ✨ Features
+
+- `report` says when a recreated container came back on a different image under the same tag (#411). After `docker compose pull && up -d` with `nginx:latest` in the compose file, `docker ps` prints `nginx:latest` before and after, so the line said `replaced: web — recreated, 7d4a91f0aa11 → 91be0322bb22` and nothing about the image. It is still `replaced`, and now reads `replaced: web — recreated, 7d4a91f0aa11 → 91be0322bb22, image 605c77e624dd → 1a2b3c4d5e6f under nginx:latest`. Snapshots record each container's image ID under `image_ids`, read with one `docker inspect` per run; containers it does not answer for are compared by tag as before, and `warnings` names them. The first report after upgrading compares against a snapshot without image IDs, so its lines are the ones the last release wrote
+
 ### 🐛 Fixes
 
+- A report taken between `docker compose pull` and `up -d` saw the container's image as a bare ID, because the pull had moved the tag off it, and the next report called the recreate `… 73aaf090f3d8 → nginx:latest`. With image IDs on both sides it now reads as the same update as above (#411)
 - `watch --help`, `watch list`, `watch remove` and `watch check` described a Docker-only tracker; the help now names systemd units and PM2 apps where the command handles them, and `check --help` says it checks Docker targets only (#410)
+
+### 📚 Documentation
+
+- The README said an `image` line comes from pulling a new tag. Pulling and recreating is a `replaced`; `image` is what a pull leaves behind when it moves the tag off a container that is still running, so Docker names that container's image by ID. The README, `docs/report.md`, the docs site and the agent skill now say so (#411)
 
 ## [1.8.0](https://github.com/Higangssh/homebutler/compare/v1.7.0...v1.8.0) - 2026-11-11
 

@@ -2,6 +2,7 @@ package docker
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"regexp"
 	"sort"
@@ -34,6 +35,84 @@ func List() ([]Container, error) {
 	}
 
 	return parseDockerPS(out), nil
+}
+
+// ImageIDs answers which image each container runs, keyed by the short
+// container ID List reports. docker ps prints the reference the container was
+// created from, so a container recreated after a pull under the same tag looks
+// unchanged there; the image ID is what says the code underneath moved.
+//
+// One docker inspect for the whole list, not one per container.
+func ImageIDs(containerIDs []string) (map[string]string, error) {
+	if len(containerIDs) == 0 {
+		return map[string]string{}, nil
+	}
+	args := append([]string{"inspect", "--type", "container", "--format", "{{.Id}} {{.Image}}"}, containerIDs...)
+	raw, err := util.DockerCmd(args...)
+	return imageIDsFrom(containerIDs, raw, err)
+}
+
+// imageIDsFrom reads docker inspect's answer for the containers asked about.
+//
+// A container removed between List and the inspect makes docker exit
+// non-zero while still answering for the rest, so whatever it did answer is
+// returned. The error is for every container it did not answer for, whatever
+// the exit status: an answer missing a container, or one that parses to
+// nothing, is not a clean read just because docker exited 0.
+func imageIDsFrom(asked []string, raw string, runErr error) (map[string]string, error) {
+	got := parseImageIDs(raw)
+	var missing []string
+	for _, id := range asked {
+		if _, ok := got[shortContainerID(id)]; !ok {
+			missing = append(missing, id)
+		}
+	}
+	if len(missing) == 0 {
+		return got, nil
+	}
+	msg := fmt.Sprintf("docker inspect answered for %d of %d containers, not %s", len(asked)-len(missing), len(asked), strings.Join(missing, ", "))
+	if runErr != nil {
+		msg += ": " + runErr.Error()
+	}
+	if out := strings.TrimSpace(raw); out != "" && len(got) == 0 {
+		msg += ": " + out
+	}
+	return got, errors.New(msg)
+}
+
+func shortContainerID(id string) string {
+	if len(id) > 12 {
+		return id[:12]
+	}
+	return id
+}
+
+// parseImageIDs reads "<container id> <image id>" lines and skips anything
+// else, which is where docker puts its error for a container that is gone.
+func parseImageIDs(raw string) map[string]string {
+	out := map[string]string{}
+	for _, line := range splitLines(raw) {
+		id, image, ok := strings.Cut(strings.TrimSpace(line), " ")
+		// Docker prefixes the image ID with its algorithm; Podman's
+		// docker-compatible CLI prints the bare hex.
+		if !ok || !isHex(id) || !isHex(strings.TrimPrefix(image, "sha256:")) {
+			continue
+		}
+		out[shortContainerID(id)] = image
+	}
+	return out
+}
+
+func isHex(s string) bool {
+	if s == "" {
+		return false
+	}
+	for _, r := range s {
+		if (r < '0' || r > '9') && (r < 'a' || r > 'f') {
+			return false
+		}
+	}
+	return true
 }
 
 // ActionResult holds the result of a docker action.

@@ -116,7 +116,7 @@ it rather than reading the sentence:
 | `gone` | it was there last time and is not now |
 | `new` | it was not there last time and is now |
 | `replaced` | same name, different thing underneath — a recreated container |
-| `image` | same container, different image |
+| `image` | same container, different image — a pull moved its tag off it; a container recreated onto a new image is `replaced` |
 | `state` | running where it was stopped, or the reverse — or a process that keeps restarting |
 | `port` | same port, a different process answering on it |
 | `disk` | a mount moved by more than half a gigabyte |

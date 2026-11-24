@@ -27,8 +27,14 @@ type Snapshot struct {
 	ServerName string             `json:"server_name"`
 	System     *system.StatusInfo `json:"system"`
 	Containers []docker.Container `json:"containers"`
-	Ports      []ports.PortInfo   `json:"ports"`
-	Processes  []ProcessIdentity  `json:"processes,omitempty"`
+	// ImageIDs is the image each container ran, keyed by container ID. The
+	// image in Containers is the reference docker ps prints, which stays
+	// nginx:latest across a pull and a recreate; this is what moves. A
+	// snapshot an earlier release wrote has none, and a container missing
+	// here on either side is compared by its reference alone.
+	ImageIDs  map[string]string `json:"image_ids,omitempty"`
+	Ports     []ports.PortInfo  `json:"ports"`
+	Processes []ProcessIdentity `json:"processes,omitempty"`
 	// ProcessesReadAt is when the process list was read, to the nanosecond.
 	// A process's age is measured then, so the time between two of these is
 	// what says whether a process started after the last list or before it.
@@ -227,6 +233,7 @@ func DefaultCollectFuncs() CollectFuncs {
 		system.MarkOnDemand(procs)
 		return procs, nil
 	}
+	fns.ImageIDsFn = docker.ImageIDs
 	return fns
 }
 
@@ -338,6 +345,7 @@ func buildSnapshot(inv *inventory.Inventory) *Snapshot {
 		ServerName: inv.ServerName,
 		System:     inv.System,
 		Containers: inv.Containers,
+		ImageIDs:   inv.ImageIDs,
 		Ports:      inv.Ports,
 		Processes:  processIdentities(kept),
 		Warnings:   inv.Warnings,
@@ -498,7 +506,7 @@ func buildReport(snap *Snapshot, prev *Snapshot) *Report {
 	// an agent while the caveat sits in another field is an all-clear the
 	// report cannot stand behind.
 	if collectorAnswered(prev, snap, inventory.CollectorDocker) {
-		changes = append(changes, diffContainers(prev.Containers, snap.Containers)...)
+		changes = append(changes, diffContainers(prev.Containers, snap.Containers, prev.ImageIDs, snap.ImageIDs)...)
 	} else {
 		changes = append(changes, Change{
 			Kind:    kindSkipped,

@@ -63,6 +63,12 @@ Each line below came from a real run on the test machine. `gone` and `new` name 
    replaced  hbsleep                     same name, different invocation
 ```
 
+A container recreated after a pull under the same tag, as `docker compose pull && up -d` does with `nginx:latest`, is still `replaced`. `docker ps` prints the same reference before and after, so the detail adds the old and new image IDs and the tag they were pulled under. A snapshot saved by an earlier release has no image IDs, so the first report after upgrading gives the container IDs only:
+
+```text
+   replaced  hb411-web           recreated, dd545603e914 → c555b843aa16, image 73aaf090f3d8 → a7dbc319b143 under hb411:latest
+```
+
 `image` fires when the container kept its ID and the image it reports changed. In this run the `imgproxy:v1` tag was removed after the container started, so Docker reported the container's image by ID. `port` fires when the same port is answered by a different process, here a replacement container on port 8201:
 
 ```text
