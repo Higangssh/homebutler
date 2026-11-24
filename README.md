@@ -208,7 +208,7 @@ caller filters on it without reading the title:
 | `proxmox` | an endpoint that cannot be reached with the token it has |
 | `config` | the config file itself — permissions, keys homebutler does not know |
 | `incomplete` | a collector did not answer, so this diagnosis is partial |
-| `overall` | nothing specific: the all-clear |
+| `overall` | reserved: older releases sent it as the all-clear, `No obvious issues found`; doctor no longer does |
 
 `incomplete` is the one worth handling. It means the answer you are reading is
 missing a section, which is different from that section being fine.

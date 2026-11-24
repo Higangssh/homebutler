@@ -300,7 +300,6 @@ func Run(cfg *config.Config, fns CollectFuncs, opts Options) (*Result, error) {
 	checkUpdates(r, fns.UpdatesFn())
 	checkContainers(r, inv)
 	checkPublicPorts(r, inv.Ports)
-	checkCertificates(r, probeCertificates(certTargets(cfg), fns.CertProbeFn), opts.Now)
 	checkBackups(r, cfg, fns.BackupListFn, opts)
 	checkDockerSocketMounts(r, inv, fns.InspectFn)
 	checkProxmoxTrust(r, cfg)
@@ -311,16 +310,12 @@ func Run(cfg *config.Config, fns CollectFuncs, opts Options) (*Result, error) {
 	checkDashboard(r, cfg, fns.ServeServiceFn)
 	checkNotifications(r, cfg)
 	checkReportBaseline(r, fns.SnapshotDir)
-	checkProxmox(r, cfg, fns.ProxmoxOpenFn)
+	unreachable := checkProxmox(r, cfg, fns.ProxmoxOpenFn)
+	checkCertificates(r, probeCertificates(certTargets(cfg), fns.CertProbeFn), opts.Now, unreachable)
 
-	if len(r.Findings) == 0 {
-		r.Findings = append(r.Findings, Finding{
-			Severity: SeverityPass,
-			Category: "overall",
-			Title:    "No obvious issues found",
-			Detail:   "System resources, Docker state, exposed ports, backups, and notification readiness look acceptable.",
-		})
-	}
+	// There is no all-clear finding any more: checkUpdates always reports,
+	// so a run is never empty. "overall" stays in Categories, because a
+	// caller may still receive it from an older server under --server.
 
 	r.Summary = summarize(r.Findings)
 	r.Status = overallStatus(r.Summary)
@@ -602,7 +597,10 @@ func checkProxmoxTrust(r *Result, cfg *config.Config) {
 // renewal fails without a sound: a rotated DNS token, port 80 closed, a
 // container that stopped. Nothing is reported when nothing is listed and no
 // Proxmox endpoint is configured — a list nobody wrote is not a pass.
-func checkCertificates(r *Result, probes []CertProbe, now time.Time) {
+//
+// unreachable names the Proxmox endpoints checkProxmox already failed, so an
+// endpoint that does not answer is one finding, not two.
+func checkCertificates(r *Result, probes []CertProbe, now time.Time, unreachable map[string]bool) {
 	var fine []string
 	for _, p := range probes {
 		label := p.Target.Label
@@ -615,45 +613,69 @@ func checkCertificates(r *Result, probes []CertProbe, now time.Time) {
 		}
 		command := opensslCommand(p.Target)
 		if p.Err != nil {
+			if p.Target.Proxmox != "" && unreachable[p.Target.Proxmox] {
+				continue
+			}
 			r.add(SeverityWarn, "exposure",
 				"Could not read the certificate for "+label,
-				p.Err.Error(),
+				dialDetail(p.Err),
 				"Check that it is up and answers TLS on this port. When it expires cannot be told until it does.",
 				command)
 			continue
 		}
 
-		left := p.NotAfter.Sub(now)
-		on := p.NotAfter.UTC().Format("2006-01-02")
-		if p.Issuer != "" {
-			on += ", issued by " + p.Issuer
+		// A pinned endpoint is one homebutler trusts by fingerprint or not at
+		// all, so its own client goes on working past the end date. Saying
+		// every client refuses it would be wrong; other clients do.
+		severity, refused := SeverityFail, "Every client that checks certificates refuses this endpoint."
+		if p.Target.Pinned {
+			severity, refused = SeverityWarn, "Its fingerprint is pinned or it is not verified at all, so homebutler keeps working here, but a browser or any other client that checks certificates refuses it."
 		}
+		issued := ""
+		if p.Issuer != "" {
+			issued = ", issued by " + p.Issuer
+		}
+		whose := func(who string) string {
+			if who == "" {
+				return "It"
+			}
+			return "Its " + who
+		}
+
+		left := p.NotAfter.Sub(now)
 		problem := false
 		switch {
+		case p.NotBefore.After(now):
+			problem = true
+			r.add(severity, "exposure",
+				fmt.Sprintf("Certificate for %s is not valid until %s", label, p.NotBefore.UTC().Format("2006-01-02")),
+				whose(p.Starting)+" starts on "+p.NotBefore.UTC().Format("2006-01-02 15:04 MST")+issued+". "+refused+" A start date in the future usually means this machine's clock or the issuer's is wrong.",
+				"Check the clock here and on the machine that issued it.",
+				command)
 		case left <= 0:
 			problem = true
-			r.add(SeverityFail, "exposure",
+			r.add(severity, "exposure",
 				fmt.Sprintf("Certificate for %s expired %s ago", label, certDays(-left)),
-				"It expired on "+on+". Every client that checks certificates refuses this endpoint.",
+				whose(p.Expiring)+" expired on "+p.NotAfter.UTC().Format("2006-01-02")+issued+". "+refused,
 				"Renew it, then find out why automatic renewal stopped: a DNS token, port 80, or a renewal container that is not running.",
 				command)
 		case left < certExpiryWarning:
 			problem = true
 			r.add(SeverityWarn, "exposure",
 				fmt.Sprintf("Certificate for %s expires in %s", label, certDays(left)),
-				"It expires on "+on+". ACME clients renew at around 30 days left, so one this close has usually missed a renewal already.",
+				whose(p.Expiring)+" expires on "+p.NotAfter.UTC().Format("2006-01-02")+issued+". ACME clients renew at around 30 days left, so one this close has usually missed a renewal already.",
 				"Check the renewal log now, while the certificate still works.",
 				command)
 		}
 		if p.NameErr != nil {
 			problem = true
-			names := "no names at all"
-			if len(p.Names) > 0 {
-				names = strings.Join(p.Names, ", ")
+			detail := fmt.Sprintf("It covers %s, so a client connecting to %s refuses it.", strings.Join(p.Names, ", "), p.Target.Host)
+			if len(p.Names) == 0 {
+				detail = fmt.Sprintf("It has no subject alternative names, only the common name %q, and modern clients ignore the common name, so a client connecting to %s refuses it.", p.Subject, p.Target.Host)
 			}
 			r.add(SeverityFail, "exposure",
 				fmt.Sprintf("Certificate for %s does not name %s", label, p.Target.Host),
-				fmt.Sprintf("It covers %s, so a client connecting to %s refuses it.", names, p.Target.Host),
+				detail,
 				"Serve a certificate that includes this name, or check that the proxy is answering with the one meant for it.",
 				command)
 		}
@@ -710,7 +732,8 @@ func checkUpdates(r *Result, s UpdateState) {
 	if s.RebootRequired {
 		detail := "The last update installed something that only takes effect after a reboot, so what is running is not what was patched."
 		if !s.RebootSince.IsZero() {
-			detail = "Pending since " + s.RebootSince.UTC().Format("2006-01-02") + ". " + detail
+			// The date the machine itself would show, not the UTC one.
+			detail = "Pending since " + s.RebootSince.Format("2006-01-02") + ". " + detail
 		}
 		if len(s.RebootPackages) > 0 {
 			detail += " Asked for by " + strings.Join(s.RebootPackages, ", ") + "."
@@ -720,18 +743,37 @@ func checkUpdates(r *Result, s UpdateState) {
 			s.RebootCommand)
 	}
 
-	asOf := "When the package list was last refreshed is unknown."
-	if s.CacheAge > 0 {
-		asOf = "Counted from the package list as it was refreshed " + listAge(s.CacheAge) + " ago."
+	// Everything said about how far to trust the count goes in its detail.
+	// A stale list or held packages are worth knowing and are not faults a
+	// warning should turn --strict red for.
+	var notes []string
+	switch {
+	case s.CacheAge > staleCacheAge:
+		notes = append(notes, "Counted from the package list as it was refreshed "+listAge(s.CacheAge)+
+			" ago, so it may be missing everything released since; doctor does not refresh it, because that needs root and the network.")
+	case s.CacheAge > 0:
+		notes = append(notes, "Counted from the package list as it was refreshed "+listAge(s.CacheAge)+" ago.")
+	default:
+		notes = append(notes, "When the package list was last refreshed is unknown.")
+	}
+	if len(s.Held) > 0 {
+		notes = append(notes, fmt.Sprintf("%d more held back and not counted (held, phased, or needing a removal): %s.", len(s.Held), strings.Join(s.Held, ", ")))
 	}
 	if !s.RebootKnown {
-		asOf += " needs-restarting is not installed, so whether a reboot is pending was not checked."
+		notes = append(notes, "needs-restarting is not installed, so whether a reboot is pending was not checked.")
 	}
+	asOf := strings.Join(notes, " ")
 
 	switch {
+	case s.NotCounted != "":
+		detail := "Not counted: " + s.NotCounted + "."
+		if !s.RebootKnown {
+			detail += " needs-restarting is not installed, so whether a reboot is pending was not checked."
+		}
+		r.add(SeverityPass, "system", "Pending updates were not counted", detail, "", "")
 	case s.UpgradableErr != nil:
 		r.add(SeverityWarn, "system", "Could not count pending updates",
-			s.UpgradableErr.Error()+". "+asOf,
+			upperFirst(s.UpgradableErr.Error())+". "+asOf,
 			"Run the package manager's own listing to see why.", s.UpgradableCommand)
 	case s.Security > 0:
 		r.add(SeverityWarn, "system",
@@ -740,28 +782,15 @@ func checkUpdates(r *Result, s UpdateState) {
 			"Install them, or check that unattended upgrades is running if it is meant to be.",
 			s.UpgradableCommand)
 	case s.Upgradable > 0 && s.Security < 0:
-		r.add(SeverityWarn, "system",
-			fmt.Sprintf("%d package update(s) pending", s.Upgradable),
-			s.Manager+" could not say which of them are security fixes. "+asOf,
-			"List them and look for security fixes.", s.UpgradableCommand)
+		r.add(SeverityPass, "system",
+			fmt.Sprintf("%d package update(s) available", s.Upgradable),
+			s.Manager+" could not say which of them are security fixes. "+asOf, "", "")
 	case s.Upgradable > 0:
 		r.add(SeverityPass, "system",
 			fmt.Sprintf("%d package update(s) available, none from a security repository", s.Upgradable),
 			asOf, "", "")
 	default:
 		r.add(SeverityPass, "system", "No pending package updates", asOf, "", "")
-	}
-
-	if s.CacheAge > staleCacheAge {
-		refresh := "sudo apt update"
-		if s.Manager == "dnf" {
-			refresh = "sudo dnf makecache"
-		}
-		r.add(SeverityWarn, "system",
-			"The package list is "+listAge(s.CacheAge)+" old",
-			"The update count is what "+s.Manager+" knew then, and may be missing everything released since. doctor does not refresh it, because that needs root and the network.",
-			"Refresh it, and check that whatever was meant to refresh it on a schedule is still running.",
-			refresh)
 	}
 }
 
@@ -1038,9 +1067,13 @@ func checkReportBaseline(r *Result, snapshotDir string) {
 // requests. It reports one finding per endpoint and keeps configuration, TLS,
 // authentication, authorization, response, and transport failures distinguishable rather than
 // collapsing them into a single "unavailable" result, per #105 and #111.
-func checkProxmox(r *Result, cfg *config.Config, openFn func(config.ProxmoxConfig) (*proxmox.Client, error)) {
+//
+// It returns the endpoints none of whose collectors answered, so the
+// certificate check does not report the same silent endpoint a second time.
+func checkProxmox(r *Result, cfg *config.Config, openFn func(config.ProxmoxConfig) (*proxmox.Client, error)) map[string]bool {
+	unreachable := map[string]bool{}
 	if cfg == nil || len(cfg.Proxmox) == 0 {
-		return
+		return unreachable
 	}
 	for _, endpoint := range cfg.Proxmox {
 		command := fmt.Sprintf("homebutler proxmox status --endpoint %q", endpoint.Name)
@@ -1049,15 +1082,18 @@ func checkProxmox(r *Result, cfg *config.Config, openFn func(config.ProxmoxConfi
 			r.add(SeverityFail, "proxmox", fmt.Sprintf("Proxmox endpoint %q could not be configured", endpoint.Name), err.Error(), proxmoxFailureAction(err), command)
 			continue
 		}
-		checkProxmoxEndpoint(r, endpoint.Name, client, command)
+		if !checkProxmoxEndpoint(r, endpoint.Name, client, command) {
+			unreachable[endpoint.Name] = true
+		}
 	}
+	return unreachable
 }
 
 // checkProxmoxEndpoint calls the same DefaultView the proxmox status command
 // renders, so the two never disagree about what a token can reach: an empty
 // resources collector is a failed collector here exactly as it is there,
 // not a doctor-only pass.
-func checkProxmoxEndpoint(r *Result, name string, client *proxmox.Client, command string) {
+func checkProxmoxEndpoint(r *Result, name string, client *proxmox.Client, command string) (answered bool) {
 	view, _ := client.DefaultView(context.Background())
 
 	allFailed := view.CollectorFailed(proxmox.CollectorVersion) &&
@@ -1072,6 +1108,7 @@ func checkProxmoxEndpoint(r *Result, name string, client *proxmox.Client, comman
 	default:
 		r.add(SeverityPass, "proxmox", fmt.Sprintf("Proxmox endpoint %q is fully readable", name), "Version, cluster status, and resources all responded.", "", "")
 	}
+	return !allFailed
 }
 
 // proxmoxFailureAction turns a classified Proxmox error into what the
