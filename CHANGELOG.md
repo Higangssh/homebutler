@@ -2,7 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
-## [Unreleased]
+## [1.9.0](https://github.com/Higangssh/homebutler/compare/v1.8.0...v1.9.0) - 2026-11-25
+
+**homebutler said what changed on a box, but not when a tag had moved to another image, when the machine itself needed attention, or what had changed around a container that just stopped; `report` and `doctor` now name the image under a tag, `doctor` reads certificates, pending updates and a pending reboot, and `incident_context` answers for a crash with the changes around it.**
+
+Three things to check before upgrading. `doctor --strict` can exit 1 on a machine that passed before: a pending reboot, a pending security update, a failed package check, or a Proxmox certificate that has expired, is not yet valid, does not name the host or expires within 14 days now each raise a finding that `--strict` counts. `doctor` findings can carry a fourth severity, `info`, and `summary` an `info` count; `status` and the `--strict` exit code never count it. And `doctor` now asks the registry of each running container's image about its tag, an anonymous `HEAD`, which Docker Hub does not count as a pull, plus a `GET` of a multi-arch index only when Docker cannot say how the image was pulled, caching the answer in `~/.homebutler/registry/digests.json`; `doctor.image_updates.enabled: false` turns it off, per machine. `incident_context` against a `server` needs that server on this release.
 
 ### ⚠️ Behavior changes
 
