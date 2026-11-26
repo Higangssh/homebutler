@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: homebutler web dashboard API
-  version: 1.8.0
+  version: 1.9.0
   license:
     name: MIT
     url: https://opensource.org/licenses/MIT
@@ -576,7 +576,7 @@ paths:
         - Report and doctor
       operationId: runDoctor
       summary: Run doctor
-      description: Checks the machine for problems across system, Docker, exposure, backups, watch, notifications, Proxmox and configuration, and returns one finding per check. Every `warn` and `fail` finding carries the command that fixes or investigates it.
+      description: Checks the machine for problems across system, pending updates, Docker, running images against their registry, exposure, certificates, backups, watch, notifications, Proxmox and configuration, and returns one finding per check. Every `warn` and `fail` finding carries the command that fixes or investigates it. The image check asks each running image's registry, anonymously, unless `doctor.image_updates.enabled` is `false` in the config of the machine checked.
       x-protection: none
       parameters:
         - $ref: '#/components/parameters/Server'
@@ -589,31 +589,32 @@ paths:
                 $ref: '#/components/schemas/DoctorResult'
               example:
                 schema_version: 1
-                timestamp: '2026-10-25T18:57:55Z'
-                server_name: homelab
+                timestamp: '2026-11-26T01:36:17Z'
+                server_name: main
                 status: fail
                 summary:
-                  pass: 0
-                  warn: 5
+                  pass: 1
+                  warn: 6
                   fail: 2
-                  info: 0
+                  info: 3
                 findings:
-                  - severity: warn
-                    category: exposure
-                    title: 6 port(s) are listening on all interfaces
-                    detail: 18601/tcp, 18610/tcp, 18611/tcp, 22/tcp, 3399/tcp, 8080/tcp
-                    action: Make sure each one is intentional and protected by firewall, reverse proxy, or login where needed.
-                    command: homebutler inventory scan
-                    runner: mcp
-                    tool: inventory_scan
+                  - severity: pass
+                    category: system
+                    title: Pending updates are not read on macOS
+                    detail: doctor reads /var/run/reboot-required, needs-restarting and the apt or dnf package cache, and macOS has none of them.
                   - severity: warn
                     category: backup
                     title: No backups found
-                    detail: No .tar.gz backups found in /home/you/backups.
+                    detail: No .tar.gz backups found in /home/you/.homebutler/backups.
                     action: Create your first backup, then verify at least one important app with a drill.
                     command: homebutler backup
                     runner: mcp
                     tool: backup_create
+                  - severity: info
+                    category: docker
+                    title: 'web: debian:bookworm-slim now names a different image in the registry'
+                    detail: 'On docker.io, debian:bookworm-slim names sha256:e67eeead736f; this container runs the image pulled as sha256:99c0b25c46d0. Registry answer from 1m ago.'
+                    action: Pull and recreate it when you choose to. doctor does not pull or restart anything.
                   - severity: warn
                     category: proxmox
                     title: Proxmox endpoint "pve" accepts any certificate
@@ -985,14 +986,15 @@ paths:
                 items:
                   $ref: '#/components/schemas/Incident'
               example:
-                - id: flaky-20261025-115840.172-50551e
+                - id: flaky-20261126-014259.651-6cd114
                   container: flaky
-                  detected_at: '2026-10-25T11:58:40.172139897-07:00'
-                  restart_count: 6
-                  prev_started_at: '2026-10-25T18:58:24.350797511Z'
-                  curr_started_at: '2026-10-25T18:58:35.810745971Z'
+                  detected_at: '2026-11-26T01:42:59.651369Z'
+                  restart_count: 5
+                  prev_started_at: '2026-11-26T01:42:44.585132089Z'
+                  curr_started_at: '2026-11-26T01:42:58.120118519Z'
                   pre_logs: ''
                   post_logs: ''
+                  kind: docker
         '401':
           $ref: '#/components/responses/Unauthorized'
         '500':
@@ -1018,7 +1020,7 @@ paths:
           description: The incident `id`, from [List incidents](/reference/api/watch-and-alerts/list-incidents).
           schema:
             type: string
-            example: flaky-20261025-113501.277-3c009f
+            example: flaky-20261126-014259.651-6cd114
       responses:
         '200':
           description: The incident with its logs.
@@ -1027,12 +1029,12 @@ paths:
               schema:
                 $ref: '#/components/schemas/Incident'
               example:
-                id: flaky-20261025-115840.172-50551e
+                id: flaky-20261126-014259.651-6cd114
                 container: flaky
-                detected_at: '2026-10-25T11:58:40.172139897-07:00'
-                restart_count: 6
-                prev_started_at: '2026-10-25T18:58:24.350797511Z'
-                curr_started_at: '2026-10-25T18:58:35.810745971Z'
+                detected_at: '2026-11-26T01:42:59.651369Z'
+                restart_count: 5
+                prev_started_at: '2026-11-26T01:42:44.585132089Z'
+                curr_started_at: '2026-11-26T01:42:58.120118519Z'
                 pre_logs: (captured at detection — see post_logs for current state)
                 post_logs: |-
                   booting
@@ -1046,8 +1048,7 @@ paths:
                   booting
                   fatal: out of cheese
                   booting
-                  fatal: out of cheese
-                  booting
+                kind: docker
         '401':
           $ref: '#/components/responses/Unauthorized'
         '404':
@@ -2500,7 +2501,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/Version'
               example:
-                version: 1.8.0
+                version: 1.9.0
         '401':
           $ref: '#/components/responses/Unauthorized'
   /api/:
@@ -3100,7 +3101,7 @@ components:
             - pass
             - warn
             - fail
-          description: The worst severity among the findings.
+          description: The worst severity among the findings. `info` findings never set it.
         summary:
           type: object
           required:

@@ -17,13 +17,13 @@ An MCP client sends `tools/call` with the tool's `name` and its `arguments`. The
 ```
 
 ```json
-{"jsonrpc":"2.0","id":2,"result":{"resultType":"complete","content":[{"type":"text","text":"{\"container\":\"web\",\"lines\":\"2\",\"logs\":\"listening on 18102\\nlistening on 18102\"}"}],"_meta":{"io.modelcontextprotocol/serverInfo":{"name":"homebutler","version":"1.8.0"}}}}
+{"jsonrpc":"2.0","id":2,"result":{"resultType":"complete","content":[{"type":"text","text":"{\"container\":\"web\",\"lines\":\"2\",\"logs\":\"listening on 18102\\nlistening on 18102\"}"}],"_meta":{"io.modelcontextprotocol/serverInfo":{"name":"homebutler","version":"1.9.0"}}}}
 ```
 
 The pages in this tab show the parsed JSON inside `text`, not the envelope. When a tool fails, the content item holds the error message as plain text and the result has `"isError": true`. A failed call is a normal response, not a JSON-RPC error:
 
 ```json
-{"jsonrpc":"2.0","id":2,"result":{"resultType":"complete","content":[{"type":"text","text":"failed to stop missing: Error response from daemon: No such container: missing"}],"isError":true,"_meta":{"io.modelcontextprotocol/serverInfo":{"name":"homebutler","version":"1.8.0"}}}}
+{"jsonrpc":"2.0","id":2,"result":{"resultType":"complete","content":[{"type":"text","text":"failed to stop missing: Error response from daemon: No such container: missing"}],"isError":true,"_meta":{"io.modelcontextprotocol/serverInfo":{"name":"homebutler","version":"1.9.0"}}}}
 ```
 
 Arguments are checked by the tool, not by the transport. A missing required argument returns `missing required parameter: <name>`, except `watch_add` and `watch_remove`, which return `container is required`. A tool name that doesn't exist returns `unknown tool: <name>`. A number can be sent as a string, and a boolean as `"true"`; the tool converts it.

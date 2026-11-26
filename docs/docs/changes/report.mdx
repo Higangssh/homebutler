@@ -63,10 +63,16 @@ Each line below came from a real run on the test machine. `gone` and `new` name 
    replaced  hbsleep                     same name, different invocation
 ```
 
-A container recreated after a pull under the same tag, as `docker compose pull && up -d` does with `nginx:latest`, is still `replaced`. `docker ps` prints the same reference before and after, so the detail adds the old and new image IDs and the tag they were pulled under. A snapshot saved by an earlier release has no image IDs, so the first report after upgrading gives the container IDs only:
+A container recreated after a pull under the same tag, as `docker compose pull && up -d` does with `nginx:latest`, is still `replaced`. `docker ps` prints the same reference before and after, so the detail adds the old and new image IDs and the tag they were pulled under:
 
 ```text
    replaced  hb411-web           recreated, dd545603e914 → c555b843aa16, image 73aaf090f3d8 → a7dbc319b143 under hb411:latest
+```
+
+A snapshot saved by 1.8.0 or earlier has no image IDs, so the first report after upgrading to 1.9.0 gives the container IDs only, as before:
+
+```text
+   replaced  hb190-web  recreated, 9d6f14d82e7b → c174b83d8c38
 ```
 
 `image` fires when the container kept its ID and the image it reports changed. In this run the `imgproxy:v1` tag was removed after the container started, so Docker reported the container's image by ID. `port` fires when the same port is answered by a different process, here a replacement container on port 8201:
@@ -164,7 +170,7 @@ The first run, and a run after the previous snapshot became unreadable, also pro
 
 Each saved run writes `~/.homebutler/reports/snapshots/snapshot_<timestamp>.json`, such as `snapshot_20261025T181341Z.json`. After saving, homebutler deletes the oldest files until `--keep` remain. Pruning counts files, not days, so the span `--keep` covers depends on how often you run `report`. Snapshots are ordered by the timestamp in the file name.
 
-A snapshot holds the system reading, the container list, the listening ports, the process identities, and which collectors failed. On the test machine, with 42 containers and 34 process identities, a snapshot was 17 KB. The largest measured case is a desktop macOS with 639 process identities, where a snapshot is about 50 KB and `--keep 30` holds roughly 1.5 MB. Weigh that before raising `--keep`.
+A snapshot holds the system reading, the container list, the image ID each container runs (`image_ids`, from 1.9.0), the listening ports, the process identities, and which collectors failed. On the test machine, with 42 containers and 34 process identities, a snapshot was 17 KB. The largest measured case is a desktop macOS with 639 process identities, where a snapshot is about 50 KB and `--keep 30` holds roughly 1.5 MB. Weigh that before raising `--keep`.
 
 ## Use the report from a script
 

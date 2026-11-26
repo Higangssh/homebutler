@@ -64,7 +64,7 @@ The header has five tabs and, on the Dashboard and Report tabs, a server picker 
 | Tab | What it answers | Contents |
 | --- | --- | --- |
 | **Dashboard** | What is true right now | Cards: **Server Overview**, **Proxmox VE**, **System Status**, **Docker Containers**, **Top Processes**, **Alerts**, **Network Ports**, **Wake-on-LAN**. |
-| **Report** | What changed since the last snapshot | **What changed**, **Needs attention**, **Notable changes**, **Suggested actions** and **Doctor**. |
+| **Report** | What changed since the last snapshot | **What changed**, **Needs attention**, **Notable changes**, **Suggested actions** and **Doctor**, which counts its findings as failing, to look at, to know about (the `info` findings, shown only when there are some) and fine. |
 | **Watch** | What went down, and why | **Watched** targets and **Incidents**, with the logs captured at the time. |
 | **Apps** | Which apps are installed | The app catalog with install, uninstall and purge. |
 | **Config** | How homebutler is set up | **Servers**, **Alert Thresholds**, **Proxmox**, **Notifications** and **Wake-on-LAN Devices**. |
@@ -102,7 +102,7 @@ curl -H "Authorization: Bearer <long-random-token>" http://127.0.0.1:8080/api/ve
 ```
 
 ```text
-{"version":"1.8.0"}
+{"version":"1.9.0"}
 ```
 
 A missing or wrong token gets `401` with `{"error":"unauthorized"}`.

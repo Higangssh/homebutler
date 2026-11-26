@@ -13,7 +13,7 @@ homebutler doctor [flags]
 
 The checks cover resource pressure, stopped containers, running containers whose tag names a different image in their registry, ports open on every interface, the installed dashboard, backup age, backup directory size and drill history, notification readiness, the watch service, report baseline, config file permissions, containers that mount the Docker socket, Proxmox endpoints that accept any certificate, incident history size, Proxmox endpoint reachability, TLS certificates that are expired, expire within 14 days or do not name their host, and pending security updates and reboots as apt or dnf already knows them.
 
-The overall status is the worst severity found: pass, warn, or fail. `doctor` changes nothing on the server except `~/.homebutler/registry/digests.json`, where it keeps registry answers for six hours. The image check asks each running image's registry, anonymously; set `doctor.image_updates.enabled: false` to turn it off. Under `--server`, the server's config decides.
+The overall status is the worst severity found: pass, warn, or fail. An `info` finding, such as a tag that names a different image upstream, never sets it. `doctor` changes nothing on the server except `~/.homebutler/registry/digests.json`, where it keeps registry answers for six hours. The image check asks each running image's registry, anonymously; set `doctor.image_updates.enabled: false` to turn it off. Under `--server`, the server's config decides.
 
 For what each category checks and how to fix a finding, see [Doctor](/changes/doctor).
 
