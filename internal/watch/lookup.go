@@ -172,33 +172,61 @@ func targetsWarning(err error) string {
 // one that does not record its kind, counts: a systemd or pm2 target can be
 // named what the unit is.
 func latestFor(incidents []Incident, targets []Target, name string) *Incident {
-	aliases := unitAliases(targets, name)
+	aliases := unitAliases(targets, func(n string) bool { return n == name })
 	// readIncidents is newest first, so the first match is the latest.
 	for i := range incidents {
 		inc := &incidents[i]
-		if inc.Container == name {
-			return inc
-		}
-		if aliases[inc.Container] && (inc.Kind == "" || inc.Kind == KindDocker) {
+		if inc.Container == name || aliases.has(*inc) {
 			return inc
 		}
 	}
 	return nil
 }
 
-// unitAliases is the units of the docker targets named name that are watched
-// under a unit, which is where the monitors record their incidents. It runs
-// one way only. An incident recorded under a target's own name is about the
-// container of that name: before `watch check` inspected the unit, it
-// inspected the target's name, so such an incident is not the unit's.
-func unitAliases(targets []Target, name string) map[string]bool {
-	aliases := map[string]bool{}
+// unitAlias is the units a name stands for, and which of them are also the
+// name of a target of another kind.
+type unitAlias struct {
+	units     map[string]bool
+	otherKind map[string]bool
+}
+
+// unitAliases is the units of the docker targets whose name named accepts
+// and that are watched under a unit, which is where the monitors record
+// their incidents. It runs one way only. An incident recorded under a
+// target's own name is about the container of that name: before `watch
+// check` inspected the unit, it inspected the target's name, so such an
+// incident is not the unit's.
+func unitAliases(targets []Target, named func(string) bool) unitAlias {
+	a := unitAlias{units: map[string]bool{}, otherKind: map[string]bool{}}
 	for _, t := range targets {
-		if t.Container == name && t.EffectiveKind() == KindDocker && t.EffectiveUnit() != name {
-			aliases[t.EffectiveUnit()] = true
+		if named(t.Container) && t.EffectiveKind() == KindDocker && t.EffectiveUnit() != t.Container {
+			a.units[t.EffectiveUnit()] = true
 		}
 	}
-	return aliases
+	for _, t := range targets {
+		if t.EffectiveKind() != KindDocker && a.units[t.Container] {
+			a.otherKind[t.Container] = true
+		}
+	}
+	return a
+}
+
+// has is whether inc is one of the alias's: recorded under one of its units
+// by a docker monitor. A Proxmox incident is not, whatever it is named. One
+// that does not record its kind is taken to be docker's only while no
+// systemd or pm2 target has the unit's name, since that target's incidents
+// are recorded under it too; IncidentContainer refuses the same guess.
+func (a unitAlias) has(inc Incident) bool {
+	if inc.Source != "" || !a.units[inc.Container] {
+		return false
+	}
+	switch inc.Kind {
+	case KindDocker:
+		return true
+	case "":
+		return !a.otherKind[inc.Container]
+	}
+	return false
 }
 
 // Attribution is what is known about whose an incident is.

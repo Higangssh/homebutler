@@ -241,10 +241,31 @@ func SaveIncident(dir string, inc *Incident, keep int) error {
 // passes over a file still being written, or one left by a crash mid-write.
 const tempSuffix = ".tmp"
 
-// isTempName is whether name is one writeFileAtomic writes under:
-// .<id>.json.<random>.tmp.
+// tempRandBytes is how many random bytes name a temp file, written as hex.
+const tempRandBytes = 6
+
+// tempName is a fresh temp file path beside path, for writeFileAtomic.
+func tempName(path string) string {
+	dir, base := filepath.Split(path)
+	b := make([]byte, tempRandBytes)
+	_, _ = rand.Read(b)
+	return filepath.Join(dir, "."+base+"."+hex.EncodeToString(b)+tempSuffix)
+}
+
+// isTempName is whether name is exactly one writeFileAtomic writes under:
+// .<id>.json.<12 hex digits>.tmp. Anything else is left alone, a backup of
+// the operator's included.
 func isTempName(name string) bool {
-	return strings.HasPrefix(name, ".") && strings.HasSuffix(name, tempSuffix) && strings.Contains(name, ".json.")
+	rest, ok := strings.CutSuffix(name, tempSuffix)
+	if !ok || !strings.HasPrefix(rest, ".") || len(rest) < 2*tempRandBytes {
+		return false
+	}
+	random := rest[len(rest)-2*tempRandBytes:]
+	if _, err := hex.DecodeString(random); err != nil || strings.ToLower(random) != random {
+		return false
+	}
+	id, ok := strings.CutSuffix(rest[:len(rest)-2*tempRandBytes], ".json.")
+	return ok && len(id) > 1
 }
 
 // writeFileAtomic writes data to a temporary file beside path and renames it
@@ -258,13 +279,10 @@ func isTempName(name string) bool {
 // returns the error; Windows refuses the rename while another process has the
 // file open, and the caller hears about it rather than a retry hiding it.
 func writeFileAtomic(path string, data []byte) error {
-	dir, base := filepath.Split(path)
 	var f *os.File
 	var err error
 	for range 10 {
-		b := make([]byte, 6)
-		_, _ = rand.Read(b)
-		f, err = os.OpenFile(filepath.Join(dir, "."+base+"."+hex.EncodeToString(b)+tempSuffix), os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o644)
+		f, err = os.OpenFile(tempName(path), os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o644)
 		if !os.IsExist(err) {
 			break
 		}
