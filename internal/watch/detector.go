@@ -109,19 +109,30 @@ func CheckTargets(dir string, keep int) (RunResult, error) {
 		}
 		result.Checked++
 
-		curr, err := inspectContainerFunc(t.Container)
+		// A docker target's unit is the container's real name. It is what
+		// is inspected, and what the incident is recorded under, as the
+		// daemon records it and as report snapshots name the container.
+		// State stays keyed by the target, which is how watch list joins it.
+		name := t.EffectiveUnit()
+		curr, err := inspectContainerFunc(name)
 		if err != nil {
 			fmt.Fprintf(defaultStderr, "warning: %v\n", err)
 			continue
 		}
 
 		prev := states[t.Container]
+		if prev != nil && prev.Container != "" && prev.Container != name {
+			// Recorded from another container: a check before this one
+			// inspected the target's name rather than its unit. That is
+			// no baseline for this container, so this check sets one.
+			prev = nil
+		}
 		if ev := DetectRestart(prev, curr); ev != nil {
-			postLogs := captureLogsFunc(t.Container, "100")
+			postLogs := captureLogsFunc(name, "100")
 			inc := Incident{
-				ID:           GenerateIncidentID(t.Container, now),
+				ID:           GenerateIncidentID(name, now),
 				Kind:         KindDocker,
-				Container:    t.Container,
+				Container:    name,
 				DetectedAt:   now,
 				RestartCount: ev.RestartCount,
 				PrevStarted:  ev.PrevStarted,
@@ -136,7 +147,7 @@ func CheckTargets(dir string, keep int) (RunResult, error) {
 		}
 
 		states[t.Container] = &ContainerState{
-			Container:    t.Container,
+			Container:    name,
 			RestartCount: curr.RestartCount,
 			StartedAt:    curr.StartedAt,
 			LastChecked:  now,

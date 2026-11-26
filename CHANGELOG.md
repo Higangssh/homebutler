@@ -2,6 +2,17 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### ⚠️ Behavior changes
+
+- **`watch check` inspects a docker target added with `--unit` by its unit, and records its incidents under the unit** (#419). It used to inspect the name `watch list` shows, which for such a target is not a container at all, so it either warned `no such container` on every run or checked a different container of that name; `watch start` already watched the unit. Incidents from `watch check` now carry the container's real name in `container` and in their ID, the same as the daemon's, so `watch check --json` and `watch_check` print the unit where they printed the listed name, and flapping counts both monitors' incidents for the container together. The first check after upgrading sets a new baseline for such a target instead of comparing against the other container's. Incidents already recorded under the listed name are still found: `watch show --container`, `watch history --container`, `watch_history` and `incident_context` answer to either name, and `incident_context` looks for the unit in report snapshots, with `note` saying it read the name from the watch list
+
+### 🐛 Fixes
+
+- A systemd unit that restarted and failed again between two polls was recorded with `curr_started_at` set to the start of the run that died, so `incident_context` placed its window before the crash (#419). The monitor now also reads `ExecMainExitTimestamp`, and a failed unit whose last exit is at or after its start gets an empty `curr_started_at`. Incidents already recorded keep the value: nothing in them says when the run exited, and the error is at most one poll interval
+- `watch show --container` and `incident_context` could warn that an incident file "could not be read" when they caught `watch start` writing it (#419). Incidents are now written to a temporary file and renamed into place
+
 ## [1.9.0](https://github.com/Higangssh/homebutler/compare/v1.8.0...v1.9.0) - 2026-11-25
 
 **homebutler said what changed on a box, but not when a tag had moved to another image, when the machine itself needed attention, or what had changed around a container that just stopped; `report` and `doctor` now name the image under a tag, `doctor` reads certificates, pending updates and a pending reboot, and `incident_context` answers for a crash with the changes around it.**

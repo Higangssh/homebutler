@@ -224,8 +224,7 @@ func SaveIncident(dir string, inc *Incident, keep int) error {
 	if err != nil {
 		return err
 	}
-	path := filepath.Join(idir, inc.ID+".json")
-	if err := os.WriteFile(path, data, 0o644); err != nil {
+	if err := writeFileAtomic(filepath.Join(idir, inc.ID+".json"), data); err != nil {
 		return err
 	}
 
@@ -235,6 +234,37 @@ func SaveIncident(dir string, inc *Incident, keep int) error {
 		fmt.Fprintf(os.Stderr, "warning: prune incidents: %v\n", err)
 	}
 	return nil
+}
+
+// tempSuffix ends the name an incident is written under before it is renamed
+// into place. It does not end in .json, so a reader listing the directory
+// passes over a file still being written, or one left by a crash mid-write.
+const tempSuffix = ".tmp"
+
+// writeFileAtomic writes data to a temporary file beside path and renames it
+// over path, so a reader sees the old file or the new one and never half of
+// either. A concurrent `watch show --container` used to catch an incident
+// being written and warn that it could not be read.
+func writeFileAtomic(path string, data []byte) error {
+	f, err := os.CreateTemp(filepath.Dir(path), "."+filepath.Base(path)+".*"+tempSuffix)
+	if err != nil {
+		return err
+	}
+	tmp := f.Name()
+	_, err = f.Write(data)
+	if cerr := f.Close(); err == nil {
+		err = cerr
+	}
+	if err == nil {
+		err = os.Chmod(tmp, 0o644)
+	}
+	if err == nil {
+		err = os.Rename(tmp, path)
+	}
+	if err != nil {
+		_ = os.Remove(tmp)
+	}
+	return err
 }
 
 // PruneIncidents deletes the oldest incidents until at most keep remain, and
@@ -458,13 +488,15 @@ func AddTarget(dir string, target Target) (bool, error) {
 	if kind == KindDocker {
 		// A container that cannot be inspected is still watched: it may not be
 		// running yet, and the next check will record the baseline instead.
-		if result, err := InspectContainer(target.Container); err == nil {
+		// The unit is the container's real name, which is what check
+		// inspects; the state is keyed by the target, as watch list reads it.
+		if result, err := inspectContainerFunc(target.Unit); err == nil {
 			states, _ := LoadState(dir)
 			if states == nil {
 				states = make(map[string]*ContainerState)
 			}
 			states[target.Container] = &ContainerState{
-				Container:    target.Container,
+				Container:    target.Unit,
 				RestartCount: result.RestartCount,
 				StartedAt:    result.StartedAt,
 				LastChecked:  time.Now(),
