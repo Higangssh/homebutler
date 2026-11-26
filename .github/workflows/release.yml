@@ -7,7 +7,7 @@ on:
 
 permissions:
   contents: write
-  id-token: write # MCP Registry OIDC login
+  id-token: write # OIDC: the MCP Registry login and npm trusted publishing
   packages: write # ghcr.io, for the container image
 
 jobs:
@@ -213,6 +213,15 @@ jobs:
           git add homebutler.rb
           git commit -m "chore: update homebutler to ${TAG}" || exit 0
           git push
+
+      # Trusted publishing (#318) needs npm 11.5.1 or later, and Node 22's npm
+      # is 10.x. With a trusted publisher set for this workflow on npmjs.com,
+      # npm signs in through the job's OIDC token, which is why `id-token:
+      # write` is above, and attaches provenance; NPM_TOKEN stays only as the
+      # fallback until a release has published that way. Pinned for the same
+      # reason as golangci-lint in ci.yml.
+      - name: Install an npm that can publish through OIDC
+        run: npm install -g npm@11.21.3
 
       - name: Publish npm wrapper
         id: npm
