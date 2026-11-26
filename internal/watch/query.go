@@ -64,11 +64,11 @@ func History(dir string, opts HistoryOptions) ([]Incident, error) {
 	}
 
 	if opts.Container != "" {
-		// A docker target watched under a unit has incidents under both of
-		// its names; see dockerAliases. The list is best effort: without it
-		// the name alone still filters.
+		// A docker target watched under a unit has its incidents recorded
+		// under the unit, as FindIncident resolves it; see unitAliases. The
+		// list is best effort: without it the name alone still filters.
 		targets, _ := LoadTargets(dir)
-		aliases := dockerAliases(targets, opts.Container)
+		aliases := unitAliases(targets, opts.Container)
 		filtered := incidents[:0:0]
 		for _, inc := range incidents {
 			if strings.EqualFold(inc.Container, opts.Container) ||

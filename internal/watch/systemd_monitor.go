@@ -42,13 +42,16 @@ type systemdState struct {
 }
 
 // startedRunDied is whether the start systemd reports is that of a run that
-// has already failed. A unit that restarts and fails again within one poll
+// has already ended. A unit that restarts and dies again within one poll
 // reports a new start, but it is the start of the run that died, not of a run
-// after the crash. The state is asked as well as the exit because systemd's
+// after the crash: it may be failed, inactive, or activating towards its next
+// Restart= attempt. The state is asked as well as the exit because systemd's
 // timestamps are to the second: a run that started in the second the last one
-// exited would otherwise read as over while it is running.
+// exited would otherwise read as over while it is running. active and
+// reloading are the two states with the main process running.
 func (s systemdState) startedRunDied() bool {
-	return s.ActiveState == "failed" && !s.Exited.IsZero() && !s.Exited.Before(s.Started)
+	running := s.ActiveState == "active" || s.ActiveState == "reloading"
+	return !running && !s.Exited.IsZero() && !s.Exited.Before(s.Started)
 }
 
 // systemdShow reads a unit's state. It asks for unix timestamps, which

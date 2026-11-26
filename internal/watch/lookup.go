@@ -87,8 +87,7 @@ func withoutPath(err error) error {
 //
 // A target is the name watch list shows. A docker target added with a unit
 // is watched under that unit, and its incidents carry the container's name,
-// so a docker target also answers to its unit, and its unit to the target's
-// name, which older incidents from `watch check` carry. Systemd and pm2 incidents are
+// so a docker target also answers to its unit. Systemd and pm2 incidents are
 // recorded under the target's own name, so theirs is not an alias. Docker
 // names are case-sensitive, so the match is exact; a name that differs only
 // in case is resolved the same way when it is the one such name, and refused
@@ -168,12 +167,12 @@ func targetsWarning(err error) string {
 	return "the watch list could not be read, so targets watched under a unit or by kind were not considered: " + withoutPath(err).Error()
 }
 
-// latestFor is the newest incident recorded under name, or under the other
-// name of a docker target watched under a unit. Under the other name only a
-// docker incident, or one that does not record its kind, counts: a systemd or
-// pm2 target can be named what the unit is.
+// latestFor is the newest incident recorded under name, or under the unit of
+// a docker target of that name. Under the unit only a docker incident, or
+// one that does not record its kind, counts: a systemd or pm2 target can be
+// named what the unit is.
 func latestFor(incidents []Incident, targets []Target, name string) *Incident {
-	aliases := dockerAliases(targets, name)
+	aliases := unitAliases(targets, name)
 	// readIncidents is newest first, so the first match is the latest.
 	for i := range incidents {
 		inc := &incidents[i]
@@ -187,49 +186,19 @@ func latestFor(incidents []Incident, targets []Target, name string) *Incident {
 	return nil
 }
 
-// dockerAliases is the other name a docker target watched under a unit has
-// incidents recorded under, given either of its names. Both monitors record
-// under the unit, the container's real name, but `watch check` used to record
-// under the target's own name, and those files are still on disk: asked by the target's name, the unit is the alias, and asked by the
-// unit, the target's name is.
-func dockerAliases(targets []Target, name string) map[string]bool {
+// unitAliases is the units of the docker targets named name that are watched
+// under a unit, which is where the monitors record their incidents. It runs
+// one way only. An incident recorded under a target's own name is about the
+// container of that name: before `watch check` inspected the unit, it
+// inspected the target's name, so such an incident is not the unit's.
+func unitAliases(targets []Target, name string) map[string]bool {
 	aliases := map[string]bool{}
 	for _, t := range targets {
-		if t.EffectiveKind() != KindDocker || t.EffectiveUnit() == t.Container {
-			continue
-		}
-		switch name {
-		case t.Container:
+		if t.Container == name && t.EffectiveKind() == KindDocker && t.EffectiveUnit() != name {
 			aliases[t.EffectiveUnit()] = true
-		case t.EffectiveUnit():
-			aliases[t.Container] = true
 		}
 	}
 	return aliases
-}
-
-// dockerName is the Docker name of a docker incident recorded under name,
-// and whether it was read from the watch list: the target's unit, when name
-// is a docker target's own name and that target is watched under a unit, as
-// an incident an earlier `watch check` recorded is. A name that is some
-// docker target's unit is already the container's.
-func dockerName(targets []Target, name string) (string, bool) {
-	for _, t := range targets {
-		if t.EffectiveKind() == KindDocker && t.EffectiveUnit() == name {
-			return name, false
-		}
-	}
-	for _, t := range targets {
-		if t.EffectiveKind() == KindDocker && t.Container == name {
-			return t.EffectiveUnit(), t.EffectiveUnit() != name
-		}
-	}
-	return name, false
-}
-
-// renamedNote says an incident's name was read as another container's.
-func renamedNote(recorded, container string) string {
-	return "This incident is recorded under " + recorded + ", the watch list's name for a target it now watches as the container " + container + ", so it is taken to be about " + container + "."
 }
 
 // Attribution is what is known about whose an incident is.
@@ -239,10 +208,8 @@ type Attribution struct {
 	Container string
 	// Why says why Container is empty.
 	Why string
-	// Inferred says what was read from the watch list as it is now: the
-	// kind, when the incident does not record it, and the container's name,
-	// when the incident is recorded under a target's name rather than its
-	// unit.
+	// Inferred says how the kind was decided when the incident does not
+	// record it, which is only ever from the watch list as it is now.
 	Inferred string
 	// Warning says the watch list could not be read.
 	Warning string
@@ -263,15 +230,7 @@ func IncidentContainer(dir string, inc Incident) Attribution {
 		if inc.Kind != KindDocker {
 			return Attribution{Why: "this incident was recorded by the " + inc.Kind + " monitor, not for a container"}
 		}
-		targets, err := LoadTargets(dir)
-		if err != nil {
-			return Attribution{Container: inc.Container, Warning: targetsWarning(err)}
-		}
-		a := Attribution{Container: inc.Container}
-		if name, renamed := dockerName(targets, inc.Container); renamed {
-			a.Container, a.Inferred = name, renamedNote(inc.Container, name)
-		}
-		return a
+		return Attribution{Container: inc.Container}
 	}
 
 	targets, err := LoadTargets(dir)
@@ -297,14 +256,10 @@ func IncidentContainer(dir string, inc Incident) Attribution {
 	if kind != KindDocker {
 		return Attribution{Why: "this incident does not record its kind, and the watch list now has a " + kind + " target of that name, so it is taken not to be a container"}
 	}
-	a := Attribution{
+	return Attribution{
 		Container: inc.Container,
 		Inferred:  "This incident does not record its kind; it is taken to be the container's because the watch list now has a docker target of that name.",
 	}
-	if name, renamed := dockerName(targets, inc.Container); renamed {
-		a.Container, a.Inferred = name, a.Inferred+" "+renamedNote(inc.Container, name)
-	}
-	return a
 }
 
 func sameKind(targets []Target) bool {
