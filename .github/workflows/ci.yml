@@ -37,7 +37,7 @@ jobs:
       - name: golangci-lint
         uses: golangci/golangci-lint-action@v9
         with:
-          version: v2.13.2
+          version: v2.15.0
 
       # goreleaser's config is checked here rather than only at tag time. It
       # was already failing `check` on deprecated properties once, and nothing
