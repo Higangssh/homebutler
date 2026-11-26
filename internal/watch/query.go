@@ -58,15 +58,34 @@ type HistoryOptions struct {
 
 // History returns recorded incidents, newest first, narrowed by opts.
 func History(dir string, opts HistoryOptions) ([]Incident, error) {
+	incidents, _, err := HistoryWithWarnings(dir, opts)
+	return incidents, err
+}
+
+// HistoryWithWarnings is History and the warnings a caller with somewhere
+// to put them should pass on: that the watch list could not be read, so a
+// docker target's incidents under its unit were not included. History's
+// answer is a bare list, frozen as one, so it has nowhere to say that.
+func HistoryWithWarnings(dir string, opts HistoryOptions) ([]Incident, []string, error) {
 	incidents, err := ListIncidents(dir)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
+	var warnings []string
 	if opts.Container != "" {
+		// A docker target watched under a unit has its incidents recorded
+		// under the unit, as FindIncident resolves it; see unitAliases. The
+		// name is matched ignoring case, as it always has been here, and so
+		// is the target it names. Without the list the name alone filters.
+		targets, terr := LoadTargets(dir)
+		if terr != nil {
+			warnings = append(warnings, targetsWarning(terr))
+		}
+		aliases := unitAliases(targets, func(n string) bool { return strings.EqualFold(n, opts.Container) })
 		filtered := incidents[:0:0]
 		for _, inc := range incidents {
-			if strings.EqualFold(inc.Container, opts.Container) {
+			if strings.EqualFold(inc.Container, opts.Container) || aliases.has(inc) {
 				filtered = append(filtered, inc)
 			}
 		}
@@ -91,7 +110,7 @@ func History(dir string, opts HistoryOptions) ([]Incident, error) {
 		incidents = stripped
 	}
 
-	return incidents, nil
+	return incidents, warnings, nil
 }
 
 // WithoutLogs is the incident as History returns it when logs were not asked

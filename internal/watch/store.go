@@ -224,8 +224,7 @@ func SaveIncident(dir string, inc *Incident, keep int) error {
 	if err != nil {
 		return err
 	}
-	path := filepath.Join(idir, inc.ID+".json")
-	if err := os.WriteFile(path, data, 0o644); err != nil {
+	if err := writeFileAtomic(filepath.Join(idir, inc.ID+".json"), data); err != nil {
 		return err
 	}
 
@@ -237,14 +236,115 @@ func SaveIncident(dir string, inc *Incident, keep int) error {
 	return nil
 }
 
+// tempSuffix ends the name an incident is written under before it is renamed
+// into place. It does not end in .json, so a reader listing the directory
+// passes over a file still being written, or one left by a crash mid-write.
+const tempSuffix = ".tmp"
+
+// tempRandBytes is how many random bytes name a temp file, written as hex.
+const tempRandBytes = 6
+
+// tempName is a fresh temp file path beside path, for writeFileAtomic.
+func tempName(path string) string {
+	dir, base := filepath.Split(path)
+	b := make([]byte, tempRandBytes)
+	_, _ = rand.Read(b)
+	return filepath.Join(dir, "."+base+"."+hex.EncodeToString(b)+tempSuffix)
+}
+
+// isTempName is whether name is exactly one writeFileAtomic writes under:
+// .<id>.json.<12 hex digits>.tmp. Anything else is left alone, a backup of
+// the operator's included.
+func isTempName(name string) bool {
+	rest, ok := strings.CutSuffix(name, tempSuffix)
+	if !ok || !strings.HasPrefix(rest, ".") || len(rest) < 2*tempRandBytes {
+		return false
+	}
+	random := rest[len(rest)-2*tempRandBytes:]
+	if _, err := hex.DecodeString(random); err != nil || strings.ToLower(random) != random {
+		return false
+	}
+	id, ok := strings.CutSuffix(rest[:len(rest)-2*tempRandBytes], ".json.")
+	return ok && len(id) > 1
+}
+
+// writeFileAtomic writes data to a temporary file beside path and renames it
+// over path, so a reader sees the old file or the new one and never half of
+// either. A concurrent `watch show --container` used to catch an incident
+// being written and warn that it could not be read.
+//
+// The mode is what os.WriteFile gave: 0644 under the umask for a new file,
+// and the existing file's mode when it is replaced, so a file the operator
+// narrowed stays narrowed. A failed rename leaves the old file as it was and
+// returns the error; Windows refuses the rename while another process has the
+// file open, and the caller hears about it rather than a retry hiding it.
+func writeFileAtomic(path string, data []byte) error {
+	var f *os.File
+	var err error
+	for range 10 {
+		f, err = os.OpenFile(tempName(path), os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o644)
+		if !os.IsExist(err) {
+			break
+		}
+	}
+	if err != nil {
+		return err
+	}
+	tmp := f.Name()
+	_, err = f.Write(data)
+	if cerr := f.Close(); err == nil {
+		err = cerr
+	}
+	if err == nil {
+		if old, serr := os.Stat(path); serr == nil {
+			err = os.Chmod(tmp, old.Mode().Perm())
+		}
+	}
+	if err == nil {
+		err = os.Rename(tmp, path)
+	}
+	if err != nil {
+		_ = os.Remove(tmp)
+	}
+	return err
+}
+
+// tempMaxAge is how old a temp file has to be before prune takes it for one
+// a crash left behind. No write takes anywhere near this long.
+const tempMaxAge = time.Hour
+
+// sweepTempFiles removes temp files older than tempMaxAge from the incident
+// directory. A write removes its own on failure, so these are only ever
+// left by a process that died between creating one and renaming it.
+func sweepTempFiles(dir string, now time.Time) {
+	idir := incidentsDir(dir)
+	entries, err := os.ReadDir(idir)
+	if err != nil {
+		return
+	}
+	for _, e := range entries {
+		if e.IsDir() || !isTempName(e.Name()) {
+			continue
+		}
+		info, err := e.Info()
+		if err != nil || now.Sub(info.ModTime()) < tempMaxAge {
+			continue
+		}
+		_ = os.Remove(filepath.Join(idir, e.Name()))
+	}
+}
+
 // PruneIncidents deletes the oldest incidents until at most keep remain, and
 // reports how many it removed. keep of zero or less keeps everything.
 //
 // Files whose names fit neither the current layout
 // (container-YYYYMMDD-HHMMSS.mmm-hex) nor the older container-timestamp form
 // without milliseconds or a suffix are left alone: ListIncidentRefs skips
-// them, so they are never selected for deletion.
+// them, so they are never selected for deletion. The one exception is a
+// temp file a crashed write left, which is removed once it is an hour old
+// whatever keep is, and is not counted: it was never an incident.
 func PruneIncidents(dir string, keep int) (int, error) {
+	sweepTempFiles(dir, time.Now())
 	if keep <= 0 {
 		return 0, nil
 	}
@@ -458,13 +558,15 @@ func AddTarget(dir string, target Target) (bool, error) {
 	if kind == KindDocker {
 		// A container that cannot be inspected is still watched: it may not be
 		// running yet, and the next check will record the baseline instead.
-		if result, err := InspectContainer(target.Container); err == nil {
+		// The unit is the container's real name, which is what check
+		// inspects; the state is keyed by the target, as watch list reads it.
+		if result, err := inspectContainerFunc(target.Unit); err == nil {
 			states, _ := LoadState(dir)
 			if states == nil {
 				states = make(map[string]*ContainerState)
 			}
 			states[target.Container] = &ContainerState{
-				Container:    target.Container,
+				Container:    target.Unit,
 				RestartCount: result.RestartCount,
 				StartedAt:    result.StartedAt,
 				LastChecked:  time.Now(),

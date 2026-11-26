@@ -693,13 +693,17 @@ func newWatchHistoryCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			incidents, err := watch.History(dir, watch.HistoryOptions{
+			incidents, warnings, err := watch.HistoryWithWarnings(dir, watch.HistoryOptions{
 				Limit:     limit,
 				Container: container,
 				Logs:      logs,
 			})
 			if err != nil {
 				return err
+			}
+			// On stderr, so --json stays the list it has always been.
+			for _, w := range warnings {
+				fmt.Fprintln(os.Stderr, "warning: "+w)
 			}
 			if jsonOutput {
 				return output(incidents, true)

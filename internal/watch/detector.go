@@ -98,6 +98,12 @@ func CheckTargets(dir string, keep int) (RunResult, error) {
 
 	var incidents []Incident
 	now := time.Now()
+	type inspection struct {
+		result *InspectResult
+		err    error
+	}
+	inspected := map[string]inspection{}
+	recorded := map[string]bool{}
 
 	for _, t := range targets {
 		if !t.CheckSupported() {
@@ -109,19 +115,42 @@ func CheckTargets(dir string, keep int) (RunResult, error) {
 		}
 		result.Checked++
 
-		curr, err := inspectContainerFunc(t.Container)
-		if err != nil {
-			fmt.Fprintf(defaultStderr, "warning: %v\n", err)
+		// A docker target's unit is the container's real name. It is what
+		// is inspected, and what the incident is recorded under, as the
+		// daemon records it and as report snapshots name the container.
+		// State stays keyed by the target, which is how watch list joins it.
+		name := t.EffectiveUnit()
+		// Targets that share a unit are one container. It is inspected
+		// once, and a restart of it is one incident, as the daemon, which
+		// watches a set of units, records it; one per target would count a
+		// single restart towards flapping once for each.
+		ins, seen := inspected[name]
+		if !seen {
+			ins.result, ins.err = inspectContainerFunc(name)
+			inspected[name] = ins
+			if ins.err != nil {
+				fmt.Fprintf(defaultStderr, "warning: %v\n", ins.err)
+			}
+		}
+		if ins.err != nil {
 			continue
 		}
+		curr := ins.result
 
 		prev := states[t.Container]
-		if ev := DetectRestart(prev, curr); ev != nil {
-			postLogs := captureLogsFunc(t.Container, "100")
+		if prev != nil && prev.Container != "" && prev.Container != name {
+			// Recorded from another container: a check before this one
+			// inspected the target's name rather than its unit. That is
+			// no baseline for this container, so this check sets one.
+			prev = nil
+		}
+		if ev := DetectRestart(prev, curr); ev != nil && !recorded[name] {
+			recorded[name] = true
+			postLogs := captureLogsFunc(name, "100")
 			inc := Incident{
-				ID:           GenerateIncidentID(t.Container, now),
+				ID:           GenerateIncidentID(name, now),
 				Kind:         KindDocker,
-				Container:    t.Container,
+				Container:    name,
 				DetectedAt:   now,
 				RestartCount: ev.RestartCount,
 				PrevStarted:  ev.PrevStarted,
@@ -136,7 +165,7 @@ func CheckTargets(dir string, keep int) (RunResult, error) {
 		}
 
 		states[t.Container] = &ContainerState{
-			Container:    t.Container,
+			Container:    name,
 			RestartCount: curr.RestartCount,
 			StartedAt:    curr.StartedAt,
 			LastChecked:  now,

@@ -36,13 +36,29 @@ type systemdState struct {
 	// is the same moment as a time, or zero when it could not be read.
 	StartTS string
 	Started time.Time
+	// Exited is when the main process last exited, or zero when systemd did
+	// not say.
+	Exited time.Time
+}
+
+// startedRunDied is whether the start systemd reports is that of a run that
+// has already ended. A unit that restarts and dies again within one poll
+// reports a new start, but it is the start of the run that died, not of a run
+// after the crash: it may be failed, inactive, or activating towards its next
+// Restart= attempt. The state is asked as well as the exit because systemd's
+// timestamps are to the second: a run that started in the second the last one
+// exited would otherwise read as over while it is running. active and
+// reloading are the two states with the main process running.
+func (s systemdState) startedRunDied() bool {
+	running := s.ActiveState == "active" || s.ActiveState == "reloading"
+	return !running && !s.Exited.IsZero() && !s.Exited.Before(s.Started)
 }
 
 // systemdShow reads a unit's state. It asks for unix timestamps, which
 // systemd prints as @1790772404, and falls back to the default format on a
 // systemd older than 248 that does not know --timestamp.
 func systemdShow(run CommandRunner, unit string) (string, error) {
-	const props = "--property=ActiveState,SubState,ExecMainStartTimestamp,ExecMainStatus"
+	const props = "--property=ActiveState,SubState,ExecMainStartTimestamp,ExecMainExitTimestamp,ExecMainStatus"
 	out, err := run("systemctl", "show", unit, "--timestamp=unix", props)
 	if err != nil {
 		out, err = run("systemctl", "show", unit, props)
@@ -61,6 +77,8 @@ func (sm *SystemdMonitor) parseState(output string) systemdState {
 		} else if strings.HasPrefix(line, "ExecMainStartTimestamp=") {
 			s.StartTS = strings.TrimPrefix(line, "ExecMainStartTimestamp=")
 			s.Started = service.ParseSystemdTime(s.StartTS)
+		} else if strings.HasPrefix(line, "ExecMainExitTimestamp=") {
+			s.Exited = service.ParseSystemdTime(strings.TrimPrefix(line, "ExecMainExitTimestamp="))
 		} else if strings.HasPrefix(line, "ExecMainStatus=") {
 			// systemd reports the unit's own exit status here. It is absent
 			// for a unit that has never run, so a parse failure means "not
@@ -134,9 +152,10 @@ func (sm *SystemdMonitor) Watch(ctx context.Context, targets []Target, incidents
 
 					// A unit that failed without starting again still reports
 					// the start of the run that died. That is not a new run,
-					// and written as curr_started_at it reads as one.
+					// and written as curr_started_at it reads as one. Nor is
+					// a start the unit failed after within the same poll.
 					currStarted := ""
-					if !curr.Started.Equal(old.Started) {
+					if !curr.Started.Equal(old.Started) && !curr.startedRunDied() {
 						currStarted = StartTime(curr.Started)
 					}
 

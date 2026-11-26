@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### ⚠️ Behavior changes
+
+- **`watch check` inspects a docker target added with `--unit` by its unit, and records its incidents under the unit** (#419). It used to inspect the name `watch list` shows, which for such a target is not a container at all, so it either warned `no such container` on every run or checked a different container of that name; `watch start` already watched the unit. Incidents from `watch check` now carry the container's real name in `container` and in their ID, the same as the daemon's, so `watch check --json` and `watch_check` print the unit where they printed the listed name, and flapping counts both monitors' incidents for the container together. Targets that share a unit are inspected once and a restart of it is one incident, where it was one per target. The first check after upgrading sets a new baseline for such a target instead of comparing against the other container's state. Incidents an earlier `watch check` recorded under the listed name were about the container of that name, not the unit, and stay so: they are found by that name only. Rolling back to 1.9.0 afterwards is not clean: its first check compares the container of the listed name against the state this release recorded for the unit, and reports one spurious incident for each such target whose listed name is also a container
+- `watch history --container` and `watch_history` given a docker target's listed name now also return the incidents recorded under its unit, where `watch start` has always recorded them and `watch check` now does, as `watch show --container` already did (#419). The name matches its target ignoring case, as the incident filter always has. An incident is counted under the unit only when a docker monitor could have recorded it: not a Proxmox incident, and not one that does not record its kind while a systemd or pm2 target has the unit's name, which `watch show --container` now skips too. When the watch list cannot be read, `watch history` says so on stderr and filters by the name alone; `watch_history` answers with a bare list, so it filters by the name alone without saying so
+
+### 🐛 Fixes
+
+- A systemd unit that restarted and died again between two polls was recorded with `curr_started_at` set to the start of the run that died, so `incident_context` placed its window before the crash (#419). The monitor now also reads `ExecMainExitTimestamp`, and when the unit is anything but `active` or `reloading` (failed, inactive, or activating towards its next `Restart=` attempt) and its last exit is at or after its start, `curr_started_at` is empty. Incidents already recorded keep the value: nothing in them says when the run exited, and the error is at most one poll interval
+- `watch show --container` and `incident_context` could warn that an incident file "could not be read" when they caught `watch start` writing it (#419). Incidents are now written to a temporary file and renamed into place, with the mode a new file got before (0644 under the umask) or the one the file already had. A temp file left by a crash mid-write is removed by the next save once it is an hour old
+
 ## [1.9.0](https://github.com/Higangssh/homebutler/compare/v1.8.0...v1.9.0) - 2026-11-25
 
 **homebutler said what changed on a box, but not when a tag had moved to another image, when the machine itself needed attention, or what had changed around a container that just stopped; `report` and `doctor` now name the image under a tag, `doctor` reads certificates, pending updates and a pending reboot, and `incident_context` answers for a crash with the changes around it.**
