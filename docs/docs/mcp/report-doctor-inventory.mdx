@@ -224,7 +224,7 @@ A recreated container shows as `replaced`: `{"kind": "replaced", "target": "web"
 
 <Badge tone="success">read</Badge>
 
-Runs a read-only diagnosis of resource pressure, stopped containers, ports open on every interface, backup age and drills, notification readiness, watch setup, config file permissions, and configured Proxmox endpoints. Each finding names the command that addresses it, and `runner` says whether a tool, the CLI or a shell runs it.
+Runs a read-only diagnosis of resource pressure, pending updates and a pending reboot, stopped containers, running containers whose tag names a different image in their registry, ports open on every interface, TLS certificates, backup age and drills, notification readiness, watch setup, config file permissions, and configured Proxmox endpoints. The image check asks each running image's registry, anonymously, and keeps the answers in `~/.homebutler/registry/digests.json`; under `--max-risk read` it reads that cache without writing it. See [Doctor](/changes/doctor#image-updates). Each finding names the command that addresses it, and `runner` says whether a tool, the CLI or a shell runs it.
 
 #### Arguments
 
@@ -258,29 +258,27 @@ Runs a read-only diagnosis of resource pressure, stopped containers, ports open 
 
 <Accordion title="Examples">
 
-The response, shortened to three of the seven findings (the others name containers that are not part of this example). `summary` counts all seven:
+The response, shortened to three of the twelve findings (the others are not part of this example). `summary` counts all twelve:
 
 ```json
 {
   "schema_version": 1,
-  "timestamp": "2026-10-25T18:35:43Z",
-  "server_name": "homelab",
+  "timestamp": "2026-11-26T01:36:03Z",
+  "server_name": "main",
   "status": "fail",
   "summary": {
-    "pass": 0,
+    "pass": 1,
     "warn": 6,
-    "fail": 1
+    "fail": 2,
+    "info": 3
   },
   "findings": [
     {
-      "severity": "warn",
-      "category": "backup",
-      "title": "The newest backup has never been drilled",
-      "detail": "The last drill was 4m0s before the newest archive was taken, so what passed is not what you would restore from.",
-      "action": "Drill again so the verdict is about the archive you actually have.",
-      "command": "homebutler backup drill --all",
-      "runner": "mcp",
-      "tool": "backup_drill"
+      "severity": "info",
+      "category": "docker",
+      "title": "web: debian:bookworm-slim now names a different image in the registry",
+      "detail": "On docker.io, debian:bookworm-slim names sha256:e67eeead736f; this container runs the image pulled as sha256:99c0b25c46d0. Registry answer from 1m ago.",
+      "action": "Pull and recreate it when you choose to. doctor does not pull or restart anything."
     },
     {
       "severity": "warn",

@@ -7,9 +7,22 @@ description: What changed in each homebutler release from 1.0.0 on, in summary, 
 
 What changed in each release, newest first. The [full changelog](https://github.com/Higangssh/homebutler/blob/main/CHANGELOG.md) in the repository covers every release since 0.1 in detail. To update, see [Upgrading](/running/upgrading).
 
+## 1.9.0
+
+November 25, 2026 · <Badge tone="brand">Latest</Badge> · <Badge tone="warning">Check when upgrading</Badge>
+
+- **`doctor` says when a running container's tag [names a different image](/changes/doctor#image-updates) in its registry** than the one it runs, as a new `info` finding. It asks each registry anonymously with a `HEAD`, adds a `GET` of a multi-arch index only when Docker cannot say how the image was pulled, and caches the answers for `doctor.image_updates.cache_ttl`, six hours by default. `doctor.image_updates.enabled: false` turns it off. `doctor --no-save` reads the cache without writing it, and read-only MCP uses it.
+- **`doctor` checks [TLS certificates](/changes/doctor#certificates)**: each `host:port` in the new [`certificates:`](/reference/configuration#certificates) list, and every Proxmox endpoint. Expired, not yet valid, or not naming the host is `❌`; under 14 days is `⚠️`.
+- **`doctor` counts [pending updates and a pending reboot](/changes/doctor#updates-and-reboot)** from what apt or dnf already knows, without root and without the network.
+- **`doctor --strict` can exit `1` on a machine that passed before**, from a pending reboot, a pending security update, a failed package check, or a Proxmox certificate. Findings can carry a fourth severity, `info`, and `summary` an `info` count, which `status` and `--strict` never count. `No obvious issues found` no longer appears.
+- **`report` names the image under a tag.** A container [recreated on a new image under the same tag](/changes/report), as `docker compose pull && up -d` does, is still `replaced`, and the line now adds the old and new image IDs and the tag. Snapshots record `image_ids`; the first report after upgrading compares against one without them.
+- **The MCP tool [`incident_context`](/mcp/watch#incident_context)** returns an incident with the report changes around it, split into `about_target` and `other_changes`. On the command line it is [`watch show --context`](/cli/watch), with `--logs` for the logs, and `watch show --container <name>` shows a target's latest incident. With `server`, the server needs 1.9.0.
+- Incidents record the `kind` of monitor that wrote them: `docker`, `systemd` or `pm2`.
+- A systemd unit that failed and stayed failed no longer has `curr_started_at` set to the start of the run that died.
+
 ## 1.8.0
 
-November 11, 2026 · <Badge tone="brand">Latest</Badge> · <Badge tone="warning">Check when upgrading</Badge>
+November 11, 2026 · <Badge tone="warning">Check when upgrading</Badge>
 
 - **`trust --reset` keeps the old key until you answer `y`.** Answering `n` [left the server with no saved key](/cli/trust), so the next connection trusted whatever answered.
 - **Inside a container, a `local: true` server is refused** wherever its readings would have been the container's: the [dashboard routes](/running/container#what-the-container-cant-do) answer `501`, and `--all` and `--server` exit `1` for `status`, `alerts`, `ports`, `processes`, `report`, `doctor` and `network scan`. The dashboard opens on a server it can read.

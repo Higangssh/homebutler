@@ -14,13 +14,13 @@ homebutler doctor
 The output starts with an overall status and the finding counts. This run used a config that sets `alerts.memory` to `10`, so memory counts as almost full:
 
 ```text
-🩺 Homebutler Doctor — homelab
-   2026-10-25T18:37:49Z
+🩺 Homebutler Doctor — main
+   2026-11-26T01:35:54Z
 
-❌ Status: FAIL  · pass 0 / warn 7 / fail 2
+❌ Status: FAIL  · pass 1 / warn 6 / fail 2 / info 3
 
 ❌ [system] Memory is almost full
-   Memory is 40%, threshold is 10%.
+   Memory is 39%, threshold is 10%.
    → Find memory-heavy processes now; otherwise containers may be killed unexpectedly.
    $ homebutler ps --sort mem
 ```

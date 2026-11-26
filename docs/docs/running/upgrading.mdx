@@ -16,9 +16,9 @@ homebutler upgrade
 `upgrade` asks GitHub for the latest release, then handles the local binary and each remote server in turn. It updates only what is out of date. Progress goes to standard error:
 
 ```text
-checking latest version... v1.8.0
+checking latest version... v1.9.0
 
-upgrading local... ─ already v1.8.0
+upgrading local... ─ already v1.9.0
 
 1 already up-to-date
 ```
@@ -27,14 +27,14 @@ Pass `--local` to skip the remote servers and upgrade only the binary you are ru
 
 ```json
 {
-  "latest_version": "1.8.0",
+  "latest_version": "1.9.0",
   "results": [
     {
       "target": "local",
-      "prev_version": "1.8.0",
-      "new_version": "1.8.0",
+      "prev_version": "1.9.0",
+      "new_version": "1.9.0",
       "status": "up-to-date",
-      "message": "already v1.8.0"
+      "message": "already v1.9.0"
     }
   ]
 }
@@ -56,8 +56,8 @@ A server that has no homebutler yet reports `not installed — run 'homebutler d
 The output for a server that was upgraded and a server that was unreachable, shortened to those lines:
 
 ```text
-upgrading edge... ✓ v1.7.0 → v1.8.0 (linux/amd64)
-upgrading dead... ✗ ssh connect: [dead] SSH connection failed (192.168.1.30:22): dial tcp 192.168.1.30:22: connect: connection refused
+upgrading edge... ✓ v1.8.0 → v1.9.0 (linux/arm64)
+upgrading dead... ✗ ssh connect: [dead] SSH connection failed (127.0.0.1:2209): dial tcp 127.0.0.1:2209: connect: connection refused
   → Check: server online? correct host/port? firewall rules?
   → Config: /home/you/.config/homebutler/config.yaml
 ```
@@ -89,8 +89,14 @@ A container keeps your config and snapshots in the mounted folder and volume, so
 
 The binary on each remote server is separate from the one on the hub. After you upgrade the hub, run `homebutler upgrade` from a machine with SSH access to bring the servers level, or the [commands the hub runs on them](/running/multi-server#keep-versions-level) fail with `does not have` errors.
 
-## Check these when upgrading to 1.4, 1.5, 1.6, 1.7 or 1.8
+## Check these when upgrading to 1.4, 1.5, 1.6, 1.7, 1.8 or 1.9
 
+- **`doctor --strict` on a machine that passed:** from 1.9.0 it can exit `1` where it exited `0`. On Debian, Ubuntu, and RHEL-family systems with `needs-restarting`, a pending reboot, a pending security update, or an `apt-get --simulate` or `dnf -C check-update` that fails each raise a warning. So does a Proxmox endpoint, checked without being listed, whose certificate has expired, starts in the future, does not name the host or expires within 14 days, or cannot be read while the API answers. A cron job that runs `doctor --strict` against such a machine now sees a failure. See [Doctor](/changes/doctor#updates-and-reboot).
+- **`No obvious issues found` is gone:** from 1.9.0 `doctor` no longer prints it, nor the `overall` finding that carried it in `--json`, because the update check always adds a finding of its own. A script that looked for it should read `status`.
+- **A fourth severity, `info`:** from 1.9.0 a `doctor` finding can be `info`, and `summary` has an `info` count. A script that switches on `severity` meets a new word. `status` and the `--strict` exit code never count it.
+- **`doctor` asks registries about running images:** from 1.9.0, for each running container's tag, it sends an anonymous `HEAD` to that image's registry, and for a container behind a multi-arch tag it may `GET` the tag's index, which Docker Hub counts as a pull. It writes the answers to `~/.homebutler/registry/digests.json`. Set `doctor.image_updates.enabled: false` in the config of the machine the check runs on to turn it off; under `--server` that is the server's config. See [Doctor](/changes/doctor#image-updates).
+- **`incident_context` with `server`:** the server needs 1.9.0, because the tool runs `watch show --context` there. Against an older server the call fails with ``[edge] the homebutler on edge is 1.8.0, and its `watch` does not have --context``. Upgrade the server.
+- **The first `report` after upgrading** compares against a snapshot saved without image IDs, so a container recreated on a new image under the same tag reads as it did on 1.8.0, without the image IDs. From the next report on, the line names both images.
 - **Container and `local: true`:** from 1.8.0, inside a container, the dashboard routes that read the machine answer `501` for a `local: true` server or no `server`, and `--all` and `--server` exit `1` for that server. A Homepage widget pointed at `/api/report` on the container image, or a cron job running `status --all`, gets an error where it got the container's numbers. Point it at `?server=<name>` for a server reached over SSH. See [Run in a container](/running/container#what-the-container-cant-do).
 - **Response shapes for a server:** from 1.8.0, `/api/processes?server=<name>` answers the bare list and `/api/ports?server=<name>` answers `{"ports": […]}`, as they do for this machine, and so does the MCP tool `open_ports` given a `server`. `watch add`, `watch remove` and an empty `watch check` print JSON under `--json` where they printed a sentence.
 - **`watch_add` with `unit`:** from 1.8.0 it fails against a server running 1.7.0 or older. Upgrade the server, or leave `unit` out.
